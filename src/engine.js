@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSegments, clipSignature, totalBeats, EPS } from './model.js';
+import { clipSegments, clipSignature, clipEnvelope, clipGain, totalBeats, EPS } from './model.js';
 import { Emitter } from './util.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
@@ -43,6 +43,10 @@ export function buildMix(ctx, project, { limiter = true } = {}) {
 
 export function applyLevels(ctx, project, mix, immediate = false) {
   const anySolo = project.tracks.some((t) => t.solo);
+  const ids = new Set(project.tracks.map((t) => t.id));
+  for (const [id, node] of mix.tracks) {
+    if (!ids.has(id)) { node.pan.disconnect(); mix.tracks.delete(id); }
+  }
   for (const track of project.tracks) {
     let node = mix.tracks.get(track.id);
     if (!node) {
@@ -61,26 +65,64 @@ export function applyLevels(ctx, project, mix, immediate = false) {
   }
 }
 
-// Spielt ein Stück eines Samples. Kurze Rampen verhindern Knackser, wenn mitten im Sample
-// begonnen oder vor seinem Ende abgeschnitten wird.
-export function startVoice(ctx, dest, buffer, when, offset, stopAt) {
+// Stützpunkte der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat],
+// als [Kontextzeit, Wert]. null, wenn der Clip unverändert laut ist.
+export function envelopePoints(clip, fromBeat, toBeat, when, spb) {
+  const fi = clip.fadeInBeats || 0;
+  const fo = clip.fadeOutBeats || 0;
+  if (!fi && !fo && clipGain(clip) === 1) return null;
+  const x0 = fromBeat - clip.startBeat;
+  const x1 = toBeat - clip.startBeat;
+  const xs = [x0];
+  for (const k of [fi, clip.lengthBeats - fo]) if (k > x0 + EPS && k < x1 - EPS) xs.push(k);
+  xs.push(x1);
+  xs.sort((a, b) => a - b);
+  return xs.map((x) => [when + (x - x0) * spb, clipEnvelope(clip, x)]);
+}
+
+// Spielt ein Stück eines Samples. An Schnittkanten (Einstieg mitten im Sample, Abschneiden vor dem Ende)
+// überlappen sich benachbarte Stimmen um ±XF mit linearen Rampen. Ist der Inhalt durchgehend (z. B. ein
+// geteilter Clip), ergänzen sich beide Rampen zu exakt 1 – das Teilen bleibt unhörbar.
+// `env` formt die Clip-Lautstärke (Gain, Fades).
+export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) {
+  const XF = 96 / ctx.sampleRate;
   const src = ctx.createBufferSource();
   src.buffer = buffer;
   const g = ctx.createGain();
-  src.connect(g).connect(dest);
+  src.connect(g);
+  if (env) {
+    const e = ctx.createGain();
+    e.gain.value = env[0][1];
+    e.gain.setValueAtTime(env[0][1], env[0][0]);
+    for (const [t, v] of env.slice(1)) e.gain.linearRampToValueAtTime(v, t);
+    g.connect(e).connect(dest);
+  } else {
+    g.connect(dest);
+  }
   const naturalEnd = when + buffer.duration - offset;
   const cut = stopAt < naturalEnd - 1e-4;
+  let start = when;
   if (offset > 1e-6) {
-    g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(1, when + 0.003);
+    const now = ctx instanceof OfflineAudioContext ? 0 : ctx.currentTime;
+    const pre = Math.max(0, Math.min(XF, offset, when - now));
+    start = when - pre;
+    g.gain.setValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(1, when + XF);
   }
   if (cut) {
-    g.gain.setValueAtTime(1, Math.max(when + 0.003, stopAt - 0.004));
-    g.gain.linearRampToValueAtTime(0, stopAt);
+    g.gain.setValueAtTime(1, Math.max(start + 1e-4, when + (offset > 1e-6 ? XF : 0), stopAt - XF));
+    g.gain.linearRampToValueAtTime(0, stopAt + XF);
   }
-  src.start(when, offset);
-  if (cut) src.stop(stopAt + 0.002);
+  src.start(start, offset - (when - start));
+  if (cut) src.stop(stopAt + XF + 0.001);
   return { src, g };
+}
+
+// Spielt einen Clip-Ausschnitt [fromBeat, toBeat] eines Segments ab Kontextzeit `when`.
+function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) {
+  const offset = (fromBeat - seg.start + seg.offset) * spb;
+  const stopAt = when + (toBeat - fromBeat) * spb;
+  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopePoints(clip, fromBeat, toBeat, when, spb));
 }
 
 // Rendert das Projekt komplett offline (für Tests und später für den WAV-Export).
@@ -96,7 +138,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
       if (!sample) continue;
       for (const seg of clipSegments(clip, sample.lengthBeats)) {
         if (seg.start >= end - EPS) continue;
-        startVoice(ctx, dest, sample.buffer, seg.start * spb, seg.offset * spb, Math.min(seg.end, end) * spb);
+        playSegment(ctx, dest, clip, sample, seg, seg.start, Math.min(seg.end, end), seg.start * spb, spb);
       }
     }
   }
@@ -264,27 +306,24 @@ export class Engine extends Emitter {
     this._forEachClip(filter, (track, clip, sample, node) => {
       for (const seg of clipSegments(clip, sample.lengthBeats)) {
         if (seg.start < b0 - EPS || seg.start >= b1 - EPS || seg.start >= limit - EPS) continue;
-        const end = Math.min(seg.end, limit);
-        this._voice(track, clip, sample, node, t0 + (seg.start - b0) * spb, seg.offset * spb, t0 + (end - b0) * spb);
+        this._voice(track, clip, sample, node, seg, seg.start, Math.min(seg.end, limit), t0 + (seg.start - b0) * spb);
       }
     });
   }
 
   // Wiederholungen, die bei Schlag b bereits laufen: mitten im Sample einsteigen.
   _scheduleActiveAt(b, t, limit, filter) {
-    const spb = this.spb;
     this._forEachClip(filter, (track, clip, sample, node) => {
       for (const seg of clipSegments(clip, sample.lengthBeats)) {
         if (!(seg.start < b - EPS && seg.end > b + EPS)) continue;
-        const end = Math.min(seg.end, limit);
-        this._voice(track, clip, sample, node, t, (b - seg.start + seg.offset) * spb, t + (end - b) * spb);
+        this._voice(track, clip, sample, node, seg, b, Math.min(seg.end, limit), t);
       }
     });
   }
 
-  _voice(track, clip, sample, node, when, offset, stopAt) {
-    if (stopAt <= when + 1e-4) return;
-    const { src, g } = startVoice(this.ctx, node.input, sample.buffer, when, offset, stopAt);
+  _voice(track, clip, sample, node, seg, fromBeat, toBeat, when) {
+    if (toBeat - fromBeat <= 1e-4) return;
+    const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb);
     const voice = { clipId: clip.id, sig: clipSignature(track.id, clip), src, g };
     this.voices.add(voice);
     src.onended = () => this.voices.delete(voice);

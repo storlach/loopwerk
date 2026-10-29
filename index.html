@@ -299,7 +299,28 @@
     background: var(--panel);
     border-right: 1px solid var(--line);
   }
-  .track-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track-top { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .track-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+  .track-name-input {
+    flex: 1; min-width: 0; height: 20px; box-sizing: border-box;
+    padding: 0 4px; border: 1px solid var(--focus); border-radius: 3px;
+    background: var(--panel); font-weight: 600; font-size: 13px;
+    -webkit-user-select: text; user-select: text;
+  }
+  .tbtn.tbtn-del { width: 20px; border-color: transparent; background: transparent; font-size: 14px; opacity: 0.55; }
+  .tbtn.tbtn-del:hover, .tbtn.tbtn-del:focus-visible { opacity: 1; border-color: var(--line); }
+  .tbtn.tbtn-del.confirm { opacity: 1; background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
+  .tbtn-del:disabled { visibility: hidden; }
+  .add-row { display: flex; height: 40px; }
+  .add-track {
+    position: sticky; left: 0; z-index: 3;
+    flex: 0 0 var(--head-w); width: var(--head-w);
+    border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    background: var(--panel); color: var(--muted);
+    font: 600 12px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
+    text-align: left; padding: 0 12px; cursor: pointer;
+  }
+  .add-track:hover { color: var(--ink); background: var(--lane); }
   .track-btns { display: flex; align-items: center; gap: 4px; min-width: 0; }
   .tbtn {
     width: 24px; height: 20px; padding: 0;
@@ -345,8 +366,27 @@
     pointer-events: none;
   }
   .clip-wave { --wave: var(--cat); position: absolute; left: 0; top: 17px; height: calc(100% - 19px); display: block; pointer-events: none; }
-  .clip-handle { position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize; }
-  .clip-handle::after { content: ""; position: absolute; top: 30%; bottom: 30%; right: 3px; width: 2px; border-radius: 1px; background: var(--cat); opacity: 0.7; }
+  .clip-handle, .clip-trim { position: absolute; top: 14px; bottom: 0; width: 9px; cursor: ew-resize; z-index: 2; }
+  .clip-handle { right: 0; }
+  .clip-trim { left: 0; }
+  .clip-handle::after, .clip-trim::after { content: ""; position: absolute; top: 25%; bottom: 25%; width: 2px; border-radius: 1px; background: var(--cat); opacity: 0.7; }
+  .clip-handle::after { right: 3px; }
+  .clip-trim::after { left: 3px; opacity: 0; }
+  .clip:hover .clip-trim::after, .clip.selected .clip-trim::after { opacity: 0.7; }
+  .clip-grip {
+    position: absolute; z-index: 3;
+    width: 11px; height: 11px; box-sizing: border-box;
+    border: 2px solid var(--panel); border-radius: 2px;
+    background: var(--cat);
+    box-shadow: 0 0 0 1px var(--cat), 0 1px 3px #0004;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .clip-grip::before { content: ""; position: absolute; inset: -6px; }
+  .clip-vol { border-radius: 50%; cursor: ns-resize; }
+  .clip-fade-in, .clip-fade-out { cursor: ew-resize; }
+  .clip:hover .clip-grip, .clip.selected .clip-grip, .clip.editing .clip-grip { opacity: 1; }
+  .clip.editing { z-index: 6; }
   .drop-preview {
     position: absolute; top: 3px; bottom: 3px; z-index: 5;
     border: 2px dashed var(--cat); border-radius: 4px;
@@ -397,6 +437,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .loop-item.previewing .loop-play { animation: none; }
+    .clip-grip { transition: none; }
   }
 </style>
 
@@ -404,7 +445,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Spike 0.1</span>
+      <span class="brand-tag">Version 0.2</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -454,6 +495,21 @@
         <option value="2">Raster: ½ Takt</option>
         <option value="1">Raster: Schlag</option>
       </select>
+    </div>
+
+    <div class="group" role="group" aria-label="Clip">
+      <button class="key" id="split-btn" type="button" title="An der Abspielmarke teilen (T)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 1a2.5 2.5 0 012.3 3.5L8 5.7l5.3-5.3 1.4 1.4L9.4 7.1l5.3 5.3-1.4 1.4L8 8.5 6.8 9.7A2.5 2.5 0 114.5 8.3l.9-.9.2-.3-.2-.3-.9-.9A2.5 2.5 0 014.5 1zm0 1.6a.9.9 0 100 1.8.9.9 0 000-1.8zm0 7.8a.9.9 0 100 1.8.9.9 0 000-1.8z"/></svg>
+        Teilen
+      </button>
+      <button class="key" id="dup-btn" type="button" title="Ausgewählten Clip duplizieren (Strg+D)">Duplizieren</button>
+      <button class="key" id="del-btn" type="button" title="Ausgewählten Clip löschen (Entf)">Löschen</button>
+    </div>
+
+    <div class="group" role="group" aria-label="Projekt">
+      <button class="key" id="open-btn" type="button" title="Projektdatei öffnen">Öffnen</button>
+      <button class="key" id="save-btn" type="button" title="Projekt als Datei speichern">Speichern</button>
+      <input type="file" id="open-input" accept=".json,application/json" hidden>
       <button class="key" id="demo-btn" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
       <button class="key" id="new-btn" type="button" title="Alle Spuren leeren">Leeren</button>
     </div>

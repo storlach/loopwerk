@@ -8,10 +8,17 @@
 - Mute/Solo/Lautstärke pro Spur, Master-Pegel, Undo/Redo, Autospeichern im Browser
 - Tests: samplegenaues Timing, Drag & Drop, Loop-Sprung
 
-## Stufe 2 – Arranger-Komfort
-- Spuren umbenennen, hinzufügen; Clip-Lautstärke und Fades am Objekt
-- Clips links kürzen, teilen (Schere), duplizieren
-- Projekt als Datei exportieren/importieren
+## ✅ Stufe 2 – Arranger-Komfort (0.2)
+- Clip-Lautstärke und Fade-In/-Out über Griffe auf der Hüllkurve, Wellenform zeigt das Ergebnis
+- Clips links kürzen (Phase bleibt), teilen an der Abspielmarke (T), duplizieren (Strg+D), Löschen-Knopf für Touch
+- Spuren umbenennen (Doppelklick), hinzufügen (bis 16), löschen mit Bestätigung
+- Projekt als `.json` speichern (im Artifact über `downloads`) und öffnen
+- Engine: Hüllkurve pro Stimme, Überblendung an Schnittkanten – Teilen ist klanglich neutral (gemessen)
+- Spec: `docs/specs/stufe-2-arranger-komfort.md`, Tests: `tests/stufe2.test.cjs`
+
+### Offen aus Stufe 2
+- Mehrfachauswahl (mehrere Clips gemeinsam verschieben/löschen)
+- Clip-Lautstärke über 0 dB
 
 ## Stufe 3 – Bibliothek
 - Freie CC0-Bibliotheken anbinden (Kandidaten: Sonic-Pi-Samples, VCSL), Lizenz je Sample

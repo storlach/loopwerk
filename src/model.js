@@ -64,7 +64,36 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}`;
+}
+
+export const MAX_TRACKS = 16;
+export const clipGain = (clip) => clip.gain ?? 1;
+
+// Fades begrenzen: nie negativ, zusammen nie länger als der Clip.
+export function normalizeClip(clip) {
+  clip.gain = Math.min(1, Math.max(0, clipGain(clip)));
+  let fi = Math.max(0, clip.fadeInBeats || 0);
+  let fo = Math.max(0, clip.fadeOutBeats || 0);
+  if (fi + fo > clip.lengthBeats) {
+    const k = clip.lengthBeats / (fi + fo);
+    fi *= k;
+    fo *= k;
+  }
+  clip.fadeInBeats = fi;
+  clip.fadeOutBeats = fo;
+  return clip;
+}
+
+// Lautstärke-Hüllkurve an Position x (Schläge ab Clip-Start).
+export function clipEnvelope(clip, x) {
+  const L = clip.lengthBeats;
+  const fi = clip.fadeInBeats || 0;
+  const fo = clip.fadeOutBeats || 0;
+  let v = 1;
+  if (fi > 0) v = Math.min(v, x / fi);
+  if (fo > 0) v = Math.min(v, (L - x) / fo);
+  return clipGain(clip) * Math.max(0, Math.min(1, v));
 }
 
 export function totalBeats(project) {
@@ -148,16 +177,17 @@ export class Store extends Emitter {
       const cs = c.startBeat;
       const ce = cs + c.lengthBeats;
       if (ce <= ks + EPS || cs >= ke - EPS) { out.push(c); continue; }
-      if (cs < ks - EPS) out.push({ ...c, lengthBeats: ks - cs });
+      if (cs < ks - EPS) out.push(normalizeClip({ ...c, lengthBeats: ks - cs, fadeOutBeats: 0 }));
       if (ce > ke + EPS) {
         const sb = this.sampleBeats(c.sampleId);
-        out.push({
+        out.push(normalizeClip({
           ...c,
           id: cs < ks - EPS ? this.newId() : c.id,
           startBeat: ke,
           lengthBeats: ce - ke,
           offsetBeats: ((c.offsetBeats || 0) + (ke - cs)) % sb,
-        });
+          fadeInBeats: 0,
+        }));
       }
     }
     track.clips = out.sort((a, b) => a.startBeat - b.startBeat);
@@ -198,6 +228,7 @@ export class Store extends Emitter {
         moved.startBeat = start;
         moved.lengthBeats = length;
       }
+      normalizeClip(moved);
       target.clips.push(moved);
       this._carve(target, moved);
     });
@@ -208,6 +239,7 @@ export class Store extends Emitter {
     this.dispatch('resize-clip', () => {
       const { track, clip } = this.findClip(clipId);
       clip.lengthBeats = this._fit(clip.startBeat, lengthBeats).length;
+      normalizeClip(clip);
       this._carve(track, clip);
     });
   }
@@ -218,6 +250,91 @@ export class Store extends Emitter {
       const { track } = this.findClip(clipId);
       track.clips = track.clips.filter((c) => c.id !== clipId);
     });
+  }
+
+  setClip(clipId, patch) {
+    if (!this.findClip(clipId)) return;
+    this.dispatch('clip', () => normalizeClip(Object.assign(this.findClip(clipId).clip, patch)));
+  }
+
+  // Linken Rand verschieben: Inhalt bleibt an seiner Stelle, nur der Anfang wandert.
+  trimClipStart(clipId, startBeat) {
+    if (!this.findClip(clipId)) return;
+    this.dispatch('trim-clip', () => {
+      const { track, clip } = this.findClip(clipId);
+      const end = clip.startBeat + clip.lengthBeats;
+      const start = Math.max(0, Math.min(startBeat, end - EPS * 10));
+      const sb = this.sampleBeats(clip.sampleId);
+      clip.offsetBeats = ((((clip.offsetBeats || 0) + (start - clip.startBeat)) % sb) + sb) % sb;
+      clip.startBeat = start;
+      clip.lengthBeats = end - start;
+      normalizeClip(clip);
+      this._carve(track, clip);
+    });
+  }
+
+  // Teilt die angegebenen Clips (ohne Angabe: alle) an Schlag `beat`. Gibt die neuen rechten Teile zurück.
+  splitAt(beat, clipIds = null) {
+    const targets = [];
+    for (const track of this.project.tracks) {
+      for (const c of track.clips) {
+        if (clipIds && !clipIds.includes(c.id)) continue;
+        if (beat > c.startBeat + EPS && beat < c.startBeat + c.lengthBeats - EPS) targets.push(c.id);
+      }
+    }
+    if (!targets.length) return [];
+    const created = targets.map(() => this.newId());
+    this.dispatch('split', () => {
+      targets.forEach((id, i) => {
+        const { track, clip } = this.findClip(id);
+        const sb = this.sampleBeats(clip.sampleId);
+        const end = clip.startBeat + clip.lengthBeats;
+        const right = normalizeClip({
+          ...clip,
+          id: created[i],
+          startBeat: beat,
+          lengthBeats: end - beat,
+          offsetBeats: ((clip.offsetBeats || 0) + (beat - clip.startBeat)) % sb,
+          fadeInBeats: 0,
+        });
+        clip.lengthBeats = beat - clip.startBeat;
+        clip.fadeOutBeats = 0;
+        normalizeClip(clip);
+        track.clips.splice(track.clips.indexOf(clip) + 1, 0, right);
+      });
+    });
+    return created;
+  }
+
+  duplicateClip(clipId) {
+    const found = this.findClip(clipId);
+    if (!found) return null;
+    const total = totalBeats(this.project);
+    const start = found.clip.startBeat + found.clip.lengthBeats;
+    if (start >= total - EPS) return null;
+    const id = this.newId();
+    this.dispatch('duplicate-clip', () => {
+      const { track, clip } = this.findClip(clipId);
+      const copy = normalizeClip({ ...clip, id, startBeat: start, lengthBeats: Math.min(clip.lengthBeats, total - start) });
+      track.clips.push(copy);
+      this._carve(track, copy);
+    });
+    return id;
+  }
+
+  addTrack() {
+    if (this.project.tracks.length >= MAX_TRACKS) return null;
+    const n = 1 + Math.max(0, ...this.project.tracks.map((t) => parseInt(t.id.slice(1), 10) || 0));
+    const id = 't' + n;
+    this.dispatch('add-track', (p) => {
+      p.tracks.push({ id, name: 'Spur ' + (p.tracks.length + 1), volume: 0.8, pan: 0, mute: false, solo: false, clips: [] });
+    });
+    return id;
+  }
+
+  removeTrack(trackId) {
+    if (this.project.tracks.length <= 1 || !this.track(trackId)) return;
+    this.dispatch('remove-track', (p) => { p.tracks = p.tracks.filter((t) => t.id !== trackId); });
   }
 
   setTrack(trackId, patch, coalesce) {
