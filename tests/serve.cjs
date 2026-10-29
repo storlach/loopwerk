@@ -21,5 +21,5 @@ function start(port = 0) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
 }
 
-module.exports = { start };
+module.exports = { start, SKELETON_HEAD };
 if (require.main === module) start(Number(process.argv[2]) || 8080).then((s) => console.log('http://127.0.0.1:' + s.address().port));
