@@ -2,6 +2,7 @@
 // Ein Clip verweist auf ein Sample und wiederholt es über seine Länge (wie ein Objekt im Music Maker).
 
 import { Emitter } from './util.js';
+import { withFx } from './effects.js';
 
 export const EPS = 1e-6;
 export const PROJECT_VERSION = 1;
@@ -341,6 +342,27 @@ export class Store extends Emitter {
 
   setTrack(trackId, patch, coalesce) {
     this.dispatch('track', () => Object.assign(this.track(trackId), patch), { coalesce });
+  }
+
+  setTrackFx(trackId, fxId, patch, coalesce) {
+    if (!this.track(trackId)) return;
+    this.dispatch('fx', () => {
+      const t = this.track(trackId);
+      t.fx = withFx(t.fx);
+      Object.assign(t.fx[fxId], patch);
+    }, { coalesce });
+  }
+
+  setMaster(patch, coalesce) {
+    this.dispatch('master', (p) => { p.master = { volume: 0.85, fx: null, ...(p.master || {}), ...patch }; }, { coalesce });
+  }
+
+  setMasterFx(fxId, patch, coalesce) {
+    this.dispatch('fx', (p) => {
+      p.master = { volume: 0.85, ...(p.master || {}) };
+      p.master.fx = withFx(p.master.fx);
+      Object.assign(p.master.fx[fxId], patch);
+    }, { coalesce });
   }
 
   setBpm(bpm) {

@@ -9,6 +9,7 @@ import { mountLibrary } from './ui/library.js';
 import { mountArranger } from './ui/arranger.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
+import { mountMixer } from './ui/mixer.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
@@ -145,6 +146,7 @@ async function boot() {
   mountTransport({ store, engine, ui, arranger });
   mountProjectIO({ store, engine, ui, library });
   const tools = mountClipTools({ store, engine, ui, arranger });
+  const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   if (library.bpm !== store.project.bpm) await tempo.apply();
   mountHints({ root: document.getElementById('hint'), ui, library, store });
@@ -196,7 +198,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, renderProject, encodeWav, ready: true };
 }
 
 boot().catch((err) => {

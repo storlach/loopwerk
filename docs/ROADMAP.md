@@ -31,8 +31,14 @@
 - Tempowechsel schneller (Worker, benutzte Sounds zuerst)
 - Tonart wählbar (Loops transponieren)
 
-## Stufe 4 – Mixer und Effekte
-- Mixer-Ansicht, Panorama, EQ, Hall, Echo, Kompressor pro Spur und Master
+## ✅ Stufe 4 – Mixer und Effekte (0.4)
+- Mixer-Dock: Kanalzug je Spur plus Master mit Fader, Panorama, M/S, Pegelanzeige
+- Festes Effekt-Rack je Kanal: EQ, Kompressor, Echo (tempo-synchron), Hall
+- Live umschaltbar ohne Knackser, identisch im Offline-Rendering
+- Spec: `docs/specs/stufe-4-mixer-effekte.md`, Tests: `tests/stufe4.test.cjs`
+
+### Offen aus Stufe 4
+- Freie Effekt-Slots, Send-Effekte, Automation
 
 ## Stufe 5 – Aufnahme und Sample-Editor
 - Mikrofon-Aufnahme mit Einzähler und Latenzausgleich, eigene Dateien importieren

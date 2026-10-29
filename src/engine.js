@@ -3,6 +3,7 @@
 
 import { clipSegments, clipSignature, clipEnvelope, clipGain, totalBeats, EPS } from './model.js';
 import { Emitter } from './util.js';
+import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 const TICK_MS = 25;
@@ -14,17 +15,52 @@ export function trackLevel(track, anySolo) {
   return track.volume;
 }
 
-function createTrackChain(ctx, dest) {
-  const gain = ctx.createGain();
-  const pan = ctx.createStereoPanner();
-  gain.connect(pan).connect(dest);
-  return { input: gain, gain, pan };
+// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Panorama → Ziel
+function createStrip(ctx, dest, { pan = true } = {}) {
+  const input = ctx.createGain();
+  const out = pan ? ctx.createStereoPanner() : ctx.createGain();
+  out.connect(dest);
+  return { input, gain: input, pan: pan ? out : null, out, chain: null, xf: null };
 }
 
+// Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet.
+function installChain(ctx, strip, fx, spb, live) {
+  const chain = buildFxChain(ctx, fx, spb);
+  const xf = ctx.createGain();
+  chain.output.connect(xf).connect(strip.out);
+  strip.input.connect(chain.input);
+  const old = strip.chain;
+  const oldXf = strip.xf;
+  if (old) {
+    if (live) {
+      const t = ctx.currentTime;
+      xf.gain.setValueAtTime(0, t);
+      xf.gain.linearRampToValueAtTime(1, t + 0.03);
+      oldXf.gain.setValueAtTime(oldXf.gain.value, t);
+      oldXf.gain.linearRampToValueAtTime(0, t + 0.03);
+      setTimeout(() => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); }, 120);
+    } else {
+      strip.input.disconnect(old.input);
+      oldXf.disconnect();
+    }
+  }
+  strip.chain = chain;
+  strip.xf = xf;
+}
+
+function syncStrip(ctx, strip, level, panValue, fx, spb, live) {
+  const t = live ? ctx.currentTime : null;
+  if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
+  if (strip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
+  if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live);
+  else updateFxParams(strip.chain, fx, t, spb);
+}
+
+export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
+
 export function buildMix(ctx, project, { limiter = true } = {}) {
-  const master = ctx.createGain();
-  master.gain.value = 0.85;
-  let output = master;
+  const post = ctx.createGain();
+  let output = post;
   if (limiter) {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -6;
@@ -32,37 +68,34 @@ export function buildMix(ctx, project, { limiter = true } = {}) {
     comp.ratio.value = 12;
     comp.attack.value = 0.003;
     comp.release.value = 0.2;
-    master.connect(comp);
+    post.connect(comp);
     output = comp;
   }
   output.connect(ctx.destination);
-  const mix = { master, output, tracks: new Map() };
-  applyLevels(ctx, project, mix, true);
+  const masterStrip = createStrip(ctx, post, { pan: false });
+  const mix = { master: masterStrip.input, masterStrip, output, tracks: new Map() };
+  syncMix(ctx, project, mix, 60 / project.bpm, false);
   return mix;
 }
 
-export function applyLevels(ctx, project, mix, immediate = false) {
+// Bringt Pegel, Panorama und Effekte aller Kanäle auf den Stand des Projekts.
+export function syncMix(ctx, project, mix, spb, live = true) {
   const anySolo = project.tracks.some((t) => t.solo);
   const ids = new Set(project.tracks.map((t) => t.id));
-  for (const [id, node] of mix.tracks) {
-    if (!ids.has(id)) { node.pan.disconnect(); mix.tracks.delete(id); }
+  for (const [id, strip] of mix.tracks) {
+    if (!ids.has(id)) { strip.out.disconnect(); mix.tracks.delete(id); }
   }
   for (const track of project.tracks) {
-    let node = mix.tracks.get(track.id);
-    if (!node) {
-      node = createTrackChain(ctx, mix.master);
-      mix.tracks.set(track.id, node);
-      immediate = true;
+    let strip = mix.tracks.get(track.id);
+    if (!strip) {
+      strip = createStrip(ctx, mix.master);
+      mix.tracks.set(track.id, strip);
+      mix.onStrip?.(track.id, strip);
     }
-    const level = trackLevel(track, anySolo);
-    if (immediate) {
-      node.gain.gain.value = level;
-      node.pan.pan.value = track.pan;
-    } else {
-      node.gain.gain.setTargetAtTime(level, ctx.currentTime, 0.012);
-      node.pan.pan.setTargetAtTime(track.pan, ctx.currentTime, 0.012);
-    }
+    syncStrip(ctx, strip, trackLevel(track, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null);
   }
+  const m = masterOf(project);
+  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null);
 }
 
 // Stützpunkte der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat],
@@ -190,6 +223,16 @@ export class Engine extends Emitter {
     if (!this.ctx) {
       this.ctx = new AudioContext({ latencyHint: 'interactive' });
       this.mix = buildMix(this.ctx, this.project, { limiter: true });
+      // Pegelmesser je Kanal für den Mixer
+      this.meters = new Map();
+      const tapStrip = (id, strip) => {
+        const a = this.ctx.createAnalyser();
+        a.fftSize = 512;
+        strip.out.connect(a);
+        this.meters.set(id, { analyser: a, data: new Float32Array(a.fftSize) });
+      };
+      this.mix.onStrip = tapStrip;
+      for (const [id, strip] of this.mix.tracks) tapStrip(id, strip);
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
       this.mix.output.connect(this.analyser);
@@ -373,7 +416,7 @@ export class Engine extends Emitter {
 
   _onChange(reason) {
     if (!this.ctx) return;
-    applyLevels(this.ctx, this.project, this.mix);
+    syncMix(this.ctx, this.project, this.mix, this.spb, true);
     if (this.playing) this._resync();
   }
 
@@ -438,6 +481,15 @@ export class Engine extends Emitter {
     this.preview = null;
     this._kill(p, this.ctx.currentTime);
     this.emit('preview');
+  }
+
+  trackPeak(trackId) {
+    const m = this.meters?.get(trackId);
+    if (!m) return 0;
+    m.analyser.getFloatTimeDomainData(m.data);
+    let p = 0;
+    for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
+    return p;
   }
 
   peakLevel() {

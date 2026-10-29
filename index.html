@@ -84,6 +84,10 @@
     grid-template-columns: 248px minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas: "deck deck" "shelf arr" "hint hint";
+  }
+  .app.dock-open {
+    grid-template-rows: auto minmax(160px, 1fr) minmax(250px, 42%) auto;
+    grid-template-areas: "deck deck" "shelf arr" "shelf dock" "hint hint";
     gap: 10px;
     padding-block: 10px;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
@@ -445,6 +449,61 @@
   }
   body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
 
+
+  /* ---------- Dock (Mixer, Editoren) ---------- */
+  .dock {
+    grid-area: dock; min-width: 0; min-height: 0;
+    display: grid; grid-template-rows: auto minmax(0, 1fr);
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .dock-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--line); }
+  .dock-head h2 { margin: 0; font: 700 13px/1.2 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  .dock-close { width: 28px; height: 28px; border: 0; border-radius: 4px; background: transparent; font-size: 18px; cursor: pointer; color: var(--muted); }
+  .dock-close:hover { background: var(--lane); color: var(--ink); }
+  .dock-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); min-height: 0; }
+  .mixer-strips { display: flex; gap: 6px; overflow: auto; padding: 10px; min-width: 0; }
+  .strip {
+    flex: 0 0 86px; display: flex; flex-direction: column; gap: 6px;
+    padding: 8px 6px; box-sizing: border-box;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--lane);
+  }
+  .strip.selected { border-color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+  .strip-master { margin-left: auto; background: color-mix(in srgb, var(--amber) 9%, var(--lane)); }
+  .strip-name {
+    border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer;
+    font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .strip-name:hover { text-decoration: underline; }
+  .strip-fx { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+  .fx-toggle {
+    height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 3px;
+    background: var(--panel); color: var(--muted); cursor: pointer;
+    font: 600 9px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .fx-toggle[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: #1B1204; }
+  .strip-pan { width: 100%; margin: 0; accent-color: var(--muted); }
+  .strip-fader-row { flex: 1; min-height: 70px; display: flex; justify-content: center; gap: 8px; }
+  .strip-fader { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 100%; margin: 0; accent-color: var(--amber); }
+  .strip-meter { width: 8px; height: 100%; border-radius: 2px; }
+  .strip-value { text-align: center; font: 500 11px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .strip-ms { display: flex; justify-content: center; gap: 4px; min-height: 20px; }
+  .mixer-detail { border-left: 1px solid var(--line); padding: 10px 14px; overflow: auto; min-width: 0; }
+  .detail-title { margin: 0 0 8px; font: 700 12px/1.2 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  .detail-empty, .detail-hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .fx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .fx-card { border: 1px solid var(--line); border-radius: 4px; padding: 8px; display: grid; gap: 6px; align-content: start; }
+  .fx-card.off .fx-param { opacity: 0.55; }
+  .fx-switch {
+    justify-self: start; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--panel); cursor: pointer; font: 600 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .fx-switch[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: #1B1204; }
+  .fx-param { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; font-size: 11px; color: var(--muted); }
+  .fx-param input, .fx-param select { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--amber); }
+  .fx-param select { height: 26px; border: 1px solid var(--line); border-radius: 3px; background: var(--panel); }
+  .fx-param-label { grid-row: 1; }
+  .fx-param-value { grid-row: 1; grid-column: 2; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
   /* ---------- Hinweiszeile ---------- */
   .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
   .hint.armed { color: var(--ink); font-weight: 500; }
@@ -465,6 +524,13 @@
       grid-template-rows: auto auto minmax(380px, 70vh) auto;
       grid-template-areas: "deck" "shelf" "arr" "hint";
     }
+    .app.dock-open {
+      grid-template-rows: auto auto minmax(300px, 55vh) auto auto;
+      grid-template-areas: "deck" "shelf" "arr" "dock" "hint";
+    }
+    .dock-body { grid-template-columns: minmax(0, 1fr); }
+    .mixer-strips { min-height: 300px; }
+    .mixer-detail { border-left: 0; border-top: 1px solid var(--line); }
     .shelf { max-height: 260px; }
     .deck .spacer { display: none; }
     :root { --track-h: 54px; }
@@ -479,7 +545,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 0.3</span>
+      <span class="brand-tag">Version 0.4</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -493,6 +559,10 @@
       <button class="key" id="loop-btn" type="button" title="Loop-Bereich wiederholen">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 5h7V3l3 3-3 3V7H4v3H2V7a2 2 0 012-2zm8 6H5v2l-3-3 3-3v2h7V6h2v3a2 2 0 01-2 2z"/></svg>
         Loop
+      </button>
+      <button class="key" id="mixer-btn" type="button" title="Mixer und Effekte" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg>
+        Mixer
       </button>
       <button class="key" id="metro-btn" type="button" title="Metronom">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l3 14H3zm1.6 2L5.4 13h5.2L8.4 3zM8 6l4-3 .6.8-4 3z"/></svg>
@@ -563,6 +633,17 @@
   <main class="arranger" aria-label="Arranger">
     <div class="arr-scroll" id="arr-scroll"></div>
   </main>
+
+  <section class="dock" id="mixer" aria-label="Mixer" hidden>
+    <div class="dock-head">
+      <h2>Mixer</h2>
+      <button class="dock-close" id="mixer-close" type="button" aria-label="Mixer schließen">×</button>
+    </div>
+    <div class="dock-body">
+      <div class="mixer-strips" id="mixer-strips"></div>
+      <div class="mixer-detail" id="mixer-detail"></div>
+    </div>
+  </section>
 
   <footer class="hint" id="hint"></footer>
 </div>
