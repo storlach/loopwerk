@@ -16,7 +16,7 @@ const entry = (file, name, category, extra) => ({
   ...extra,
 });
 
-export const CATALOG = [
+const CATALOG_ENTRIES = [
   // Loops
   entry('loop_amen', 'Amen Break', 'drums', { kind: 'loop', beats: 4, source: fs('Dolfeus/sounds/43389/') }),
   entry('loop_breakbeat', 'Breakbeat 126', 'drums', { kind: 'loop', beats: 4, source: fs('Snapper4298/sounds/160354/') }),
@@ -57,6 +57,24 @@ export const CATALOG = [
   entry('misc_cineboom', 'Kino-Boom', 'fx', { source: 'http://freesound.org/people/Northern_Monkey/sounds/177242/' }),
   entry('ambi_swoosh', 'Swoosh', 'fx', { source: fs('Halgrimm/sounds/169867/') }),
 ];
+
+// Genre-Vorschläge zum Stöbern (Einschätzung nach Klang, keine Herkunftsangabe)
+const GENRES_OF = {
+  'sp-loop-amen': ['breaks'], 'sp-loop-breakbeat': ['breaks', 'hiphop'], 'sp-loop-compus': ['hiphop', 'breaks'],
+  'sp-loop-garzul': ['techno'], 'sp-loop-mika': ['house'], 'sp-loop-safari': ['house'],
+  'sp-bd-haus': ['house', 'techno'], 'sp-bd-808': ['hiphop'], 'sp-bd-boom': ['hiphop', 'ambient'],
+  'sp-sn-dub': ['hiphop', 'breaks'], 'sp-sn-generic': ['pop', 'breaks'], 'sp-drum-snare-hard': ['pop', 'breaks'],
+  'sp-drum-cymbal-closed': ['pop', 'breaks'], 'sp-drum-cymbal-open': ['pop', 'breaks'], 'sp-drum-cymbal-hard': ['pop', 'breaks'],
+  'sp-perc-snap': ['hiphop', 'pop'], 'sp-drum-tom-mid-hard': ['pop', 'breaks'], 'sp-drum-tom-lo-hard': ['pop', 'breaks'],
+  'sp-drum-cowbell': ['house'],
+  'sp-bass-hard-c': ['techno', 'house'], 'sp-bass-voxy-c': ['house', 'pop'], 'sp-bass-woodsy-c': ['hiphop', 'pop'],
+  'sp-ambi-piano': ['ambient', 'pop'], 'sp-guit-em9': ['pop', 'ambient'], 'sp-guit-e-fifths': ['pop'], 'sp-ambi-choir': ['ambient'],
+  'sp-elec-chime': ['ambient', 'pop'], 'sp-elec-blip': ['techno', 'house'], 'sp-perc-bell': ['ambient'],
+  'sp-ambi-drone': ['ambient', 'techno'], 'sp-ambi-glass-hum': ['ambient'], 'sp-misc-cineboom': ['ambient', 'hiphop'],
+  'sp-ambi-swoosh': ['ambient', 'pop', 'house'],
+};
+
+export const CATALOG = CATALOG_ENTRIES.map((e) => ({ ...e, genres: GENRES_OF[e.id] || [] }));
 
 // Ziel-Spitzenpegel je Kategorie (siehe Skill sample-import)
 export const PEAK_TARGET = { drums: 0.62, bass: 0.5, chords: 0.42, synth: 0.42, fx: 0.5, own: 0.6 };

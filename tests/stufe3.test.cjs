@@ -117,14 +117,16 @@ const { check, finish } = createChecker();
     // ---------- Regal: Suche, Filter, Favoriten ----------
     await page.fill('#shelf-search', 'kick');
     const kickRows = await page.locator('#library .loop-item').count();
-    check('Suche „kick“ findet die drei Kicks', kickRows === 3, `${kickRows} Treffer`);
+    const kicks = await page.evaluate(() => window.loopwerk.library.list().filter((s) => /kick/i.test(s.name)).length);
+    check('Suche „kick“ findet alle Kicks', kickRows === kicks && kicks >= 4, `${kickRows} Treffer`);
     await page.fill('#shelf-search', 'xyzzy');
     const empty = await page.locator('#library .shelf-empty').textContent();
     check('Leere Suche erklärt sich', empty.includes('Keine Sounds gefunden'), empty);
     await page.fill('#shelf-search', '');
     await page.click('#shelf-chips .chip[data-filter="bass"]');
     const bassRows = await page.locator('#library .loop-item').count();
-    check('Filter „Bass“ zeigt nur Bass-Sounds', bassRows === 6, `${bassRows} Einträge`);
+    const basses = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'bass').length);
+    check('Filter „Bass“ zeigt nur Bass-Sounds', bassRows === basses, `${bassRows} Einträge`);
     await page.locator('#library .loop-row').first().locator('.loop-fav').click();
     await page.click('#shelf-chips .chip[data-filter="fav"]');
     const favRows = await page.locator('#library .loop-item').count();

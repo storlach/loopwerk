@@ -2,7 +2,7 @@
 // Eingabe per Maus, Computertastatur (A–K wie Klaviertasten, Pfeil hoch/runter = Oktave) oder MIDI-Keyboard.
 
 import {
-  DRUM_ROWS, KITS, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
+  DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
   noteName, resizeDrumRows, previewNote, previewDrum,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
@@ -134,12 +134,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const from = paged ? page * PAGE : 0;
     const n = paged ? PAGE : total;
     renderPages(p);
-    if (drumsEl.dataset.key !== `${id}|${total}|${from}|${n}`) {
-      drumsEl.dataset.key = `${id}|${total}|${from}|${n}`;
+    if (drumsEl.dataset.key !== `${id}|${total}|${from}|${n}|${p.kit}`) {
+      drumsEl.dataset.key = `${id}|${total}|${from}|${n}|${p.kit}`;
       drumsEl.innerHTML = '';
       drumsEl.style.setProperty('--steps', n);
       for (const row of DRUM_ROWS) {
-        const label = el('button', 'pat-row-label', row.label);
+        const rowLabel = drumLabel(p.kit, row.id);
+        const label = el('button', 'pat-row-label', rowLabel);
         label.type = 'button';
         label.title = 'Anhören';
         label.addEventListener('click', async () => previewDrum(await audio(), engine.mix.master, pat().kit, row.id, library));
@@ -149,7 +150,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
           cell.type = 'button';
           cell.dataset.row = row.id;
           cell.dataset.step = String(i);
-          cell.setAttribute('aria-label', `${row.label}, Schritt ${i + 1}`);
+          cell.setAttribute('aria-label', `${rowLabel}, Schritt ${i + 1}`);
           drumsEl.append(cell);
         }
       }

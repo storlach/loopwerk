@@ -199,6 +199,77 @@ const { check, finish } = createChecker();
     await page.evaluate(() => window.loopwerk.store.undo());
     check('Kopieren ist ein Rückgängig-Schritt', (await names()).length === 8);
 
+    // ---------- Techno-Sounds ----------
+    const techno = await page.evaluate(() => {
+      const { library } = window.loopwerk;
+      const list = library.list().filter((s) => s.id.startsWith('techno-'));
+      // Pegel und Tiefen-Anteil je Sound (Energie unter ~150 Hz über einen einfachen Tiefpass)
+      return list.map((s) => {
+        const d = s.buffer.getChannelData(0);
+        let peak = 0, e = 0, lo = 0, y = 0;
+        const a = 1 - Math.exp(-2 * Math.PI * 150 / s.buffer.sampleRate);
+        for (let i = 0; i < d.length; i++) { const v = d[i]; peak = Math.max(peak, Math.abs(v)); e += v * v; y += a * (v - y); lo += y * y; }
+        return { id: s.id, cat: s.category, genres: s.genres, peak: +peak.toFixed(3), low: +(lo / Math.max(e, 1e-12)).toFixed(3), beats: s.lengthBeats };
+      });
+    });
+    check('14 Techno-Sounds in der Bibliothek', techno.length === 14, techno.map((t) => t.id).join(','));
+    check('Alle Techno-Sounds klingen und sind eingepegelt', techno.every((t) => t.peak > 0.3 && t.peak <= 0.7), JSON.stringify(techno.map((t) => [t.id, t.peak])));
+    check('Alle Techno-Sounds tragen das Genre Techno', techno.every((t) => t.genres.includes('techno')));
+    const low = Object.fromEntries(techno.map((t) => [t.id, t.low]));
+    check('Kick und Rumble sind tief, Hats und Ride nicht', low['techno-kick'] > 0.4 && low['techno-rumble'] > 0.6 && low['techno-hats'] < 0.05 && low['techno-ride'] < 0.05, JSON.stringify(low));
+    const allTagged = await page.evaluate(() => window.loopwerk.library.list().filter((s) => !s.id.startsWith('test-') && s.category !== 'own' && !s.id.startsWith('pat-')).every((s) => s.genres?.length > 0));
+    check('Jeder mitgelieferte Sound hat mindestens ein Genre', allTagged);
+
+    // Techno-Kit im Beat-Editor
+    const kit = await page.evaluate(async () => {
+      const m = await import('./src/instruments.js');
+      const p = m.newDrumPattern(1);
+      p.kit = 'techno';
+      p.rows.crash[2] = 1;
+      p.rows.tomHi[6] = 1;
+      const r = await m.renderPattern(p, 120, window.loopwerk.library);
+      let peak = 0;
+      for (const v of r.buffer.getChannelData(0)) peak = Math.max(peak, Math.abs(v));
+      return { peak, labels: ['snare', 'tomLo', 'tomHi', 'crash', 'kick'].map((id) => m.drumLabel('techno', id)), kits: m.KITS.map((k) => k.id) };
+    });
+    check('Techno-Kit im Beat-Editor rendert', kit.kits.includes('techno') && kit.peak > 0.2, JSON.stringify(kit));
+    check('Techno-Kit benennt die Zeilen passend', kit.labels.join(',') === 'Rim,Rumble,Clang,Ride,Kick', kit.labels.join(','));
+
+    // ---------- Regal nach Genre ordnen ----------
+    await page.evaluate(async () => {
+      const m = await import('./src/model.js');
+      window.loopwerk.store.replace(m.createEmptyProject());
+    });
+    await page.click('.shelf-sort [data-sort="genre"]');
+    const genreView = await page.evaluate(() => ({
+      heads: [...document.querySelectorAll('.shelf-cat')].map((h) => h.textContent.replace(/\d+$/, '')),
+      chips: [...document.querySelectorAll('#shelf-chips .chip')].map((c) => c.textContent),
+      pressed: document.querySelector('.shelf-sort [data-sort="genre"]').getAttribute('aria-pressed'),
+    }));
+    check('Umschalter „Genre“ ordnet das Regal nach Genres', genreView.pressed === 'true' && genreView.heads[0].startsWith('Techno') && genreView.heads.some((h) => h.startsWith('Hip-Hop')), genreView.heads.join(' | '));
+    check('Filter-Chips zeigen Genres', genreView.chips.includes('Techno') && genreView.chips.includes('House') && !genreView.chips.includes('Bass'), genreView.chips.join(','));
+    await page.locator('#shelf-chips .chip', { hasText: 'Techno' }).click();
+    const tech = await page.evaluate(() => [...document.querySelectorAll('#library .loop-item')].map((n) => n.dataset.sampleId));
+    check('Genre-Filter „Techno“ zeigt Techno-Sounds aus allen Kategorien', tech.includes('techno-kick') && tech.includes('techno-acid') && tech.includes('drums-four') && tech.includes('sp-loop-garzul') && !tech.includes('drums-break'), `${tech.length} Sounds`);
+    check('Jeder Sound erscheint im Filter nur einmal', new Set(tech).size === tech.length);
+    await page.locator('#shelf-chips .chip', { hasText: 'Alle' }).click();
+    await page.fill('#shelf-search', 'ambient');
+    const amb = await page.evaluate(() => [...document.querySelectorAll('#library .loop-item')].map((n) => n.dataset.sampleId));
+    check('Suche findet auch nach Genre', amb.includes('sp-ambi-choir') && amb.includes('chords-pad'), amb.join(','));
+    await page.fill('#shelf-search', '');
+    // Ein Sound in mehreren Genres: Auswahl leuchtet überall
+    await page.locator('#shelf-cat-g-house').click().catch(() => {});
+    await page.locator('#library .loop-item[data-sample-id="techno-hats"]').first().click();
+    const armedRows = await page.evaluate(() => [...document.querySelectorAll('#library .loop-item[data-sample-id="techno-hats"]')].map((n) => n.classList.contains('armed')));
+    check('Ausgewählter Sound ist in jeder Genre-Gruppe markiert', armedRows.length >= 1 && armedRows.every(Boolean), JSON.stringify(armedRows));
+    await page.keyboard.press('Escape');
+    await page.reload();
+    await page.waitForFunction(() => window.loopwerk?.ready);
+    check('Ordnung nach Genre wird gemerkt', await page.evaluate(() => document.querySelector('.shelf-sort [data-sort="genre"]').getAttribute('aria-pressed') === 'true'));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-genre.png') });
+    await page.click('.shelf-sort [data-sort="cat"]');
+    check('Zurück nach Kategorie', await page.evaluate(() => !!document.getElementById('shelf-cat-drums')));
+
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 

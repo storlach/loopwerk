@@ -208,6 +208,18 @@
     -webkit-user-select: text; user-select: text;
   }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .shelf-sort { display: flex; align-items: center; gap: 0; }
+  .shelf-sort-label { font-size: 11px; color: var(--muted); margin-right: 6px; }
+  .seg {
+    padding: 3px 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer;
+    font: 600 11px/1.3 var(--font-display); letter-spacing: 0.04em;
+  }
+  .seg:first-of-type { border-radius: 999px 0 0 999px; }
+  .seg:last-of-type { border-radius: 0 999px 999px 0; border-left: 0; }
+  .seg[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--panel); }
+  .chip.genre { border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); }
+  .chip.genre[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: #231a00; }
+  .shelf-group.genre { --cat: var(--amber); }
   .chip {
     padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
     background: transparent; color: var(--muted); cursor: pointer;
@@ -771,6 +783,8 @@
     .shelf-title { display: none; }
     .shelf-search { grid-column: 1 / -1; order: -2; height: 44px; font-size: 16px; }
     .chips { grid-column: 1 / -1; order: -1; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .shelf-sort { grid-column: 1 / -1; order: -1; }
+    .seg { min-height: 36px; padding: 0 14px; font-size: 12px; }
     .chip { flex: none; min-height: 44px; padding: 0 14px; }
     .shelf-make { display: contents; }
     .shelf-import { height: 44px; }
@@ -973,7 +987,12 @@
         <button class="shelf-import" id="new-melody-btn" type="button" title="Neue Melodie in der Piano-Roll schreiben">+ Melodie</button>
       </div>
       <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
-      <div class="chips" id="shelf-chips" role="group" aria-label="Kategorie"></div>
+      <div class="shelf-sort" role="group" aria-label="Ordnen nach">
+        <span class="shelf-sort-label">Ordnen:</span>
+        <button type="button" class="seg" data-sort="cat">Kategorie</button>
+        <button type="button" class="seg" data-sort="genre">Genre</button>
+      </div>
+      <div class="chips" id="shelf-chips" role="group" aria-label="Filter"></div>
     </div>
     <div class="shelf-list" id="library"></div>
     <p class="shelf-credit">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>

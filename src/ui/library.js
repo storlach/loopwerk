@@ -1,10 +1,11 @@
 // Sound-Regal: Suche, Kategorie-Filter, Favoriten. Klick = anhören und auswählen, Ziehen = auf eine Spur legen.
 
-import { CATEGORIES } from '../samples.js';
+import { CATEGORIES, GENRES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
 
 const FAV_KEY = 'loopwerk.favs';
 const OPEN_KEY = 'loopwerk.shelfOpen';
+const SORT_KEY = 'loopwerk.shelfSort';
 // Auf schmalen Bildschirmen ist immer nur eine Kategorie offen (Akkordeon)
 const narrow = window.matchMedia('(max-width: 760px)');
 
@@ -33,6 +34,7 @@ const describe = (s) => {
   const parts = [s.name, s.kind === 'loop' ? `Loop, ${s.beats} Schläge` : 'One-Shot'];
   if (s.bpm) parts.push(`Original ${String(s.bpm).replace('.', ',')} BPM`);
   if (s.key) parts.push(`Tonart ${s.key}`);
+  if (s.genres?.length) parts.push(s.genres.map((g) => GENRES.find((x) => x.id === g)?.label).filter(Boolean).join(', '));
   parts.push(s.origin === 'Loopwerk' ? 'synthetisch erzeugt' : `${s.origin}${s.license ? ` (${s.license})` : ''}`);
   return parts.join(' · ');
 };
@@ -46,15 +48,44 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   let filter = 'all';
   const items = new Map();
 
-  const chipDefs = [{ id: 'all', label: 'Alle' }, { id: 'fav', label: '★' }, ...CATEGORIES];
-  for (const c of chipDefs) {
-    const chip = el('button', `chip${c.id !== 'all' && c.id !== 'fav' ? ` cat-${c.id}` : ''}`, c.label);
-    chip.type = 'button';
-    chip.dataset.filter = c.id;
-    if (c.id === 'fav') { chip.title = 'Favoriten'; chip.setAttribute('aria-label', 'Favoriten'); }
-    chip.addEventListener('click', () => { filter = c.id; render(); });
-    chipsEl.append(chip);
+  // Gruppen im Regal: nach Kategorie oder nach Genre (ein Sound kann in mehreren Genres stehen)
+  let sort = 'cat';
+  try { if (localStorage.getItem(SORT_KEY) === 'genre') sort = 'genre'; } catch { /* Standard */ }
+  const groupsFor = (mode) => (mode === 'genre'
+    ? [
+      // Sounds, deren Hauptgenre das ist, stehen oben
+      ...GENRES.map((g) => ({ id: 'g-' + g.id, label: g.label, cls: 'genre', has: (s) => !!s.genres?.includes(g.id), rank: (s) => (s.genres[0] === g.id ? 0 : 1) })),
+      { id: 'g-none', label: 'Eigene & ohne Genre', cls: 'cat-own', has: (s) => !s.genres?.length },
+    ]
+    : CATEGORIES.map((c) => ({ id: c.id, label: c.label, cls: `cat-${c.id}`, has: (s) => s.category === c.id })));
+  let groups = groupsFor(sort);
+
+  function buildChips() {
+    chipsEl.innerHTML = '';
+    for (const c of [{ id: 'all', label: 'Alle' }, { id: 'fav', label: '★' }, ...groups]) {
+      const chip = el('button', `chip${c.cls ? ` ${c.cls}` : ''}`, c.label);
+      chip.type = 'button';
+      chip.dataset.filter = c.id;
+      if (c.id === 'fav') { chip.title = 'Favoriten'; chip.setAttribute('aria-label', 'Favoriten'); }
+      chip.addEventListener('click', () => { filter = c.id; render(); });
+      chipsEl.append(chip);
+    }
   }
+  const sortBtns = [...document.querySelectorAll('.shelf-sort .seg')];
+  for (const b of sortBtns) {
+    b.addEventListener('click', () => {
+      if (sort === b.dataset.sort) return;
+      sort = b.dataset.sort;
+      try { localStorage.setItem(SORT_KEY, sort); } catch { /* egal */ }
+      groups = groupsFor(sort);
+      if (filter !== 'all' && filter !== 'fav') filter = 'all';
+      // Erste Gruppe öffnen, damit gleich etwas zu sehen ist
+      if (!groups.some((g) => open.has(g.id))) { if (narrow.matches) open.clear(); open.add(groups[0].id); saveOpen(open); }
+      buildChips();
+      render();
+    });
+  }
+  buildChips();
   search.addEventListener('input', render);
 
   function activate(sample) {
@@ -104,12 +135,15 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   function render() {
     const q = search.value.trim().toLowerCase();
     const all = library.list();
-    const match = (s) => (!q || s.name.toLowerCase().includes(q) || (CATEGORIES.find((c) => c.id === s.category)?.label ?? '').toLowerCase().includes(q))
-      && (filter === 'all' || (filter === 'fav' ? favs.has(s.id) : s.category === filter));
+    const words = (s) => [s.name, CATEGORIES.find((c) => c.id === s.category)?.label, ...(s.genres || []).map((g) => GENRES.find((x) => x.id === g)?.label)]
+      .filter(Boolean).join(' ').toLowerCase();
+    const inFilter = (s) => filter === 'all' || (filter === 'fav' ? favs.has(s.id) : !!groups.find((g) => g.id === filter)?.has(s));
+    const match = (s) => (!q || words(s).includes(q)) && inFilter(s);
     const shown = all.filter(match);
     root.innerHTML = '';
     items.clear();
     for (const chip of chipsEl.children) chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter));
+    for (const b of sortBtns) b.setAttribute('aria-pressed', String(b.dataset.sort === sort));
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {
@@ -118,13 +152,15 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         : `Keine Sounds gefunden${q ? ` für „${search.value.trim()}“` : ''}.`));
       return;
     }
-    for (const cat of CATEGORIES) {
-      const samples = shown.filter((s) => s.category === cat.id);
+    for (const cat of groups) {
+      if (filter !== 'all' && filter !== 'fav' && filter !== cat.id) continue;
+      const samples = shown.filter(cat.has);
+      if (cat.rank) samples.sort((a, b) => cat.rank(a) - cat.rank(b));
       if (!samples.length) continue;
       // Bei Suche oder Filter sind alle Treffer-Gruppen offen, sonst gilt der gemerkte Zustand
       const forced = !!q || filter !== 'all';
       const expanded = forced || open.has(cat.id);
-      const group = el('section', `shelf-group cat-${cat.id}`);
+      const group = el('section', `shelf-group ${cat.cls}`);
       const h = el('h3', 'shelf-cat-wrap');
       const head = el('button', 'shelf-cat');
       head.type = 'button';
@@ -140,7 +176,8 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       list.hidden = !expanded;
       for (const s of samples) {
         const { row, star } = makeItem(s);
-        items.set(s.id, row);
+        if (!items.has(s.id)) items.set(s.id, []);
+        items.get(s.id).push(row);
         const fav = favs.has(s.id);
         star.classList.toggle('on', fav);
         star.setAttribute('aria-pressed', String(fav));
@@ -197,11 +234,13 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   }
 
   function sync() {
-    for (const [id, row] of items) {
-      const item = row.firstChild;
-      item.classList.toggle('armed', ui.armedSampleId === id);
-      item.classList.toggle('previewing', engine.preview?.sampleId === id);
-      item.setAttribute('aria-pressed', String(ui.armedSampleId === id));
+    for (const [id, list] of items) {
+      for (const row of list) {
+        const item = row.firstChild;
+        item.classList.toggle('armed', ui.armedSampleId === id);
+        item.classList.toggle('previewing', engine.preview?.sampleId === id);
+        item.setAttribute('aria-pressed', String(ui.armedSampleId === id));
+      }
     }
   }
   ui.on(sync);

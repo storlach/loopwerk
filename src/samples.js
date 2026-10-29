@@ -15,6 +15,16 @@ export const CATEGORIES = [
   { id: 'own', label: 'Eigene' },
 ];
 
+// Genres sind Vorschläge zum Stöbern; ein Sound kann in mehreren stehen.
+export const GENRES = [
+  { id: 'techno', label: 'Techno' },
+  { id: 'house', label: 'House' },
+  { id: 'hiphop', label: 'Hip-Hop' },
+  { id: 'breaks', label: 'Breakbeat & DnB' },
+  { id: 'pop', label: 'Pop' },
+  { id: 'ambient', label: 'Ambient & Film' },
+];
+
 export const LIBRARY_BPM = 120;
 export const LIBRARY_KEY = 'Am';
 const SAMPLE_RATE = 44100;
@@ -22,6 +32,8 @@ const TAIL_SECONDS = 2;
 const PEAKS_PER_BEAT = 64;
 
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+// Frequenzen der sechs Rechteck-Oszillatoren eines 808/909-Beckens (metallischer Klang)
+const METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];
 
 // Klangbausteine. Alle Zeiten werden in Schlägen übergeben.
 export function createKit(ctx, out, spb) {
@@ -69,6 +81,35 @@ export function createKit(ctx, out, spb) {
     g.gain.linearRampToValueAtTime(0, t + dur + release * 0.5);
     g.connect(out);
     return g;
+  };
+
+  // Sanfte Sättigung (tanh); drive 1 = fast linear
+  const shaperCurves = new Map();
+  const shaper = (drive) => {
+    let curve = shaperCurves.get(drive);
+    if (!curve) {
+      curve = new Float32Array(1024);
+      for (let i = 0; i < curve.length; i++) {
+        const x = (i / (curve.length - 1)) * 2 - 1;
+        curve[i] = Math.tanh(drive * x) / Math.tanh(drive);
+      }
+      shaperCurves.set(drive, curve);
+    }
+    const w = ctx.createWaveShaper();
+    w.curve = curve;
+    w.oversample = '2x';
+    return w;
+  };
+  const metal = (t, dur, level, hp, bp) => {
+    const mix = ctx.createGain();
+    mix.gain.value = 1 / METAL.length;
+    mix.connect(biquad('bandpass', bp, 0.8)).connect(biquad('highpass', hp)).connect(decayGain(t, level, dur));
+    for (const f of METAL) {
+      const o = osc('square', f);
+      o.connect(mix);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
   };
 
   const kit = {
@@ -215,6 +256,130 @@ export function createKit(ctx, out, spb) {
       const t = T(beat);
       noiseSource(t, 2).connect(biquad('highpass', 3800)).connect(decayGain(t, 0.5, 1.9));
     },
+    // ---------- Techno (909-artig, Industrial) ----------
+    kick909(beat, vel = 1, decay = 0.5) {
+      const t = T(beat);
+      const o = osc('sine', 290);
+      o.frequency.setValueAtTime(290, t);
+      o.frequency.exponentialRampToValueAtTime(54, t + 0.06);
+      o.frequency.exponentialRampToValueAtTime(43, t + decay);
+      o.connect(shaper(2.4)).connect(decayGain(t, 0.95 * vel, decay));
+      o.start(t);
+      o.stop(t + decay + 0.05);
+      noiseSource(t, 0.02).connect(biquad('highpass', 2500)).connect(decayGain(t, 0.3 * vel, 0.012));
+    },
+    hat909(beat, vel = 1, open = false) {
+      const t = T(beat);
+      metal(t, open ? 0.32 : 0.05, 1.4 * vel, 7000, 10000);
+      noiseSource(t, open ? 0.4 : 0.06).connect(biquad('highpass', 8000)).connect(decayGain(t, 0.2 * vel, open ? 0.28 : 0.035));
+    },
+    ride(beat, vel = 1) {
+      const t = T(beat);
+      metal(t, 1.1, 0.9 * vel, 4500, 6500);
+      noiseSource(t, 1).connect(biquad('bandpass', 9000, 1.5)).connect(decayGain(t, 0.12 * vel, 0.9));
+    },
+    rim(beat, vel = 1) {
+      const t = T(beat);
+      for (const [f, l] of [[1700, 0.45], [820, 0.35]]) {
+        const o = osc('triangle', f);
+        o.connect(biquad('bandpass', f, 2)).connect(decayGain(t, l * vel, 0.03));
+        o.start(t);
+        o.stop(t + 0.06);
+      }
+    },
+    // Industrial: metallischer Schlag per FM, angezerrt
+    clang(beat, freq = 300, vel = 1) {
+      const t = T(beat);
+      const car = osc('sine', freq);
+      const mod = osc('sine', freq * 1.414);
+      const idx = ctx.createGain();
+      idx.gain.setValueAtTime(freq * 6, t);
+      idx.gain.exponentialRampToValueAtTime(freq * 0.2, t + 0.25);
+      mod.connect(idx).connect(car.frequency);
+      car.connect(shaper(4)).connect(biquad('highpass', 300)).connect(decayGain(t, 0.45 * vel, 0.28));
+      for (const o of [car, mod]) { o.start(t); o.stop(t + 0.35); }
+      noiseSource(t, 0.08).connect(biquad('bandpass', 3000, 3)).connect(decayGain(t, 0.4 * vel, 0.05));
+    },
+    // Rumble: tiefe, verwaschene Bassfläche zwischen den Kicks (schwillt an, bricht vor der nächsten Kick ab)
+    rumble(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.85 * vel, t + d * 0.45);
+      g.gain.linearRampToValueAtTime(0, t + d);
+      g.connect(out);
+      const lp = biquad('lowpass', 150, 1.2);
+      lp.connect(g);
+      const o = osc('sine', mtof(midi));
+      o.connect(shaper(3)).connect(lp);
+      o.start(t);
+      o.stop(t + d + 0.02);
+      const ng = ctx.createGain();
+      ng.gain.value = 0.7;
+      noiseSource(t, d).connect(biquad('lowpass', 170, 0.9)).connect(ng).connect(lp);
+    },
+    // Acid: Sägezahn durch resonanten Tiefpass mit Hüllkurve, Akzent und Slide wie bei der TB-303
+    acid(beat, midi, lenBeats, { accent = false, slideFrom = null, cutoff = 420, env = 2200, res = 14 } = {}) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const o = osc('sawtooth', mtof(slideFrom ?? midi));
+      if (slideFrom != null) o.frequency.exponentialRampToValueAtTime(mtof(midi), t + 0.06);
+      const lp = biquad('lowpass', cutoff, res);
+      lp.frequency.setValueAtTime(cutoff + env * (accent ? 1.7 : 1), t);
+      lp.frequency.exponentialRampToValueAtTime(cutoff, t + (accent ? 0.2 : 0.13));
+      o.connect(lp).connect(shaper(accent ? 2.6 : 1.6)).connect(holdGain(t, d, accent ? 0.5 : 0.34, 0.003, 0.02));
+      o.start(t);
+      o.stop(t + d + 0.05);
+    },
+    // Dub-Stab: kurzer Mollakkord mit Filterschließung und Echo
+    dubStab(beat, midis, vel = 1) {
+      const t = T(beat);
+      const lp = biquad('lowpass', 2600, 4);
+      lp.frequency.setValueAtTime(2600, t);
+      lp.frequency.exponentialRampToValueAtTime(450, t + 0.25);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.32 * vel, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      lp.connect(g);
+      g.connect(out);
+      const delay = ctx.createDelay(2);
+      delay.delayTime.value = T(0.75);
+      const fb = ctx.createGain();
+      fb.gain.value = 0.42;
+      const dlp = biquad('lowpass', 1600);
+      g.connect(delay).connect(dlp).connect(fb).connect(delay);
+      dlp.connect(out);
+      for (const m of midis) {
+        for (const det of [-8, 8]) {
+          const o = osc('sawtooth', mtof(m));
+          o.detune.value = det;
+          o.connect(lp);
+          o.start(t);
+          o.stop(t + 0.4);
+        }
+      }
+    },
+    // Rauschen mit wanderndem Filter: aufwärts (Riser) oder abwärts (Downlifter)
+    sweep(beat, lenBeats, down = false) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const bp = biquad('bandpass', down ? 9000 : 250, 3);
+      bp.frequency.setValueAtTime(down ? 9000 : 250, t);
+      bp.frequency.exponentialRampToValueAtTime(down ? 180 : 10000, t + d);
+      const g = ctx.createGain();
+      g.connect(out);
+      if (down) {
+        g.gain.setValueAtTime(0.8, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      } else {
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.8, t + d - 0.02);
+        g.gain.linearRampToValueAtTime(0, t + d);
+      }
+      noiseSource(t, d).connect(bp).connect(g);
+    },
     impact(beat) {
       const t = T(beat);
       const o = osc('sine', 75);
@@ -241,14 +406,14 @@ const LEAD = [
 
 export const LOOP_DEFS = [
   {
-    id: 'drums-four', name: 'Four to the Floor', category: 'drums', bars: 1, peak: 0.62,
+    id: 'drums-four', name: 'Four to the Floor', genres: ['house', 'techno', 'pop'], category: 'drums', bars: 1, peak: 0.62,
     render(k) {
       for (let b = 0; b < 4; b++) { k.kick(b); k.hat(b + 0.5, 0.9); }
       k.clap(1); k.clap(3);
     },
   },
   {
-    id: 'drums-break', name: 'Breakbeat', category: 'drums', bars: 2, peak: 0.62,
+    id: 'drums-break', name: 'Breakbeat', genres: ['breaks', 'hiphop'], category: 'drums', bars: 2, peak: 0.62,
     render(k) {
       [0, 1.75, 2.5, 4, 6.25, 6.5].forEach((b) => k.kick(b));
       [1, 3, 5, 7, 7.75].forEach((b) => k.snare(b, b % 1 ? 0.45 : 1));
@@ -256,14 +421,14 @@ export const LOOP_DEFS = [
     },
   },
   {
-    id: 'drums-halftime', name: 'Halftime', category: 'drums', bars: 1, peak: 0.62,
+    id: 'drums-halftime', name: 'Halftime', genres: ['hiphop', 'pop'], category: 'drums', bars: 1, peak: 0.62,
     render(k) {
       k.kick(0); k.kick(2.75, 0.8); k.snare(2);
       for (let b = 0; b < 4; b += 0.5) k.hat(b, b % 1 ? 0.55 : 0.85);
     },
   },
   {
-    id: 'drums-hats16', name: 'Hi-Hats 16tel', category: 'drums', bars: 1, peak: 0.42,
+    id: 'drums-hats16', name: 'Hi-Hats 16tel', genres: ['house', 'hiphop', 'pop'], category: 'drums', bars: 1, peak: 0.42,
     render(k) {
       for (let i = 0; i < 15; i++) {
         if (i === 14) k.hat(i / 4, 0.8, true);
@@ -272,11 +437,11 @@ export const LOOP_DEFS = [
     },
   },
   {
-    id: 'bass-pulse', name: 'Pulse Bass A', category: 'bass', bars: 1, peak: 0.5,
+    id: 'bass-pulse', name: 'Pulse Bass A', genres: ['techno', 'house'], category: 'bass', bars: 1, peak: 0.5,
     render(k) { for (let i = 0; i < 8; i++) k.bass(i / 2, i % 4 === 3 ? 45 : 33, 0.45); },
   },
   {
-    id: 'bass-prog', name: 'Bass Am–F–C–G', category: 'bass', bars: 4, peak: 0.5,
+    id: 'bass-prog', name: 'Bass Am–F–C–G', genres: ['pop', 'house'], category: 'bass', bars: 4, peak: 0.5,
     render(k) {
       ROOTS.forEach((r, bar) => {
         [r, r, r + 12, r, r, r + 12, r, r + 7].forEach((m, i) => k.bass(bar * 4 + i / 2, m, 0.45));
@@ -284,17 +449,17 @@ export const LOOP_DEFS = [
     },
   },
   {
-    id: 'bass-sub', name: 'Sub Am–F–C–G', category: 'bass', bars: 4, peak: 0.55,
+    id: 'bass-sub', name: 'Sub Am–F–C–G', genres: ['hiphop', 'pop'], category: 'bass', bars: 4, peak: 0.55,
     render(k) {
       ROOTS.forEach((r, bar) => { k.sub(bar * 4, r, 1.5); k.sub(bar * 4 + 2, r, 1.25); k.sub(bar * 4 + 3.5, r, 0.4); });
     },
   },
   {
-    id: 'chords-pad', name: 'Pad Am–F–C–G', category: 'chords', bars: 4, peak: 0.42,
+    id: 'chords-pad', name: 'Pad Am–F–C–G', genres: ['pop', 'ambient', 'house'], category: 'chords', bars: 4, peak: 0.42,
     render(k) { CHORDS.forEach((c, bar) => k.pad(bar * 4, c, 4)); },
   },
   {
-    id: 'chords-stabs', name: 'Stabs Am–F–C–G', category: 'chords', bars: 4, peak: 0.42,
+    id: 'chords-stabs', name: 'Stabs Am–F–C–G', genres: ['house', 'pop'], category: 'chords', bars: 4, peak: 0.42,
     render(k) {
       CHORDS.forEach((c, bar) => {
         for (const b of [0.5, 1.5, 2.5, 3.25]) k.stab(bar * 4 + b, c.map((m) => m + 12));
@@ -302,14 +467,14 @@ export const LOOP_DEFS = [
     },
   },
   {
-    id: 'synth-arp', name: 'Arp Am', category: 'synth', bars: 1, peak: 0.4,
+    id: 'synth-arp', name: 'Arp Am', genres: ['house', 'techno', 'pop'], category: 'synth', bars: 1, peak: 0.4,
     render(k) {
       [69, 72, 76, 81, 76, 72, 69, 72, 69, 72, 76, 81, 84, 81, 76, 72]
         .forEach((m, i) => k.pluck(i / 4, m, i % 4 === 0 ? 1 : 0.75, 0.16));
     },
   },
   {
-    id: 'synth-arp-prog', name: 'Arp Am–F–C–G', category: 'synth', bars: 4, peak: 0.4,
+    id: 'synth-arp-prog', name: 'Arp Am–F–C–G', genres: ['pop', 'house'], category: 'synth', bars: 4, peak: 0.4,
     render(k) {
       const order = [0, 1, 2, 3, 2, 1, 0, 1];
       CHORDS.forEach((c, bar) => {
@@ -319,12 +484,81 @@ export const LOOP_DEFS = [
     },
   },
   {
-    id: 'synth-lead', name: 'Melodie Am–F–C–G', category: 'synth', bars: 4, peak: 0.42,
+    id: 'synth-lead', name: 'Melodie Am–F–C–G', genres: ['pop'], category: 'synth', bars: 4, peak: 0.42,
     render(k) { LEAD.forEach(([b, m, d]) => k.lead(b, m, d)); },
   },
-  { id: 'fx-riser', name: 'Riser', category: 'fx', bars: 2, peak: 0.45, oneShot: true, render(k) { k.riser(0, 8); } },
-  { id: 'fx-crash', name: 'Crash', category: 'fx', bars: 1, peak: 0.42, oneShot: true, render(k) { k.crash(0); } },
-  { id: 'fx-impact', name: 'Impact', category: 'fx', bars: 1, peak: 0.6, oneShot: true, render(k) { k.impact(0); } },
+  { id: 'fx-riser', name: 'Riser', genres: ['techno', 'house', 'pop', 'breaks'], category: 'fx', bars: 2, peak: 0.45, oneShot: true, render(k) { k.riser(0, 8); } },
+  { id: 'fx-crash', name: 'Crash', genres: ['pop', 'house', 'breaks', 'hiphop', 'techno'], category: 'fx', bars: 1, peak: 0.42, oneShot: true, render(k) { k.crash(0); } },
+  { id: 'fx-impact', name: 'Impact', genres: ['ambient', 'techno', 'hiphop'], category: 'fx', bars: 1, peak: 0.6, oneShot: true, render(k) { k.impact(0); } },
+  // ---------- Techno-Paket (A-Moll, 909-artig) ----------
+  {
+    id: 'techno-kick', name: 'Techno-Kick', genres: ['techno'], category: 'drums', bars: 1, peak: 0.66,
+    render(k) { for (let b = 0; b < 4; b++) k.kick909(b); },
+  },
+  {
+    id: 'techno-groove', name: 'Techno-Groove', genres: ['techno'], category: 'drums', bars: 1, peak: 0.64,
+    render(k) {
+      for (let b = 0; b < 4; b++) { k.kick909(b); k.hat909(b + 0.5, 0.9, true); k.hat909(b + 0.25, 0.35); k.hat909(b + 0.75, 0.45); }
+      k.clap(1, 0.8); k.clap(3, 0.8); k.rim(3.75, 0.6);
+    },
+  },
+  {
+    id: 'techno-hats', name: 'Offbeat-Hats', genres: ['techno', 'house'], category: 'drums', bars: 1, peak: 0.45,
+    render(k) { for (let b = 0; b < 4; b++) { k.hat909(b + 0.5, 1, true); k.hat909(b + 0.75, 0.4); } },
+  },
+  {
+    id: 'techno-ride', name: 'Ride 8tel', genres: ['techno'], category: 'drums', bars: 1, peak: 0.4,
+    render(k) { for (let b = 0; b < 4; b += 0.5) k.ride(b, b % 1 ? 1 : 0.6); },
+  },
+  {
+    id: 'techno-perc', name: 'Industrial-Perc', genres: ['techno'], category: 'drums', bars: 2, peak: 0.5,
+    render(k) {
+      [[0.75, 310], [1.5, 220], [2.25, 410], [3.5, 260], [4.75, 310], [5.25, 520], [6.5, 220], [7.25, 410]].forEach(([b, f], i) => k.clang(b, f, i % 2 ? 0.7 : 1));
+      [1.75, 3.25, 5.75, 7.75].forEach((b) => k.rim(b, 0.7));
+    },
+  },
+  {
+    id: 'techno-rumble', name: 'Rumble-Bass A', genres: ['techno'], category: 'bass', bars: 1, peak: 0.55,
+    render(k) { for (let b = 0; b < 4; b++) k.rumble(b + 0.12, 33, 0.86); },
+  },
+  {
+    id: 'techno-offbass', name: 'Offbeat-Bass A', genres: ['techno', 'house'], category: 'bass', bars: 1, peak: 0.5,
+    render(k) { for (let b = 0; b < 4; b++) k.bass(b + 0.5, b === 3 ? 36 : 33, 0.35); },
+  },
+  {
+    id: 'techno-acid', name: 'Acid-Linie A', genres: ['techno'], category: 'bass', bars: 2, peak: 0.5,
+    render(k) {
+      // [Schritt (16tel), Ton, Akzent, Slide vom vorigen Ton]
+      const line = [[0, 33, 1], [2, 45], [3, 33], [4, 36, 0, 1], [6, 33, 1], [7, 43], [8, 45, 1], [10, 33], [11, 40, 0, 1], [12, 33], [14, 45, 1], [15, 43],
+        [16, 33, 1], [18, 45], [19, 48, 0, 1], [20, 45], [22, 33, 1], [23, 31], [24, 33], [26, 45, 1], [27, 43, 0, 1], [28, 40], [30, 36, 1], [31, 33]];
+      line.forEach(([st, m, acc, slide], i) => {
+        const next = line[i + 1]?.[0] ?? 32;
+        k.acid(st / 4, m, Math.min(next - st, 2) / 4 * 0.85, { accent: !!acc, slideFrom: slide ? line[i - 1][1] : null, cutoff: 380 + (st % 16) * 25 });
+      });
+    },
+  },
+  {
+    id: 'techno-squelch', name: 'Acid-Squelch', genres: ['techno'], category: 'synth', bars: 1, peak: 0.42,
+    render(k) {
+      [45, 45, 57, 45, 48, 45, 55, 45, 45, 52, 45, 57, 45, 48, 45, 60].forEach((m, i) => {
+        k.acid(i / 4, m, 0.2, { accent: i % 3 === 0, cutoff: 700 + 120 * Math.sin(i / 2.5), env: 3200, res: 18 });
+      });
+    },
+  },
+  {
+    id: 'techno-stab', name: 'Dub-Stab Am', genres: ['techno', 'house'], category: 'chords', bars: 2, peak: 0.42,
+    render(k) { [0.75, 2.5, 4.75, 6.25].forEach((b) => k.dubStab(b, [57, 60, 64, 67])); },
+  },
+  {
+    id: 'techno-seq', name: 'Hypno-Sequenz', genres: ['techno'], category: 'synth', bars: 2, peak: 0.4,
+    render(k) {
+      const notes = [57, 57, 69, 57, 60, 57, 64, 57];
+      for (let i = 0; i < 32; i++) k.pluck(i / 4, notes[i % 8] - 12, i % 4 === 0 ? 1 : 0.65, 0.08 + 0.1 * (0.5 + 0.5 * Math.sin(i / 5)));
+    },
+  },
+  { id: 'techno-sweep', name: 'Noise-Sweep', genres: ['techno', 'house'], category: 'fx', bars: 4, peak: 0.45, oneShot: true, render(k) { k.sweep(0, 16); } },
+  { id: 'techno-down', name: 'Downlifter', genres: ['techno', 'house', 'breaks'], category: 'fx', bars: 2, peak: 0.45, oneShot: true, render(k) { k.sweep(0, 8, true); } },
+  { id: 'techno-hit', name: 'Industrial-Hit', genres: ['techno', 'ambient'], category: 'fx', bars: 1, peak: 0.6, oneShot: true, render(k) { k.impact(0); k.clang(0, 180); k.clang(0.02, 260, 0.7); } },
 ];
 
 export function computePeaks(buffer, beats) {
@@ -499,7 +733,7 @@ export async function buildLibrary({ bpm = LIBRARY_BPM, onProgress } = {}) {
     const s = {
       id: def.id, name: def.name, category: def.category, kind: def.oneShot ? 'oneshot' : 'loop',
       beats: def.bars * 4, bpm: null, key: def.category === 'drums' || def.category === 'fx' ? null : LIBRARY_KEY,
-      oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', def,
+      oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', genres: def.genres || [], def,
     };
     await lib.add(s);
     tick();

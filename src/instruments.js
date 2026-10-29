@@ -19,6 +19,10 @@ export const DRUM_ROWS = [
 export const KITS = [
   { id: 'elektro', label: 'Elektro (synthetisch)' },
   {
+    id: 'techno', label: 'Techno (909-artig)',
+    labels: { snare: 'Rim', tomLo: 'Rumble', tomHi: 'Clang', crash: 'Ride' },
+  },
+  {
     id: 'akustik', label: 'Akustik (Sonic Pi)',
     map: {
       kick: 'sp-bd-haus', snare: 'sp-drum-snare-hard', clap: 'sp-perc-snap', hat: 'sp-drum-cymbal-closed',
@@ -36,6 +40,21 @@ export const SYNTH_PRESETS = [
 
 export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
 export const noteName = (m) => `${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
+export const drumLabel = (kitId, rowId) => KITS.find((k) => k.id === kitId)?.labels?.[rowId] ?? DRUM_ROWS.find((r) => r.id === rowId)?.label ?? rowId;
+
+// Synthetische Kits: welche Stimme des Klangbaukastens eine Zeile spielt (b = Schlag, v = Stärke)
+const SYNTH_DRUMS = {
+  elektro: {
+    kick: (k, b, v) => k.kick(b, v), snare: (k, b, v) => k.snare(b, v), clap: (k, b, v) => k.clap(b, v),
+    hat: (k, b, v) => k.hat(b, v), open: (k, b, v) => k.hat(b, v, true), tomLo: (k, b, v) => k.tom(b, 95, v),
+    tomHi: (k, b, v) => k.tom(b, 150, v), crash: (k, b) => k.crash(b),
+  },
+  techno: {
+    kick: (k, b, v) => k.kick909(b, v), snare: (k, b, v) => k.rim(b, v), clap: (k, b, v) => k.clap(b, v),
+    hat: (k, b, v) => k.hat909(b, v), open: (k, b, v) => k.hat909(b, v, true), tomLo: (k, b, v) => k.rumble(b, 33, 0.5, v),
+    tomHi: (k, b, v) => k.clang(b, 310, v), crash: (k, b, v) => k.ride(b, v),
+  },
+};
 export const PITCH_LOW = 36; // C2
 export const PITCH_HIGH = 84; // C6
 
@@ -97,14 +116,7 @@ export async function renderPattern(pattern, bpm, library) {
           src.start(b * spb);
           return;
         }
-        if (row.id === 'kick') kit.kick(b, v);
-        else if (row.id === 'snare') kit.snare(b, v);
-        else if (row.id === 'clap') kit.clap(b, v);
-        else if (row.id === 'hat') kit.hat(b, v);
-        else if (row.id === 'open') kit.hat(b, v, true);
-        else if (row.id === 'tomLo') kit.tom(b, 95, v);
-        else if (row.id === 'tomHi') kit.tom(b, 150, v);
-        else if (row.id === 'crash') kit.crash(b);
+        (SYNTH_DRUMS[pattern.kit] || SYNTH_DRUMS.elektro)[row.id]?.(kit, b, v);
       });
     }
   } else {
@@ -167,6 +179,5 @@ export function previewDrum(ctx, dest, kitId, rowId, library) {
   }
   const k = previewKit(ctx, dest);
   const t = ctx.currentTime + 0.01;
-  const play = { kick: () => k.kick(t), snare: () => k.snare(t), clap: () => k.clap(t), hat: () => k.hat(t), open: () => k.hat(t, 1, true), tomLo: () => k.tom(t, 95), tomHi: () => k.tom(t, 150), crash: () => k.crash(t) };
-  play[rowId]?.();
+  (SYNTH_DRUMS[kitId] || SYNTH_DRUMS.elektro)[rowId]?.(k, t, 1);
 }
