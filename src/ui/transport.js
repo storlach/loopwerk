@@ -30,10 +30,19 @@ export function mountTransport({ store, engine, ui, arranger }) {
   undo.addEventListener('click', () => store.undo());
   redo.addEventListener('click', () => store.redo());
 
-  const zoom = (f) => { ui.pxPerBeat = clamp(Math.round(ui.pxPerBeat * f), 10, 64); arranger.render(); };
-  $('zoom-in').addEventListener('click', () => zoom(1.25));
-  $('zoom-out').addEventListener('click', () => zoom(0.8));
-  $('snap-sel').addEventListener('change', (e) => { ui.snapBeats = Number(e.target.value); });
+  $('zoom-in').addEventListener('click', () => arranger.zoom(1.5));
+  $('zoom-out').addEventListener('click', () => arranger.zoom(1 / 1.5));
+  // Raster merkt sich der Browser (nur eine Bequemlichkeit, kein Projektinhalt)
+  const snapSel = $('snap-sel');
+  try {
+    const saved = localStorage.getItem('loopwerk.snap');
+    if (saved != null && [...snapSel.options].some((o) => o.value === saved)) snapSel.value = saved;
+  } catch { /* ohne Speicher gilt die Voreinstellung */ }
+  ui.snapBeats = Number(snapSel.value);
+  snapSel.addEventListener('change', () => {
+    ui.snapBeats = Number(snapSel.value);
+    try { localStorage.setItem('loopwerk.snap', snapSel.value); } catch { /* egal */ }
+  });
 
   // Zweistufige Bestätigung im Button selbst (Dialoge gibt es hier nicht).
   function confirmButton(btn, label, action) {

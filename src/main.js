@@ -38,7 +38,7 @@ function createUi() {
   let flashTimer = null;
   Object.assign(ui, {
     pxPerBeat: 24,
-    snapBeats: 4,
+    snapBeats: 1,
     selectedClipId: null,
     armedSampleId: null,
     statusText: null,
@@ -357,6 +357,8 @@ async function boot() {
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();
+    } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      if (arranger.nudge(e.key === 'ArrowLeft' ? -1 : 1, e)) e.preventDefault();
     } else if (e.key === 'Home') {
       engine.setPosition(0);
     }

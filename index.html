@@ -400,6 +400,24 @@
       repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
     touch-action: pan-x pan-y;
   }
+  .arr-grid.fine .lane {
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
+      repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb)),
+      repeating-linear-gradient(to right, color-mix(in srgb, var(--grid-beat) 45%, transparent) 0 1px, transparent 1px calc(var(--ppb) / 4)),
+      repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
+  }
+  .arr-grid.coarse .lane {
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
+      repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
+  }
+  .arr-grid.fine .ruler {
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
+      repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb));
+    background-size: 100% 9px, 100% 5px;
+  }
   .app.armed-mode .lane { cursor: copy; }
 
   .clip {
@@ -892,10 +910,13 @@
       <button class="key" id="zoom-out" type="button" aria-label="Verkleinern" title="Verkleinern">−</button>
       <button class="key" id="zoom-in" type="button" aria-label="Vergrößern" title="Vergrößern">+</button>
       <label class="sr" for="snap-sel" hidden>Raster</label>
-      <select class="snap" id="snap-sel" title="Raster">
-        <option value="4" selected>Raster: Takt</option>
+      <select class="snap" id="snap-sel" title="Raster (beim Ziehen Umschalt halten: frei)">
+        <option value="4">Raster: Takt</option>
         <option value="2">Raster: ½ Takt</option>
-        <option value="1">Raster: Schlag</option>
+        <option value="1" selected>Raster: Schlag</option>
+        <option value="0.5">Raster: 1/8</option>
+        <option value="0.25">Raster: 1/16</option>
+        <option value="0">Raster: frei</option>
       </select>
     </div>
 

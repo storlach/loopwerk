@@ -11,6 +11,13 @@ const WAVE_TOP = 17; // Abstand der Wellenform vom Clip-Oberrand (Platz für den
 
 export const formatDb = (g) => (g <= 0.0001 ? '−∞ dB' : `${(20 * Math.log10(g)).toFixed(1).replace('.', ',').replace('-', '−')} dB`);
 const formatBeats = (b) => `${(Math.round(b * 100) / 100).toString().replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`;
+const formatPos = (b, bpb = 4) => `Takt ${Math.floor(b / bpb) + 1}, Schlag ${String(Math.round(((b % bpb) + 1) * 100) / 100).replace('.', ',')}`;
+
+// „Frei“ (und Umschalt beim Ziehen) rastet in 1/64 Schlag – fein genug zum Hören, exakt als Gleitkommazahl.
+export const FREE_STEP = 1 / 64;
+export const MIN_PPB = 4;
+export const MAX_PPB = 192;
+const MAX_CANVAS = 16000; // Gerätepixel; größere Canvas-Flächen verweigert der Browser
 
 export function mountArranger({ root, store, engine, library, ui }) {
   root.innerHTML = '';
@@ -40,7 +47,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
   let marksKey = '';
 
   const ppb = () => ui.pxPerBeat;
-  const snap = (b) => Math.round(b / ui.snapBeats) * ui.snapBeats;
+  const step = (ev) => (ev?.shiftKey || !ui.snapBeats ? FREE_STEP : ui.snapBeats);
+  const snap = (b, ev) => Math.round(b / step(ev)) * step(ev);
+  const snapDown = (b, ev) => Math.floor(b / step(ev) + 1e-9) * step(ev);
 
   addBtn.addEventListener('click', () => {
     const id = store.addTrack();
@@ -158,11 +167,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const w = Math.max(1, Math.round(clip.lengthBeats * ppb()));
     const h = canvas.clientHeight || 30;
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(w * dpr);
+    const sx = Math.min(dpr, MAX_CANVAS / w);
+    canvas.width = Math.max(1, Math.round(w * sx));
     canvas.height = Math.round(h * dpr);
     canvas.style.width = w + 'px';
     const c = canvas.getContext('2d');
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.setTransform(sx, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, w, h);
     const color = getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888';
     c.fillStyle = color;
@@ -258,7 +268,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (key === marksKey) return;
     marksKey = key;
     marks.innerHTML = '';
-    for (let bar = 0; bar < p.lengthBars; bar++) {
+    // Bei kleinem Zoom nur jede 2./4./8. Taktzahl, damit sie lesbar bleiben
+    const barPx = ppb() * p.beatsPerBar;
+    const every = barPx >= 28 ? 1 : barPx >= 14 ? 2 : barPx >= 7 ? 4 : 8;
+    for (let bar = 0; bar < p.lengthBars; bar += every) {
       const m = el('span', 'bar-mark', String(bar + 1));
       m.style.left = bar * p.beatsPerBar * ppb() + 'px';
       marks.append(m);
@@ -278,6 +291,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
     grid.style.setProperty('--ppb', ppb() + 'px');
     grid.style.setProperty('--bar', ppb() * p.beatsPerBar + 'px');
     grid.style.setProperty('--head-w', headW() + 'px');
+    // Feine Rasterlinien (Sechzehntel) erst, wenn genug Platz ist; Schlaglinien bei sehr kleinem Zoom weg
+    grid.classList.toggle('fine', ppb() >= 64);
+    grid.classList.toggle('coarse', ppb() < 10);
     grid.style.width = headW() + totalBeats(p) * ppb() + 'px';
     renderRuler();
     syncRows();
@@ -346,26 +362,28 @@ export function mountArranger({ root, store, engine, library, ui }) {
       moved = true;
       node.classList.add('dragging');
       node.classList.toggle('copying', ev.altKey || ev.ctrlKey || ev.metaKey);
-      newStart = clamp(snap(clip.startBeat + (ev.clientX - sx) / ppb()), 0, Math.max(0, total - clip.lengthBeats));
+      newStart = clamp(snap(clip.startBeat + (ev.clientX - sx) / ppb(), ev), 0, Math.max(0, total - clip.lengthBeats));
       node.style.left = newStart * ppb() + 'px';
+      ui.status(formatPos(newStart, store.project.beatsPerBar));
       const lane = laneAt(ev.clientX, ev.clientY);
       if (lane && lane !== node.parentElement) lane.append(node);
     }, (ev) => {
       node.classList.remove('dragging', 'copying');
+      ui.status(null);
       if (!moved) return;
       const targetId = node.parentElement.dataset.trackId;
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
       if (!copy && targetId === track.id && newStart === clip.startBeat) { render(); return; }
       const id = store.moveClip(clip.id, targetId, newStart, { copy });
       select(id);
-    }, () => render());
+    }, () => { ui.status(null); render(); });
   }
 
   function startResize(e, node) {
     const total = totalBeats(store.project);
     dragClip(e, node, {
-      preview: (clip, dx) => {
-        const len = clamp(Math.max(ui.snapBeats, snap(clip.lengthBeats + dx / ppb())), ui.snapBeats, total - clip.startBeat);
+      preview: (clip, dx, dy, ev) => {
+        const len = clamp(snap(clip.lengthBeats + dx / ppb(), ev), step(ev), total - clip.startBeat);
         return { clip: { lengthBeats: len }, status: `Länge: ${formatBeats(len)}` };
       },
       commit: (clip, r) => { if (r.lengthBeats !== clip.lengthBeats) store.resizeClip(clip.id, r.lengthBeats); else render(); },
@@ -374,12 +392,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   function startTrim(e, node) {
     dragClip(e, node, {
-      preview: (clip, dx) => {
+      preview: (clip, dx, dy, ev) => {
         const end = clip.startBeat + clip.lengthBeats;
-        const start = clamp(snap(clip.startBeat + dx / ppb()), 0, end - ui.snapBeats);
+        const start = clamp(snap(clip.startBeat + dx / ppb(), ev), 0, end - step(ev));
         const sb = library.get(clip.sampleId)?.lengthBeats ?? 4;
         const offsetBeats = ((((clip.offsetBeats || 0) + start - clip.startBeat) % sb) + sb) % sb;
-        return { clip: { startBeat: start, lengthBeats: end - start, offsetBeats }, left: start, status: `Anfang: Takt ${Math.floor(start / 4) + 1}, Schlag ${Math.floor(start % 4) + 1}` };
+        return { clip: { startBeat: start, lengthBeats: end - start, offsetBeats }, left: start, status: `Anfang: ${formatPos(start, store.project.beatsPerBar)}` };
       },
       commit: (clip, r) => { if (r.startBeat !== clip.startBeat) store.trimClipStart(clip.id, r.startBeat); else render(); },
     });
@@ -433,7 +451,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (!ui.armedSampleId) { select(null); return; }
     const sample = library.get(ui.armedSampleId);
     const rect = lane.getBoundingClientRect();
-    const beat = Math.floor((e.clientX - rect.left) / ppb() / ui.snapBeats) * ui.snapBeats;
+    const beat = clamp(snapDown((e.clientX - rect.left) / ppb(), e), 0, totalBeats(store.project) - step(e));
     const id = store.addClip(lane.dataset.trackId, sample.id, beat, sample.lengthBeats);
     select(id);
   }
@@ -469,7 +487,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (!lane) { clearDropPreview(); return null; }
     const total = totalBeats(store.project);
     const rect = lane.getBoundingClientRect();
-    const startBeat = clamp(Math.floor((x - rect.left) / ppb() / ui.snapBeats) * ui.snapBeats, 0, total - ui.snapBeats);
+    const startBeat = clamp(snapDown((x - rect.left) / ppb()), 0, total - step());
     dropPreview.className = `drop-preview cat-${sample.category}`;
     dropPreview.style.left = startBeat * ppb() + 'px';
     dropPreview.style.width = Math.min(sample.lengthBeats, total - startBeat) * ppb() + 'px';
@@ -479,8 +497,66 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   function clearDropPreview() { dropPreview.remove(); }
 
+  // ---------- Zoom ----------
+
+  // Zoomt so, dass der Schlag unter `clientX` (Standard: Mitte des sichtbaren Rasters) an seinem Platz bleibt.
+  function zoomTo(target, clientX) {
+    const next = clamp(Math.round(target * 4) / 4, MIN_PPB, MAX_PPB);
+    if (next === ppb()) return;
+    const box = root.getBoundingClientRect();
+    const x = clientX == null ? headW() + (box.width - headW()) / 2 : clamp(clientX - box.left, headW(), box.width);
+    const beat = (root.scrollLeft + x - headW()) / ppb();
+    ui.pxPerBeat = next;
+    render();
+    root.scrollLeft = Math.max(0, beat * next + headW() - x);
+    ui.emit();
+  }
+  const zoom = (factor, clientX) => zoomTo(ppb() * factor, clientX);
+
+  // Strg + Mausrad (und Zwei-Finger-Zoom auf dem Trackpad, das kommt als Strg + Rad)
+  root.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    zoom(Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025)), e.clientX);
+  }, { passive: false });
+
+  // Zwei Finger auseinander/zusammen
+  let pinch = null;
+  const spread = (t) => Math.abs(t[0].clientX - t[1].clientX);
+  root.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 2) return;
+    // Zweiter Finger: Scrollen für diese Geste abbestellen, solange es noch nicht begonnen hat
+    if (e.cancelable) e.preventDefault();
+    pinch = { d: Math.max(20, spread(e.touches)), ppb: ppb() };
+  }, { passive: false });
+  root.addEventListener('touchmove', (e) => {
+    if (!pinch || e.touches.length !== 2) return;
+    if (e.cancelable) e.preventDefault();
+    const [a, b] = e.touches;
+    zoomTo(pinch.ppb * Math.max(20, spread(e.touches)) / pinch.d, (a.clientX + b.clientX) / 2);
+  }, { passive: false });
+  root.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+  root.addEventListener('touchcancel', () => { pinch = null; });
+
+  // Ausgewählten Clip mit Alt + Pfeil um einen Rasterschritt schieben (mit Umschalt: 1/64 Schlag)
+  function nudge(dir, ev) {
+    const found = ui.selectedClipId && store.findClip(ui.selectedClipId);
+    if (!found) return false;
+    const { clip, track } = found;
+    const total = totalBeats(store.project);
+    // Zur nächsten Rasterlinie in Pfeilrichtung (ein Clip abseits des Rasters landet zuerst darauf)
+    const st = step(ev);
+    const k = clip.startBeat / st;
+    const target = (dir > 0 ? Math.floor(k + 1e-9) + 1 : Math.ceil(k - 1e-9) - 1) * st;
+    const start = clamp(target, 0, Math.max(0, total - clip.lengthBeats));
+    if (start === clip.startBeat) return true;
+    select(store.moveClip(clip.id, track.id, start, { copy: false }));
+    ui.flash?.(formatPos(start, store.project.beatsPerBar));
+    return true;
+  }
+
   store.on(render);
   narrow.addEventListener('change', render);
   render();
-  return { render, setPlayhead, dropTargetAt, clearDropPreview, select };
+  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, nudge };
 }
