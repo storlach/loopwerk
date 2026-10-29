@@ -7,7 +7,8 @@ import { formatDb } from './arranger.js';
 
 export const narrow = window.matchMedia('(max-width: 760px)');
 // Diese Fächer gibt es nur am Handy; Mixer, Editoren und Export sind die gewöhnlichen Docks.
-const PHONE_DOCKS = ['sounds', 'more'];
+const PHONE_DOCKS = ['sounds', 'more', 'tempo'];
+const TEMPO_PRESETS = [80, 90, 100, 120, 128, 140];
 
 const formatBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100).replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`);
 
@@ -117,10 +118,91 @@ export function mountMobile({ store, ui, tools }) {
     $('lvl-out-out').textContent = formatBeats(c.fadeOutBeats || 0);
   }
 
-  const sync = () => { syncTabs(); syncBar(); };
+  // ---------- Tempo ohne Bildschirmtastatur ----------
+
+  const bpmInput = $('bpm-input');
+  const tempoPanel = $('tempo');
+  const tempoValue = $('tempo-value');
+  const slider = $('tempo-slider');
+  let pending = null;
+  let applyTimer = null;
+
+  function setInputMode() {
+    // Am Handy öffnet das Tempo-Feld das Tempo-Fach statt der Tastatur
+    bpmInput.readOnly = narrow.matches;
+    bpmInput.inputMode = narrow.matches ? 'none' : 'numeric';
+  }
+  bpmInput.addEventListener('click', () => {
+    if (!narrow.matches) return;
+    bpmInput.blur();
+    ui.setDock(ui.dock === 'tempo' ? null : 'tempo');
+  });
+
+  const presets = $('tempo-presets');
+  for (const v of TEMPO_PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'key';
+    b.textContent = String(v);
+    b.dataset.bpm = String(v);
+    b.addEventListener('click', () => choose(v, true));
+    presets.append(b);
+  }
+
+  // Anzeige folgt sofort; die Sounds werden erst nach einer kurzen Pause angepasst (das dauert einige Sekunden)
+  function choose(v, now = false) {
+    pending = clamp(Math.round(v), 60, 200);
+    showTempo();
+    clearTimeout(applyTimer);
+    applyTimer = setTimeout(() => { store.setBpm(pending); pending = null; showTempo(); }, now ? 0 : 700);
+  }
+  const step = (d) => () => choose((pending ?? store.project.bpm) + d);
+  $('tempo-m5').addEventListener('click', step(-5));
+  $('tempo-m1').addEventListener('click', step(-1));
+  $('tempo-p1').addEventListener('click', step(1));
+  $('tempo-p5').addEventListener('click', step(5));
+  slider.addEventListener('input', () => { pending = Number(slider.value); showTempo(); });
+  slider.addEventListener('change', () => choose(Number(slider.value), true));
+  $('tempo-close').addEventListener('click', () => ui.setDock(null));
+
+  function showTempo() {
+    const v = pending ?? store.project.bpm;
+    tempoValue.textContent = String(v);
+    if (document.activeElement !== slider) slider.value = String(v);
+    for (const b of presets.children) b.setAttribute('aria-pressed', String(Number(b.dataset.bpm) === v));
+  }
+
+  // ---------- Bildschirmtastatur ----------
+
+  const isText = (n) => !!n && !n.readOnly && (n.tagName === 'TEXTAREA'
+    || (n.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'file', 'submit'].includes(n.type)));
+  let kbdTimer = null;
+  const fitViewport = () => {
+    const vv = window.visualViewport;
+    if (vv) app.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+  };
+  document.addEventListener('focusin', (e) => {
+    if (!narrow.matches || !isText(e.target)) return;
+    clearTimeout(kbdTimer);
+    app.classList.add('kbd');
+    app.dataset.kbdIn = e.target.closest('.arranger') ? 'arr' : 'dock';
+    fitViewport();
+    requestAnimationFrame(() => e.target.scrollIntoView({ block: 'nearest' }));
+  });
+  document.addEventListener('focusout', (e) => {
+    if (!isText(e.target)) return;
+    // Kurz warten: ein Tipp auf einen Treffer soll noch auf dem Element landen, auf das gezielt wurde
+    kbdTimer = setTimeout(() => { if (!isText(document.activeElement)) { app.classList.remove('kbd'); delete app.dataset.kbdIn; } }, 250);
+  });
+  window.visualViewport?.addEventListener('resize', fitViewport);
+  // Enter in der Suche schließt die Tastatur, die Treffer bleiben
+  $('shelf-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.currentTarget.blur(); });
+
+  const sync = () => { syncTabs(); syncBar(); tempoPanel.hidden = ui.dock !== 'tempo'; if (!tempoPanel.hidden) showTempo(); };
   ui.on(sync);
   store.on(sync);
-  narrow.addEventListener('change', layout);
+  narrow.addEventListener('change', () => { layout(); setInputMode(); });
   layout();
+  setInputMode();
   sync();
 }

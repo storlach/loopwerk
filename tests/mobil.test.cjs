@@ -98,7 +98,16 @@ const { check, finish } = createChecker();
     await page.fill('#shelf-search', 'snare');
     const forced = await page.evaluate(() => [...document.querySelectorAll('.shelf-cat')].map((b) => [b.id, b.getAttribute('aria-expanded'), b.disabled]));
     check('Suche zeigt alle Treffer aufgeklappt', forced.length >= 1 && forced.every(([, e, d]) => e === 'true' && d), JSON.stringify(forced));
+    const kbd = await page.evaluate(() => {
+      const a = document.getElementById('app');
+      return { on: a.classList.contains('kbd'), where: a.dataset.kbdIn, tabs: getComputedStyle(document.getElementById('tabbar')).display, deck: getComputedStyle(document.querySelector('.deck')).display, arr: getComputedStyle(document.querySelector('.arranger')).display, shelfH: document.querySelector('.shelf').getBoundingClientRect().height, h: innerHeight };
+    });
+    check('Tastatur offen: nur das Regal bleibt sichtbar, es nutzt die ganze Höhe', kbd.on && kbd.where === 'dock' && kbd.tabs === 'none' && kbd.deck === 'none' && kbd.arr === 'none' && kbd.shelfH > kbd.h * 0.9, JSON.stringify(kbd));
     await page.fill('#shelf-search', '');
+    await page.press('#shelf-search', 'Enter');
+    await page.waitForTimeout(350);
+    const kbdOff = await page.evaluate(() => ({ on: document.getElementById('app').classList.contains('kbd'), tabs: getComputedStyle(document.getElementById('tabbar')).display }));
+    check('Enter schließt die Tastatur, Leiste und Arranger sind wieder da', !kbdOff.on && kbdOff.tabs !== 'none', JSON.stringify(kbdOff));
     check('Nach der Suche gilt wieder der eigene Zustand', await expanded('bass') === 'true' && await expanded('drums') === 'false');
     await page.tap('#tab-sounds');
     check('Nochmal „Sounds“ schließt das Fach', (await lw()).dock === null);
@@ -189,11 +198,35 @@ const { check, finish } = createChecker();
     await page.tap('#new-beat-btn');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
     const cell = page.locator('#pat-drums .pat-cell[data-row="clap"][data-step="2"]');
+    const grid = await page.evaluate(() => {
+      const d = document.getElementById('pat-drums');
+      const cells = [...d.querySelectorAll('.pat-cell[data-row="kick"]')];
+      const last = cells[cells.length - 1].getBoundingClientRect();
+      return { perRow: cells.length, steps: cells.map((c) => Number(c.dataset.step)), fits: last.right <= d.getBoundingClientRect().right + 1, scroll: d.scrollWidth - d.clientWidth, pages: document.querySelectorAll('#pat-pages .pat-page').length, labels: [...document.querySelectorAll('#pat-pages .pat-page')].map((b) => b.textContent) };
+    });
+    check('Beat-Editor am Handy: ein halber Takt (8 Schritte) passt ohne Wischen', grid.perRow === 8 && grid.fits && grid.scroll <= 1, JSON.stringify(grid));
+    check('Umschalter für die Takthälften', grid.pages === 2 && grid.labels[0].includes('Schlag 1–2') && grid.labels[1].includes('Schlag 3–4'), JSON.stringify(grid.labels));
     const cellBox = await cell.boundingBox();
-    check('Beat-Editor: Felder ≥ 36 px', cellBox.width >= 36 && cellBox.height >= 40, `${cellBox.width}×${cellBox.height}`);
+    check('Beat-Editor: Felder ≥ 30×40 px', cellBox.width >= 30 && cellBox.height >= 40, `${cellBox.width}×${cellBox.height}`);
     await cell.tap();
     check('Feld antippen setzt einen Schlag', await cell.getAttribute('aria-pressed') === 'true');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-beat.png') });
+    await page.locator('#pat-pages .pat-page').nth(1).tap();
+    const page2 = await page.evaluate(() => [...document.querySelectorAll('#pat-drums .pat-cell[data-row="kick"]')].map((c) => Number(c.dataset.step)));
+    check('Zweite Hälfte zeigt die Schritte 9–16', JSON.stringify(page2) === JSON.stringify([8, 9, 10, 11, 12, 13, 14, 15]), JSON.stringify(page2));
+    await page.locator('#pat-drums .pat-cell[data-row="tomLo"][data-step="14"]').tap();
+    const pid = await page.evaluate(() => window.loopwerk.patternEditor.id);
+    check('Antippen in der zweiten Hälfte setzt den richtigen Schritt', await page.evaluate((id) => window.loopwerk.store.project.patterns[id].rows.tomLo[14], pid) === 1);
+    const hitsBefore = await page.evaluate((id) => Object.values(window.loopwerk.store.project.patterns[id].rows).flat().filter(Boolean).length, pid);
+    const g = await box('#pat-drums');
+    await swipe(g.x + g.width * 0.3, g.y + 60, g.width * 0.5, 0);
+    const afterRight = await page.evaluate(() => document.querySelector('#pat-pages .pat-page[aria-pressed="true"]').dataset.page);
+    await swipe(g.x + g.width * 0.8, g.y + 60, -g.width * 0.5, 0);
+    const afterLeft = await page.evaluate(() => document.querySelector('#pat-pages .pat-page[aria-pressed="true"]').dataset.page);
+    const changed = await page.evaluate((id) => Object.values(window.loopwerk.store.project.patterns[id].rows).flat().filter(Boolean).length, pid);
+    check('Wischen blättert zwischen den Hälften, ohne Felder zu ändern', afterRight === '0' && afterLeft === '1' && changed === hitsBefore, `rechts → ${afterRight}, links → ${afterLeft}, Schläge ${hitsBefore} → ${changed}`);
+    check('Punkt markiert Hälften mit Schlägen', await page.locator('#pat-pages .pat-page.has-hits').count() === 2);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-beat-haelfte2.png') });
 
     // ---------- Melodie-Editor (Piano-Roll) ----------
     await page.tap('#tab-sounds');
@@ -215,12 +248,32 @@ const { check, finish } = createChecker();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-melodie.png') });
     await page.tap('#pattern-close');
 
+    // ---------- Tempo ohne Tastatur ----------
+    const bpm = page.locator('#bpm-input');
+    check('Tempo-Feld öffnet am Handy keine Tastatur', await bpm.evaluate((n) => n.readOnly && n.inputMode === 'none'));
+    await bpm.tap();
+    check('Tempo antippen öffnet das Tempo-Fach', (await lw()).dock === 'tempo' && await page.locator('#tempo-p5').isVisible());
+    const bpm0 = await page.evaluate(() => window.loopwerk.store.project.bpm);
+    await page.tap('#tempo-p5');
+    await page.tap('#tempo-p1');
+    const shown = await page.locator('#tempo-value').textContent();
+    check('+5 und +1 zeigen das neue Tempo sofort', shown === String(bpm0 + 6), shown);
+    await page.waitForFunction((v) => window.loopwerk.store.project.bpm === v, bpm0 + 6, { timeout: 3000 });
+    check('Kurz danach gilt das Tempo (ein Schritt, nicht zwei)', await page.evaluate(() => window.loopwerk.store.project.bpm) === bpm0 + 6);
+    await page.locator('#tempo-presets .key[data-bpm="100"]').tap();
+    await page.waitForFunction(() => window.loopwerk.store.project.bpm === 100 && window.loopwerk.library.bpm === 100 && !window.loopwerk.tempo.busy, null, { timeout: 30000 });
+    check('Schnellwahl 100 setzt das Tempo, das Deck zeigt es', await bpm.inputValue() === '100');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-tempo.png') });
+    await page.tap('#tempo-close');
+
     // ---------- Spurköpfe ----------
     const mute = await box('.track-row:nth-child(1) .tbtn-mute');
     const hitAbove = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.tbtn-mute'), [mute.x + mute.width / 2, mute.y - 5]);
     check('Stumm-Knopf: sichtbar ≥ 30 px, Trefferfläche ≥ 44 px', mute.height >= 30 && mute.width >= 36 && hitAbove, `${mute.width}×${mute.height}`);
     await page.locator('.track-row:nth-child(1) .track-name').tap();
     check('Spurname antippen öffnet das Umbenennen', await page.locator('#name-t1').isVisible());
+    const kbdArr = await page.evaluate(() => ({ where: document.getElementById('app').dataset.kbdIn, arr: getComputedStyle(document.querySelector('.arranger')).display, tabs: getComputedStyle(document.getElementById('tabbar')).display }));
+    check('Tastatur beim Umbenennen: der Arranger bleibt, die Leiste tritt zurück', kbdArr.where === 'arr' && kbdArr.arr !== 'none' && kbdArr.tabs === 'none', JSON.stringify(kbdArr));
     await page.locator('#name-t1').fill('Schlagzeug');
     await page.locator('#name-t1').press('Enter');
     check('Spur umbenannt', await page.evaluate(() => window.loopwerk.store.track('t1').name) === 'Schlagzeug');
@@ -257,6 +310,7 @@ const { check, finish } = createChecker();
       order: [...document.querySelector('.deck .group[aria-label="Transport"]').children].map((b) => b.id).join(','),
     }));
     check('Desktop: Knöpfe zurück im Deck, ohne Leiste unten, Regal sichtbar', desk.back && desk.tabs === 'none' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
+    check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
     check('Desktop: Reihenfolge im Deck unverändert', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,mixer-btn,metro-btn', desk.order);
     await page.click('#shelf-cat-synth');
     check('Desktop: mehrere Kategorien können offen sein', await expanded('bass') === 'true' && await expanded('synth') === 'true');

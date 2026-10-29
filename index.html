@@ -582,7 +582,19 @@
   .pat-field { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
   .pat-field select { height: 28px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
   #pat-rec[aria-pressed="true"] { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
-  .pat-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; padding: 10px 14px; min-height: 0; }
+  .pat-body { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; min-height: 0; }
+  .pat-body > .pat-drums, .pat-body > .pat-roll-wrap { flex: 1 1 auto; }
+  .pat-pages { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: none; }
+  .pat-page {
+    position: relative; flex: 1 0 auto; min-width: 72px; min-height: 44px; padding: 4px 10px;
+    display: grid; justify-items: center; align-content: center; gap: 2px;
+    border: 1px solid var(--line); border-radius: 5px; background: var(--lane); color: var(--muted); cursor: pointer;
+  }
+  .pat-page-top { font: 600 9px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  .pat-page-main { font: 600 12px/1.1 var(--font-body); color: var(--ink); white-space: nowrap; }
+  .pat-page-dot { position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--cat); opacity: 0; }
+  .pat-page.has-hits .pat-page-dot { opacity: 1; }
+  .pat-page[aria-pressed="true"] { border-color: var(--cat); background: color-mix(in srgb, var(--cat) 16%, var(--panel)); box-shadow: inset 0 0 0 1px var(--cat); }
   .pat-drums {
     display: grid; grid-template-columns: 96px repeat(var(--steps, 16), minmax(14px, 1fr)); gap: 3px;
     align-content: start; overflow: auto; min-height: 0;
@@ -690,6 +702,31 @@
     .more-sec h3 { margin: 0 0 6px; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--deck-muted); }
     .more-row { display: flex; flex-wrap: wrap; gap: 6px; }
 
+    /* Tempo ohne Bildschirmtastatur */
+    .tempo-body { padding: 12px max(12px, env(safe-area-inset-left, 0px)) 16px; display: grid; gap: 14px; }
+    .tempo-row { display: grid; grid-template-columns: 1fr 1fr 1.6fr 1fr 1fr; gap: 6px; align-items: center; }
+    .tempo-step { width: 100%; height: 52px; font-size: 15px; }
+    .tempo-value {
+      text-align: center; padding: 6px 0; border-radius: 5px; background: var(--lcd);
+      font: 600 30px/1.2 var(--font-mono); color: var(--amber); font-variant-numeric: tabular-nums;
+    }
+    .tempo-slider { width: 100%; height: 44px; margin: 0; accent-color: var(--amber); }
+    .tempo-presets { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+    .tempo-presets .key { width: 100%; padding: 0; }
+    .tempo-presets .key[aria-pressed="true"] { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber-dim); }
+    .tempo-note { margin: 0; font-size: 12px; color: var(--deck-muted); }
+    #bpm-input { cursor: pointer; caret-color: transparent; }
+
+    /* Tastatur offen: nur der Bereich mit dem Eingabefeld bleibt, passend zur Höhe über der Tastatur */
+    .app.kbd { height: var(--vvh, 100dvh); }
+    .app.kbd .deck, .app.kbd .tabbar, .app.kbd .clipbar, .app.kbd .hint { display: none; }
+    .app.kbd[data-kbd-in="dock"] { grid-template-rows: 0 0 minmax(0, 1fr) 0 0 0; }
+    .app.kbd[data-kbd-in="dock"] .arranger { display: none; }
+    .app.kbd[data-kbd-in="dock"] .shelf, .app.kbd[data-kbd-in="dock"] .dock { height: auto; }
+    .app.kbd[data-kbd-in="arr"] { grid-template-rows: 0 minmax(0, 1fr) 0 0 0 0; }
+    .app.kbd[data-kbd-in="arr"] .shelf, .app.kbd[data-kbd-in="arr"] .dock { display: none; }
+    .ed-name, #pat-name, .track-name-input, .ed-beats { font-size: 16px; }
+
     /* Sound-Regal im Fach: Suche und Kategorien oben, das ganze Fach scrollt */
     .shelf-head { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 12px 8px; }
     .shelf-title { display: none; }
@@ -732,7 +769,7 @@
     /* Editoren und Export */
     .ed-wave-wrap { height: 120px; }
     #pat-rec { display: none; }
-    .pat-drums { grid-template-columns: 76px repeat(var(--steps, 16), 36px); gap: 4px; }
+    .pat-drums { grid-template-columns: 76px repeat(var(--steps, 8), minmax(0, 1fr)); gap: 4px; touch-action: pan-y; }
     .pat-cell, .pat-row-label { height: 40px; }
     .export-body { gap: 12px; }
     .ex-set { width: 100%; box-sizing: border-box; }
@@ -801,7 +838,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.2</span>
+      <span class="brand-tag">Version 1.3</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -1014,9 +1051,29 @@
       <button class="dock-close" id="pattern-close" type="button" aria-label="Pattern-Editor schließen">×</button>
     </div>
     <div class="pat-body">
+      <div class="pat-pages cat-own" id="pat-pages" role="group" aria-label="Takthälfte" hidden></div>
       <div class="pat-drums cat-own" id="pat-drums"></div>
       <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
       <p class="pat-hint" id="pat-hint"></p>
+    </div>
+  </section>
+
+  <section class="dock more-panel tempo-panel" id="tempo" aria-label="Tempo" hidden>
+    <div class="dock-head">
+      <h2>Tempo</h2>
+      <button class="dock-close" id="tempo-close" type="button" aria-label="Tempo schließen">×</button>
+    </div>
+    <div class="tempo-body">
+      <div class="tempo-row">
+        <button class="key tempo-step" id="tempo-m5" type="button" aria-label="5 BPM langsamer">−5</button>
+        <button class="key tempo-step" id="tempo-m1" type="button" aria-label="1 BPM langsamer">−1</button>
+        <output class="tempo-value" id="tempo-value" aria-live="polite">120</output>
+        <button class="key tempo-step" id="tempo-p1" type="button" aria-label="1 BPM schneller">+1</button>
+        <button class="key tempo-step" id="tempo-p5" type="button" aria-label="5 BPM schneller">+5</button>
+      </div>
+      <input class="tempo-slider" id="tempo-slider" type="range" min="60" max="200" step="1" aria-label="Tempo in BPM">
+      <div class="tempo-presets" id="tempo-presets" role="group" aria-label="Schnellwahl"></div>
+      <p class="tempo-note" id="tempo-note">Die Sounds passen sich kurz nach dem Einstellen an.</p>
     </div>
   </section>
 

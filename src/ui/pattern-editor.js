@@ -48,6 +48,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   }
 
   function open(patternId) {
+    if (id !== patternId) page = 0;
     id = patternId;
     cursor = 0;
     ui.setDock('pattern');
@@ -87,10 +88,54 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   // ---------- Stepsequencer ----------
 
+  // Am Handy zeigt das Raster einen halben Takt (8 Schritte); der Umschalter darüber blättert.
+  const PAGE = 8;
+  const pagesEl = $('pat-pages');
+  let page = 0;
+  const pageCount = () => steps() / PAGE;
+
+  function pageLabel(i, bars) {
+    const beat = (i % 2) * 2 + 1;
+    const half = `Schlag ${beat}–${beat + 1}`;
+    return bars > 1 ? [`Takt ${Math.floor(i / 2) + 1}`, half] : [null, half];
+  }
+
+  function renderPages(p) {
+    const n = pageCount();
+    pagesEl.hidden = !narrow.matches;
+    if (!narrow.matches) return;
+    if (pagesEl.dataset.key !== `${id}|${n}`) {
+      pagesEl.dataset.key = `${id}|${n}`;
+      pagesEl.innerHTML = '';
+      for (let i = 0; i < n; i++) {
+        const b = el('button', 'pat-page');
+        b.type = 'button';
+        b.dataset.page = String(i);
+        const [top, main] = pageLabel(i, p.bars);
+        if (top) b.append(el('span', 'pat-page-top', top));
+        b.append(el('span', 'pat-page-main', main), el('span', 'pat-page-dot'));
+        b.addEventListener('click', () => { page = i; render(); });
+        pagesEl.append(b);
+      }
+    }
+    for (const b of pagesEl.children) {
+      const i = Number(b.dataset.page);
+      const active = DRUM_ROWS.some((r) => (p.rows?.[r.id] || []).slice(i * PAGE, i * PAGE + PAGE).some(Boolean));
+      b.setAttribute('aria-pressed', String(i === page));
+      b.classList.toggle('has-hits', active);
+      b.setAttribute('aria-label', `${pageLabel(i, p.bars).filter(Boolean).join(', ')}${active ? ', mit Schlägen' : ''}`);
+    }
+  }
+
   function renderDrums(p) {
-    const n = steps();
-    if (drumsEl.dataset.key !== `${id}|${n}`) {
-      drumsEl.dataset.key = `${id}|${n}`;
+    const total = steps();
+    if (page >= pageCount()) page = 0;
+    const paged = narrow.matches;
+    const from = paged ? page * PAGE : 0;
+    const n = paged ? PAGE : total;
+    renderPages(p);
+    if (drumsEl.dataset.key !== `${id}|${total}|${from}|${n}`) {
+      drumsEl.dataset.key = `${id}|${total}|${from}|${n}`;
       drumsEl.innerHTML = '';
       drumsEl.style.setProperty('--steps', n);
       for (const row of DRUM_ROWS) {
@@ -99,7 +144,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         label.title = 'Anhören';
         label.addEventListener('click', async () => previewDrum(await audio(), engine.mix.master, pat().kit, row.id, library));
         drumsEl.append(label);
-        for (let i = 0; i < n; i++) {
+        for (let i = from; i < from + n; i++) {
           const cell = el('button', `pat-cell${Math.floor(i / 4) % 2 ? ' alt' : ''}${i % 16 === 0 ? ' bar' : ''}`);
           cell.type = 'button';
           cell.dataset.row = row.id;
@@ -115,9 +160,24 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   }
 
+  // Wischen nach links/rechts blättert zur nächsten/vorigen Takthälfte
+  let swipe = null;
+  let swiped = false;
+  drumsEl.addEventListener('pointerdown', (e) => { swipe = narrow.matches ? { x: e.clientX, y: e.clientY } : null; swiped = false; });
+  drumsEl.addEventListener('pointerup', (e) => {
+    if (!swipe) return;
+    const dx = e.clientX - swipe.x;
+    const dy = e.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const next = clamp(page + (dx < 0 ? 1 : -1), 0, pageCount() - 1);
+    swiped = true;
+    if (next !== page) { page = next; render(); }
+  });
+
   drumsEl.addEventListener('click', async (e) => {
     const cell = e.target.closest('.pat-cell');
-    if (!cell) return;
+    if (!cell || swiped) { swiped = false; return; }
     const row = cell.dataset.row;
     const i = Number(cell.dataset.step);
     const on = !pat().rows?.[row]?.[i];
@@ -328,7 +388,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (drums) {
       renderDrums(p);
       hint.textContent = narrow.matches
-        ? 'Feld antippen setzt oder löscht einen Schlag, Namen antippen spielt das Instrument. Zur Seite wischen zeigt weitere Schritte.'
+        ? 'Feld antippen setzt oder löscht einen Schlag, Namen antippen spielt das Instrument. Die Schalter oben oder Wischen wechseln die Takthälfte; ein Punkt zeigt, wo schon Schläge liegen.'
         : 'Klick auf ein Feld setzt oder löscht einen Schlag. Klick auf den Namen spielt das Instrument.';
     } else {
       drawRoll(p);

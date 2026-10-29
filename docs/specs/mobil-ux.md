@@ -61,3 +61,8 @@ Dazu: Hinweiszeile direkt über der Leiste mit Fingertexten statt Tastenkürzeln
 - Pinch-Zoom im Arranger (heute Zoom-Knöpfe unter „Mehr“).
 - Piano-Roll: Notenlänge per Ziehen am Finger, sichtbare Tastennamen beim seitlichen Scrollen.
 - Mehrfachauswahl, Lineal-Loop per Finger feiner einstellen.
+
+## 1.3 – Nachbesserung nach Martins Rückmeldung
+- **Beat-Editor:** am Handy ein halber Takt (8 Schritte) pro Ansicht, alle Felder ohne seitliches Wischen sichtbar. Umschalter „Schlag 1–2 / Schlag 3–4“ (bei mehreren Takten mit Taktnummer), Wischen nach links/rechts blättert ebenfalls; ein Punkt markiert Hälften mit Schlägen. Desktop zeigt weiter das ganze Raster.
+- **Bildschirmtastatur:** Tempo braucht keine Tastatur mehr – Antippen öffnet das Tempo-Fach mit −5/−1/+1/+5, Schieberegler und Schnellwahl (80–140); angepasst wird nach kurzer Pause, damit mehrere Tipps ein Schritt bleiben. Wo Tippen nötig ist (Suche, Namen), schaltet die App in einen Tastatur-Modus: nur der Bereich mit dem Feld bleibt sichtbar und füllt die Höhe über der Tastatur (`visualViewport`); Deck, Leiste, Hinweiszeile und Clip-Werkzeuge treten zurück. Enter in der Suche schließt die Tastatur. Eingabefelder haben 16 px Schrift, damit iOS nicht hineinzoomt.
+- **Offen:** Ob `visualViewport` im eingebetteten Rahmen der Claude-App die Tastaturhöhe meldet, lässt sich nur auf dem Gerät prüfen; der Tastatur-Modus greift aber unabhängig davon beim Fokus.
