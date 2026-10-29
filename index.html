@@ -543,6 +543,19 @@
   .ed-name { width: 200px; max-width: 100%; }
   .ed-bpm { font-size: 12px; color: var(--muted); }
 
+
+  /* ---------- Export ---------- */
+  .export-body { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 14px 24px; align-content: start; overflow: auto; min-height: 0; }
+  .ex-set { border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px 10px; margin: 0; display: grid; gap: 6px; min-width: 0; }
+  .ex-set legend { padding: 0 4px; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .ex-set label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ex-go { display: grid; gap: 8px; align-content: start; min-width: 240px; flex: 1; }
+  .ex-go .dbtn { justify-self: start; height: 34px; padding: 0 18px; }
+  .ex-go progress { width: 100%; max-width: 360px; accent-color: var(--amber); }
+  .ex-status { margin: 0; font-size: 13px; }
+  .ex-note { margin: 0; font-size: 11px; color: var(--muted); }
+  .ex-note a { color: inherit; }
+
   /* ---------- Hinweiszeile ---------- */
   .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
   .hint.armed { color: var(--ink); font-weight: 500; }
@@ -584,7 +597,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 0.5</span>
+      <span class="brand-tag">Version 0.6</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -659,6 +672,7 @@
       <button class="key" id="open-btn" type="button" title="Projektdatei öffnen">Öffnen</button>
       <button class="key" id="save-btn" type="button" title="Projekt als Datei speichern">Speichern</button>
       <input type="file" id="open-input" accept=".json,application/json" hidden>
+      <button class="key" id="export-btn" type="button" title="Song als WAV oder MP3 exportieren" aria-pressed="false">Exportieren</button>
       <button class="key" id="demo-btn" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
       <button class="key" id="new-btn" type="button" title="Alle Spuren leeren">Leeren</button>
     </div>
@@ -742,6 +756,32 @@
           <label class="ed-group-label" for="ed-name">Name</label>
           <input class="ed-name" id="ed-name" type="text" maxlength="40">
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dock" id="export" aria-label="Exportieren" hidden>
+    <div class="dock-head">
+      <h2>Song exportieren</h2>
+      <button class="dock-close" id="export-close" type="button" aria-label="Export schließen">×</button>
+    </div>
+    <div class="export-body">
+      <fieldset class="ex-set">
+        <legend>Format</legend>
+        <label><input type="radio" name="ex-format" id="ex-format-wav" value="wav" checked> WAV – verlustfrei, 16 Bit, 44,1 kHz</label>
+        <label><input type="radio" name="ex-format" id="ex-format-mp3" value="mp3"> MP3 – 192 kBit/s, etwa ein Siebtel so groß</label>
+      </fieldset>
+      <fieldset class="ex-set">
+        <legend>Bereich</legend>
+        <label><input type="radio" name="ex-range" id="ex-range-song" value="song" checked> <span id="ex-range-song-label">Ganzer Song</span></label>
+        <label><input type="radio" name="ex-range" id="ex-range-loop" value="loop"> <span id="ex-range-loop-label">Loop-Bereich</span></label>
+        <label><input type="checkbox" id="ex-tail" checked> Hall und Echo ausklingen lassen (+2,5 s)</label>
+      </fieldset>
+      <div class="ex-go">
+        <button class="dbtn primary" id="ex-go" type="button">Exportieren</button>
+        <progress id="ex-progress" max="1" value="0" hidden></progress>
+        <p class="ex-status" id="ex-status" role="status"></p>
+        <p class="ex-note">In claude.ai wird die Audiodatei als ZIP gespeichert. MP3-Kodierung mit <a href="https://lame.sourceforge.net" target="_blank" rel="noopener">LAME</a> (LGPL).</p>
       </div>
     </div>
   </section>

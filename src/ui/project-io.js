@@ -2,24 +2,9 @@
 // Im Artifact läuft das Speichern über die Capability `downloads`, lokal über einen normalen Download-Link.
 
 import { isValidProject } from '../model.js';
+import { saveFile, safeName } from './save-file.js';
 
-async function saveFile(filename, text) {
-  const downloads = window.claude?.use ? await window.claude.use('downloads') : null;
-  if (downloads) {
-    await downloads.save({ filename, data: text });
-    return 'saved';
-  }
-  if (window.claude) throw { code: 'unavailable' };
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return 'saved';
-}
-
-const fileName = (name) => `${(name || 'Loopwerk-Projekt').replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'Loopwerk-Projekt'}.json`;
+const fileName = (name) => `${safeName(name)}.json`;
 
 export function mountProjectIO({ store, engine, ui, library, own }) {
   const saveBtn = document.getElementById('save-btn');
@@ -30,7 +15,7 @@ export function mountProjectIO({ store, engine, ui, library, own }) {
     const ownSounds = own ? await own.embed(store.project) : [];
     const data = JSON.stringify({ ...store.project, app: 'Loopwerk', ownSounds }, null, 2);
     try {
-      await saveFile(fileName(store.project.name), data);
+      await saveFile(fileName(store.project.name), new Blob([data], { type: 'application/json' }));
       ui.flash('Projekt gespeichert.');
     } catch (err) {
       if (err?.code === 'declined') return;

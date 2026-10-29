@@ -49,8 +49,13 @@
 ### Offen aus Stufe 5
 - Manuelle Latenz-Korrektur, Mehrspur-Aufnahme, Aufnahme im Loop (Takes)
 
-## Stufe 6 – Export
-- WAV (Encoder vorhanden: `src/wav.js`), MP3
+## ✅ Stufe 6 – Export (0.6)
+- WAV (verlustfrei) und MP3 (192 kBit/s, LAME/lamejs) aus dem ganzen Song oder dem Loop-Bereich, mit Ausklang für Hall und Echo
+- Im Artifact als ZIP gespeichert (dort dürfen Audiodateien nur verpackt gespeichert werden)
+- Spec: `docs/specs/stufe-6-export.md`, ADR 002, Tests: `tests/stufe6.test.cjs`
+
+### Offen aus Stufe 6
+- Einzelspuren (Stems) exportieren, Normalisieren beim Export
 
 ## Stufe 7 – Instrumente
 - Drum-Step-Sequencer, einfacher Synth mit Piano-Roll, MIDI-Eingang

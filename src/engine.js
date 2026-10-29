@@ -58,16 +58,40 @@ function syncStrip(ctx, strip, level, panValue, fx, spb, live) {
 
 export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
 
+function createLimiter(ctx) {
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -6;
+  comp.knee.value = 4;
+  comp.ratio.value = 12;
+  comp.attack.value = 0.003;
+  comp.release.value = 0.2;
+  return comp;
+}
+
+// Der Limiter verzögert um einige Millisekunden (Vorausschau). Einmal messen, beim Export ausgleichen.
+const latencyCache = new Map();
+export async function limiterLatency(sampleRate) {
+  if (latencyCache.has(sampleRate)) return latencyCache.get(sampleRate);
+  const ctx = new OfflineAudioContext(1, 4096, sampleRate);
+  const b = ctx.createBuffer(1, 1, sampleRate);
+  b.getChannelData(0)[0] = 0.5;
+  const src = ctx.createBufferSource();
+  src.buffer = b;
+  src.connect(createLimiter(ctx)).connect(ctx.destination);
+  src.start(0);
+  const d = (await ctx.startRendering()).getChannelData(0);
+  let peak = 0;
+  let at = 0;
+  for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > peak) { peak = Math.abs(d[i]); at = i; }
+  latencyCache.set(sampleRate, at);
+  return at;
+}
+
 export function buildMix(ctx, project, { limiter = true } = {}) {
   const post = ctx.createGain();
   let output = post;
   if (limiter) {
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -6;
-    comp.knee.value = 4;
-    comp.ratio.value = 12;
-    comp.attack.value = 0.003;
-    comp.release.value = 0.2;
+    const comp = createLimiter(ctx);
     post.connect(comp);
     output = comp;
   }
@@ -158,11 +182,16 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) 
   return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopePoints(clip, fromBeat, toBeat, when, spb));
 }
 
-// Rendert das Projekt komplett offline (für Tests und später für den WAV-Export).
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, toBeat } = {}) {
+// Rendert das Projekt offline (Tests, Export). Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
+// onProgress(0…1) wird etwa alle 2 s Audio gemeldet.
+// compensate: Limiter-Verzögerung herausrechnen (für Export, damit Loops exakt am Dateianfang beginnen).
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false } = {}) {
   const spb = 60 / project.bpm;
   const end = toBeat ?? totalBeats(project);
-  const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(end * spb * sampleRate)), sampleRate);
+  const duration = (end - fromBeat) * spb + tailSeconds;
+  const frames = Math.max(1, Math.ceil(duration * sampleRate));
+  const lat = limiter && compensate ? await limiterLatency(sampleRate) : 0;
+  const ctx = new OfflineAudioContext(2, frames + lat, sampleRate);
   const mix = buildMix(ctx, project, { limiter });
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
@@ -170,12 +199,25 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
       const sample = library.get(clip.sampleId);
       if (!sample?.buffer) continue;
       for (const seg of clipSegments(clip, sample.lengthBeats)) {
-        if (seg.start >= end - EPS) continue;
-        playSegment(ctx, dest, clip, sample, seg, seg.start, Math.min(seg.end, end), seg.start * spb, spb);
+        if (seg.start >= end - EPS || seg.end <= fromBeat + EPS) continue;
+        const from = Math.max(seg.start, fromBeat);
+        playSegment(ctx, dest, clip, sample, seg, from, Math.min(seg.end, end), (from - fromBeat) * spb, spb);
       }
     }
   }
-  return ctx.startRendering();
+  if (onProgress) {
+    for (let t = 2; t < duration; t += 2) {
+      ctx.suspend(t).then(() => { onProgress(t / duration); ctx.resume(); });
+    }
+  }
+  let out = await ctx.startRendering();
+  if (lat) {
+    const trimmed = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate });
+    for (let c = 0; c < 2; c++) trimmed.copyToChannel(out.getChannelData(c).subarray(lat, lat + frames), c);
+    out = trimmed;
+  }
+  onProgress?.(1);
+  return out;
 }
 
 // Takt-Geber in einem Worker, damit er in Hintergrund-Tabs nicht gedrosselt wird.

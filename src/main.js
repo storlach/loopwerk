@@ -11,6 +11,7 @@ import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
+import { mountExport } from './ui/export-dock.js';
 import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 
@@ -258,6 +259,7 @@ async function boot() {
   mountRecording({ store, engine, ui, arranger, recorder });
   const importer = mountImport({ store, ui, arranger, own });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
+  mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   if (library.bpm !== store.project.bpm) await tempo.apply();
   mountHints({ root: document.getElementById('hint'), ui, library, store });
 
