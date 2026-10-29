@@ -189,12 +189,20 @@ export function mountMobile({ store, ui, tools }) {
     fitViewport();
     requestAnimationFrame(() => e.target.scrollIntoView({ block: 'nearest' }));
   });
-  document.addEventListener('focusout', (e) => {
+  const endKbd = () => { if (!isText(document.activeElement)) { app.classList.remove('kbd'); delete app.dataset.kbdIn; } };
+  // „blur“ in der Capture-Phase: kommt auch an, wenn das Feld beim Verlassen sofort entfernt wird
+  // (Spurname: Tipp daneben speichert und entfernt das Eingabefeld – „focusout“ erreicht das Dokument dann nicht mehr)
+  document.addEventListener('blur', (e) => {
     if (!isText(e.target)) return;
     // Kurz warten: ein Tipp auf einen Treffer soll noch auf dem Element landen, auf das gezielt wurde
-    kbdTimer = setTimeout(() => { if (!isText(document.activeElement)) { app.classList.remove('kbd'); delete app.dataset.kbdIn; } }, 250);
+    clearTimeout(kbdTimer);
+    kbdTimer = setTimeout(endKbd, 250);
+  }, true);
+  window.visualViewport?.addEventListener('resize', () => {
+    fitViewport();
+    // Sicherheitsnetz: Tastatur zu und kein Textfeld mehr aktiv → Leiste wieder zeigen
+    if (app.classList.contains('kbd')) { clearTimeout(kbdTimer); kbdTimer = setTimeout(endKbd, 250); }
   });
-  window.visualViewport?.addEventListener('resize', fitViewport);
   // Enter in der Suche schließt die Tastatur, die Treffer bleiben
   $('shelf-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.currentTarget.blur(); });
 

@@ -10,13 +10,30 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
   const saveBtn = document.getElementById('save-btn');
   const openBtn = document.getElementById('open-btn');
   const input = document.getElementById('open-input');
+  const nameIn = document.getElementById('project-name');
+
+  // Projektname: frei editierbar, Enter oder Verlassen übernimmt, Escape verwirft; leer = alter Name
+  nameIn.placeholder = 'Projektname';
+  const showName = () => {
+    const name = store.project.name || 'Neues Projekt';
+    if (document.activeElement !== nameIn) nameIn.value = name;
+    document.title = `${name} · Loopwerk`;
+  };
+  nameIn.addEventListener('change', () => { store.setProjectName(nameIn.value); showName(); });
+  nameIn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); nameIn.value = store.project.name || ''; nameIn.blur(); }
+  });
+  nameIn.addEventListener('blur', showName);
+  store.on(showName);
+  showName();
 
   saveBtn.addEventListener('click', async () => {
     const ownSounds = own ? await own.embed(store.project) : [];
     const data = JSON.stringify({ ...store.project, app: 'Loopwerk', ownSounds }, null, 2);
     try {
-      await saveFile(fileName(store.project.name), new Blob([data], { type: 'application/json' }));
-      ui.flash('Projekt gespeichert.');
+      const saved = await saveFile(fileName(store.project.name), new Blob([data], { type: 'application/json' }));
+      ui.flash(`„${store.project.name}“ gespeichert als ${saved.filename}.`);
     } catch (err) {
       if (err?.code === 'declined') return;
       ui.flash('Speichern ist hier nicht möglich. Öffne Loopwerk in claude.ai oder im Browser.');

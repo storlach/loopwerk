@@ -346,6 +346,27 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     check('Klang von Claude: Grundklang, Name und Effekte übernommen, Werte begrenzt', snd.preset === 'bell' && snd.name === 'Glitzerglocke' && snd.echo.on && snd.echo.time === '1/8' && snd.drive.on && snd.drive.drive === 1 && snd.drive.type === 'soft', JSON.stringify(snd));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-weiterfuehren.png') });
 
+    // ---------- Projektname ----------
+    await page.evaluate(async () => { delete window.claude; const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createDemoProject()); });
+    check('Projektname steht im Deck', await page.inputValue('#project-name') === 'Beispiel-Arrangement');
+    await page.fill('#project-name', 'Mein Techno-Track');
+    await page.press('#project-name', 'Enter');
+    let pn = await page.evaluate(() => ({ name: window.loopwerk.store.project.name, title: document.title, focus: document.activeElement.id }));
+    check('Projektname ändern (Enter übernimmt, Fenstertitel folgt)', pn.name === 'Mein Techno-Track' && pn.title.startsWith('Mein Techno-Track') && pn.focus !== 'project-name', JSON.stringify(pn));
+    await page.fill('#project-name', '   ');
+    await page.press('#project-name', 'Enter');
+    check('Leerer Name behält den alten', await page.inputValue('#project-name') === 'Mein Techno-Track');
+    await page.click('#project-name');
+    await page.keyboard.type(' 2');
+    await page.keyboard.press('Escape');
+    check('Escape verwirft die Eingabe', await page.inputValue('#project-name') === 'Mein Techno-Track' && await page.evaluate(() => window.loopwerk.store.project.name) === 'Mein Techno-Track');
+    const dl = page.waitForEvent('download');
+    await page.click('#save-btn');
+    const file = (await dl).suggestedFilename();
+    check('Gespeicherte Datei heißt wie das Projekt', file === 'Mein Techno-Track.json', file);
+    await page.keyboard.press('Control+z');
+    check('Rückgängig stellt den alten Namen her', await page.inputValue('#project-name') === 'Beispiel-Arrangement');
+
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 
@@ -371,6 +392,30 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await page.tap('#pat-sing-btn');
     const ms = await page.evaluate(() => ({ visible: !document.getElementById('pat-sing').hidden, overflow: document.documentElement.scrollWidth - innerWidth, rec: document.getElementById('sing-rec').getBoundingClientRect().height }));
     check('Handy: Einsingen-Feld nutzbar', ms.visible && ms.overflow <= 0 && ms.rec >= 40, JSON.stringify(ms));
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+
+    // Spurname bearbeiten und daneben tippen: die Leiste unten muss wiederkommen
+    const tabbar = () => page.evaluate(() => getComputedStyle(document.getElementById('tabbar')).display !== 'none' && !document.getElementById('app').classList.contains('kbd'));
+    await page.locator('.track-row').nth(1).locator('.track-name').tap();
+    await page.keyboard.type('Bass neu');
+    await page.locator('.lane').nth(4).tap();
+    await page.waitForTimeout(400);
+    check('Handy: nach Umbenennen (Tipp daneben) ist die Leiste unten wieder da', await tabbar());
+    await page.locator('.track-row').nth(2).locator('.track-name').tap();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
+    check('Handy: nach Umbenennen mit Enter ist die Leiste unten wieder da', await tabbar());
+
+    // Projektname im Fach „Mehr“
+    await page.tap('#tab-more');
+    const inMore = await page.evaluate(() => { const n = document.getElementById('project-name'); const r = n.getBoundingClientRect(); return { inMore: !!n.closest('#more'), h: r.height, w: r.width }; });
+    check('Handy: Projektname im Fach „Mehr“, groß genug', inMore.inMore && inMore.h >= 44 && inMore.w > 300, JSON.stringify(inMore));
+    await page.locator('#project-name').tap();
+    await page.fill('#project-name', 'Handy-Song');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(400);
+    check('Handy: Projektname ändern, danach Leiste wieder da', await page.evaluate(() => window.loopwerk.store.project.name) === 'Handy-Song' && await tabbar());
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-projektname-mobil.png') });
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-einsingen-mobil.png') });
     check('Keine Fehler in der Konsole (Handy)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {

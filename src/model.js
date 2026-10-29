@@ -465,6 +465,12 @@ export class Store extends Emitter {
     });
   }
 
+  setProjectName(name) {
+    const v = String(name).trim().slice(0, 40);
+    if (!v || v === this.project.name) return;
+    this.dispatch('name', (p) => { p.name = v; });
+  }
+
   setMaster(patch, coalesce) {
     this.dispatch('master', (p) => { p.master = { volume: 0.85, fx: null, ...(p.master || {}), ...patch }; }, { coalesce });
   }

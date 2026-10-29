@@ -104,6 +104,8 @@
 - „✨ Weiterführen“ im Melodie-Editor: Claude (im Artifact) oder Regeln führen die Melodie fort, nochmal klicken = neue Idee
 - „Wie soll es klingen?“: Beschreibung → Klang, Name und Effekte (Claude oder Stichwörter); nach dem Einsingen automatisch
 - Spec: `docs/specs/v1.6-ideen-von-claude.md`
+- Projektname im Deck (am Handy unter „Mehr“) editierbar, bestimmt Dateinamen und Fenstertitel
+- Behoben: Nach dem Umbenennen einer Spur am Handy (Tipp daneben) blieb die Leiste unten verschwunden
 
 ## Als Nächstes
 - GitHub-Repo verbinden, GitHub Pages (dort geht das Mikrofon)
