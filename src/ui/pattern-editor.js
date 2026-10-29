@@ -7,6 +7,10 @@ import {
   noteName, resizeDrumRows, previewNote, previewDrum,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
+import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
+import { runJob } from '../dsp/run.js';
+import { startMicCapture } from '../recorder.js';
+import { decodeAudio } from '../samples.js';
 import { clamp, el, trackPointer } from '../util.js';
 
 const KEY_W = 46;
@@ -38,6 +42,10 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   const keysEl = $('pat-keys');
   const keybed = $('pat-keybed');
   const viewBtns = [...root.querySelectorAll('#pat-view .seg')];
+  const singBtn = $('pat-sing-btn');
+  const singEl = $('pat-sing');
+  const singStatus = $('sing-status');
+  let singOpen = false;
   let view = 'grid';
   let id = null;
   let rec = false;
@@ -80,10 +88,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       if (p.type === 'drums') p.rows = resizeDrumRows(p.rows, bars);
       else p.notes = p.notes.filter((n) => n.start < bars * 4);
     });
-    // Clips dieses Patterns auf die neue Länge bringen
+    fitClips(bars);
+  });
+  // Clips dieses Patterns auf die neue Länge bringen
+  function fitClips(bars) {
     const sid = patternSampleId(id);
     for (const t of store.project.tracks) for (const c of t.clips) if (c.sampleId === sid && c.lengthBeats < bars * 4) store.resizeClip(c.id, bars * 4);
-  });
+  }
   kitSel.addEventListener('change', () => update((p) => { p.kit = kitSel.value; }));
   presetSel.addEventListener('change', () => update((p) => { p.preset = presetSel.value; }));
   recBtn.addEventListener('click', () => { rec = !rec; render(); });
@@ -579,6 +590,89 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }, 'live-' + id);
   }
 
+  // ---------- Einsingen: Melodie aus Gesang oder Datei ----------
+
+  const keySel = $('sing-key');
+  keySel.append(el('option', null, 'genau wie gesungen'));
+  keySel.lastChild.value = '';
+  const ROOTS = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
+  for (const scale of ['minor', 'major']) {
+    for (let r = 0; r < 12; r++) {
+      const o = el('option', null, `${ROOTS[r]}-${SCALES[scale].label}`);
+      o.value = `${r}:${scale}`;
+      keySel.append(o);
+    }
+  }
+  singBtn.addEventListener('click', () => { singOpen = !singOpen; render(); });
+
+  const say = (text) => { singStatus.textContent = text; };
+  async function transcribe(chs, sampleRate, { fromFirst }) {
+    const lead = $('sing-lead').checked;
+    let voice = chs;
+    if (lead) {
+      say('Trenne die Lead-Stimme vom Rest … (bei ganzen Songs etwas Geduld)');
+      const stems = await runJob('separate', { chs, sampleRate }, { onProgress: (p) => say(`Trenne die Lead-Stimme vom Rest … ${Math.round(p * 100)} %`) });
+      voice = stems.vocals;
+    }
+    say('Erkenne die Töne …');
+    const track = await runJob('pitch', { chs: voice, sampleRate });
+    const [root, scale] = keySel.value ? keySel.value.split(':') : [];
+    const res = trackToNotes(track, { bpm: store.project.bpm, grid: 0.25, fromFirst, key: keySel.value ? { root: Number(root), scale } : null, minConf: lead ? 0.7 : 0.8 });
+    if (!res.notes.length) {
+      say('Keine klaren Töne gefunden. Tipp: gleichmäßig summen oder auf „la“ singen, nah am Mikrofon, ohne Musik im Hintergrund.');
+      return;
+    }
+    const bars = [1, 2, 4, 8, 16].find((b) => b * 4 >= res.beats) ?? 16;
+    const notes = fitOctaves(res.notes, PITCH_LOW, PITCH_HIGH)
+      .filter((n) => n.start < bars * 4)
+      .map((n) => ({ ...n, len: Math.min(n.len, bars * 4 - n.start) }));
+    update((p) => { p.notes = notes; p.bars = bars; });
+    fitClips(bars);
+    say(`${notes.length} Töne erkannt (${bars} ${bars === 1 ? 'Takt' : 'Takte'}). Hör sie dir mit „▶ Anhören“ an und wähle oben den Klang.`);
+    requestAnimationFrame(() => reveal(notes[0].pitch));
+  }
+
+  let mic = null;
+  $('sing-rec').addEventListener('click', async () => {
+    const btn = $('sing-rec');
+    if (mic) {
+      const m = mic;
+      mic = null;
+      btn.classList.remove('recording');
+      btn.textContent = '● Aufnehmen';
+      try {
+        const { chs, sampleRate } = await m.stop();
+        await transcribe(chs, sampleRate, { fromFirst: false });
+      } catch (err) { say(err.message); }
+      return;
+    }
+    try {
+      looper.stop();
+      mic = await startMicCapture(engine, { beatsPerBar: store.project.beatsPerBar });
+      btn.classList.add('recording');
+      btn.textContent = '■ Fertig';
+      say('Ein Takt Vorzähler, dann singen. Mit „■ Fertig“ beenden.');
+    } catch (err) {
+      say(err.code === 'unavailable' || err.code === 'denied'
+        ? 'Das Mikrofon ist hier nicht verfügbar (in claude.ai gesperrt). Nimm die Melodie mit der Sprachmemo-App auf und wähle die Datei – oder öffne Loopwerk im Browser.'
+        : err.message);
+    }
+  });
+  $('sing-file').addEventListener('click', () => $('sing-input').click());
+  $('sing-input').addEventListener('change', async () => {
+    const file = $('sing-input').files[0];
+    $('sing-input').value = '';
+    if (!file) return;
+    say(`Lese „${file.name}“ …`);
+    try {
+      const buffer = await decodeAudio(await file.arrayBuffer());
+      const chs = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+      await transcribe(chs, buffer.sampleRate, { fromFirst: true });
+    } catch (err) {
+      say(err?.message?.includes('decode') || err?.name === 'EncodingError' ? `„${file.name}“ kann dieser Browser nicht lesen.` : `Das hat nicht geklappt: ${err.message}`);
+    }
+  });
+
   // ---------- Darstellung ----------
 
   function render() {
@@ -590,6 +684,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     $('pat-view').hidden = !drums;
     for (const b of viewBtns) b.setAttribute('aria-pressed', String(b.dataset.view === view));
     liveBtn.setAttribute('aria-pressed', String(looper.running));
+    singBtn.hidden = drums;
+    singBtn.setAttribute('aria-pressed', String(singOpen && !drums));
+    singEl.hidden = drums || !singOpen;
     liveBtn.textContent = looper.running ? '■ Live stoppen' : '● Live';
     const pads = drums && view === 'pads';
     if (document.activeElement !== nameIn) nameIn.value = p.name;
@@ -639,5 +736,5 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   });
   window.addEventListener('resize', () => render());
 
-  return { open, get id() { return id; }, get looper() { return looper; } };
+  return { open, transcribe, get id() { return id; }, get looper() { return looper; } };
 }

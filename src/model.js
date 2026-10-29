@@ -387,6 +387,27 @@ export class Store extends Emitter {
     return id;
   }
 
+  // Ebenen eines zerlegten Clips: neue Spuren direkt unter der Spur des Clips, der Original-Clip fällt weg
+  insertStemTracks(clipId, stems) {
+    const found = this.findClip(clipId);
+    if (!found || this.project.tracks.length + stems.length > MAX_TRACKS) return null;
+    const ids = [];
+    this.dispatch('stems', (p) => {
+      const { track, clip } = this.findClip(clipId);
+      let at = p.tracks.indexOf(track) + 1;
+      for (const s of stems) {
+        const id = this._newTrackId();
+        ids.push(id);
+        p.tracks.splice(at++, 0, {
+          id, name: s.name.slice(0, 32), volume: track.volume, pan: track.pan || 0, mute: false, solo: false, autoName: false,
+          clips: [normalizeClip({ ...clip, id: this.newId(), sampleId: s.sampleId })],
+        });
+      }
+      track.clips = track.clips.filter((c) => c.id !== clipId);
+    });
+    return ids;
+  }
+
   // Spur an eine neue Position der Liste schieben (0 = ganz oben)
   moveTrack(trackId, toIndex) {
     const tracks = this.project.tracks;

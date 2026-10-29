@@ -302,6 +302,8 @@
   }
   .loop-item.previewing .loop-play { border: 0; width: 9px; height: 9px; background: var(--cat); border-radius: 1px; animation: pulse 0.5s ease-in-out infinite alternate; }
   @keyframes pulse { to { opacity: 0.35; } }
+  .loop-row.fresh .loop-item { animation: fresh 1.6s ease-out; }
+  @keyframes fresh { from { background: var(--amber); } }
   .loop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .loop-len { font: 400 11px/1 var(--font-mono); color: var(--muted); }
 
@@ -656,6 +658,18 @@
   }
   .pat-row-label:hover { background: var(--lane); }
   .pat-view { display: flex; }
+  #pat-sing-btn[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: #1B1204; }
+  .pat-sing { flex: none; display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--lane); }
+  .pat-sing-intro, .pat-sing-status { margin: 0; font-size: 13px; }
+  .pat-sing-status:empty { display: none; }
+  .pat-sing-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  #sing-rec.recording { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
+  .ed-sel-small { height: 28px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  .ed-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .ed-inline input[type="range"] { width: 80px; accent-color: var(--amber); }
+  #editor.busy .ed-tools, #editor.busy .dock-actions { pointer-events: none; opacity: 0.5; }
+  .ed-busy { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ed-busy progress { width: 160px; accent-color: var(--amber); }
   #pat-live[aria-pressed="true"] { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
   .pat-pads {
     flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(64px, 1fr); gap: 8px;
@@ -931,7 +945,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.4</span>
+      <span class="brand-tag">Version 1.5</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -1069,6 +1083,7 @@
         <div class="ed-head" hidden></div>
       </div>
       <p class="ed-info" id="ed-info"></p>
+      <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
       <div class="ed-tools">
         <div class="ed-group" role="group" aria-label="Auswahl">
           <span class="ed-group-label">Auswahl</span>
@@ -1091,6 +1106,20 @@
           <output class="ed-pitch" id="ed-pitch-value">0</output>
           <button class="dbtn" id="ed-pitch-up" type="button" aria-label="Einen Halbton höher">+</button>
           <button class="dbtn" id="ed-pitch-apply" type="button">Anwenden</button>
+        </div>
+        <div class="ed-group" role="group" aria-label="Autotune">
+          <span class="ed-group-label">Autotune</span>
+          <select class="ed-sel-small" id="ed-at-root" aria-label="Grundton"><option value="0">C</option><option value="1">C♯</option><option value="2">D</option><option value="3">D♯</option><option value="4">E</option><option value="5">F</option><option value="6">F♯</option><option value="7">G</option><option value="8">G♯</option><option value="9" selected>A</option><option value="10">A♯</option><option value="11">H</option></select>
+          <select class="ed-sel-small" id="ed-at-scale" aria-label="Tonleiter"><option value="minor" selected>Moll</option><option value="major">Dur</option><option value="chromatic">Chromatisch</option></select>
+          <label class="ed-inline">Stärke <input type="range" id="ed-at-strength" min="0" max="1" step="0.05" value="1"></label>
+          <label class="ed-inline"><input type="checkbox" id="ed-at-robot"> Roboter</label>
+          <button class="dbtn" id="ed-autotune" type="button" title="Gesang auf die Töne der Tonleiter ziehen">Anwenden</button>
+        </div>
+        <div class="ed-group" role="group" aria-label="Trennen">
+          <span class="ed-group-label">Trennen (Näherung)</span>
+          <button class="dbtn" id="ed-novocal" type="button" title="Gesang aus einem Song entfernen (Karaoke)">Stimme entfernen</button>
+          <button class="dbtn" id="ed-vocal" type="button" title="Nur den Gesang behalten">Stimme isolieren</button>
+          <button class="dbtn" id="ed-stems" type="button" title="Gesang, Drums, Bass und Instrumente als eigene Spuren">In Ebenen zerlegen</button>
         </div>
         <div class="ed-group" role="group" aria-label="Loop">
           <label class="ed-check"><input type="checkbox" id="ed-loop"> Als Loop</label>
@@ -1138,7 +1167,7 @@
       <div class="dock-actions">
         <input class="ed-name" id="pat-name" type="text" maxlength="30" aria-label="Name des Patterns">
         <label class="pat-field">Takte
-          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select>
+          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
         </label>
         <div class="pat-view" id="pat-view" role="group" aria-label="Ansicht">
           <button type="button" class="seg" data-view="grid">Raster</button>
@@ -1150,6 +1179,7 @@
           <select id="pat-len"><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1" selected>1/4</option><option value="2">1/2</option><option value="4">1/1</option></select>
         </label>
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
+        <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
         <button class="dbtn" id="pat-live" type="button" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">● Live</button>
         <label class="pat-field" id="pat-quant-field">Raster
           <select id="pat-quant"><option value="1" selected>1/16</option><option value="2">1/8</option></select>
@@ -1162,6 +1192,17 @@
     <div class="pat-body">
       <div class="pat-pages cat-own" id="pat-pages" role="group" aria-label="Takthälfte" hidden></div>
       <div class="pat-drums cat-own" id="pat-drums"></div>
+      <div class="pat-sing" id="pat-sing" hidden>
+        <p class="pat-sing-intro">Sing, summ oder pfeif eine Melodie – Loopwerk erkennt die Töne und spielt sie mit dem Klang, den du oben wählst. Oder nimm eine Aufnahme oder einen ganzen Song.</p>
+        <div class="pat-sing-row">
+          <button class="dbtn primary" id="sing-rec" type="button">● Aufnehmen</button>
+          <button class="dbtn" id="sing-file" type="button">Datei wählen …</button>
+          <input type="file" id="sing-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" hidden>
+          <label class="ed-inline"><input type="checkbox" id="sing-lead"> Song mit Begleitung: Lead-Melodie heraushören</label>
+          <label class="pat-field">Töne <select id="sing-key"></select></label>
+        </div>
+        <p class="pat-sing-status" id="sing-status" role="status"></p>
+      </div>
       <div class="pat-pads cat-own" id="pat-pads" hidden></div>
       <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
       <div class="pat-keys" id="pat-keys" hidden>

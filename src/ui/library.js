@@ -252,5 +252,25 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   });
   if (narrow.matches && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); }
   render();
-  return { render };
+  // Sound sichtbar machen: Gruppe öffnen (Filter/Suche lösen, falls sie ihn verbergen), hinscrollen, kurz aufleuchten
+  function reveal(sampleId) {
+    const s = library.get(sampleId);
+    if (!s) return;
+    const group = groups.find((g) => g.has(s));
+    if (!group) return;
+    const q = search.value.trim().toLowerCase();
+    if (q && !s.name.toLowerCase().includes(q)) search.value = '';
+    if (filter !== 'all' && filter !== group.id && !(filter === 'fav' && favs.has(s.id))) filter = 'all';
+    if (narrow.matches) open.clear();
+    open.add(group.id);
+    saveOpen(open);
+    render();
+    const row = items.get(sampleId)?.[0];
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest' });
+    row.classList.add('fresh');
+    setTimeout(() => row.classList.remove('fresh'), 1600);
+  }
+
+  return { render, reveal };
 }

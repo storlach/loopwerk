@@ -6,7 +6,7 @@ import { encodeWav } from './wav.js';
 
 const DB_NAME = 'loopwerk';
 const STORE = 'sounds';
-const MAX_SECONDS = 300;
+const MAX_SECONDS = 480;
 
 let dbPromise = null;
 function db() {
@@ -85,7 +85,7 @@ export class OwnSounds {
 
   // Neuen eigenen Sound anlegen (aus Puffer) und dauerhaft speichern
   async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId() }) {
-    if (buffer.duration > MAX_SECONDS) throw new Error(`Der Sound ist länger als ${MAX_SECONDS / 60} Minuten.`);
+    if (buffer.duration > MAX_SECONDS) throw new Error(`„${name}“ ist länger als ${MAX_SECONDS / 60} Minuten – bitte vorher kürzen.`);
     const wav = await encodeWav(buffer).arrayBuffer();
     const rec = { id, name, kind, beats, source, wav, created: Date.now() };
     const sample = await this.library.add(toSample(rec, buffer));
@@ -102,8 +102,11 @@ export class OwnSounds {
     let buffer;
     try {
       buffer = await decodeAudio(await file.arrayBuffer());
-    } catch {
-      throw new Error(`„${file.name}“ ist keine lesbare Audiodatei.`);
+    } catch (err) {
+      // Typ und Fehler nennen: hilft bei Formaten, die dieser Browser nicht kennt (z. B. manche .m4a/.amr)
+      const kind = file.type || file.name.split('.').pop() || 'unbekannt';
+      console.warn('Import fehlgeschlagen:', file.name, kind, err?.name, err?.message);
+      throw new Error(`„${file.name}“ (${kind}) kann dieser Browser nicht lesen. WAV und MP3 gehen überall; sonst die Datei vorher umwandeln.`);
     }
     const name = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Import';
     return this.create({ name, buffer, source: `Import: ${file.name}` });

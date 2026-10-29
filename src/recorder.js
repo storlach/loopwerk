@@ -105,3 +105,70 @@ export class Recorder extends Emitter {
     }
   }
 }
+
+// Einfache Mikrofon-Aufnahme mit Klick im Projekttempo (ein Takt Vorzähler), z. B. zum Einsingen einer Melodie.
+// Gibt die Aufnahme ab dem ersten Schlag nach dem Vorzähler zurück, um die Latenz korrigiert.
+let micWorklet = new WeakSet();
+export async function startMicCapture(engine, { beatsPerBar = 4 } = {}) {
+  if (!navigator.mediaDevices?.getUserMedia || !window.AudioWorkletNode) throw new RecorderError('unavailable', 'Aufnahmen gehen in dieser Ansicht nicht.');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch {
+    throw new RecorderError('denied', 'Kein Zugriff auf das Mikrofon.');
+  }
+  await engine._ensure();
+  engine.stop();
+  const ctx = engine.ctx;
+  if (!micWorklet.has(ctx)) {
+    await ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
+    micWorklet.add(ctx);
+  }
+  const chunks = [];
+  let doneFn = null;
+  const source = ctx.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(ctx, 'loopwerk-recorder', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
+  const sink = ctx.createGain();
+  sink.gain.value = 0;
+  source.connect(node).connect(sink).connect(ctx.destination);
+  node.port.onmessage = (e) => { if (e.data.done) doneFn?.(); else chunks.push(e.data); };
+  // Klick als Schleife (ein Takt), der erste Takt ist Vorzähler
+  const spb = engine.spb;
+  const bar = beatsPerBar * spb;
+  const click = new AudioBuffer({ numberOfChannels: 1, length: Math.round(bar * ctx.sampleRate), sampleRate: ctx.sampleRate });
+  const cd = click.getChannelData(0);
+  for (let b = 0; b < beatsPerBar; b++) {
+    const f = b === 0 ? 1760 : 1175;
+    const at = Math.round(b * spb * ctx.sampleRate);
+    for (let i = 0; i < 0.03 * ctx.sampleRate && at + i < cd.length; i++) cd[at + i] = 0.16 * Math.sign(Math.sin((2 * Math.PI * f * i) / ctx.sampleRate)) * Math.exp(-i / (0.008 * ctx.sampleRate));
+  }
+  const clickSrc = ctx.createBufferSource();
+  clickSrc.buffer = click;
+  clickSrc.loop = true;
+  clickSrc.connect(ctx.destination);
+  const t0 = ctx.currentTime + 0.1 + bar;
+  clickSrc.start(t0 - bar);
+  const inputLatency = stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
+  const latency = (ctx.outputLatency || 0) + (ctx.baseLatency || 0) + inputLatency;
+  return {
+    startTime: t0,
+    async stop() {
+      try { clickSrc.stop(); } catch { /* schon aus */ }
+      await new Promise((resolve) => { doneFn = resolve; node.port.postMessage('stop'); setTimeout(resolve, 500); });
+      source.disconnect();
+      node.disconnect();
+      stream.getTracks().forEach((t) => t.stop());
+      if (!chunks.length) throw new RecorderError('empty', 'Die Aufnahme ist leer.');
+      const sr = ctx.sampleRate;
+      const first = chunks[0].frame;
+      const total = chunks.reduce((n, c) => n + c.l.length, 0);
+      const l = new Float32Array(total);
+      const r = new Float32Array(total);
+      let o = 0;
+      for (const c of chunks) { l.set(c.l, o); r.set(c.r, o); o += c.l.length; }
+      const from = Math.max(0, Math.round((t0 + latency) * sr) - first);
+      if (total - from < sr * 0.3) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
+      return { chs: [l.slice(from), r.slice(from)], sampleRate: sr };
+    },
+  };
+}

@@ -185,7 +185,7 @@ function mountRecording({ store, engine, ui, arranger, recorder }) {
   });
 }
 
-function mountImport({ store, ui, arranger, own }) {
+function mountImport({ store, ui, arranger, own, shelf }) {
   const btn = document.getElementById('import-btn');
   const input = document.getElementById('import-input');
   const app = document.getElementById('app');
@@ -199,15 +199,31 @@ function mountImport({ store, ui, arranger, own }) {
           placed = store.addClip(target.trackId, sample.id, at, sample.lengthBeats);
           at += sample.lengthBeats;
         } else ui.arm(sample.id);
-        ui.flash(`„${sample.name}“ importiert${target ? ' und eingesetzt' : ' – klicke in eine Spur, um ihn einzusetzen'}.`);
+        // Im Regal aufklappen und hinscrollen, sonst übersieht man den neuen Sound in der zugeklappten Gruppe
+        shelf.reveal(sample.id);
+        ui.flash(`„${sample.name}“ importiert${target ? ' und eingesetzt' : ' – steht unter „Eigene“. Tippe oder klicke in eine Spur, um ihn einzusetzen'}.`);
       } catch (err) {
         ui.flash(err.message);
       }
     }
     if (placed) arranger.select(placed);
   }
-  btn.addEventListener('click', () => input.click());
-  input.addEventListener('change', () => { const files = [...input.files]; input.value = ''; importFiles(files); });
+  // Manche Apps (eingebettete Browser) öffnen keine Dateiauswahl. Merkt die Seite nichts davon
+  // (kein Fokuswechsel, keine Auswahl), erklärt ein Hinweis den Ausweg.
+  let picking = null;
+  const pickerSeen = () => { if (picking) { clearTimeout(picking); picking = null; } };
+  window.addEventListener('blur', pickerSeen);
+  document.addEventListener('visibilitychange', pickerSeen);
+  input.addEventListener('cancel', pickerSeen);
+  btn.addEventListener('click', () => {
+    input.click();
+    clearTimeout(picking);
+    picking = setTimeout(() => {
+      picking = null;
+      if (document.hasFocus()) ui.flash('Keine Dateiauswahl geöffnet? In manchen Apps ist das Hochladen gesperrt – öffne Loopwerk im Browser (Chrome, Safari, Firefox) oder ziehe die Datei direkt auf eine Spur.');
+    }, 2500);
+  });
+  input.addEventListener('change', () => { pickerSeen(); const files = [...input.files]; input.value = ''; importFiles(files); });
   // Dateien direkt auf eine Spur ziehen
   const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
   const probe = { category: 'own', lengthBeats: 4 };
@@ -247,7 +263,7 @@ async function boot() {
   const ui = createUi();
 
   const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui });
-  mountLibrary({
+  const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger,
     onDeleteOwn: async (id) => {
       if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
@@ -309,7 +325,7 @@ async function boot() {
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
   mountRecording({ store, engine, ui, arranger, recorder });
-  const importer = mountImport({ store, ui, arranger, own });
+  const importer = mountImport({ store, ui, arranger, own, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   if (library.bpm !== store.project.bpm) await tempo.apply();

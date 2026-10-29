@@ -2,6 +2,8 @@
 // „Übernehmen“ speichert das Ergebnis als neuen eigenen Sound und setzt ihn in den Clip ein.
 
 import * as E from '../dsp/edit.js';
+import { runJob } from '../dsp/run.js';
+import { STEMS, mixStems } from '../dsp/separate.js';
 import { channelsToBuffer, bufferToChannels } from '../own-sounds.js';
 import { clamp, el, trackPointer } from '../util.js';
 
@@ -145,6 +147,71 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   beatsIn.addEventListener('change', () => { st.beats = clamp(Math.round(Number(beatsIn.value) || 1), 1, 64); render(); });
 
   $('ed-undo').addEventListener('click', () => { if (st?.history.length) { st.chs = st.history.pop(); st.sel = null; render(); } });
+
+  // ---------- Lange Berechnungen (Autotune, Trennen) ----------
+
+  const busyEl = $('ed-busy');
+  let busy = false;
+  async function work(text, job, args) {
+    if (!st || busy) return null;
+    busy = true;
+    root.classList.add('busy');
+    busyEl.hidden = false;
+    $('ed-busy-text').textContent = text;
+    $('ed-busy-bar').removeAttribute('value');
+    try {
+      return await runJob(job, args, { onProgress: (p) => { $('ed-busy-bar').value = p; } });
+    } catch (err) {
+      ui.flash(`Das hat nicht geklappt: ${err.message}`);
+      return null;
+    } finally {
+      busy = false;
+      root.classList.remove('busy');
+      busyEl.hidden = true;
+    }
+  }
+
+  $('ed-autotune').addEventListener('click', async () => {
+    if (!st) return;
+    const [a, b] = selOrAll();
+    const opts = {
+      root: Number($('ed-at-root').value), scale: $('ed-at-scale').value,
+      strength: Number($('ed-at-strength').value), speed: $('ed-at-robot').checked ? 1 : 0.6,
+    };
+    const part = st.chs.map((d) => d.slice(a, b));
+    const out = await work('Autotune rechnet …', 'autotune', { chs: part, sampleRate: st.sr, opts });
+    if (!out || !st) return;
+    apply((chs) => chs.map((d, c) => { const r = d.slice(); r.set(out[c], a); return r; }));
+    ui.flash('Autotune angewendet. „Rückgängig“ im Editor nimmt es zurück.');
+  });
+
+  const separateNow = () => work('Trenne Gesang, Drums, Bass und Instrumente … (dauert bei langen Songs etwas)', 'separate', { chs: st.chs, sampleRate: st.sr });
+  $('ed-novocal').addEventListener('click', async () => {
+    const stems = await separateNow();
+    if (stems && st) { apply(() => mixStems(stems, ['drums', 'bass', 'other'])); ui.flash('Stimme entfernt (Näherung: Reste können bleiben).'); }
+  });
+  $('ed-vocal').addEventListener('click', async () => {
+    const stems = await separateNow();
+    if (stems && st) { apply(() => stems.vocals); ui.flash('Stimme isoliert (Näherung: mittige Instrumente können mitklingen).'); }
+  });
+  $('ed-stems').addEventListener('click', async () => {
+    if (!st) return;
+    if (store.project.tracks.length + STEMS.length > 16) { ui.flash('Dafür braucht es vier freie Spuren (höchstens 16).'); return; }
+    const stems = await separateNow();
+    if (!stems || !st) return;
+    const base = nameIn.value.trim() || st.src.name;
+    const made = [];
+    for (const stem of STEMS) {
+      const sample = await own.create({
+        name: `${base} – ${stem.label}`.slice(0, 40), buffer: channelsToBuffer(stems[stem.id], st.sr),
+        kind: st.kind, beats: st.kind === 'loop' ? st.beats : null, source: `Ebene aus „${st.src.name}“`,
+      });
+      made.push({ name: `${stem.label}`, sampleId: sample.id });
+    }
+    const clipId = st.clipId;
+    close();
+    if (store.insertStemTracks(clipId, made)) ui.flash('In vier Ebenen zerlegt: Gesang, Drums, Bass, Instrumente – jede auf eigener Spur.');
+  });
 
   // ---------- Anhören ----------
 

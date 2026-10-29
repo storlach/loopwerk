@@ -93,9 +93,14 @@
 - Markt-Scout-Agent: `docs/markt-scout/2026-10-29.md`
 - Spec: `docs/specs/v1.4-komfort-techno-effekte.md`, Tests: `tests/v14.test.cjs`
 
+## ✅ 1.5 – Einsingen, Autotune, Trennen
+- Import: neuer Sound wird im Regal aufgeklappt und angesprungen; Hinweis, wenn eine App die Dateiauswahl sperrt
+- Melodie einsingen (Mikrofon oder Datei) → Noten im Melodie-Editor, Klang frei wählbar; Lead-Melodie aus ganzen Songs
+- Elf Klänge (neu: E-Piano, Orgel, Flöte, Glocke, Streicher, Blech, Acid)
+- Sample-Editor: Autotune (Tonart, Stärke, Roboter), Stimme entfernen/isolieren, Song in vier Ebenen zerlegen (Näherung, ADR 003)
+- Spec: `docs/specs/v1.5-einsingen-trennen.md`, Tests: `tests/v15.test.cjs`
+
 ## Als Nächstes (Wunschliste vom 29.10.2026)
-- Import prüfen (lief bei Martin nicht), Einsingen, gesungene Melodie → Instrument, Lead-Melodie aus Datei, Autotune
-- Stimmen entfernen/isolieren, Song in Instrument-Ebenen zerlegen (als Näherung im Browser)
 - Melodie fortsetzen, Instrument per Beschreibung erzeugen (über Claude im Artifact)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 

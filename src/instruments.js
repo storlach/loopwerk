@@ -34,9 +34,35 @@ export const KITS = [
 export const SYNTH_PRESETS = [
   { id: 'pluck', label: 'Pluck', category: 'synth' },
   { id: 'lead', label: 'Lead', category: 'synth' },
+  { id: 'piano', label: 'E-Piano', category: 'chords' },
+  { id: 'organ', label: 'Orgel', category: 'chords' },
+  { id: 'flute', label: 'Flöte', category: 'synth' },
+  { id: 'bell', label: 'Glocke', category: 'synth' },
+  { id: 'strings', label: 'Streicher', category: 'chords' },
+  { id: 'brass', label: 'Blech', category: 'synth' },
   { id: 'bass', label: 'Bass', category: 'bass' },
+  { id: 'acid', label: 'Acid-Bass', category: 'bass' },
   { id: 'pad', label: 'Fläche', category: 'chords' },
 ];
+
+// Wie ein Klang eine Note spielt (b = Schlag, len = Länge in Schlägen, v = Stärke)
+const PLAY = {
+  lead: (k, p, b, len) => k.lead(b, p, len),
+  bass: (k, p, b, len, v) => k.bass(b, p, len, v),
+  pad: (k, p, b, len) => k.pad(b, [p], len),
+  piano: (k, p, b, len, v) => k.piano(b, p, len, v),
+  organ: (k, p, b, len, v) => k.organ(b, p, len, v),
+  flute: (k, p, b, len, v) => k.flute(b, p, len, v),
+  bell: (k, p, b, len, v) => k.bell(b, p, len, v),
+  strings: (k, p, b, len, v) => k.strings(b, p, len, v),
+  brass: (k, p, b, len, v) => k.brass(b, p, len, v),
+  acid: (k, p, b, len, v) => k.acid(b, p, len * 0.9, { accent: v > 0.9 }),
+};
+export function playNote(kit, preset, pitch, beat, len, vel, spb) {
+  const fn = PLAY[preset];
+  if (fn) fn(kit, pitch, beat, len, vel);
+  else kit.pluck(beat, pitch, vel, Math.min(0.6, Math.max(0.12, len * spb)));
+}
 
 export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
 export const noteName = (m) => `${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
@@ -123,11 +149,7 @@ export async function renderPattern(pattern, bpm, library) {
     for (const n of pattern.notes || []) {
       if (n.start >= beats) continue;
       const len = Math.max(0.05, Math.min(n.len, beats - n.start));
-      const v = n.vel ?? 1;
-      if (pattern.preset === 'lead') kit.lead(n.start, n.pitch, len);
-      else if (pattern.preset === 'bass') kit.bass(n.start, n.pitch, len, v);
-      else if (pattern.preset === 'pad') kit.pad(n.start, [n.pitch], len);
-      else kit.pluck(n.start, n.pitch, v, Math.min(0.6, Math.max(0.12, len * spb)));
+      playNote(kit, pattern.preset, n.pitch, n.start, len, n.vel ?? 1, spb);
     }
   }
 
@@ -160,10 +182,7 @@ function previewKit(ctx, dest) {
 export function previewNote(ctx, dest, preset, pitch) {
   const k = previewKit(ctx, dest);
   const t = ctx.currentTime + 0.01;
-  if (preset === 'lead') k.lead(t, pitch, 0.4);
-  else if (preset === 'bass') k.bass(t, pitch, 0.4);
-  else if (preset === 'pad') k.pad(t, [pitch], 0.6);
-  else k.pluck(t, pitch, 1, 0.3);
+  playNote(k, preset, pitch, t, preset === 'pad' || preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
 }
 
 export function previewDrum(ctx, dest, kitId, rowId, library) {

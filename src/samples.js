@@ -256,6 +256,102 @@ export function createKit(ctx, out, spb) {
       const t = T(beat);
       noiseSource(t, 2).connect(biquad('highpass', 3800)).connect(decayGain(t, 0.5, 1.9));
     },
+    // ---------- Instrumente für Melodien (Piano-Roll, Einsingen) ----------
+    // E-Piano per FM: Modulator im Verhältnis 1:1, dessen Anteil schnell abnimmt (heller Anschlag, weicher Ausklang)
+    piano(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = Math.max(T(lenBeats), 0.25);
+      const f = mtof(midi);
+      const car = osc('sine', f);
+      const mod = osc('sine', f);
+      const idx = ctx.createGain();
+      idx.gain.setValueAtTime(f * 2.2 * vel, t);
+      idx.gain.exponentialRampToValueAtTime(f * 0.15, t + 0.7);
+      mod.connect(idx).connect(car.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.4 * vel, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.12 * vel, t + 0.6);
+      g.gain.setValueAtTime(0.12 * vel, t + d);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.35);
+      g.connect(out);
+      car.connect(g);
+      for (const o of [car, mod]) { o.start(t); o.stop(t + d + 0.4); }
+    },
+    organ(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const g = holdGain(t, d, 0.22 * vel, 0.006, 0.06);
+      for (const [h, a] of [[1, 1], [2, 0.7], [3, 0.45], [4, 0.3], [6, 0.18]]) {
+        const o = osc('sine', mtof(midi) * h);
+        const og = ctx.createGain();
+        og.gain.value = a / 2.6;
+        o.connect(og).connect(g);
+        o.start(t);
+        o.stop(t + d + 0.1);
+      }
+    },
+    flute(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const f = mtof(midi);
+      const g = holdGain(t, d, 0.35 * vel, 0.06, 0.08);
+      const o = osc('sine', f);
+      const o2 = osc('sine', f * 2);
+      const g2 = ctx.createGain();
+      g2.gain.value = 0.12;
+      const vib = osc('sine', 5);
+      const depth = ctx.createGain();
+      depth.gain.setValueAtTime(0, t);
+      depth.gain.linearRampToValueAtTime(12, t + Math.min(d, 0.5));
+      vib.connect(depth);
+      depth.connect(o.detune);
+      depth.connect(o2.detune);
+      o.connect(g);
+      o2.connect(g2).connect(g);
+      const breath = ctx.createGain();
+      breath.gain.value = 0.06;
+      noiseSource(t, d + 0.1).connect(biquad('bandpass', f * 2, 2)).connect(breath).connect(g);
+      for (const x of [o, o2, vib]) { x.start(t); x.stop(t + d + 0.1); }
+    },
+    bell(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const f = mtof(midi);
+      const car = osc('sine', f);
+      const mod = osc('sine', f * 3.5);
+      const idx = ctx.createGain();
+      idx.gain.setValueAtTime(f * 3 * vel, t);
+      idx.gain.exponentialRampToValueAtTime(f * 0.05, t + 1.5);
+      mod.connect(idx).connect(car.frequency);
+      car.connect(decayGain(t, 0.32 * vel, 1.8, 0.002));
+      for (const o of [car, mod]) { o.start(t); o.stop(t + 1.9); }
+    },
+    strings(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const lp = biquad('lowpass', 2400, 0.7);
+      lp.connect(holdGain(t, d, 0.2 * vel, 0.18, 0.45));
+      for (const det of [-12, 0, 11]) {
+        const o = osc('sawtooth', mtof(midi));
+        o.detune.value = det;
+        o.connect(lp);
+        o.start(t);
+        o.stop(t + d + 0.5);
+      }
+    },
+    brass(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = T(lenBeats);
+      const o = osc('sawtooth', mtof(midi));
+      const lp = biquad('lowpass', 500, 1.5);
+      lp.frequency.setValueAtTime(500, t);
+      lp.frequency.linearRampToValueAtTime(2800 * vel, t + 0.07);
+      lp.frequency.exponentialRampToValueAtTime(1500, t + 0.3);
+      o.connect(lp).connect(holdGain(t, d, 0.3 * vel, 0.035, 0.08));
+      o.start(t);
+      o.stop(t + d + 0.1);
+    },
+
     // ---------- Techno (909-artig, Industrial) ----------
     kick909(beat, vel = 1, decay = 0.5) {
       const t = T(beat);
