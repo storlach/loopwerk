@@ -1,7 +1,7 @@
 // Version 1.7: flüssige Tasteneingabe (keine verlorenen Schläge, kein Ruckeln) und Splash-Screen beim Laden.
 // node tests/v17.test.cjs
 const { chromium } = require('playwright');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, clickR, selectR, createCard } = require('./harness.cjs');
 const { start } = require('./serve.cjs');
 
 const { check, finish } = createChecker();
@@ -50,7 +50,7 @@ const { check, finish } = createChecker();
       const orig = AudioScheduledSourceNode.prototype.start;
       AudioScheduledSourceNode.prototype.start = function (...a) { if (this.context === window.loopwerk.engine.ctx) window.__starts++; return orig.apply(this, a); };
     });
-    await page.click('#new-beat-btn');
+    await createCard(page, 'beat');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
     await page.click('#pat-view [data-view="pads"]');
     await page.keyboard.press('a');
@@ -77,11 +77,11 @@ const { check, finish } = createChecker();
     await page.waitForTimeout(200);
     const sel = await page.evaluate(() => ({ starts: window.__starts, kit: document.getElementById('pat-kit').value }));
     check('Auf der Kit-Auswahl: Taste spielt das Pad, Auswahl bleibt', sel.starts >= 1 && sel.kit === kit0, JSON.stringify(sel));
-    await page.selectOption('#pat-quant', '1');
+    await selectR(page, '#pat-quant', '1');
     check('Nach einer Auswahl liegt der Fokus nicht mehr im Auswahlfeld', await page.evaluate(() => document.activeElement?.id !== 'pat-quant'));
 
     // Live: 10 Sechzehntel nacheinander → 10 Schritte; ein gleichzeitiger Doppelschlag bleibt einer
-    await page.click('#pat-clear');
+    await clickR(page, '#pat-clear');
     await page.click('#pat-live');
     await page.evaluate(() => new Promise((r) => { const lp = window.loopwerk.patternEditor.looper; const go = () => (window.loopwerk.engine.ctx.currentTime > lp.t0 + 0.2 ? r() : setTimeout(go, 5)); go(); }));
     const t = Date.now();
@@ -97,7 +97,7 @@ const { check, finish } = createChecker();
     check('Live: echter Doppelschlag (gleichzeitig) bleibt ein Schlag', rows.open === 1, JSON.stringify(rows));
 
     // Flüssig: eine Eingabe zeichnet nur die geänderte Spur neu
-    await page.click('#new-melody-btn');
+    await createCard(page, 'melody');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
     const cost = await page.evaluate(async () => {
       const { store, arranger, patternEditor } = window.loopwerk;

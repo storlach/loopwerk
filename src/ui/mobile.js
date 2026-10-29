@@ -5,7 +5,9 @@ import { clipGain } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
 
-export const narrow = window.matchMedia('(max-width: 760px)');
+import { narrow } from './place.js';
+
+export { narrow };
 // Diese Fächer gibt es nur am Handy; Mixer, Editoren und Export sind die gewöhnlichen Docks.
 const PHONE_DOCKS = ['sounds', 'more', 'tempo'];
 const TEMPO_PRESETS = [80, 90, 100, 120, 128, 140];
@@ -15,27 +17,10 @@ const formatBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100
 export function mountMobile({ store, ui, tools }) {
   const $ = (id) => document.getElementById(id);
   const app = $('app');
-  const deck = document.querySelector('.deck');
   const more = $('more');
 
-  // Seltener gebrauchte Deck-Knöpfe wandern am Handy ins Fach „Mehr“; ein Platzhalter merkt sich die Herkunft.
-  const moves = [
-    [$('rec-btn'), 'play'],
-    [$('metro-btn'), 'play'],
-    [deck.querySelector('.group[aria-label="Bearbeiten"]'), 'edit'],
-    [deck.querySelector('.group[aria-label="Projekt"]'), 'project'],
-    [deck.querySelector('.brand'), 'about'],
-  ].map(([node, slot]) => {
-    const home = document.createComment(node.id || slot);
-    node.before(home);
-    return { node, home, slot: more.querySelector(`[data-slot="${slot}"]`) };
-  });
-
+  // Die Deck-Knöpfe verteilt layout.js (am Handy ins Fach „Mehr“). Hier nur: Handy-Fächer am Desktop schließen.
   function layout() {
-    for (const m of moves) {
-      if (narrow.matches) m.slot.append(m.node);
-      else m.home.after(m.node);
-    }
     if (!narrow.matches && PHONE_DOCKS.includes(ui.dock)) ui.setDock(null);
   }
 

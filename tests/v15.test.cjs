@@ -4,7 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, clickR, selectR, fillR, createCard } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -113,7 +113,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
 
     // ---------- Einsingen per Datei ----------
     await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createEmptyProject()); });
-    await page.click('#new-melody-btn');
+    await createCard(page, 'melody');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
     await page.click('#pat-sing-btn');
     check('„Einsingen“ öffnet das Feld', await page.locator('#pat-sing').isVisible());
@@ -155,7 +155,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await page.uncheck('#sing-lead');
 
     // ---------- Einsingen über das Mikrofon (simuliert) ----------
-    await page.click('#pat-clear');
+    await clickR(page, '#pat-clear');
     await page.click('#sing-rec');
     await page.waitForFunction(() => document.getElementById('sing-rec').textContent.includes('Fertig'), null, { timeout: 5000 });
     await page.waitForTimeout(6500);
@@ -185,9 +185,9 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
       return clipId;
     }, { samples: Array.from(voice([[57, 0.6], [60, 0.6], [64, 0.6], [67, 0.6]], { detune: [-40, 35, -30, 45] })) });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
-    await page.selectOption('#ed-at-root', '9');
-    await page.selectOption('#ed-at-scale', 'minor');
-    await page.click('#ed-autotune');
+    await selectR(page, '#ed-at-root', '9');
+    await selectR(page, '#ed-at-scale', 'minor');
+    await clickR(page, '#ed-autotune');
     await page.waitForFunction(() => document.getElementById('ed-busy').hidden && window.loopwerk.editor.state.history.length === 1, null, { timeout: 20000 });
     const cents = await page.evaluate(async () => {
       const { detectPitch, voicing, midiOf } = await import('./src/dsp/pitch.js');
@@ -230,17 +230,17 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
       return ab / Math.sqrt(aa * bb);
     });
     const before = await corr();
-    await page.click('#ed-novocal');
+    await clickR(page, '#ed-novocal');
     await page.waitForFunction(() => document.getElementById('ed-busy').hidden && window.loopwerk.editor.state.history.length === 1, null, { timeout: 60000 });
     const without = await corr();
     check('Stimme entfernen: Gesang fast verschwunden', before > 0.4 && Math.abs(without) < 0.1, `Korrelation mit dem Gesang ${before.toFixed(2)} → ${without.toFixed(2)}`);
     await page.click('#ed-undo');
-    await page.click('#ed-vocal');
+    await clickR(page, '#ed-vocal');
     await page.waitForFunction(() => document.getElementById('ed-busy').hidden && window.loopwerk.editor.state.history.length === 1, null, { timeout: 60000 });
     const only = await corr();
     check('Stimme isolieren: fast nur noch Gesang', only > 0.9, only.toFixed(3));
     await page.click('#ed-undo');
-    await page.click('#ed-stems');
+    await clickR(page, '#ed-stems');
     await page.waitForFunction(() => window.loopwerk.ui.dock !== 'editor', null, { timeout: 60000 });
     const stems = await page.evaluate((clipId) => {
       const { store, library } = window.loopwerk;
@@ -269,7 +269,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
 
     // ---------- Weiterführen und Klang bauen (ohne Claude: Regeln) ----------
     await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createEmptyProject()); });
-    await page.click('#new-melody-btn');
+    await createCard(page, 'melody');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
     const START = [[69, 0, 1], [72, 1, 1], [76, 2, 1], [74, 3, 1], [72, 4, 2], [71, 6, 2]];
     const setNotes = (list) => page.evaluate((l) => {
@@ -323,7 +323,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
       };
       window.claude = { use: async (name) => (name === 'sample' ? fakeSample : null) };
     });
-    await page.click('#new-melody-btn');
+    await createCard(page, 'melody');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
     await setNotes(START);
     await page.click('#pat-continue');
@@ -349,19 +349,19 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     // ---------- Projektname ----------
     await page.evaluate(async () => { delete window.claude; const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createDemoProject()); });
     check('Projektname steht im Deck', await page.inputValue('#project-name') === 'Beispiel-Arrangement');
-    await page.fill('#project-name', 'Mein Techno-Track');
+    await fillR(page, '#project-name', 'Mein Techno-Track');
     await page.press('#project-name', 'Enter');
     let pn = await page.evaluate(() => ({ name: window.loopwerk.store.project.name, title: document.title, focus: document.activeElement.id }));
     check('Projektname ändern (Enter übernimmt, Fenstertitel folgt)', pn.name === 'Mein Techno-Track' && pn.title.startsWith('Mein Techno-Track') && pn.focus !== 'project-name', JSON.stringify(pn));
-    await page.fill('#project-name', '   ');
+    await fillR(page, '#project-name', '   ');
     await page.press('#project-name', 'Enter');
     check('Leerer Name behält den alten', await page.inputValue('#project-name') === 'Mein Techno-Track');
-    await page.click('#project-name');
+    await clickR(page, '#project-name');
     await page.keyboard.type(' 2');
     await page.keyboard.press('Escape');
     check('Escape verwirft die Eingabe', await page.inputValue('#project-name') === 'Mein Techno-Track' && await page.evaluate(() => window.loopwerk.store.project.name) === 'Mein Techno-Track');
     const dl = page.waitForEvent('download');
-    await page.click('#save-btn');
+    await clickR(page, '#save-btn');
     const file = (await dl).suggestedFilename();
     check('Gespeicherte Datei heißt wie das Projekt', file === 'Mein Techno-Track.json', file);
     await page.keyboard.press('Control+z');

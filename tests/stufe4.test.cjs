@@ -1,6 +1,6 @@
 // Tests für Stufe 4 (Mixer und Effekte): node tests/stufe4.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, toggleFx } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -120,18 +120,22 @@ const { check, finish } = createChecker();
     const stripCount = await page.locator('#mixer .strip').count();
     check('Mixer öffnet mit Kanalzug je Spur plus Master', visible && stripCount === 9, `${stripCount} Kanalzüge`);
 
-    await page.locator('#mixer .strip[data-strip-id="t1"] .fx-toggle', { hasText: 'Hall' }).click();
+    // Desktop: Klick auf „keine Effekte“ zeigt die Spur im Inspektor; dort liegen die Effekte
+    await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').click();
+    const insp = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, title: document.querySelector('#insp .insp-sec:not([hidden]) .insp-title')?.textContent }));
+    check('Effekte des gewählten Kanals stehen im Inspektor', insp.mode === 'track' && insp.title.includes('Drums'), JSON.stringify(insp));
+    await page.click('#fx-hall-on');
     const hallOn = await page.evaluate(() => window.loopwerk.store.track('t1').fx.hall.on);
-    check('Hall-Schalter im Kanalzug schaltet Hall ein', hallOn === true);
-    const detail = await page.locator('#mixer-detail .detail-title').textContent();
-    check('Effekt-Details zeigen den gewählten Kanal', detail.includes('Drums'), detail);
+    check('Hall-Schalter schaltet Hall ein', hallOn === true);
+    check('Kanalzug zeigt „1 Effekt“', (await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').textContent()) === '1 Effekt');
 
     await page.locator('#fx-hall-mix').fill('0.6');
     const mix = await page.evaluate(() => window.loopwerk.store.track('t1').fx.hall.mix);
     check('Regler ändert den Effekt-Parameter', Math.abs(mix - 0.6) < 0.01, String(mix));
+    await page.click('#fx-echo-on');
     await page.locator('#fx-echo-time').selectOption('1/16');
     const echo = await page.evaluate(() => window.loopwerk.store.track('t1').fx.echo);
-    check('Echo-Zeit wählen schaltet das Echo ein', echo.on && echo.time === '1/16', JSON.stringify(echo));
+    check('Echo einschalten, Zeit wählen', echo.on && echo.time === '1/16', JSON.stringify(echo));
 
     await page.locator('#fader-t2').fill('0.3');
     await page.locator('#pan-t2').fill('-0.5');
@@ -143,9 +147,9 @@ const { check, finish } = createChecker();
     // Wiedergabe mit Effekten, Effekt live umschalten
     await page.click('#play-btn');
     await page.waitForTimeout(700);
-    await page.locator('#mixer .strip[data-strip-id="t4"] .fx-toggle', { hasText: 'EQ' }).click();
+    await toggleFx(page, 't4', 'eq');
     await page.waitForTimeout(300);
-    await page.locator('#mixer .strip[data-strip-id="t4"] .fx-toggle', { hasText: 'EQ' }).click();
+    await toggleFx(page, 't4', 'eq');
     await page.waitForTimeout(300);
     const live = await page.evaluate(() => ({ playing: window.loopwerk.engine.playing, meter: window.loopwerk.engine.trackPeak('t4') }));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'stufe4-light.png') });

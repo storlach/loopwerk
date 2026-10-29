@@ -5,11 +5,12 @@ import { EFFECTS, withFx } from '../effects.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
 import { formatDb } from './arranger.js';
+import { narrow } from './place.js';
 
 const MASTER = '__master';
 const SHORT = { drive: 'Zerr', filter: 'Filter', eq: 'EQ', comp: 'Komp', pump: 'Pump', echo: 'Echo', hall: 'Hall' };
 
-const formatParam = (p, v) => {
+export const formatParam = (p, v) => {
   if (p.format) return p.format(v);
   if (p.unit === 'ms') return `${Math.round(v)} ms`;
   if (p.unit === 'dB') return `${v > 0 ? '+' : ''}${String(v).replace('.', ',').replace('-', '−')} dB`;
@@ -36,6 +37,10 @@ export function mountMixer({ root, store, engine, ui }) {
     name.type = 'button';
     name.title = 'Effekte dieses Kanals bearbeiten';
     name.addEventListener('click', () => select(id));
+    // Desktop: Zusammenfassung statt sieben Schalter; Klick zeigt die Effekte der Spur im Inspektor
+    const sum = el('button', 'strip-sum');
+    sum.type = 'button';
+    sum.addEventListener('click', () => select(id));
     const fxBtns = el('div', 'strip-fx');
     const fxMap = new Map();
     for (const e of EFFECTS) {
@@ -88,10 +93,10 @@ export function mountMixer({ root, store, engine, ui }) {
       solo.addEventListener('click', () => store.setTrack(id, { solo: !store.track(id).solo }));
       ms.append(mute, solo);
     }
-    strip.append(name, fxBtns);
+    strip.append(name, sum, fxBtns);
     if (pan) strip.append(pan);
     strip.append(faderRow, value, ms);
-    const s = { strip, name, fxMap, pan, fader, meter, value, mute, solo, peak: 0 };
+    const s = { strip, name, sum, fxMap, pan, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);
     return s;
   }
@@ -107,6 +112,9 @@ export function mountMixer({ root, store, engine, ui }) {
       s.name.textContent = nameOf(id);
       s.strip.classList.toggle('selected', selected === id);
       for (const [fxId, b] of s.fxMap) b.setAttribute('aria-pressed', String(fx[fxId].on));
+      const nOn = EFFECTS.filter((e) => fx[e.id].on).length;
+      s.sum.textContent = nOn ? `${nOn} ${nOn === 1 ? 'Effekt' : 'Effekte'}` : 'keine Effekte';
+      s.sum.classList.toggle('on', nOn > 0);
       const vol = id === MASTER ? masterOf(store.project).volume : store.track(id).volume;
       if (document.activeElement !== s.fader) s.fader.value = String(vol);
       s.fader.setAttribute('aria-label', `Lautstärke ${nameOf(id)}`);
@@ -123,14 +131,20 @@ export function mountMixer({ root, store, engine, ui }) {
     renderDetail();
   }
 
+  // Am Desktop zeigt der Inspektor die Effekte der gewählten Spur (Master: Song-Ansicht);
+  // am Handy das Detail im Mixer
   function select(id) {
     selected = id;
+    if (!narrow.matches) {
+      if (id === MASTER) { ui.select(null); ui.selectTrack?.(null); } else ui.selectTrack?.(id);
+    }
     sync();
   }
 
   // ---------- Effekt-Details ----------
 
   function renderDetail() {
+    if (!narrow.matches) { detailFor = null; detailEl.innerHTML = ''; return; }
     if (!selected) {
       detailFor = null;
       detailEl.innerHTML = '';
@@ -240,5 +254,11 @@ export function mountMixer({ root, store, engine, ui }) {
   document.getElementById('mixer-btn').addEventListener('click', () => setOpen(ui.dock !== 'mixer'));
   root.querySelector('#mixer-close').addEventListener('click', () => setOpen(false));
   store.on(sync);
+  ui.on(() => {
+    // Auswahl im Arranger/Inspektor im Mixer markieren
+    const t = !narrow.matches ? (ui.selectedTrackId || (ui.selectedClipId && store.findClip(ui.selectedClipId)?.track.id) || null) : selected;
+    for (const [id, s] of strips) s.strip.classList.toggle('selected', t === id);
+  });
+  narrow.addEventListener('change', () => { detailFor = null; sync(); });
   return { setOpen, select, MASTER };
 }

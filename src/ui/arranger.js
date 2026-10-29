@@ -68,10 +68,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     menuBtn.type = 'button';
     menuBtn.title = 'Spur: duplizieren, verschieben, umbenennen, löschen';
     menuBtn.setAttribute('aria-haspopup', 'menu');
-    const del = el('button', 'tbtn tbtn-del', '×');
-    del.type = 'button';
-    del.title = 'Spur löschen';
-    top.append(name, menuBtn, del);
+    top.append(name, menuBtn);
     const btns = el('div', 'track-btns');
     const mute = el('button', 'tbtn tbtn-mute', 'M');
     mute.type = 'button';
@@ -99,20 +96,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     // Doppelklick gibt es am Finger nicht: dort genügt einmal Antippen
     name.addEventListener('click', (e) => { if (e.pointerType === 'touch') startRename(track.id); });
 
-    // Löschen mit Bestätigung im Button selbst
-    let armed = null;
-    del.addEventListener('click', () => {
-      if (armed) { clearTimeout(armed); armed = null; store.removeTrack(track.id); return; }
-      del.classList.add('confirm');
-      del.textContent = '?';
-      del.title = 'Nochmal klicken zum Löschen';
-      armed = setTimeout(() => { armed = null; del.classList.remove('confirm'); del.textContent = '×'; del.title = 'Spur löschen'; }, 3000);
-    });
-
     menuBtn.addEventListener('click', () => openMenu(track.id, menuBtn));
     head.addEventListener('pointerdown', (e) => startTrackDrag(e, track.id));
 
-    const r = { row, head, name, top, menuBtn, del, mute, solo, vol, lane };
+    // Klick auf den Spurkopf zeigt die Spur im Inspektor (Lautstärke, Panorama, Effekte)
+    head.addEventListener('click', (e) => { if (!e.target.closest('button, input')) ui.selectTrack?.(track.id); });
+
+    const r = { row, head, name, top, menuBtn, mute, solo, vol, lane };
     rows.set(track.id, r);
     return r;
   }
@@ -159,11 +149,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       r.mute.setAttribute('aria-pressed', String(t.mute));
       r.solo.setAttribute('aria-pressed', String(t.solo));
       r.vol.setAttribute('aria-label', `Lautstärke ${t.name}`);
-      r.del.setAttribute('aria-label', `Spur ${t.name} löschen`);
       r.menuBtn.setAttribute('aria-label', `Menü für Spur ${t.name}`);
-      r.del.disabled = tracks.length <= 1;
       if (document.activeElement !== r.vol) r.vol.value = String(t.volume);
       r.row.classList.toggle('silent', t.mute || (anySolo && !t.solo));
+      r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === t.id);
     });
     addRow.hidden = tracks.length >= MAX_TRACKS;
   }
@@ -335,7 +324,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   function makeClip(clip) {
     const sample = library.get(clip.sampleId);
-    const node = el('div', `clip cat-${sample?.category ?? 'fx'}`);
+    const node = el('div', `clip cat-${sample?.colorCat ?? sample?.category ?? 'fx'}`);
     node.dataset.clipId = clip.id;
     node.style.left = clip.startBeat * ppb() + 'px';
     node.style.width = clip.lengthBeats * ppb() + 'px';
@@ -566,7 +555,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
   }
 
   function laneClick(e, lane) {
-    if (!ui.armedSampleId) { select(null); return; }
+    if (scissors) { scissors = null; grid.classList.remove('scissors'); ui.status(null); }
+    if (!ui.armedSampleId) { select(null); ui.selectTrack?.(null); return; }
     const sample = library.get(ui.armedSampleId);
     const rect = lane.getBoundingClientRect();
     const beat = clamp(snapDown((e.clientX - rect.left) / ppb(), e), 0, totalBeats(store.project) - step(e));
@@ -578,6 +568,23 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (e.button !== 0) return;
     const t = e.target;
     const clip = t.closest('.clip');
+    if (clip && scissors) {
+      // Schere: an der angeklickten Stelle teilen (im Raster)
+      e.preventDefault();
+      const c = store.findClip(clip.dataset.clipId)?.clip;
+      const rect = clip.parentElement.getBoundingClientRect();
+      const beat = snap((e.clientX - rect.left) / ppb(), e);
+      const done = scissors;
+      scissors = null;
+      grid.classList.remove('scissors');
+      ui.status(null);
+      if (c && beat > c.startBeat + 1e-6 && beat < c.startBeat + c.lengthBeats - 1e-6) {
+        const created = store.splitAt(beat, [c.id]);
+        if (created.length) select(created[0]);
+        done.onDone?.(created.length > 0);
+      } else done.onDone?.(false);
+      return;
+    }
     if (clip) {
       e.preventDefault();
       // Finger: ein nicht ausgewählter Clip wird nur ausgewählt, damit Wischen scrollt statt verschiebt
@@ -614,6 +621,32 @@ export function mountArranger({ root, store, engine, library, ui }) {
   }
 
   function clearDropPreview() { dropPreview.remove(); }
+
+  // ---------- Schere: Teilen an einer Stelle, die man anklickt ----------
+  let scissors = null;
+  function armScissors(onDone) {
+    scissors = { onDone };
+    grid.classList.add('scissors');
+    ui.status('Schere: Klick auf die Stelle im Clip, an der geteilt wird – Esc bricht ab');
+  }
+  function cancelScissors() {
+    if (!scissors) return false;
+    scissors = null;
+    grid.classList.remove('scissors');
+    ui.status(null);
+    return true;
+  }
+
+  // Clip über einer Schublade sichtbar halten: so scrollen, dass er oberhalb von `limitTop` liegt
+  function revealClip(clipId, limitTop) {
+    const node = root.querySelector(`.clip[data-clip-id="${clipId}"]`);
+    if (!node) return;
+    const r = node.getBoundingClientRect();
+    const box = root.getBoundingClientRect();
+    const top = box.top + 32; // unter dem Lineal
+    if (r.bottom > limitTop - 8) root.scrollTop += r.bottom - (limitTop - 8);
+    else if (r.top < top) root.scrollTop -= top - r.top;
+  }
 
   // ---------- Zoom ----------
 
@@ -678,5 +711,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Farben der Wellenformen hängen vom Farbschema ab
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render(true));
   render(true);
-  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, nudge };
+  ui.on(() => {
+    for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
+  });
+  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, nudge, armScissors, cancelScissors, revealClip, get scissors() { return !!scissors; } };
 }

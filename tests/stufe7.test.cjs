@@ -2,7 +2,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, clickR, selectR, createCard } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -51,7 +51,7 @@ const { check, finish } = createChecker();
 
     // ---------- Beat anlegen und bearbeiten ----------
     await page.evaluate(async () => { const m = await import('./src/model.js'); window.loopwerk.store.replace(m.createEmptyProject()); });
-    await page.click('#new-beat-btn');
+    await createCard(page, 'beat');
     await page.waitForSelector('#pattern:not([hidden])');
     const created = await page.evaluate(() => {
       const { store, library } = window.loopwerk;
@@ -84,7 +84,7 @@ const { check, finish } = createChecker();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'stufe7-beat.png') });
 
     // ---------- Melodie ----------
-    await page.click('#new-melody-btn');
+    await createCard(page, 'melody');
     await page.waitForFunction(() => window.loopwerk.patternEditor.id === 'p2');
     const box = await page.locator('#pat-roll').boundingBox();
     const geo = await page.evaluate(() => ({ cellW: (document.getElementById('pat-roll').clientWidth - 46) / 32, top: 84 }));
@@ -103,7 +103,7 @@ const { check, finish } = createChecker();
     check('Klick auf die Note löscht sie', notes.length === 0, JSON.stringify(notes));
 
     // Schritt-Eingabe mit der Computertastatur: A (C4), D (E4), G (G4)
-    await page.click('#pat-rec');
+    await clickR(page, '#pat-rec');
     await page.keyboard.press('a');
     await page.keyboard.press('d');
     await page.keyboard.press('g');
@@ -113,7 +113,7 @@ const { check, finish } = createChecker();
     const splitSafe = await page.evaluate(() => window.loopwerk.store.project.tracks.every((t) => t.clips.length <= 1));
     check('Taste T im Melodie-Editor spielt F♯ statt den Clip zu teilen', splitSafe);
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'stufe7-melodie.png') });
-    await page.click('#pat-rec');
+    await clickR(page, '#pat-rec');
 
     await page.selectOption('#pat-preset', 'bass');
     await page.waitForTimeout(300);
@@ -133,7 +133,7 @@ const { check, finish } = createChecker();
     check('Pattern-Clips spielen im Song', playing.p && playing.v > 0, `${playing.v} Stimmen`);
 
     // Speichern und wieder öffnen
-    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#save-btn')]);
+    const [download] = await Promise.all([page.waitForEvent('download'), clickR(page, '#save-btn')]);
     const saved = path.join(os.tmpdir(), 'loopwerk-patterns.json');
     await download.saveAs(saved);
     await page.evaluate(async () => { const m = await import('./src/model.js'); window.loopwerk.store.replace(m.createEmptyProject()); });
@@ -153,7 +153,7 @@ const { check, finish } = createChecker();
     // Pattern im Regal löschen (nicht benutzt) und Rückgängig
     const cnt = await page.evaluate(() => window.loopwerk.store.addPattern({ type: 'synth', name: 'Übrig', bars: 1, preset: 'lead', notes: [] }));
     await page.waitForFunction(() => window.loopwerk.library.list().some((s) => s.name === 'Übrig'));
-    await page.click('#shelf-chips .chip[data-filter="own"]');
+    await clickR(page, '#shelf-chips .chip[data-filter="own"]');
     const row = page.locator('#library .loop-row', { hasText: 'Übrig' });
     await row.locator('.loop-del').click();
     await row.locator('.loop-del').click();

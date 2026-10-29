@@ -13,6 +13,7 @@ import { startMicCapture } from '../recorder.js';
 import { decodeAudio } from '../samples.js';
 import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
+import { place } from './place.js';
 
 // Breite der Tastenspalte links in der Piano-Roll; am Handy breiter (spielbare Tasten)
 const keyW = () => (narrow.matches ? 64 : 46);
@@ -57,6 +58,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   let midiTried = false;
 
   for (const k of KITS) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
+  // Am Desktop stehen Seltenes und Einstellungen unter „Mehr“, damit die Kopfzeile ruhig bleibt
+  const moreEl = $('pat-more');
+  for (const node of [nameIn, $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-clear')]) place(node, { wide: moreEl });
   // Nach einer Auswahl den Fokus vom Auswahlfeld nehmen: sonst „frisst“ es die Buchstabentasten
   // (A springt z. B. zum Kit „Akustik“), statt dass sie Pads oder Klaviatur spielen
   root.addEventListener('change', (e) => { if (e.target.tagName === 'SELECT') e.target.blur(); });
@@ -266,10 +270,12 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       const y = (PITCH_HIGH - m) * rowH();
       c.fillStyle = col(isBlack(m) ? '--lane-alt' : '--lane');
       c.fillRect(keyW(), y, w - keyW(), rowH());
-      c.fillStyle = col(isBlack(m) ? '--ink' : '--panel');
-      c.fillRect(0, y, keyW() - 1, rowH() - 1);
+      // Wie ein Klavier: weiße Tasten laufen hinter den (kürzeren) schwarzen durch
+      c.fillStyle = col('--key-white');
+      c.fillRect(0, y, keyW() - 1, rowH());
+      if (isBlack(m)) { c.fillStyle = col('--key-black'); c.fillRect(0, y, Math.round(keyW() * 0.62), rowH()); }
       if (m % 12 === 0) {
-        c.fillStyle = col(isBlack(m) ? '--panel' : '--muted');
+        c.fillStyle = col(isBlack(m) ? '--key-black-ink' : '--key-white-ink');
         c.font = '10px ' + col('--font-mono');
         c.fillText(noteName(m), 4, y + rowH() - 3);
         c.fillStyle = col('--grid-bar');
@@ -790,6 +796,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   }
   singBtn.addEventListener('click', () => { singOpen = !singOpen; render(); });
+  function openSing() { singOpen = true; render(); }
 
   const say = (text) => { singStatus.textContent = text; };
   async function transcribe(chs, sampleRate, { fromFirst }) {
@@ -943,6 +950,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     $('pat-continue').hidden = drums;
     singBtn.setAttribute('aria-pressed', String(singOpen && !drums));
     singEl.hidden = drums || !singOpen;
+    root.dataset.sing = singOpen && !drums ? '1' : '0';
     liveBtn.textContent = looper.running ? '■ Live stoppen' : '● Live';
     const pads = drums && view === 'pads';
     if (document.activeElement !== nameIn) nameIn.value = p.name;
@@ -993,5 +1001,5 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   });
   window.addEventListener('resize', () => render());
 
-  return { open, transcribe, buildSound, get id() { return id; }, get looper() { return looper; } };
+  return { open, openSing, transcribe, buildSound, get id() { return id; }, get looper() { return looper; } };
 }

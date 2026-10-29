@@ -465,6 +465,16 @@ export class Store extends Emitter {
     });
   }
 
+  // Songlänge in Takten; nie kürzer als der letzte Clip
+  setLength(bars) {
+    const p = this.project;
+    const lastBeat = Math.max(0, ...p.tracks.flatMap((t) => t.clips.map((c) => c.startBeat + c.lengthBeats)));
+    const min = Math.max(4, Math.ceil(lastBeat / p.beatsPerBar - 1e-9));
+    const v = Math.max(min, Math.min(256, Math.round(bars)));
+    if (v === p.lengthBars) return;
+    this.dispatch('length', (q) => { q.lengthBars = v; if (q.loop.endBeat > v * q.beatsPerBar) q.loop = { ...q.loop, startBeat: 0, endBeat: Math.min(16, v * q.beatsPerBar) }; });
+  }
+
   setProjectName(name) {
     const v = String(name).trim().slice(0, 40);
     if (!v || v === this.project.name) return;

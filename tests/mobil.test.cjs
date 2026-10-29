@@ -101,9 +101,9 @@ const { check, finish } = createChecker();
     check('Suche zeigt alle Treffer aufgeklappt', forced.length >= 1 && forced.every(([, e, d]) => e === 'true' && d), JSON.stringify(forced));
     const kbd = await page.evaluate(() => {
       const a = document.getElementById('app');
-      return { on: a.classList.contains('kbd'), where: a.dataset.kbdIn, tabs: getComputedStyle(document.getElementById('tabbar')).display, deck: getComputedStyle(document.querySelector('.deck')).display, arr: getComputedStyle(document.querySelector('.arranger')).display, shelfH: document.querySelector('.shelf').getBoundingClientRect().height, h: innerHeight };
+      return { on: a.classList.contains('kbd'), where: a.dataset.kbdIn, tabs: getComputedStyle(document.getElementById('tabbar')).display, deck: getComputedStyle(document.querySelector('.deck')).display, arr: getComputedStyle(document.querySelector('.arranger')).visibility, shelfH: document.querySelector('.shelf').getBoundingClientRect().height, h: innerHeight };
     });
-    check('Tastatur offen: nur das Regal bleibt sichtbar, es nutzt die ganze Höhe', kbd.on && kbd.where === 'dock' && kbd.tabs === 'none' && kbd.deck === 'none' && kbd.arr === 'none' && kbd.shelfH > kbd.h * 0.9, JSON.stringify(kbd));
+    check('Tastatur offen: nur das Regal bleibt sichtbar, es nutzt die ganze Höhe', kbd.on && kbd.where === 'dock' && kbd.tabs === 'none' && kbd.deck === 'none' && kbd.arr === 'hidden' && kbd.shelfH > kbd.h * 0.9, JSON.stringify(kbd));
     await page.fill('#shelf-search', '');
     await page.press('#shelf-search', 'Enter');
     await page.waitForTimeout(350);
@@ -268,6 +268,7 @@ const { check, finish } = createChecker();
     await page.tap('#tempo-close');
 
     // ---------- Spurköpfe ----------
+    await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 0; });
     const mute = await box('.track-row:nth-child(1) .tbtn-mute');
     const hitAbove = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.tbtn-mute'), [mute.x + mute.width / 2, mute.y - 5]);
     check('Stumm-Knopf: sichtbar ≥ 30 px, Trefferfläche ≥ 44 px', mute.height >= 30 && mute.width >= 36 && hitAbove, `${mute.width}×${mute.height}`);
@@ -304,7 +305,9 @@ const { check, finish } = createChecker();
     await page.setViewportSize({ width: 1400, height: 820 });
     await page.waitForTimeout(150);
     const desk = await page.evaluate(() => ({
-      back: ['rec-btn', 'metro-btn', 'zoom-in', 'save-btn'].every((id) => document.getElementById(id).closest('.deck')),
+      // Desktop-Plätze: Transport im Deck, Zoom in der Arranger-Leiste, Speichern im Projekt-Menü, Mixer in der Leiste unten
+      back: ['rec-btn', 'metro-btn'].every((id) => document.getElementById(id).closest('.deck')) && !!document.getElementById('zoom-in').closest('.arr-bar')
+        && !!document.getElementById('save-btn').closest('#project-menu') && !!document.getElementById('mixer-btn').closest('.deskbar'),
       tabs: getComputedStyle(document.getElementById('tabbar')).display,
       shelf: getComputedStyle(document.querySelector('.shelf')).display,
       dock: window.loopwerk.ui.dock,
@@ -312,7 +315,7 @@ const { check, finish } = createChecker();
     }));
     check('Desktop: Knöpfe zurück im Deck, ohne Leiste unten, Regal sichtbar', desk.back && desk.tabs === 'none' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
     check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
-    check('Desktop: Reihenfolge im Deck unverändert', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,mixer-btn,metro-btn', desk.order);
+    check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,metro-btn', desk.order);
     await page.click('#shelf-cat-synth');
     check('Desktop: mehrere Kategorien können offen sein', await expanded('bass') === 'true' && await expanded('synth') === 'true');
     await page.click('#shelf-cat-synth');

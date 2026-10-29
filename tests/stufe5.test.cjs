@@ -2,7 +2,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { openApp, createChecker, makeWav } = require('./harness.cjs');
+const { openApp, createChecker, makeWav, clickR, fillR, reveal } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -92,16 +92,16 @@ const tmp = (name) => path.join(os.tmpdir(), name);
     await page.mouse.up();
     const selInfo = await page.locator('#ed-info').textContent();
     check('Bereich auf der Wellenform auswählen', selInfo.startsWith('Auswahl'), selInfo);
-    await page.click('#ed-crop');
+    await clickR(page, '#ed-crop');
     const lenAfterCrop = await page.evaluate(() => window.loopwerk.editor.state.chs[0].length);
-    await page.click('#ed-reverse');
+    await clickR(page, '#ed-reverse');
     await page.click('#ed-undo');
     const lenAfterUndo = await page.evaluate(() => window.loopwerk.editor.state.history.length);
     check('Zuschneiden im Editor und Rückgängig', Math.abs(lenAfterCrop - 33075) < 400 && lenAfterUndo === 1, `${lenAfterCrop} Frames, Verlauf ${lenAfterUndo}`);
-    await page.check('#ed-loop');
+    await reveal(page, '#ed-loop'); await page.check('#ed-loop');
     await page.fill('#ed-beats', '2');
     await page.press('#ed-beats', 'Enter');
-    await page.fill('#ed-name', 'Gesang kurz');
+    await fillR(page, '#ed-name', 'Gesang kurz');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'stufe5-editor.png') });
     await page.click('#ed-apply');
     await page.waitForFunction(() => window.loopwerk.library.list().some((s) => s.name === 'Gesang kurz'), null, { timeout: 10000 });
@@ -115,7 +115,7 @@ const tmp = (name) => path.join(os.tmpdir(), name);
     check('Als Loop markiert: auf 2 Schläge im Projekttempo gestreckt', applied.kind === 'loop' && applied.beats === 2 && applied.len === 44100, `${applied.len} Frames`);
 
     // ---------- Speichern mit eingebetteten Sounds, Wiederherstellen ----------
-    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#save-btn')]);
+    const [download] = await Promise.all([page.waitForEvent('download'), clickR(page, '#save-btn')]);
     const saved = tmp('loopwerk-eigene.json');
     await download.saveAs(saved);
     const json = JSON.parse(fs.readFileSync(saved, 'utf8'));

@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, isValidProject } from './model.js';
+import { Store, createDemoProject, isValidProject, DEFAULT_TRACK_NAME } from './model.js';
 import { Engine, renderProject } from './engine.js';
 import { Emitter } from './util.js';
 import { encodeWav } from './wav.js';
@@ -10,6 +10,11 @@ import { mountArranger } from './ui/arranger.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
 import { createSplash } from './ui/splash.js';
+import { mountLayout } from './ui/layout.js';
+import { mountInspector } from './ui/inspector.js';
+import { mountCreate } from './ui/create.js';
+import { mountSheets } from './ui/sheets.js';
+import { mountTips } from './ui/tips.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
@@ -41,12 +46,25 @@ function createUi() {
     pxPerBeat: 24,
     snapBeats: 1,
     selectedClipId: null,
+    selectedTrackId: null,
     armedSampleId: null,
     statusText: null,
     flashText: null,
     dock: null,
     setDock(name) { if (ui.dock !== name) { ui.dock = name; ui.emit(); } },
-    select(id) { if (ui.selectedClipId !== id) { ui.selectedClipId = id; ui.emit(); } },
+    select(id) {
+      if (ui.selectedClipId === id && (!id || !ui.selectedTrackId)) return;
+      ui.selectedClipId = id;
+      if (id) ui.selectedTrackId = null;
+      ui.emit();
+    },
+    // Spur im Inspektor zeigen (hebt die Clip-Auswahl auf)
+    selectTrack(id) {
+      if (ui.selectedTrackId === id && !ui.selectedClipId) return;
+      ui.selectedTrackId = id;
+      ui.selectedClipId = null;
+      ui.emit();
+    },
     arm(id) { if (ui.armedSampleId !== id) { ui.armedSampleId = id; ui.emit(); } },
     // Laufende Anzeige beim Ziehen (z. B. „Fade-In: 1,5 Schläge“)
     status(text) { if (ui.statusText !== text) { ui.statusText = text; ui.emit(); } },
@@ -64,7 +82,6 @@ function createUi() {
 function mountHints({ root, ui, library, store, engine }) {
   const text = root.querySelector('#hint-text');
   const done = root.querySelector('#hint-done');
-  const base = 'Leertaste: Start/Stopp · Lineal: klicken setzt die Position, ziehen setzt den Loop · Alt+Ziehen: kopieren · Umschalt+Ziehen: frei · Alt+←/→: schieben · Strg+Mausrad: Zoom · Spurkopf ziehen: Spur verschieben · T: teilen · Strg+Z: rückgängig';
   // Am Handy gibt es keine Tastatur: dort erklärt die Zeile die Fingerbedienung
   const touchBase = 'Tippe auf „Sounds“, wähle einen Sound und tippe dann in eine Spur. Antippen des Lineals setzt die Abspielmarke, zwei Finger zoomen.';
   const sync = () => {
@@ -77,9 +94,9 @@ function mountHints({ root, ui, library, store, engine }) {
     done.hidden = !armed;
     text.textContent = ui.statusText
       ?? ui.flashText
-      ?? (armed ? (phone ? `„${armed.name}“ ist ausgewählt. Tippe in eine Spur, um ihn einzusetzen.` : `„${armed.name}“ ist ausgewählt. Klick in eine Spur setzt ihn ein. Esc beendet.`)
-        : sel ? (phone ? (ui.dock ? `„${selName}“ ausgewählt. Schließe das Fach für die Clip-Werkzeuge.` : `„${selName}“ ausgewählt. Ziehen verschiebt, die Ränder kürzen. Lautstärke und Fades unter „Pegel“.`) : `„${selName}“ ausgewählt · Griffe oben: Fade-In, Lautstärke, Fade-Out · Ränder: kürzen/verlängern · T: an der Abspielmarke teilen · Entf: löschen`)
-          : phone ? touchBase : base);
+      ?? (armed ? (phone ? `„${armed.name}“ ist ausgewählt. Tippe in eine Spur, um ihn einzusetzen.` : `„${armed.name}“ ausgewählt – in eine Spur klicken setzt ihn ein, Esc beendet`)
+        : sel ? (phone ? (ui.dock ? `„${selName}“ ausgewählt. Schließe das Fach für die Clip-Werkzeuge.` : `„${selName}“ ausgewählt. Ziehen verschiebt, die Ränder kürzen. Lautstärke und Fades unter „Pegel“.`) : `„${selName}“ ausgewählt`)
+          : phone ? touchBase : '');
   };
   done.addEventListener('click', () => { ui.arm(null); engine.stopPreview(); });
   ui.on(sync);
@@ -100,6 +117,8 @@ function mountClipTools({ store, engine, ui, arranger }) {
       const ids = ui.selectedClipId ? [ui.selectedClipId] : null;
       const created = store.splitAt(beat, ids);
       if (!created.length) {
+        // Steht die Abspielmarke nicht im Clip: Schere – die Stelle per Klick wählen (am Handy wie bisher)
+        if (ids && !narrow.matches) { arranger.armScissors((ok) => { if (ok) ui.flash('Clip geteilt.'); }); return; }
         ui.flash(ids ? 'Die Abspielmarke steht nicht im ausgewählten Clip. Setze sie im Lineal an die Stelle, an der geteilt werden soll.' : 'Unter der Abspielmarke liegt kein Clip.');
         return;
       }
@@ -158,13 +177,15 @@ function mountRecording({ store, engine, ui, arranger, recorder }) {
   const btn = document.getElementById('rec-btn');
   const label = btn.querySelector('.rec-label');
   const freeTrack = (from, to) => store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < to && c.startBeat + c.lengthBeats > from));
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', () => start(null));
+  async function start(target) {
     if (recorder.state === 'recording') { recorder.stop(); return; }
     if (recorder.state !== 'idle') return;
-    const startBeat = Math.floor(engine.heardBeat() / store.project.beatsPerBar) * store.project.beatsPerBar;
+    const bpb = store.project.beatsPerBar;
+    const startBeat = target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
     if (engine.playing) engine.stop();
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
-    let trackId = sel?.track.id ?? freeTrack(startBeat, startBeat + 16)?.id;
+    let trackId = target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, startBeat + 16)?.id;
     if (!trackId) trackId = store.addTrack();
     if (!trackId) { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
     try {
@@ -173,9 +194,9 @@ function mountRecording({ store, engine, ui, arranger, recorder }) {
     } catch (err) {
       ui.flash(err.code === 'denied'
         ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
-        : 'Aufnahmen sind in dieser Ansicht nicht möglich (z. B. in claude.ai). Nimm mit einer anderen App auf und importiere die Datei über „+ Eigene Sounds importieren“.');
+        : 'Aufnahmen sind in dieser Ansicht nicht möglich (z. B. in claude.ai). Nimm mit einer anderen App auf und importiere die Datei („Datei importieren“).');
     }
-  });
+  }
   recorder.on((what, payload) => {
     const rec = recorder.state === 'recording' || recorder.state === 'arming';
     btn.classList.toggle('recording', recorder.state === 'recording');
@@ -184,6 +205,7 @@ function mountRecording({ store, engine, ui, arranger, recorder }) {
     if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
     if (what === 'error') ui.flash(payload.message);
   });
+  return { start };
 }
 
 function mountImport({ store, ui, arranger, own, shelf }) {
@@ -224,7 +246,8 @@ function mountImport({ store, ui, arranger, own, shelf }) {
       if (document.hasFocus()) ui.flash('Keine Dateiauswahl geöffnet? In manchen Apps ist das Hochladen gesperrt – öffne Loopwerk im Browser (Chrome, Safari, Firefox) oder ziehe die Datei direkt auf eine Spur.');
     }, 2500);
   });
-  input.addEventListener('change', () => { pickerSeen(); const files = [...input.files]; input.value = ''; importFiles(files); });
+  let pendingTarget = null; // Spur/Schlag, wenn die Import-Karte auf eine Spur gezogen wurde
+  input.addEventListener('change', () => { pickerSeen(); const files = [...input.files]; input.value = ''; const t = pendingTarget; pendingTarget = null; importFiles(files, t); });
   // Dateien direkt auf eine Spur ziehen
   const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
   const probe = { category: 'own', lengthBeats: 4 };
@@ -243,7 +266,7 @@ function mountImport({ store, ui, arranger, own, shelf }) {
     arranger.clearDropPreview();
     importFiles([...e.dataTransfer.files].filter((f) => f.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name)), target);
   });
-  return { importFiles };
+  return { importFiles, pick(target) { pendingTarget = target; btn.click(); } };
 }
 
 const splash = createSplash();
@@ -312,32 +335,57 @@ async function boot() {
   await patterns.sync(store.project);
 
   // Neues Pattern: auf eine freie Spur an der Abspielmarke legen und Editor öffnen
-  async function createPattern(make) {
+  // Neues Pattern: an der Ablagestelle oder an der Abspielmarke, bevorzugt auf einer leeren Spur
+  // (die dann wie das Pattern heißt), sonst auf einer neuen Spur. Editor öffnen.
+  async function createPattern(make, target = null) {
     const n = 1 + Object.values(store.project.patterns || {}).filter((p) => p.type === make().type).length;
     const pattern = make(n);
     const pid = store.addPattern(pattern);
     await patterns.sync(store.project);
     const len = pattern.bars * 4;
     const bpb = store.project.beatsPerBar;
-    const at = Math.floor(engine.heardBeat() / bpb) * bpb;
-    const free = store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < at + len && c.startBeat + c.lengthBeats > at));
-    const trackId = free?.id ?? store.addTrack();
+    const at = target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
+    const empty = store.project.tracks.find((t) => !t.clips.length && DEFAULT_TRACK_NAME.test(t.name));
+    const trackId = target?.trackId ?? empty?.id ?? store.addTrack()
+      ?? store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < at + len && c.startBeat + c.lengthBeats > at))?.id;
     if (trackId) arranger.select(store.addClip(trackId, patternSampleId(pid), at, len));
     patternEditor.open(pid);
+    return pid;
   }
   document.getElementById('new-beat-btn').addEventListener('click', () => createPattern(newDrumPattern));
   document.getElementById('new-melody-btn').addEventListener('click', () => createPattern(newSynthPattern));
   library.on(() => { cancelAnimationFrame(redraw); redraw = requestAnimationFrame(() => arranger.render()); });
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
-  mountRecording({ store, engine, ui, arranger, recorder });
+  const recording = mountRecording({ store, engine, ui, arranger, recorder });
   const importer = mountImport({ store, ui, arranger, own, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
   if (library.bpm !== store.project.bpm) { splash.set(0.95, 'Sounds werden ans Tempo angepasst …'); await tempo.apply(); }
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
+  const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools });
+  const layout = mountLayout({
+    store, ui, library,
+    editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
+  });
+  layout.onEditorTab(() => {
+    if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
+    else tools.edit();
+  });
+  mountCreate({
+    root: document.getElementById('create-panel'), arranger,
+    actions: {
+      beat: (t) => createPattern(newDrumPattern, t),
+      melody: (t) => createPattern(newSynthPattern, t),
+      sing: async (t) => { await createPattern(newSynthPattern, t); patternEditor.openSing(); },
+      record: (t) => recording.start(t),
+      import: (t) => importer.pick(t),
+    },
+  });
   mountMobile({ store, ui, tools });
+  const sheets = mountSheets({ ui, arranger });
+  const tips = mountTips({ ui, store });
 
   let saveTimer = null;
   const saveNow = () => {
@@ -365,6 +413,8 @@ async function boot() {
       e.preventDefault();
       tools.remove();
     } else if (e.key === 'Escape') {
+      if (arranger.cancelScissors()) return;
+      if (ui.dock) { ui.setDock(null); return; }
       ui.arm(null);
       ui.select(null);
       engine.stopPreview();
@@ -394,7 +444,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, patterns, patternEditor, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, ready: true };
 }
 
 boot().catch((err) => {

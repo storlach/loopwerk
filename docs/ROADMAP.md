@@ -114,8 +114,23 @@
 - Splash-Screen mit Logo, animierten Pegelbalken, Fortschrittsbalken (Prozent und aktueller Ladeschritt) und Ausblenden.
 - Tests: `tests/v17.test.cjs`
 
+## ✅ 1.8 – Neues Desktop-Layout, Schubladen, Tipps, Drücken und Halten
+- Desktop nach UX-Prüfung (Variante B):
+  - Deck in einer Zeile mit Projekt-Menü und Export-Klappfeld
+  - links „Sounds | Erstellen“ (Karten zum Klicken oder Ziehen)
+  - rechts der Inspektor für Clip, Spur oder Song (Effekte haben dort genau einen Ort)
+  - unten Mixer, Editor, Hinweis und Tastenkürzel
+- Fächer als Schubladen über den Spuren (Desktop und Handy): Griff zum Aufziehen, nach unten wischen schließt, Schatten
+- Tutorial: Tipps beim ersten Sehen eines Bereichs, abschaltbar; feste Erklärtexte am Desktop entfernt
+- Teilen per Schere, Sample-Editor mit Reitern, Einsingen links neben der Piano-Roll, neue Patterns auf eigener Spur in passender Farbe
+- Drücken und Halten:
+  - Pads wirbeln, Töne klingen solange gehalten (auch MIDI)
+  - die Schritt-Eingabe übernimmt die Haltedauer
+  - im Beat-Raster malt Ziehen mehrere Schritte
+- Handy: senkrechte Klaviertasten an der Piano-Roll; Ladescreen sofort sichtbar
+- Spec: `docs/specs/v1.8-layout-schubladen-tipps.md`, Tests: `tests/v18.test.cjs`
+
 ## Als Nächstes
-- Desktop-Layout neu ordnen (UX-Agent prüft und schlägt vor: `docs/ux/`)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Danach: neuer Look

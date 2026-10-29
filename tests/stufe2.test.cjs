@@ -1,7 +1,7 @@
 // Tests für Stufe 2 (Arranger-Komfort): node tests/stufe2.test.cjs [--shots]
 const path = require('path');
 const fs = require('fs');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, clickR } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -155,10 +155,11 @@ const { check, finish } = createChecker();
     // Spur hinzufügen und mit zwei Klicks löschen
     await page.click('#add-track');
     const nTracks = await page.evaluate(() => window.loopwerk.store.project.tracks.length);
-    const del = page.locator('.track-row').nth(8).locator('.tbtn-del');
-    await del.click();
+    // Löschen steht im Spur-Menü „⋯“ (mit Rückfrage im Menü selbst)
+    await page.locator('.track-row').nth(8).locator('.tbtn-menu').click();
+    await page.locator('.track-menu-item', { hasText: 'Löschen' }).click();
     const afterOne = await page.evaluate(() => window.loopwerk.store.project.tracks.length);
-    await del.click();
+    await page.locator('.track-menu-item', { hasText: 'Wirklich löschen?' }).click();
     const afterTwo = await page.evaluate(() => window.loopwerk.store.project.tracks.length);
     check('Spur hinzufügen und mit Bestätigung löschen', nTracks === 9 && afterOne === 9 && afterTwo === 8, `${nTracks} → ${afterOne} → ${afterTwo}`);
 
@@ -184,7 +185,7 @@ const { check, finish } = createChecker();
     }
 
     // Projekt speichern (lokal: Download) und wieder öffnen
-    const [download] = await Promise.all([page.waitForEvent('download'), page.click('#save-btn')]);
+    const [download] = await Promise.all([page.waitForEvent('download'), clickR(page, '#save-btn')]);
     const saved = path.join(require('os').tmpdir(), 'loopwerk-test-projekt.json');
     await download.saveAs(saved);
     const json = JSON.parse(fs.readFileSync(saved, 'utf8'));

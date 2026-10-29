@@ -1,7 +1,7 @@
 // Version 1.4: feineres Raster, Zoom, Spur-Funktionen, Techno-Sounds, Genres, neue Effekte, Drumpad, Klaviatur.
 // node tests/v14.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, clickR, selectR, createCard, toggleFx } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -389,13 +389,16 @@ const { check, finish } = createChecker();
       window.loopwerk.mixer.setOpen(true);
     });
     const strip = page.locator('.strip[data-strip-id="t1"]');
-    const toggles = await strip.locator('.fx-toggle').allTextContents();
-    check('Kanalzug hat sieben Effekt-Schalter', toggles.join(',') === 'Zerr,Filter,EQ,Komp,Pump,Echo,Hall', toggles.join(','));
-    await strip.locator('.fx-toggle', { hasText: 'Pump' }).click();
+    await strip.locator('.strip-sum').click();
+    const fxNames = await page.locator('#insp .fxl-name').allTextContents();
+    check('Inspektor zeigt sieben Effekte', fxNames.join(',') === 'Verzerrer,Filter,EQ,Kompressor,Pumpen,Echo,Hall', fxNames.join(','));
+    await page.click('#fx-pump-on');
     check('Pumpen per Schalter an', await page.evaluate(() => window.loopwerk.store.track('t1').fx.pump.on === true));
+    await page.click('#fx-drive-on');
     await page.selectOption('#fx-drive-type', 'crush');
     const dv = await page.evaluate(() => window.loopwerk.store.track('t1').fx.drive);
     check('Verzerrer-Art wählbar, schaltet ein', dv.type === 'crush' && dv.on, JSON.stringify(dv));
+    await page.click('#fx-filter-on');
     const cutoffLabel = await page.locator('#fx-filter-cutoff').locator('xpath=..').locator('.fx-param-value').textContent();
     check('Filterfrequenz wird in Hz angezeigt', /Hz/.test(cutoffLabel), cutoffLabel);
     await page.click('#play-btn');
@@ -409,7 +412,7 @@ const { check, finish } = createChecker();
       const m = await import('./src/model.js');
       window.loopwerk.store.replace(m.createEmptyProject());
     });
-    await page.click('#new-beat-btn');
+    await createCard(page, 'beat');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
     await page.click('#pat-view [data-view="pads"]');
     const pads = await page.locator('#pat-pads .pat-pad').allTextContents();
@@ -446,7 +449,7 @@ const { check, finish } = createChecker();
     await page.waitForTimeout(150);
     let clap = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.clap.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
     check('Live-Schläge landen auf dem nächsten 1/16', JSON.stringify(clap) === '[4,10]', JSON.stringify(clap));
-    await page.selectOption('#pat-quant', '2');
+    await selectR(page, '#pat-quant', '2');
     await waitBeat(4 + 3.3);
     await tap('d');
     await page.waitForTimeout(150);
@@ -460,7 +463,7 @@ const { check, finish } = createChecker();
     check('Raster-Ansicht zeigt die eingespielten Schläge', await page.locator('#pat-drums .pat-cell[data-row="clap"][data-step="10"]').getAttribute('aria-pressed') === 'true');
 
     // ---------- Klaviatur im Melodie-Editor ----------
-    await page.click('#new-melody-btn');
+    await createCard(page, 'melody');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
     const keys = await page.evaluate(() => ({
       visible: !document.getElementById('pat-keys').hidden && document.getElementById('pat-keys').offsetHeight > 40,
@@ -476,18 +479,18 @@ const { check, finish } = createChecker();
     await page.keyboard.up('h');
     const up = await page.locator('#pat-keybed .pat-key[data-pitch="69"]').evaluate((n) => n.classList.contains('down'));
     check('Computertaste H leuchtet auf der Klaviatur (A4)', down && !up);
-    await page.click('#pat-rec');
+    await clickR(page, '#pat-rec');
     await page.locator('#pat-keybed .pat-key[data-pitch="64"]').click();
     await page.locator('#pat-keybed .pat-key[data-pitch="67"]').click();
     const stepNotes = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns).find((p) => p.type === 'synth').notes.map((n) => [n.pitch, n.start, n.len]));
     check('Klaviatur-Klick mit Schritt-Eingabe setzt Noten', JSON.stringify(stepNotes) === '[[64,0,1],[67,1,1]]', JSON.stringify(stepNotes));
-    await page.click('#pat-rec');
+    await clickR(page, '#pat-rec');
     await page.click('#pat-oct-up');
     check('Oktave höher verschiebt die Klaviatur', await page.evaluate(() => document.querySelector('#pat-keybed .pat-key').getAttribute('aria-label')) === 'C5');
     await page.click('#pat-oct-down');
     // Live-Melodie: Ton halten bestimmt die Länge
-    await page.click('#pat-clear');
-    await page.selectOption('#pat-quant', '1');
+    await clickR(page, '#pat-clear');
+    await selectR(page, '#pat-quant', '1');
     await page.click('#pat-live');
     await waitBeat(1.03);
     await press('h');

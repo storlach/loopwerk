@@ -22,6 +22,15 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   const pitchOut = $('ed-pitch-value');
   let st = null; // { clipId, src, chs, sr, history, sel, kind, beats, pitch }
 
+  // Werkzeug-Reiter (Desktop): nur eine Gruppe sichtbar
+  const toolsEl = root.querySelector('.ed-tools');
+  for (const b of root.querySelectorAll('.ed-tab')) {
+    b.addEventListener('click', () => {
+      toolsEl.dataset.tab = b.dataset.tab;
+      for (const x of root.querySelectorAll('.ed-tab')) x.setAttribute('aria-selected', String(x === b));
+    });
+  }
+
   const len = () => st.chs[0].length;
   const hasSel = () => st.sel && st.sel[1] - st.sel[0] > 0;
   const selOrAll = () => (hasSel() ? st.sel : [0, len()]);

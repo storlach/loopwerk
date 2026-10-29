@@ -36,6 +36,8 @@ export class Patterns {
         beats: p.bars * 4,
         origin: 'Pattern',
         instrument: p.type === 'drums' ? 'Beat' : SYNTH_PRESETS.find((x) => x.id === p.preset)?.label,
+        // Farbe im Arranger: Beats wie Drums, Melodien wie ihr Klang (Bass, Akkorde, Synth)
+        colorCat: p.type === 'drums' ? 'drums' : SYNTH_PRESETS.find((x) => x.id === p.preset)?.category ?? 'synth',
       };
       let s = lib.get(sid);
       if (!s) {

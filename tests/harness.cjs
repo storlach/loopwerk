@@ -60,4 +60,29 @@ function makeWav(seconds, freq = 440, sampleRate = 44100) {
   return buf;
 }
 
-module.exports = { openApp, createChecker, makeWav };
+// Desktop-Bedienung: Knöpfe, die in Menüs, Reitern oder unter „Erstellen“ liegen, erst sichtbar machen
+async function reveal(page, sel) {
+  await page.evaluate((s) => {
+    const n = document.querySelector(s);
+    if (!n) return;
+    const pop = n.closest('.pop');
+    if (pop && pop.hidden) pop.parentElement.querySelector('button').click();
+    const group = n.closest('.ed-group[data-tab]');
+    const tools = n.closest('.ed-tools');
+    if (group && tools && tools.dataset.tab !== group.dataset.tab) document.querySelector(`.ed-tab[data-tab="${group.dataset.tab}"]`)?.click();
+    if (n.closest('.create-panel') && document.querySelector('.shelf').dataset.left !== 'create') document.getElementById('ltab-create').click();
+    if (n.closest('.shelf-head, .shelf-list') && document.querySelector('.shelf').dataset.left === 'create') document.getElementById('ltab-sounds').click();
+  }, sel);
+}
+const clickR = async (page, sel) => { await reveal(page, sel); await page.click(sel); };
+const selectR = async (page, sel, value) => { await reveal(page, sel); await page.selectOption(sel, value); };
+const fillR = async (page, sel, value) => { await reveal(page, sel); await page.fill(sel, value); };
+// Beat/Melodie/Einsingen über die Karten unter „Erstellen“
+const createCard = (page, kind) => clickR(page, `.ccard[data-create="${kind}"]`);
+// Effekt einer Spur ein-/ausschalten: Spur im Inspektor zeigen, Schalter klicken
+async function toggleFx(page, trackId, fxId) {
+  await page.evaluate((id) => window.loopwerk.ui.selectTrack(id), trackId);
+  await page.click(`#fx-${fxId}-on`);
+}
+
+module.exports = { openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx };
