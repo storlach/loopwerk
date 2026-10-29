@@ -611,16 +611,18 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   // Pad halten = Wirbel: der Schlag wiederholt sich im Raster (1/16 oder 1/8), solange man hält.
   // Geplant auf der Audio-Uhr mit kurzem Vorlauf, in der Live-Aufnahme genau auf den Loop-Schritten.
-  const HOLD_DELAY = 0.16; // s: kürzeres Antippen ist ein einzelner Schlag
+  // Erst bewusstes Halten gibt einen Wirbel; normales Antippen (bis gut 300 ms) bleibt ein einzelner Schlag
+  const HOLD_DELAY = 0.35;
   const held = new Map(); // Zeile → { from, next }
   let rollTimer = null;
   function rollTick() {
     if (!held.size || !engine.ctx) { clearInterval(rollTimer); rollTimer = null; return; }
     const ctx = engine.ctx;
     const iv = (Number(quantSel.value) / STEPS_PER_BEAT) * engine.spb;
-    const horizon = ctx.currentTime + 0.1;
+    // Kurzer Vorlauf und nur einplanen, wenn schon lange genug gehalten wird: so erklingt nach dem Loslassen nichts mehr
+    const horizon = ctx.currentTime + 0.03;
     for (const [rowId, h] of held) {
-      if (h.from == null) continue;
+      if (h.from == null || ctx.currentTime - h.from < HOLD_DELAY - 0.03) continue;
       if (h.next == null) {
         // Erster Wiederholungsschlag: nächster Rasterpunkt nach der Haltezeit
         const base = looper.running ? looper.t0 : h.from;

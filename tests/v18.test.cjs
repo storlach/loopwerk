@@ -161,10 +161,23 @@ const { check, finish } = createChecker();
     await page.click('#pat-view [data-view="pads"]');
     await page.evaluate(() => { window.__starts = 0; });
     await page.keyboard.down('a');
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(900);
     await page.keyboard.up('a');
     await page.waitForTimeout(250);
     const roll1 = await page.evaluate(() => window.__starts);
+    // Normale Tipps (auch etwas längere) bleiben ein einzelner Schlag – mit Taste und mit der Maus
+    const taps = [];
+    for (const ms of [90, 180, 280]) {
+      await page.evaluate(() => { window.__starts = 0; });
+      // Kick: genau ein Oszillator je Schlag (gezählt werden Oszillator-Starts)
+      await page.keyboard.down('a'); await page.waitForTimeout(ms); await page.keyboard.up('a');
+      await page.waitForTimeout(350);
+      const pb = await rect('#pat-pads .pat-pad[data-row="kick"]');
+      await page.mouse.move(pb.x + 20, pb.y + 20); await page.mouse.down(); await page.waitForTimeout(ms); await page.mouse.up();
+      await page.waitForTimeout(350);
+      taps.push(await page.evaluate(() => window.__starts));
+    }
+    check('Tipps bis knapp 300 ms geben genau einen Schlag (kein Doppeln)', taps.every((n) => n === 2), `je Taste+Maus: ${taps.join(', ')}`);
     await page.evaluate(() => { window.__starts = 0; });
     await page.keyboard.press('a');
     await page.waitForTimeout(400);
@@ -273,6 +286,25 @@ const { check, finish } = createChecker();
     const gM2 = await rect('.shelf > .sheet-grip');
     await drag(gM2.x + gM2.w / 2, gM2.y + 8, 300, 3, 10);
     check('Handy: nach unten wischen schließt', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    // Drumpad am Handy: Antippen = ein Schlag
+    await page.evaluate(() => {
+      window.__starts = 0;
+      const orig = AudioScheduledSourceNode.prototype.start;
+      AudioScheduledSourceNode.prototype.start = function (...a) { if (this.context === window.loopwerk.engine.ctx) window.__starts++; return orig.apply(this, a); };
+    });
+    await page.tap('#tab-sounds');
+    await page.tap('#new-beat-btn');
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
+    await page.tap('#pat-view [data-view="pads"]');
+    await page.locator('#pat-pads .pat-pad[data-row="kick"]').tap();
+    await page.waitForTimeout(400);
+    await page.evaluate(() => { window.__starts = 0; });
+    for (let i = 0; i < 3; i++) { await page.locator('#pat-pads .pat-pad[data-row="kick"]').tap(); await page.waitForTimeout(250); }
+    await page.waitForTimeout(300);
+    const phoneHits = await page.evaluate(() => window.__starts);
+    check('Handy: drei Tipps aufs Pad = drei Schläge', phoneHits === 3, String(phoneHits));
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+
     // Klaviertasten
     await page.tap('#tab-sounds');
     await page.tap('#new-melody-btn');
