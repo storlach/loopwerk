@@ -70,5 +70,15 @@
 - Sound-Regal als Akkordeon: Kategorien auf- und zuklappen, am Handy immer nur eine offen, kein eigener Scrollbereich mehr, größere Tippziele
 - Tests: `tests/mobil.test.cjs` (echte Touch-Eingabe)
 
+## ✅ 1.2 – Mobile Bedienung
+- App füllt den Bildschirm, die Seite scrollt nicht mehr: kompaktes Deck oben (Start/Stopp, Loop, Takt, Tempo), Arranger in der Mitte
+- Leiste unten (Sounds, Mixer, Rückgängig, Mehr); Regal, Mixer, Editoren, Export und „Mehr“ erscheinen im Fach direkt darüber, der Arranger bleibt sichtbar
+- Clips: erst antippen, dann ziehen; Wischen über Clips scrollt. Werkzeugleiste für den ausgewählten Clip mit Bearbeiten, Teilen, Duplizieren, Löschen und Reglern für Lautstärke und Fades
+- Hinweiszeile mit Fingertexten und „Fertig“ beim Einsetzen, Tippziele ≥ 44 px, Piano-Roll und Stepsequencer fingertauglich, Spuren per Antippen umbenennen
+- Spec: `docs/specs/mobil-ux.md`, Tests: `tests/mobil.test.cjs`
+
+### Offen aus 1.2
+- Pinch-Zoom im Arranger, Notenlänge per Finger ziehen, Prüfung im Rahmen der Claude-App auf echten Geräten
+
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

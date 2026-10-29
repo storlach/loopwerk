@@ -132,7 +132,7 @@ export function mountMixer({ root, store, engine, ui }) {
     if (!selected) {
       detailFor = null;
       detailEl.innerHTML = '';
-      detailEl.append(el('p', 'detail-empty', 'Klicke auf einen Kanalnamen, um seine Effekte einzustellen.'));
+      detailEl.append(el('p', 'detail-empty', 'Tippe oder klicke auf einen Kanalnamen, um seine Effekte einzustellen.'));
       return;
     }
     if (detailFor !== selected) buildDetail(selected);

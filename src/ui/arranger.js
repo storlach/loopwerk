@@ -83,6 +83,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     solo.addEventListener('click', () => { const t = store.track(track.id); store.setTrack(t.id, { solo: !t.solo }); });
     vol.addEventListener('input', () => store.setTrack(track.id, { volume: Number(vol.value) }, 'vol-' + track.id));
     name.addEventListener('dblclick', () => startRename(track.id));
+    // Doppelklick gibt es am Finger nicht: dort genügt einmal Antippen
+    name.addEventListener('click', (e) => { if (e.pointerType === 'touch') startRename(track.id); });
 
     // Löschen mit Bestätigung im Button selbst
     let armed = null;
@@ -442,6 +444,11 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const clip = t.closest('.clip');
     if (clip) {
       e.preventDefault();
+      // Finger: ein nicht ausgewählter Clip wird nur ausgewählt, damit Wischen scrollt statt verschiebt
+      if (e.pointerType === 'touch' && ui.selectedClipId !== clip.dataset.clipId) {
+        trackPointer(e, () => {}, () => select(clip.dataset.clipId));
+        return;
+      }
       if (t.closest('.clip-fade-in')) startFade(e, clip, 'in');
       else if (t.closest('.clip-fade-out')) startFade(e, clip, 'out');
       else if (t.closest('.clip-vol')) startVol(e, clip);

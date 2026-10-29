@@ -255,9 +255,9 @@ export class Store extends Emitter {
     });
   }
 
-  setClip(clipId, patch) {
+  setClip(clipId, patch, coalesce) {
     if (!this.findClip(clipId)) return;
-    this.dispatch('clip', () => normalizeClip(Object.assign(this.findClip(clipId).clip, patch)));
+    this.dispatch('clip', () => normalizeClip(Object.assign(this.findClip(clipId).clip, patch)), { coalesce });
   }
 
   // Linken Rand verschieben: Inhalt bleibt an seiner Stelle, nur der Anfang wandert.

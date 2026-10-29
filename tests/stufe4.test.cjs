@@ -163,7 +163,7 @@ const { check, finish } = createChecker();
       const phone = await app.browser.newPage({ viewport: { width: 400, height: 860 }, deviceScaleFactor: 2 });
       await phone.goto(app.url);
       await phone.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
-      await phone.click('#mixer-btn');
+      await phone.click('#tab-mixer');
       const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       check('Handy: Mixer ohne horizontale Seitenverschiebung', overflow <= 0, `${overflow}px`);
       await phone.screenshot({ path: path.join(SHOT_DIR, 'stufe4-phone.png'), fullPage: true });

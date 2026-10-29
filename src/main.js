@@ -13,6 +13,7 @@ import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
 import { mountPatternEditor } from './ui/pattern-editor.js';
+import { mountMobile, narrow } from './ui/mobile.js';
 import { Patterns, patternSampleId } from './patterns.js';
 import { newDrumPattern, newSynthPattern } from './instruments.js';
 import { OwnSounds } from './own-sounds.js';
@@ -59,22 +60,30 @@ function createUi() {
   return ui;
 }
 
-function mountHints({ root, ui, library, store }) {
+function mountHints({ root, ui, library, store, engine }) {
+  const text = root.querySelector('#hint-text');
+  const done = root.querySelector('#hint-done');
   const base = 'Leertaste: Start/Stopp · Lineal: klicken setzt die Position, ziehen setzt den Loop · Alt+Ziehen: kopieren · T: teilen · Strg+D: duplizieren · Strg+Z: rückgängig';
+  // Am Handy gibt es keine Tastatur: dort erklärt die Zeile die Fingerbedienung
+  const touchBase = 'Tippe auf „Sounds“, wähle einen Sound und tippe dann in eine Spur. Antippen des Lineals setzt die Abspielmarke.';
   const sync = () => {
     const armed = ui.armedSampleId && library.get(ui.armedSampleId);
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
     const selName = sel && (library.get(sel.clip.sampleId)?.name ?? 'Clip');
+    const phone = narrow.matches;
     root.classList.toggle('armed', !!(armed || ui.statusText || ui.flashText));
     document.getElementById('app').classList.toggle('armed-mode', !!armed);
-    root.textContent = ui.statusText
+    done.hidden = !armed;
+    text.textContent = ui.statusText
       ?? ui.flashText
-      ?? (armed ? `„${armed.name}“ ist ausgewählt. Klick in eine Spur setzt ihn ein. Esc beendet.`
-        : sel ? `„${selName}“ ausgewählt · Griffe oben: Fade-In, Lautstärke, Fade-Out · Ränder: kürzen/verlängern · T: an der Abspielmarke teilen · Entf: löschen`
-          : base);
+      ?? (armed ? (phone ? `„${armed.name}“ ist ausgewählt. Tippe in eine Spur, um ihn einzusetzen.` : `„${armed.name}“ ist ausgewählt. Klick in eine Spur setzt ihn ein. Esc beendet.`)
+        : sel ? (phone ? (ui.dock ? `„${selName}“ ausgewählt. Schließe das Fach für die Clip-Werkzeuge.` : `„${selName}“ ausgewählt. Ziehen verschiebt, die Ränder kürzen. Lautstärke und Fades unter „Pegel“.`) : `„${selName}“ ausgewählt · Griffe oben: Fade-In, Lautstärke, Fade-Out · Ränder: kürzen/verlängern · T: an der Abspielmarke teilen · Entf: löschen`)
+          : phone ? touchBase : base);
   };
+  done.addEventListener('click', () => { ui.arm(null); engine.stopPreview(); });
   ui.on(sync);
   store.on(sync);
+  narrow.addEventListener('change', sync);
   sync();
 }
 
@@ -90,7 +99,7 @@ function mountClipTools({ store, engine, ui, arranger }) {
       const ids = ui.selectedClipId ? [ui.selectedClipId] : null;
       const created = store.splitAt(beat, ids);
       if (!created.length) {
-        ui.flash(ids ? 'Die Abspielmarke steht nicht im ausgewählten Clip.' : 'Unter der Abspielmarke liegt kein Clip.');
+        ui.flash(ids ? 'Die Abspielmarke steht nicht im ausgewählten Clip. Setze sie im Lineal an die Stelle, an der geteilt werden soll.' : 'Unter der Abspielmarke liegt kein Clip.');
         return;
       }
       if (ids) arranger.select(created[0]);
@@ -303,7 +312,8 @@ async function boot() {
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   if (library.bpm !== store.project.bpm) await tempo.apply();
-  mountHints({ root: document.getElementById('hint'), ui, library, store });
+  mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
+  mountMobile({ store, ui, tools });
 
   let saveTimer = null;
   const saveNow = () => {

@@ -9,7 +9,9 @@ import { patternSampleId } from '../patterns.js';
 import { clamp, el, trackPointer } from '../util.js';
 
 const KEY_W = 46;
-const ROW_H = 14;
+// Am Handy größere Zeilen und Felder, damit Noten mit dem Finger treffbar sind
+const narrow = window.matchMedia('(max-width: 760px)');
+const rowH = () => (narrow.matches ? 24 : 14);
 // Computertastatur → Halbton über dem Grundton (deutsches und englisches Layout: Z und Y)
 const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, z: 8, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
 const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
@@ -127,8 +129,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   function rollGeometry() {
     const n = steps();
-    const cellW = Math.max(12, Math.floor((rollWrap.clientWidth - KEY_W - 2) / n));
-    return { n, cellW, w: KEY_W + n * cellW, h: (PITCH_HIGH - PITCH_LOW + 1) * ROW_H };
+    const cellW = Math.max(narrow.matches ? 28 : 12, Math.floor((rollWrap.clientWidth - KEY_W - 2) / n));
+    return { n, cellW, w: KEY_W + n * cellW, h: (PITCH_HIGH - PITCH_LOW + 1) * rowH() };
   }
 
   function drawRoll(p, notes = p.notes) {
@@ -143,17 +145,17 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const css = getComputedStyle(canvas);
     const col = (v) => css.getPropertyValue(v).trim();
     for (let m = PITCH_HIGH; m >= PITCH_LOW; m--) {
-      const y = (PITCH_HIGH - m) * ROW_H;
+      const y = (PITCH_HIGH - m) * rowH();
       c.fillStyle = col(isBlack(m) ? '--lane-alt' : '--lane');
-      c.fillRect(KEY_W, y, w - KEY_W, ROW_H);
+      c.fillRect(KEY_W, y, w - KEY_W, rowH());
       c.fillStyle = col(isBlack(m) ? '--ink' : '--panel');
-      c.fillRect(0, y, KEY_W - 1, ROW_H - 1);
+      c.fillRect(0, y, KEY_W - 1, rowH() - 1);
       if (m % 12 === 0) {
         c.fillStyle = col(isBlack(m) ? '--panel' : '--muted');
         c.font = '10px ' + col('--font-mono');
-        c.fillText(noteName(m), 4, y + ROW_H - 3);
+        c.fillText(noteName(m), 4, y + rowH() - 3);
         c.fillStyle = col('--grid-bar');
-        c.fillRect(KEY_W, y + ROW_H - 1, w - KEY_W, 1);
+        c.fillRect(KEY_W, y + rowH() - 1, w - KEY_W, 1);
       }
     }
     for (let i = 0; i <= n; i++) {
@@ -171,9 +173,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const noteCol = col('--cat-own');
     for (const note of notes) {
       const x = KEY_W + note.start * STEPS_PER_BEAT * cellW;
-      const y = (PITCH_HIGH - note.pitch) * ROW_H;
+      const y = (PITCH_HIGH - note.pitch) * rowH();
       c.fillStyle = noteCol;
-      c.fillRect(x + 1, y + 1, Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2), ROW_H - 2);
+      c.fillRect(x + 1, y + 1, Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2), rowH() - 2);
     }
   }
 
@@ -185,7 +187,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const { cellW } = rollGeometry();
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const pitch = clamp(PITCH_HIGH - Math.floor((e.clientY - rect.top) / ROW_H), PITCH_LOW, PITCH_HIGH);
+    const pitch = clamp(PITCH_HIGH - Math.floor((e.clientY - rect.top) / rowH()), PITCH_LOW, PITCH_HIGH);
     const p = pat();
     if (x < KEY_W) { previewNote(await audio(), engine.mix.master, p.preset, pitch); return; }
     const total = p.bars * 4;
@@ -194,6 +196,18 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const notes = p.notes.map((n) => ({ ...n }));
     const hit = noteAt(notes, pitch, beat);
     let moved = false;
+    // Finger: Wischen scrollt die Piano-Roll, Antippen setzt eine Note (Länge aus „Notenlänge“) oder löscht sie
+    if (e.pointerType === 'touch') {
+      trackPointer(e, () => {}, async () => {
+        if (hit >= 0) notes.splice(hit, 1);
+        else {
+          notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 });
+          previewNote(await audio(), engine.mix.master, p.preset, pitch);
+        }
+        update((q) => { q.notes = notes; });
+      });
+      return;
+    }
     if (hit >= 0) {
       const n = notes[hit];
       const right = KEY_W + (n.start + n.len) * STEPS_PER_BEAT * cellW;
@@ -202,7 +216,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       const pitch0 = n.pitch;
       trackPointer(e, (ev) => {
         const dx = Math.round((ev.clientX - e.clientX) / cellW) / STEPS_PER_BEAT;
-        const dy = Math.round((ev.clientY - e.clientY) / ROW_H);
+        const dy = Math.round((ev.clientY - e.clientY) / rowH());
         if (!moved && !dx && !dy) return;
         moved = true;
         if (resize) n.len = clamp(Math.round((ev.clientX - rect.left - KEY_W) / cellW) / STEPS_PER_BEAT - n.start, 0.25, total - n.start);
@@ -233,10 +247,10 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   // Gespielte Tonhöhe in den sichtbaren Bereich der Piano-Roll holen
   function reveal(pitch) {
-    const y = (PITCH_HIGH - pitch) * ROW_H;
+    const y = (PITCH_HIGH - pitch) * rowH();
     const top = rollWrap.scrollTop;
     const h = rollWrap.clientHeight;
-    if (y < top + ROW_H || y > top + h - 2 * ROW_H) rollWrap.scrollTop = Math.max(0, y - h / 2);
+    if (y < top + rowH() || y > top + h - 2 * rowH()) rollWrap.scrollTop = Math.max(0, y - h / 2);
   }
 
   async function playKey(pitch) {
@@ -313,10 +327,14 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     rollWrap.hidden = drums;
     if (drums) {
       renderDrums(p);
-      hint.textContent = 'Klick auf ein Feld setzt oder löscht einen Schlag. Klick auf den Namen spielt das Instrument.';
+      hint.textContent = narrow.matches
+        ? 'Feld antippen setzt oder löscht einen Schlag, Namen antippen spielt das Instrument. Zur Seite wischen zeigt weitere Schritte.'
+        : 'Klick auf ein Feld setzt oder löscht einen Schlag. Klick auf den Namen spielt das Instrument.';
     } else {
       drawRoll(p);
-      hint.textContent = `Klick ins Raster setzt eine Note (ziehen = länger), Klick auf eine Note löscht sie, Ziehen verschiebt. Tastatur A–K spielt ab ${noteName(octave)}, Pfeil hoch/runter wechselt die Oktave${rec ? ' – Schritt-Eingabe aktiv: jede Taste setzt eine Note an der markierten Stelle.' : '.'}`;
+      hint.textContent = narrow.matches
+        ? `Antippen setzt eine Note in der gewählten Notenlänge, Antippen einer Note löscht sie. Wischen blättert durch die Oktaven.`
+        : `Klick ins Raster setzt eine Note (ziehen = länger), Klick auf eine Note löscht sie, Ziehen verschiebt. Tastatur A–K spielt ab ${noteName(octave)}, Pfeil hoch/runter wechselt die Oktave${rec ? ' – Schritt-Eingabe aktiv: jede Taste setzt eine Note an der markierten Stelle.' : '.'}`;
     }
   }
 
