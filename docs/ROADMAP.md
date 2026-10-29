@@ -20,10 +20,16 @@
 - Mehrfachauswahl (mehrere Clips gemeinsam verschieben/löschen)
 - Clip-Lautstärke über 0 dB
 
-## Stufe 3 – Bibliothek
-- Freie CC0-Bibliotheken anbinden (Kandidaten: Sonic-Pi-Samples, VCSL), Lizenz je Sample
-- Suche, Favoriten, Vorhören synchron zum Song
-- Tempo frei wählbar mit Time-Stretching (Signalsmith Stretch, MIT)
+## ✅ Stufe 3 – Bibliothek und Tempo (0.3)
+- 33 CC0-Sounds aus Sonic Pi (Loops, Drums, Bass, Flächen, Glocken, FX) mit Quelle und Lizenz je Sound
+- Regal mit Suche, Kategorie-Filter und Favoriten
+- Tempo frei wählbar (60–200 BPM): synthetische Loops neu gerendert, echte Loops gestreckt (eigenes WSOLA, ADR 001), One-Shots auf ganze Schläge aufgefüllt
+- Spec: `docs/specs/stufe-3-bibliothek-tempo.md`, Tests: `tests/stufe3.test.cjs`
+
+### Offen aus Stufe 3
+- VCSL (echte Instrumente) – aus der Arbeitsumgebung nicht erreichbar
+- Tempowechsel schneller (Worker, benutzte Sounds zuerst)
+- Tonart wählbar (Loops transponieren)
 
 ## Stufe 4 – Mixer und Effekte
 - Mixer-Ansicht, Panorama, EQ, Hall, Echo, Kompressor pro Spur und Master

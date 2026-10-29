@@ -1,7 +1,10 @@
-// Synthetische Start-Bibliothek: alle Loops werden beim Laden per OfflineAudioContext erzeugt.
-// Einheitlich 120 BPM in A-Moll, damit alles ohne Time-Stretching zusammenpasst.
+// Bibliothek: synthetische Loops (per OfflineAudioContext erzeugt, A-Moll) und mitgelieferte CC0-Sounds.
+// Bei jedem Tempowechsel wird jeder Sound passend zum Projekttempo vorbereitet:
+// synthetische Loops neu gerendert, echte Loops gestreckt (WSOLA), One-Shots auf ganze Schläge aufgefüllt.
 
-import { mulberry32 } from './util.js';
+import { mulberry32, Emitter } from './util.js';
+import { CATALOG, PEAK_TARGET } from './catalog.js';
+import { timeStretch } from './dsp/stretch.js';
 
 export const CATEGORIES = [
   { id: 'drums', label: 'Drums' },
@@ -9,6 +12,7 @@ export const CATEGORIES = [
   { id: 'chords', label: 'Akkorde' },
   { id: 'synth', label: 'Synth' },
   { id: 'fx', label: 'FX' },
+  { id: 'own', label: 'Eigene' },
 ];
 
 export const LIBRARY_BPM = 120;
@@ -330,8 +334,24 @@ export function computePeaks(buffer, beats) {
   return peaks;
 }
 
-async function renderLoop(def) {
-  const spb = 60 / LIBRARY_BPM;
+const scale = (buffer, gain) => {
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < d.length; i++) d[i] *= gain;
+  }
+};
+
+export function bufferPeak(buffer) {
+  let peak = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; }
+  }
+  return peak;
+}
+
+async function renderLoop(def, bpm) {
+  const spb = 60 / bpm;
   const beats = def.bars * 4;
   const loopFrames = Math.round(beats * spb * SAMPLE_RATE);
   const ctx = new OfflineAudioContext(2, loopFrames + TAIL_SECONDS * SAMPLE_RATE, SAMPLE_RATE);
@@ -341,47 +361,149 @@ async function renderLoop(def) {
   const rendered = await ctx.startRendering();
 
   const buffer = new AudioBuffer({ numberOfChannels: 2, length: loopFrames, sampleRate: SAMPLE_RATE });
-  let peak = 0;
   for (let ch = 0; ch < 2; ch++) {
     const src = rendered.getChannelData(ch);
     const dst = buffer.getChannelData(ch);
     dst.set(src.subarray(0, loopFrames));
     // Ausklang an den Anfang falten: so läuft die Schleife ohne Bruch durch.
     if (!def.oneShot) for (let i = loopFrames; i < src.length; i++) dst[i % loopFrames] += src[i];
-    for (let i = 0; i < loopFrames; i++) peak = Math.max(peak, Math.abs(dst[i]));
   }
-  const gain = peak > 0 ? (def.peak ?? 0.5) / peak : 1;
-  for (let ch = 0; ch < 2; ch++) {
-    const d = buffer.getChannelData(ch);
-    for (let i = 0; i < d.length; i++) d[i] *= gain;
-  }
-  return {
-    id: def.id,
-    name: def.name,
-    category: def.category,
-    lengthBeats: beats,
-    bpm: LIBRARY_BPM,
-    key: LIBRARY_KEY,
-    oneShot: !!def.oneShot,
-    source: 'synthetisch',
-    buffer,
-  };
+  const peak = bufferPeak(buffer);
+  if (peak > 0) scale(buffer, (def.peak ?? 0.5) / peak);
+  return { buffer, lengthBeats: beats };
 }
 
-export class Library {
-  constructor() { this.samples = new Map(); }
+// Echte Loops auf das Projekttempo strecken (Länge exakt in Schlägen).
+function stretchLoop(orig, beats, bpm) {
+  const outLength = Math.round(beats * (60 / bpm) * orig.sampleRate);
+  if (outLength === orig.length) return orig;
+  const chans = Array.from({ length: orig.numberOfChannels }, (_, c) => orig.getChannelData(c));
+  const out = timeStretch(chans, outLength / orig.length, orig.sampleRate, outLength, { loop: true });
+  const buffer = new AudioBuffer({ numberOfChannels: out.length, length: outLength, sampleRate: orig.sampleRate });
+  out.forEach((d, c) => buffer.copyToChannel(d, c));
+  return buffer;
+}
+
+// One-Shots auf ganze Schläge auffüllen: ein verlängerter Clip wiederholt den Sound dann im Schlagraster.
+export function padOneShot(orig, bpm) {
+  const spb = 60 / bpm;
+  const beats = Math.max(1, Math.ceil(orig.duration / spb - 1e-6));
+  const length = Math.round(beats * spb * orig.sampleRate);
+  const buffer = new AudioBuffer({ numberOfChannels: orig.numberOfChannels, length, sampleRate: orig.sampleRate });
+  for (let c = 0; c < orig.numberOfChannels; c++) buffer.copyToChannel(orig.getChannelData(c).subarray(0, length), c);
+  return { buffer, lengthBeats: beats };
+}
+
+async function decode(arrayBuffer) {
+  const ctx = new OfflineAudioContext(2, 1, SAMPLE_RATE);
+  const decoded = await ctx.decodeAudioData(arrayBuffer);
+  if (decoded.numberOfChannels === 2) return decoded;
+  // Mono auf Stereo verdoppeln, damit alle Puffer gleich aufgebaut sind
+  const st = new AudioBuffer({ numberOfChannels: 2, length: decoded.length, sampleRate: decoded.sampleRate });
+  st.copyToChannel(decoded.getChannelData(0), 0);
+  st.copyToChannel(decoded.getChannelData(0), 1);
+  return st;
+}
+export { decode as decodeAudio };
+
+export class Library extends Emitter {
+  constructor() {
+    super();
+    this.samples = new Map();
+    this.bpm = LIBRARY_BPM;
+    this.prepared = new Map(); // id → bpm, für das der Puffer vorbereitet ist
+  }
   get(id) { return this.samples.get(id); }
   list() { return [...this.samples.values()]; }
+
+  // Fertigen Puffer übernehmen (Tests, erzeugte Sounds)
   register(sample) {
+    sample.rev = (sample.rev ?? 0) + 1;
     if (!sample.peaks) sample.peaks = computePeaks(sample.buffer, sample.lengthBeats);
     this.samples.set(sample.id, sample);
+    this.emit();
     return sample;
+  }
+
+  // Sound mit Original-Puffer aufnehmen; Länge in Schlägen ergibt sich aus dem aktuellen Tempo.
+  async add(sample) {
+    this.samples.set(sample.id, sample);
+    await this._prepare(sample, this.bpm);
+    this.emit();
+    return sample;
+  }
+
+  async _prepare(s, bpm) {
+    if (this.prepared.get(s.id) === bpm && s.buffer) return;
+    let r;
+    if (s.def) r = await renderLoop(s.def, bpm);
+    else if (s.make) r = await s.make(bpm);
+    else if (s.kind === 'loop' && s.orig) r = { buffer: stretchLoop(s.orig, s.beats, bpm), lengthBeats: s.beats };
+    else if (s.orig) r = padOneShot(s.orig, bpm);
+    else return; // fester Puffer ohne Original (z. B. Testsignal)
+    s.buffer = r.buffer;
+    s.lengthBeats = r.lengthBeats;
+    s.peaks = computePeaks(s.buffer, s.lengthBeats);
+    s.rev = (s.rev ?? 0) + 1;
+    this.prepared.set(s.id, bpm);
+  }
+
+  async setTempo(bpm) {
+    this.bpm = bpm;
+    for (const s of this.samples.values()) {
+      await this._prepare(s, bpm);
+      if (this.bpm !== bpm) return; // inzwischen neues Tempo angefordert
+    }
+    this.emit();
+  }
+
+  remove(id) {
+    this.samples.delete(id);
+    this.prepared.delete(id);
+    this.emit();
   }
 }
 
-export async function buildLibrary() {
+async function loadCatalogEntry(entry) {
+  try {
+    const res = await fetch(entry.file);
+    if (!res.ok) throw new Error(res.status);
+    const orig = await decode(await res.arrayBuffer());
+    const peak = bufferPeak(orig);
+    if (peak > 0) scale(orig, (PEAK_TARGET[entry.category] ?? 0.5) / peak);
+    const sample = { ...entry, orig, duration: orig.duration };
+    if (entry.kind === 'loop') sample.bpm = Math.round((entry.beats * 60 / orig.duration) * 100) / 100;
+    return sample;
+  } catch (err) {
+    console.warn(`Sound „${entry.name}“ konnte nicht geladen werden (${err.message}).`);
+    return null;
+  }
+}
+
+export async function buildLibrary({ bpm = LIBRARY_BPM, onProgress } = {}) {
   const lib = new Library();
-  const samples = await Promise.all(LOOP_DEFS.map(renderLoop));
-  samples.forEach((s) => lib.register(s));
+  lib.bpm = bpm;
+  let done = 0;
+  const total = LOOP_DEFS.length + CATALOG.length;
+  const tick = () => onProgress?.(++done, total);
+  const synth = LOOP_DEFS.map(async (def) => {
+    const s = {
+      id: def.id, name: def.name, category: def.category, kind: def.oneShot ? 'oneshot' : 'loop',
+      beats: def.bars * 4, bpm: null, key: def.category === 'drums' || def.category === 'fx' ? null : LIBRARY_KEY,
+      oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', def,
+    };
+    await lib.add(s);
+    tick();
+    return s;
+  });
+  const real = CATALOG.map(async (entry) => {
+    const s = await loadCatalogEntry(entry);
+    if (s) await lib.add(s);
+    tick();
+  });
+  await Promise.all([...synth, ...real]);
+  // Reihenfolge stabil halten: erst synthetisch, dann Katalog
+  const order = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];
+  lib.samples = new Map(order.filter((id) => lib.samples.has(id)).map((id) => [id, lib.samples.get(id)]));
   return lib;
 }

@@ -68,6 +68,8 @@ export function clipSignature(trackId, clip) {
 }
 
 export const MAX_TRACKS = 16;
+export const MIN_BPM = 60;
+export const MAX_BPM = 200;
 export const clipGain = (clip) => clip.gain ?? 1;
 
 // Fades begrenzen: nie negativ, zusammen nie länger als der Clip.
@@ -339,6 +341,12 @@ export class Store extends Emitter {
 
   setTrack(trackId, patch, coalesce) {
     this.dispatch('track', () => Object.assign(this.track(trackId), patch), { coalesce });
+  }
+
+  setBpm(bpm) {
+    const v = Math.round(Math.min(MAX_BPM, Math.max(MIN_BPM, bpm)) * 10) / 10;
+    if (v === this.project.bpm) return;
+    this.dispatch('tempo', (p) => { p.bpm = v; });
   }
 
   setLoop(patch) {

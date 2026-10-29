@@ -135,7 +135,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
       const sample = library.get(clip.sampleId);
-      if (!sample) continue;
+      if (!sample?.buffer) continue;
       for (const seg of clipSegments(clip, sample.lengthBeats)) {
         if (seg.start >= end - EPS) continue;
         playSegment(ctx, dest, clip, sample, seg, seg.start, Math.min(seg.end, end), seg.start * spb, spb);
@@ -295,7 +295,7 @@ export class Engine extends Emitter {
       for (const clip of track.clips) {
         if (filter && !filter(clip)) continue;
         const sample = this.library.get(clip.sampleId);
-        if (sample && node) fn(track, clip, sample, node);
+        if (sample?.buffer && node) fn(track, clip, sample, node);
       }
     }
   }
@@ -324,7 +324,7 @@ export class Engine extends Emitter {
   _voice(track, clip, sample, node, seg, fromBeat, toBeat, when) {
     if (toBeat - fromBeat <= 1e-4) return;
     const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb);
-    const voice = { clipId: clip.id, sig: clipSignature(track.id, clip), src, g };
+    const voice = { clipId: clip.id, sig: this._sig(track, clip), src, g };
     this.voices.add(voice);
     src.onended = () => this.voices.delete(voice);
   }
@@ -353,10 +353,20 @@ export class Engine extends Emitter {
     }
   }
 
+  // Signatur enthält die Version des Sounds: wird er neu erzeugt (Tempo, Editor, Pattern), plant die Engine neu.
+  _sig(track, clip) {
+    return clipSignature(track.id, clip) + '|' + (this.library.get(clip.sampleId)?.rev ?? 0);
+  }
+
   _signatures() {
     const sigs = new Map();
-    for (const track of this.project.tracks) for (const clip of track.clips) sigs.set(clip.id, clipSignature(track.id, clip));
+    for (const track of this.project.tracks) for (const clip of track.clips) sigs.set(clip.id, this._sig(track, clip));
     return sigs;
+  }
+
+  // Von außen anstoßen, wenn sich Sounds geändert haben, ohne dass sich das Projekt geändert hat.
+  refresh() {
+    if (this.ctx && this.playing) this._resync();
   }
 
   // ---------- Änderungen während der Wiedergabe ----------

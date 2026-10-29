@@ -29,11 +29,12 @@ function check(name, ok, detail = '') {
       const list = window.loopwerk.library.list();
       return {
         count: list.length,
+        synth: list.filter((s) => s.origin === 'Loopwerk').length,
         lengthsOk: list.every((s) => s.buffer.length === Math.round(s.lengthBeats * 0.5 * 44100)),
         silent: list.filter((s) => { const d = s.buffer.getChannelData(0); let m = 0; for (const v of d) m = Math.max(m, Math.abs(v)); return m < 0.05; }).map((s) => s.id),
       };
     });
-    check('Bibliothek erzeugt 15 Loops', lib.count === 15, `${lib.count} Loops`);
+    check('Bibliothek: 15 synthetische Loops plus Katalog', lib.synth === 15 && lib.count >= 15, `${lib.synth} synthetisch, ${lib.count} gesamt`);
     check('Loop-Längen exakt in Takten', lib.lengthsOk);
     check('Kein Loop ist stumm', lib.silent.length === 0, lib.silent.join(', '));
 

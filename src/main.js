@@ -104,9 +104,36 @@ function mountClipTools({ store, engine, ui, arranger }) {
   return tools;
 }
 
+// Tempo ändern: Sounds neu vorbereiten, Wiedergabe an derselben Stelle fortsetzen.
+function mountTempo({ store, engine, library, ui, arranger }) {
+  let running = null;
+  async function apply() {
+    if (running) return running;
+    running = (async () => {
+      while (library.bpm !== store.project.bpm) {
+        const wasPlaying = engine.playing;
+        const pos = engine.currentBeat();
+        if (wasPlaying) engine.stop();
+        ui.flash(`Tempo ${store.project.bpm} BPM – Sounds werden angepasst …`);
+        await library.setTempo(store.project.bpm);
+        arranger.render();
+        if (wasPlaying) engine.play(pos);
+        ui.flash(`Tempo ${store.project.bpm} BPM.`);
+      }
+    })();
+    try { await running; } finally { running = null; }
+  }
+  store.on(() => { if (library.bpm !== store.project.bpm) apply(); });
+  return { apply, get busy() { return !!running; } };
+}
+
 async function boot() {
   const bootEl = document.getElementById('boot');
-  const library = await buildLibrary();
+  const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
+  const library = await buildLibrary({
+    bpm: isValidProject(saved) ? saved.bpm : 120,
+    onProgress: (done, total) => { bootEl.textContent = `Sounds werden geladen … ${done} von ${total}`; },
+  });
   const store = new Store(loadSaved(library) ?? createDemoProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
   });
@@ -118,6 +145,8 @@ async function boot() {
   mountTransport({ store, engine, ui, arranger });
   mountProjectIO({ store, engine, ui, library });
   const tools = mountClipTools({ store, engine, ui, arranger });
+  const tempo = mountTempo({ store, engine, library, ui, arranger });
+  if (library.bpm !== store.project.bpm) await tempo.apply();
   mountHints({ root: document.getElementById('hint'), ui, library, store });
 
   let saveTimer = null;
@@ -167,7 +196,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, renderProject, encodeWav, ready: true };
 }
 
 boot().catch((err) => {

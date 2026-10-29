@@ -14,6 +14,14 @@ export function mountTransport({ store, engine, ui, arranger }) {
   const lcdBeat = $('lcd-beat');
   const lcdTime = $('lcd-time');
   const meter = $('meter');
+  const bpmInput = $('bpm-input');
+
+  bpmInput.addEventListener('change', () => {
+    const v = Number(bpmInput.value);
+    if (Number.isFinite(v) && v > 0) store.setBpm(v);
+    bpmInput.value = String(store.project.bpm);
+  });
+  bpmInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') bpmInput.blur(); });
 
   play.addEventListener('click', () => (engine.playing ? engine.stop() : engine.play()));
   $('home-btn').addEventListener('click', () => engine.setPosition(0));
@@ -55,6 +63,7 @@ export function mountTransport({ store, engine, ui, arranger }) {
     play.querySelector('.ico-stop').toggleAttribute('hidden', !engine.playing);
     loopBtn.setAttribute('aria-pressed', String(store.project.loop.on));
     metro.setAttribute('aria-pressed', String(engine.metronome));
+    if (document.activeElement !== bpmInput) bpmInput.value = String(store.project.bpm);
     undo.disabled = !store.canUndo;
     redo.disabled = !store.canRedo;
   }
