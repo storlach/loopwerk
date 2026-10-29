@@ -320,12 +320,35 @@ export class Engine extends Emitter {
     else { this.positionBeat = beat; this.emit('state'); }
   }
 
-  currentBeat() {
-    if (!this.playing || !this.ctx) return this.positionBeat;
-    const now = this.ctx.currentTime;
+  // Songposition zu einer Kontextzeit (Standard: jetzt, also die Planungszeit)
+  currentBeat(at = this.ctx?.currentTime) {
+    if (!this.playing || !this.ctx || !this.anchors.length) return this.positionBeat;
     let a = this.anchors[0];
-    for (const x of this.anchors) if (x.time <= now) a = x;
-    return Math.max(a.beat, a.beat + (now - a.time) / this.spb);
+    for (const x of this.anchors) if (x.time <= at) a = x;
+    return Math.max(a.beat, a.beat + (at - a.time) / this.spb);
+  }
+
+  // Kontextzeit, die gerade aus dem Lautsprecher kommt. Die Uhr läuft der Ausgabe um die Ausgabelatenz voraus
+  // (Bluetooth und Handys oft 100–250 ms). getOutputTimestamp liefert das genau und gleichmäßig je Bild;
+  // sonst Latenz abziehen.
+  heardTime() {
+    const ctx = this.ctx;
+    if (!ctx) return 0;
+    const now = ctx.currentTime;
+    let t = now - (ctx.outputLatency || 0) - (ctx.baseLatency || 0);
+    const ts = ctx.getOutputTimestamp?.();
+    if (ts && ts.contextTime > 0 && ts.performanceTime > 0) {
+      const est = ts.contextTime + (performance.now() - ts.performanceTime) / 1000;
+      // Plausibel halten: nie vor der Planungszeit, nie mehr als 1 s dahinter
+      if (est <= now + 0.005 && est > now - 1) t = est;
+    }
+    return Math.min(now, t);
+  }
+
+  // Songposition, die man gerade hört – für Abspielmarke, Anzeige und alles Sichtbare
+  heardBeat() {
+    if (!this.playing || !this.ctx) return this.positionBeat;
+    return this.currentBeat(this.heardTime());
   }
 
   timeAtBeat(beat) {
@@ -375,7 +398,8 @@ export class Engine extends Emitter {
     }
     // Alte Ankerpunkte aufräumen (einer vor "jetzt" bleibt für die Positionsberechnung).
     const now = this.ctx.currentTime;
-    while (this.anchors.length > 1 && this.anchors[1].time <= now) this.anchors.shift();
+    // Anker eine Weile behalten: die hörbare Position (heardBeat) liegt um die Ausgabelatenz zurück
+    while (this.anchors.length > 1 && this.anchors[1].time <= now - 1) this.anchors.shift();
     if (this.currentBeat() >= songEnd - EPS) this.stop();
   }
 
@@ -550,20 +574,38 @@ export class Engine extends Emitter {
     this.emit('preview');
   }
 
+  // Pegel laufen über einen kurzen Verlauf, damit die Anzeige zum Gehörten passt und nicht der Ausgabe vorauseilt
+  _lagged(key, measure) {
+    const now = this.ctx.currentTime;
+    const hist = (this.levelHist ||= new Map());
+    let h = hist.get(key);
+    if (!h) hist.set(key, (h = []));
+    h.push([now, measure()]);
+    while (h.length > 2 && h[1][0] <= now - 1.2) h.shift();
+    const heard = this.heardTime();
+    let v = h[0][1];
+    for (const [t, x] of h) { if (t <= heard) v = x; else break; }
+    return v;
+  }
+
   trackPeak(trackId) {
     const m = this.meters?.get(trackId);
     if (!m) return 0;
-    m.analyser.getFloatTimeDomainData(m.data);
-    let p = 0;
-    for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
-    return p;
+    return this._lagged(trackId, () => {
+      m.analyser.getFloatTimeDomainData(m.data);
+      let p = 0;
+      for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
+      return p;
+    });
   }
 
   peakLevel() {
     if (!this.analyser) return 0;
-    this.analyser.getFloatTimeDomainData(this.meterData);
-    let m = 0;
-    for (const v of this.meterData) { const a = Math.abs(v); if (a > m) m = a; }
-    return m;
+    return this._lagged('__master', () => {
+      this.analyser.getFloatTimeDomainData(this.meterData);
+      let m = 0;
+      for (const v of this.meterData) { const a = Math.abs(v); if (a > m) m = a; }
+      return m;
+    });
   }
 }

@@ -96,7 +96,7 @@ function mountClipTools({ store, engine, ui, arranger }) {
 
   const tools = {
     split() {
-      const beat = Math.round(engine.currentBeat() * 64) / 64;
+      const beat = Math.round(engine.heardBeat() * 64) / 64;
       const ids = ui.selectedClipId ? [ui.selectedClipId] : null;
       const created = store.splitAt(beat, ids);
       if (!created.length) {
@@ -138,7 +138,7 @@ function mountTempo({ store, engine, library, ui, arranger }) {
     running = (async () => {
       while (library.bpm !== store.project.bpm) {
         const wasPlaying = engine.playing;
-        const pos = engine.currentBeat();
+        const pos = engine.heardBeat();
         if (wasPlaying) engine.stop();
         ui.flash(`Tempo ${store.project.bpm} BPM – Sounds werden angepasst …`);
         await library.setTempo(store.project.bpm);
@@ -161,7 +161,7 @@ function mountRecording({ store, engine, ui, arranger, recorder }) {
   btn.addEventListener('click', async () => {
     if (recorder.state === 'recording') { recorder.stop(); return; }
     if (recorder.state !== 'idle') return;
-    const startBeat = Math.floor(engine.currentBeat() / store.project.beatsPerBar) * store.project.beatsPerBar;
+    const startBeat = Math.floor(engine.heardBeat() / store.project.beatsPerBar) * store.project.beatsPerBar;
     if (engine.playing) engine.stop();
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
     let trackId = sel?.track.id ?? freeTrack(startBeat, startBeat + 16)?.id;
@@ -319,7 +319,7 @@ async function boot() {
     await patterns.sync(store.project);
     const len = pattern.bars * 4;
     const bpb = store.project.beatsPerBar;
-    const at = Math.floor(engine.currentBeat() / bpb) * bpb;
+    const at = Math.floor(engine.heardBeat() / bpb) * bpb;
     const free = store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < at + len && c.startBeat + c.lengthBeats > at));
     const trackId = free?.id ?? store.addTrack();
     if (trackId) arranger.select(store.addClip(trackId, patternSampleId(pid), at, len));

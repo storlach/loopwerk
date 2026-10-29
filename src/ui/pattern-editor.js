@@ -485,8 +485,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     // Zwei schnelle Schläge auf derselben Spur, die aufs gleiche Raster fallen würden, verschmelzen nicht:
     // liegt der vorige schon dort und mindestens ein halbes Raster zurück, rückt der neue einen Platz weiter.
     stepNow(lane = null) {
-      const ctx = engine.ctx;
-      const heard = ctx.currentTime - (ctx.outputLatency || 0) - (ctx.baseLatency || 0);
+      const heard = engine.heardTime();
       const q = Number(quantSel.value);
       const x = ((heard - this.t0) / this.spb) * STEPS_PER_BEAT;
       if (x < -q / 2) return null;

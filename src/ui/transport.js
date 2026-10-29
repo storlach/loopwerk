@@ -85,7 +85,7 @@ export function mountTransport({ store, engine, ui, arranger }) {
   let hold = 0;
   let holdAge = 0;
   function frame() {
-    const beat = engine.currentBeat();
+    const beat = engine.heardBeat();
     const bpb = store.project.beatsPerBar;
     lcdBar.textContent = String(Math.floor(beat / bpb) + 1).padStart(3, '0');
     lcdBeat.textContent = String(Math.floor(beat % bpb) + 1);

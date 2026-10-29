@@ -416,7 +416,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (ui.selectedClipId && !store.findClip(ui.selectedClipId)) ui.select(null);
     for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', n.dataset.clipId === ui.selectedClipId);
     showLoop(p.loop.startBeat, p.loop.endBeat, p.loop.on);
-    setPlayhead(engine.currentBeat());
+    setPlayhead(engine.heardBeat());
   }
 
   function setPlayhead(beat) {

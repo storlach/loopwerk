@@ -224,7 +224,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     previewing = await engine.previewBuffer(buffer, a / st.sr, (b - a) / st.sr);
     const tick = () => {
       if (!previewing || engine.preview !== previewing) { headEl.hidden = true; return; }
-      const t = engine.ctx.currentTime - previewing.when;
+      const t = engine.heardTime() - previewing.when;
       headEl.hidden = false;
       headEl.style.left = clamp((a / st.sr + Math.max(0, t)) / (len() / st.sr), 0, 1) * 100 + '%';
       requestAnimationFrame(tick);

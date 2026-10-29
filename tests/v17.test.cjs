@@ -135,6 +135,50 @@ const { check, finish } = createChecker();
       return document.querySelector(`.clip[data-clip-id="${id}"]`).classList.contains('selected');
     });
     check('Auswahl bleibt sichtbar, auch wenn nur andere Spuren sich ändern', selOk);
+    // ---------- Bild und Ton synchron (Ausgabelatenz wie bei Bluetooth: 200 ms) ----------
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    await page.evaluate(async () => {
+      const mm = await import('./src/model.js');
+      const p = mm.createDemoProject();
+      p.loop = { on: true, startBeat: 0, endBeat: 4 };
+      window.loopwerk.store.replace(p);
+      document.getElementById('arr-scroll').scrollLeft = 0;
+    });
+    await page.click('#play-btn');
+    await page.waitForTimeout(300);
+    await page.evaluate(() => {
+      const ctx = window.loopwerk.engine.ctx;
+      ctx.getOutputTimestamp = () => ({ contextTime: ctx.currentTime - 0.2, performanceTime: performance.now() });
+    });
+    const lag = await page.evaluate(() => {
+      const e = window.loopwerk.engine;
+      return { now: e.currentBeat(), heard: e.heardBeat(), spb: e.spb };
+    });
+    const lagBeats = lag.now - lag.heard;
+    check('Hörbare Position liegt um die Ausgabelatenz zurück', Math.abs(lagBeats - 0.2 / lag.spb) < 0.02, JSON.stringify(lag));
+    // Kurz nach dem Loop-Sprung (Planungsuhr schon wieder vorn): Marke steht noch am Loop-Ende, wie man es hört
+    await page.evaluate(() => new Promise((r) => {
+      const e = window.loopwerk.engine;
+      const go = () => { const b = e.currentBeat(); if (b > 0.05 && b < 0.2 && e.anchors.length > 1) r(); else requestAnimationFrame(go); };
+      go();
+    }));
+    await page.waitForTimeout(16);
+    const jump = await page.evaluate(() => {
+      const e = window.loopwerk.engine;
+      const ph = document.querySelector('.playhead').style.transform;
+      return { now: +e.currentBeat().toFixed(2), heard: +e.heardBeat().toFixed(2), ph, ppb: window.loopwerk.ui.pxPerBeat, lcd: document.getElementById('lcd-beat').textContent };
+    });
+    check('Am Loop-Sprung springt die Marke erst, wenn man den Sprung hört', jump.heard > 3.3 && jump.heard < 4 && jump.lcd === '4', JSON.stringify(jump));
+    await page.waitForTimeout(80);
+    const ph = await page.evaluate(() => {
+      const e = window.loopwerk.engine;
+      const x = parseFloat(document.querySelector('.playhead').style.transform.match(/translateX\(([-\d.]+)px/)[1]);
+      const headW = parseFloat(getComputedStyle(document.querySelector('.arr-grid')).getPropertyValue('--head-w'));
+      return { markBeat: (x - headW) / window.loopwerk.ui.pxPerBeat, heard: e.heardBeat(), now: e.currentBeat() };
+    });
+    check('Abspielmarke zeigt die hörbare Position', Math.abs(ph.markBeat - ph.heard) < 0.08 && Math.abs(ph.markBeat - ph.now) > 0.2, JSON.stringify(ph));
+    await page.click('#play-btn');
+
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);
