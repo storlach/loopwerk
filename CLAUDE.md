@@ -43,7 +43,7 @@ Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer 
 - `effekt-bauen` – Vorlage für Effekte (ab Stufe 4)
 - `sample-import` – Sounds mit Lizenzprüfung aufnehmen
 - `ux-check` – Bedienprinzipien und Zugänglichkeit prüfen
-- `artifact-sync` – Sichern/Wiederherstellen über das Artifact (solange kein GitHub)
+- `artifact-sync` – Sichern (GitHub storlach/loopwerk führend) und Artifact-Vorschau aktualisieren
 - Persönliche Skills von Martin: `kritiker` (unabhängige Prüfung), `scout` (Skill-Review)
 
 ## Fertig heißt
