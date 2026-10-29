@@ -14,6 +14,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - `src/ai.js` – Melodie weiterführen, Klang aus Beschreibung: Claude über die Artifact-Capability `sample`, sonst Regeln.
 - `src/export.js`, `src/zip.js`, `src/wav.js`, `vendor/lamejs/` – Export WAV/MP3.
 - `src/ui/*` – Regal, Arranger, Deck, Docks (Mixer, Sample-Editor, Pattern-Editor, Export). Die UI liest aus dem Store und schreibt nur über Store-Aktionen. Docks über `ui.setDock(name)`.
+- Veröffentlichung: GitHub Pages (https://storlach.github.io/loopwerk/) baut sich bei jedem Push auf `main` (`tools/build-pages.cjs` ergänzt das HTML-Gerüst wie `tests/serve.cjs`); Artifact-Vorschau siehe Skill `artifact-sync`.
 - Entscheidungen: `docs/adr/`, Specs je Stufe: `docs/specs/`, Stand: `docs/ROADMAP.md`.
 
 ## Regeln

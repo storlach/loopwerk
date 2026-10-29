@@ -107,8 +107,9 @@
 - Projektname im Deck (am Handy unter „Mehr“) editierbar, bestimmt Dateinamen und Fenstertitel
 - Behoben: Nach dem Umbenennen einer Spur am Handy (Tipp daneben) blieb die Leiste unten verschwunden
 
+- GitHub: https://github.com/storlach/loopwerk (führend), Seite: https://storlach.github.io/loopwerk/ (bei jedem Push auf main über `.github/workflows/pages.yml`, Bau mit `tools/build-pages.cjs`; Mikrofon geht dort)
+
 ## Als Nächstes
-- GitHub-Repo verbinden, GitHub Pages (dort geht das Mikrofon)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Später

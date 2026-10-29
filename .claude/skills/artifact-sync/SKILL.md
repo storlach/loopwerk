@@ -6,13 +6,15 @@ description: Loopwerk sichern und veröffentlichen – GitHub (storlach/loopwerk
 # Sichern und veröffentlichen
 
 **GitHub (führend):** https://github.com/storlach/loopwerk, Branch `main`
-**Artifact (Vorschau in claude.ai):** https://claude.ai/artifact/LAPXHQXC5sb54jFkNbJcpP
+**Artifact (Vorschau in claude.ai, mit Claude-Ideen):** https://claude.ai/artifact/LAPXHQXC5sb54jFkNbJcpP
+**GitHub Pages (eigene Adresse, mit Mikrofon):** https://storlach.github.io/loopwerk/ – baut sich bei jedem Push auf `main` selbst (`.github/workflows/pages.yml`, `tools/build-pages.cjs`). Status prüfen: `gh run list --limit 3`.
 
 ## Ende jeder Sitzung
 1. `npm test` grün.
 2. Commit, dann `git push -u origin main`. Vorher `git fetch origin main` und bei Bedarf rebasen.
 3. Artifact aktualisieren: `file_path` = `index.html`, `url` = Artifact-Link, `root` = Projektordner. In `files` die seit der letzten Veröffentlichung geänderten Dateien mitgeben, z. B. über `git diff --name-only <letzter-Stand> HEAD`. Content-Types: `.md` → `text/markdown`, `.cjs`/`.mjs` → `text/javascript`, `.json` → `application/json`. Gelöschte Dateien mit `null` entfernen. `capabilities` weglassen, dann bleiben `downloads` und `sample` erhalten.
-4. In der Rückmeldung beide Links nennen.
+4. Mit `gh run list --limit 1` prüfen, ob der Pages-Workflow nach dem Push grün ist.
+5. In der Rückmeldung alle drei Links nennen.
 
 ## Neue Session
 - Mit Repo: Die Session klont `storlach/loopwerk`, es ist nichts weiter zu tun.
