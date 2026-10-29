@@ -64,7 +64,7 @@ const { check, finish } = createChecker();
     const before = await page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length);
     await page.tap('#undo-btn');
     check('Handy: Rückgängig nimmt das Duplizieren zurück', await page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length) === before - 1);
-    // Editor über den Reiter: öffnet oben (80 %), Klaviatur groß
+    // Editor über den Reiter: öffnet oben (100 %), Klaviatur groß
     await page.tap('#tab-sounds');
     await page.waitForTimeout(500);
     await page.tap('#new-melody-btn');
@@ -74,7 +74,7 @@ const { check, finish } = createChecker();
     const marr = await rect('.arranger');
     const roll = await rect('#pat-roll-wrap');
     const key = await rect('#pat-vkeys .vkey');
-    check('Handy: Melodie-Editor öffnet oben (80 %)', Math.abs(pat.h / marr.h - 0.8) < 0.02, `${pat.h} / ${marr.h}`);
+    check('Handy: Melodie-Editor öffnet oben (100 %)', Math.abs(pat.h / marr.h - 1) < 0.02, `${pat.h} / ${marr.h}`);
     check('Handy: Klavier groß (Piano-Roll ≥ 380 px hoch, Tasten ≥ 70 × 34)', roll.h >= 380 && key.w >= 70 && key.h >= 34, JSON.stringify({ roll, key }));
     check('Handy: Kopf des Editors in einer Zeile ohne Titel und Hinweistext', await page.evaluate(() => getComputedStyle(document.getElementById('pat-title')).display === 'none' && document.getElementById('pat-hint').hidden));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v19-mobil-klavier.png') });

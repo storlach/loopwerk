@@ -1,5 +1,5 @@
 // Schubladen: Fächer (Mixer, Editoren, am Handy auch Sounds und „Mehr“) liegen über den Spuren.
-// Drei Haltepunkte: zu (unter dem Rand), Mitte (50 %) und oben (80 % der Arranger-Höhe).
+// Drei Haltepunkte: zu (unter dem Rand), Mitte (50 %) und oben (ganze Arranger-Höhe).
 // Öffnen, Schließen und Einrasten sind immer animiert. Ein Schubs am Griff springt zum nächsten Haltepunkt
 // in Wischrichtung, langsames Ziehen rastet am nächstgelegenen ein. Jede Schublade merkt sich ihren Haltepunkt;
 // am Handy öffnen Mixer und Editoren oben, damit Fader, Klavier und Raster Platz haben.
@@ -10,7 +10,7 @@ import { narrow } from './place.js';
 
 const KEY = 'loopwerk.sheetH';
 const MID = 0.5;
-const TOP = 0.8;
+const TOP = 1;
 const FLICK = 0.35; // px/ms: ab hier zählt die Bewegung als Schubs
 
 function loadSnaps() {

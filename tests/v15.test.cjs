@@ -4,7 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { openApp, createChecker, clickR, selectR, fillR, createCard } = require('./harness.cjs');
+const { openApp, createChecker, clickR, selectR, fillR, createCard, reveal } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -388,7 +388,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-import-mobil.png') });
     await page.tap('#new-melody-btn');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
-    await page.locator('#pat-sing-btn').scrollIntoViewIfNeeded();
+    await reveal(page, '#pat-sing-btn');
     await page.tap('#pat-sing-btn');
     const ms = await page.evaluate(() => ({ visible: !document.getElementById('pat-sing').hidden, overflow: document.documentElement.scrollWidth - innerWidth, rec: document.getElementById('sing-rec').getBoundingClientRect().height }));
     check('Handy: Einsingen-Feld nutzbar', ms.visible && ms.overflow <= 0 && ms.rec >= 40, JSON.stringify(ms));

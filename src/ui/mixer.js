@@ -254,7 +254,6 @@ export function mountMixer({ root, store, engine, ui }) {
     if (show) sync();
   });
   document.getElementById('mixer-btn').addEventListener('click', () => setOpen(ui.dock !== 'mixer'));
-  root.querySelector('#mixer-close').addEventListener('click', () => setOpen(false));
   store.on(sync);
   ui.on(() => {
     // Auswahl im Arranger/Inspektor im Mixer markieren

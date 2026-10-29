@@ -2,7 +2,7 @@
 // Schubladen über den Spuren, Schere, Tipps, Drücken und Halten, Klaviertasten am Handy.
 // node tests/v18.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker, clickR, createCard } = require('./harness.cjs');
+const { openApp, createChecker, clickR, selectR, createCard, reveal } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -95,12 +95,12 @@ const { check, finish } = createChecker();
     check('Schublade hat Griff und Schatten', shadow !== 'none' && await page.locator('#mixer > .sheet-grip').isVisible(), shadow);
     const pad1 = await page.evaluate(() => getComputedStyle(document.querySelector('.arr-grid')).paddingBottom);
     check('Arranger lässt unten Platz zum Scrollen', parseFloat(pad1) >= dk.h - 2, pad1);
-    // Langsam nach oben ziehen: rastet am nächsten Haltepunkt (oben, 80 %) ein, animiert
+    // Langsam nach oben ziehen: rastet am nächsten Haltepunkt (oben, 100 %) ein, animiert
     await mdrag('#mixer', -ar.h * 0.25, 10, 16);
     await page.waitForTimeout(600);
     const dk2 = await rect('#mixer');
-    check('Aufziehen rastet oben ein (80 %)', Math.abs(dk2.h / ar.h - 0.8) < 0.02, `${dk.h} → ${dk2.h} / ${ar.h}`);
-    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide.mixer === 0.8));
+    check('Aufziehen rastet oben ein (100 %)', Math.abs(dk2.h / ar.h - 1) < 0.02, `${dk.h} → ${dk2.h} / ${ar.h}`);
+    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide.mixer === 1));
     // Kurzer Schubs nach unten: eine Stufe tiefer (Mitte), nicht zu
     await mdrag('#mixer', 40, 2, 0);
     await page.waitForTimeout(80);
@@ -112,9 +112,9 @@ const { check, finish } = createChecker();
     // Kurzer Schubs nach oben: eine Stufe höher
     await mdrag('#mixer', -40, 2, 0);
     await page.waitForTimeout(550);
-    check('Schubs nach oben rastet oben ein', Math.abs((await rect('#mixer')).h / ar.h - 0.8) < 0.02);
+    check('Schubs nach oben rastet oben ein', Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02);
     // Langsam fast ganz herunter ziehen: zu
-    await mdrag('#mixer', ar.h * 0.65, 10, 16);
+    await mdrag('#mixer', ar.h * 0.85, 10, 16);
     await page.waitForTimeout(60);
     check('Nach unten ziehen schließt die Schublade', await page.evaluate(() => window.loopwerk.ui.dock === null));
     const leaving = await page.evaluate(() => { const m = document.getElementById('mixer'); return m.classList.contains('leaving') && getComputedStyle(m).display !== 'none'; });
@@ -124,7 +124,7 @@ const { check, finish } = createChecker();
     // Mit dem Knopf öffnen und schließen: ebenfalls animiert, öffnet am gemerkten Haltepunkt
     await page.click('#mixer-btn');
     await page.waitForTimeout(550);
-    check('Öffnet am gemerkten Haltepunkt', Math.abs((await rect('#mixer')).h / ar.h - 0.8) < 0.02);
+    check('Öffnet am gemerkten Haltepunkt', Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02);
     await page.click('#mixer-btn');
     await page.waitForTimeout(40);
     check('Schließen per Knopf ist animiert', await page.evaluate(() => document.getElementById('mixer').classList.contains('leaving')));
@@ -226,7 +226,7 @@ const { check, finish } = createChecker();
     await createCard(page, 'melody');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
     await clickR(page, '#pat-rec');
-    await page.selectOption('#pat-len', '0.25');
+    await selectR(page, '#pat-len', '0.25');
     await page.keyboard.press('Escape');
     await page.keyboard.down('a');
     await page.waitForTimeout(650);
@@ -309,12 +309,12 @@ const { check, finish } = createChecker();
     const arrM2 = await rect('.arranger');
     check('Handy: Regal liegt als Schublade über den Spuren (Arranger bleibt gleich groß)', Math.abs(sh.b - arrM2.b) < 2 && Math.abs(arrM2.h - arrM.h) < 1 && sh.h < arrM.h, JSON.stringify({ sh, arrM, arrM2 }));
     check('Handy: Regal öffnet in der Mitte', Math.abs(sh.h / arrM2.h - 0.5) < 0.02, `${sh.h} / ${arrM2.h}`);
-    // Schubs nach oben: rastet oben (80 %) ein
+    // Schubs nach oben: rastet oben (100 %) ein
     const gM = await rect('.shelf > .sheet-grip');
     await drag(gM.x + gM.w / 2, gM.y + 8, -60, 3, 10);
     await page.waitForTimeout(400);
     const sh2 = await rect('.shelf');
-    check('Handy: Schubs nach oben rastet oben ein (80 %)', Math.abs(sh2.h / arrM2.h - 0.8) < 0.02, `${sh.h} → ${sh2.h}`);
+    check('Handy: Schubs nach oben rastet oben ein (100 %)', Math.abs(sh2.h / arrM2.h - 1) < 0.02, `${sh.h} → ${sh2.h}`);
     // Kurzer Schubs nach unten: zurück zur Mitte
     let gs = await rect('.shelf > .sheet-grip');
     await drag(gs.x + gs.w / 2, gs.y + 8, 50, 3, 10);
@@ -356,6 +356,7 @@ const { check, finish } = createChecker();
       return { n: keys.length, w: k.width, h: k.height, left: Math.round(k.left - roll.left), blacks: document.querySelectorAll('#pat-vkeys .vkey.black').length };
     });
     check('Handy: senkrechte Klaviertasten links an der Piano-Roll', vk.n === 49 && vk.blacks === 20 && vk.w >= 60 && vk.h >= 28 && vk.left <= 1, JSON.stringify(vk));
+    await reveal(page, '#pat-rec');
     await page.tap('#pat-rec');
     await page.evaluate(() => document.querySelector('#pat-vkeys .vkey[data-pitch="64"]').scrollIntoView({ block: 'center' }));
     await page.waitForTimeout(100);

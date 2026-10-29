@@ -39,6 +39,9 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 | `sound-kurator` | Bibliothek, Lizenzen, Metadaten | haiku |
 | `ux-designer` | Bedienung prüfen und verbessern (Handy, Desktop) | opus |
 | `markt-scout` | Konkurrenz recherchieren, Funktionen vorschlagen (`docs/markt-scout/`) | opus |
+| `ui-designer` | Visuelles Design, Look, Reviews aus UI-Sicht (Mockups in `docs/ux/`) | opus |
+| `motion-designer` | Bewegung, Gesten, Schubladen-Gefühl (misst Frames, setzt um) | opus |
+| `creative-director` | Prüft Entwürfe, gibt frei zur Durchsicht an Martin (`docs/ux/cd-review.md`) | opus |
 
 Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer Feature-Scheibe.
 

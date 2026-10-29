@@ -543,8 +543,6 @@
   }
   .dock-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--line); }
   .dock-head h2 { margin: 0; font: 700 13px/1.2 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
-  .dock-close { width: 28px; height: 28px; border: 0; border-radius: 4px; background: transparent; font-size: 18px; cursor: pointer; color: var(--muted); }
-  .dock-close:hover { background: var(--lane); color: var(--ink); }
   .dock-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); min-height: 0; }
   .mixer-strips { display: flex; gap: 6px; overflow: auto; padding: 10px; min-width: 0; }
   .strip {
@@ -604,7 +602,6 @@
   .loop-del.confirm { color: #fff; background: var(--meter-hot); border-radius: 3px; }
   .app.file-over .lane { outline: 1px dashed var(--cat-own); outline-offset: -2px; }
   .dock-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
-  .dock-actions + .dock-close { margin-left: 4px; }
   .dbtn {
     height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px;
     background: var(--panel); cursor: pointer; font-size: 12px; font-weight: 500;
@@ -1087,7 +1084,7 @@
       gap: 0;
       padding: 0;
     }
-    .left-tabs, .create-panel, .insp, .arr-bar, .deck-right, .ed-tabs, .pat-more-wrap, .tabbar-end { display: none !important; }
+    .left-tabs, .create-panel, .insp, .arr-bar, .deck-right, .ed-tabs, .tabbar-end { display: none !important; }
     /* Am Handy unten im Arranger Platz lassen, damit die letzten Spuren über das offene Fach scrollen */
     .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
     /* Das Fach lässt dem Arranger immer mindestens gut 150 px */
@@ -1129,7 +1126,6 @@
 
     .dock-head { flex-wrap: wrap; gap: 6px; padding: 2px 2px 8px 12px; }
     .dock-head h2 { flex: 1 1 0; min-width: 0; }
-    .dock-head .dock-close { order: 1; width: 44px; height: 44px; margin: 0; font-size: 22px; }
     .dock-actions { order: 2; width: 100%; margin: 0; gap: 6px; }
     /* Pattern-Einstellungen in einer Zeile zum Wischen, damit die Piano-Roll Platz behält */
     #pattern .dock-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-right: 10px; }
@@ -1139,8 +1135,18 @@
     #pattern > .dock-head h2 { display: none; }
     #pattern .dock-actions { order: 0; flex: 1 1 auto; width: auto; min-width: 0; }
     #pattern .pat-body { padding: 6px 8px 8px; }
-    #pat-play { order: -1; }
-    #pat-name { width: 150px; }
+    /* Pattern-Editor: alles in einer Zeile ohne Wischen – Anhören und Live als Tasten, der Rest unter „Mehr“ */
+    #pattern .dock-actions { flex-wrap: nowrap; overflow: visible; padding-right: 0; }
+    #pat-play, #pat-live { order: -1; width: 48px; padding: 0; justify-content: center; font-size: 0; }
+    #pat-play::before { content: "▶"; font-size: 17px; }
+    #pat-live::before { content: "●"; font-size: 17px; color: var(--meter-hot); }
+    #pat-live[aria-pressed="true"]::before { content: "■"; color: #fff; }
+    #pat-preset-field { flex: 1 1 auto; min-width: 0; }
+    #pat-preset-field select { width: 100%; min-width: 0; }
+    .pat-more-wrap { margin-left: auto; }
+    .pat-more { width: min(300px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; }
+    .pat-more .pat-field, .pat-more .dbtn, .pat-more .ed-name { width: 100%; box-sizing: border-box; justify-content: space-between; }
+    #pat-name { width: 100%; }
     .dbtn, .ed-beats, .ed-name { min-height: 44px; }
     .pat-field select { height: 44px; }
     .ed-check { min-height: 44px; }
@@ -1152,8 +1158,6 @@
       background: var(--deck); color: var(--deck-ink); border-color: var(--deck-2);
     }
     .more-panel .dock-head { border-color: var(--deck-2); }
-    .more-panel .dock-close { color: var(--deck-muted); }
-    .more-panel .dock-close:hover { background: var(--deck-2); color: var(--deck-ink); }
     .more-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px max(12px, env(safe-area-inset-left, 0px)) 14px; display: grid; gap: 14px; align-content: start; }
     .more-sec h3 { margin: 0 0 6px; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--deck-muted); }
     .more-row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1469,7 +1473,6 @@
   <section class="dock" id="mixer" aria-label="Mixer" hidden>
     <div class="dock-head">
       <h2>Mixer</h2>
-      <button class="dock-close" id="mixer-close" type="button" aria-label="Mixer schließen">×</button>
     </div>
     <div class="dock-body">
       <div class="mixer-strips" id="mixer-strips"></div>
@@ -1486,7 +1489,6 @@
         <button class="dbtn" id="ed-cancel" type="button">Abbrechen</button>
         <button class="dbtn primary" id="ed-apply" type="button">Übernehmen</button>
       </div>
-      <button class="dock-close" id="editor-close" type="button" aria-label="Editor schließen">×</button>
     </div>
     <div class="editor-body">
       <div class="ed-wave-wrap cat-own">
@@ -1557,7 +1559,6 @@
   <section class="dock" id="export" aria-label="Exportieren" hidden>
     <div class="dock-head">
       <h2>Song exportieren</h2>
-      <button class="dock-close" id="export-close" type="button" aria-label="Export schließen">×</button>
     </div>
     <div class="export-body">
       <fieldset class="ex-set">
@@ -1585,7 +1586,7 @@
       <h2 id="pat-title">Beat-Editor</h2>
       <div class="dock-actions">
         <input class="ed-name" id="pat-name" type="text" maxlength="30" aria-label="Name des Patterns">
-        <label class="pat-field">Takte
+        <label class="pat-field" id="pat-bars-field">Takte
           <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
         </label>
         <div class="pat-view" id="pat-view" role="group" aria-label="Ansicht">
@@ -1611,7 +1612,6 @@
         </div>
         <button class="dbtn" id="pat-clear" type="button">Leeren</button>
       </div>
-      <button class="dock-close" id="pattern-close" type="button" aria-label="Pattern-Editor schließen">×</button>
     </div>
     <div class="pat-body">
       <div class="pat-pages cat-own" id="pat-pages" role="group" aria-label="Takthälfte" hidden></div>
@@ -1647,7 +1647,6 @@
   <section class="dock more-panel tempo-panel" id="tempo" aria-label="Tempo" hidden>
     <div class="dock-head">
       <h2>Tempo</h2>
-      <button class="dock-close" id="tempo-close" type="button" aria-label="Tempo schließen">×</button>
     </div>
     <div class="tempo-body">
       <div class="tempo-row">
@@ -1666,7 +1665,6 @@
   <section class="dock more-panel" id="more" aria-label="Mehr" hidden>
     <div class="dock-head">
       <h2>Mehr</h2>
-      <button class="dock-close" id="more-close" type="button" aria-label="Mehr schließen">×</button>
     </div>
     <div class="more-body">
       <div class="more-sec"><h3>Wiedergabe</h3><div class="more-row" data-slot="play"></div></div>

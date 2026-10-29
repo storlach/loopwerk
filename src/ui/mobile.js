@@ -29,7 +29,6 @@ export function mountMobile({ store, ui, tools }) {
   // Mixer und Editor bedienen mixer.js und layout.js – dieselben Reiter wie am Desktop
   const tabs = [['tab-sounds', 'sounds'], ['tab-more', 'more']];
   for (const [id, dock] of tabs) $(id).addEventListener('click', () => ui.setDock(ui.dock === dock ? null : dock));
-  $('more-close').addEventListener('click', () => ui.setDock(null));
 
   function syncTabs() {
     app.dataset.dock = ui.dock || '';
@@ -147,7 +146,6 @@ export function mountMobile({ store, ui, tools }) {
   $('tempo-p5').addEventListener('click', step(5));
   slider.addEventListener('input', () => { pending = Number(slider.value); showTempo(); });
   slider.addEventListener('change', () => choose(Number(slider.value), true));
-  $('tempo-close').addEventListener('click', () => ui.setDock(null));
 
   function showTempo() {
     const v = pending ?? store.project.bpm;

@@ -249,7 +249,6 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     if (ui.dock === 'editor') ui.setDock(null);
   }
   $('ed-cancel').addEventListener('click', close);
-  $('editor-close').addEventListener('click', close);
   $('ed-apply').addEventListener('click', async () => {
     if (!st) return;
     const btn = $('ed-apply');

@@ -63,7 +63,6 @@ export function mountExport({ root, store, library, ui, engine, tempo }) {
   });
 
   btn.addEventListener('click', () => ui.setDock(ui.dock === 'export' ? null : 'export'));
-  $('export-close').addEventListener('click', () => ui.setDock(null));
   ui.on(() => {
     const show = ui.dock === 'export';
     btn.setAttribute('aria-pressed', String(show));

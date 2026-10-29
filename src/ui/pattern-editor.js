@@ -58,9 +58,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   let midiTried = false;
 
   for (const k of KITS) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
-  // Am Desktop stehen Seltenes und Einstellungen unter „Mehr“, damit die Kopfzeile ruhig bleibt
+  // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
+  // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');
-  for (const node of [nameIn, $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-clear')]) place(node, { wide: moreEl });
+  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
+    const always = [nameIn, $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-clear')].includes(node);
+    place(node, always ? { wide: moreEl, narrow: moreEl } : { narrow: moreEl });
+  }
   // Nach einer Auswahl den Fokus vom Auswahlfeld nehmen: sonst „frisst“ es die Buchstabentasten
   // (A springt z. B. zum Kit „Akustik“), statt dass sie Pads oder Klaviatur spielen
   root.addEventListener('change', (e) => { if (e.target.tagName === 'SELECT') e.target.blur(); });
@@ -117,7 +121,6 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (p.type === 'drums') p.rows = resizeDrumRows({}, p.bars);
     else p.notes = [];
   }));
-  $('pattern-close').addEventListener('click', () => ui.setDock(null));
 
   // ---------- Stepsequencer ----------
 

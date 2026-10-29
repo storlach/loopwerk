@@ -65,6 +65,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
 
   popup($('keys-btn'), $('keys-pop'));
   const setPatMore = popup($('pat-more-btn'), $('pat-more'));
+  // Ein Knopf im Menü (Schritt-Eingabe, Weiterführen, Einsingen, Leeren) erledigt seine Sache und schließt es
+  $('pat-more').addEventListener('click', (e) => { if (e.target.closest('button')) setPatMore(false); });
   ui.on(() => { if (ui.dock !== 'pattern') setPatMore(false); });
 
   // Export am Desktop als Klappfeld unter seinem Knopf

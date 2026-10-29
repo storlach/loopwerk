@@ -1,7 +1,7 @@
 // Bedienung am Handy: kompaktes Deck, Leiste unten, ein Fach für Regal und Docks, Clip-Werkzeuge,
 // Antippen statt Ziehen. node tests/mobil.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, reveal } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -203,7 +203,7 @@ const { check, finish } = createChecker();
     await page.tap('#zoom-out');
     await page.tap('#export-btn');
     check('„Exportieren“ aus „Mehr“ öffnet den Export im Fach', (await lw()).dock === 'export' && await page.locator('#ex-go').isVisible());
-    await page.tap('#export-close');
+    await page.keyboard.press('Escape');
 
     // ---------- Beat-Editor ----------
     await page.tap('#tab-sounds');
@@ -256,9 +256,11 @@ const { check, finish } = createChecker();
     await swipe(wrap.x + 150, wrap.y + wrap.height - 20, 0, -150);
     const top1 = await page.evaluate(() => document.getElementById('pat-roll-wrap').scrollTop);
     check('Piano-Roll: Wischen blättert durch die Tonhöhen, ohne Noten zu setzen', top1 > top0 + 50 && await notes() === n1, `${top0} → ${top1}`);
-    check('Schritt-Eingabe ist am Handy da (mit den senkrechten Klaviertasten)', await page.locator('#pat-rec').isVisible());
+    await reveal(page, '#pat-rec');
+    check('Schritt-Eingabe ist am Handy da (unter „Mehr“, ohne Wischen)', await page.locator('#pat-rec').isVisible() && await page.evaluate(() => { const a = document.querySelector('#pattern .dock-actions'); return a.scrollWidth <= a.clientWidth; }));
+    await page.tap('#pat-more-btn');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-melodie.png') });
-    await page.tap('#pattern-close');
+    await page.tap('#editor-tab');
 
     // ---------- Tempo ohne Tastatur ----------
     const bpm = page.locator('#bpm-input');
@@ -276,7 +278,7 @@ const { check, finish } = createChecker();
     await page.waitForFunction(() => window.loopwerk.store.project.bpm === 100 && window.loopwerk.library.bpm === 100 && !window.loopwerk.tempo.busy, null, { timeout: 30000 });
     check('Schnellwahl 100 setzt das Tempo, das Deck zeigt es', await bpm.inputValue() === '100');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-tempo.png') });
-    await page.tap('#tempo-close');
+    await page.tap('#bpm-input');
 
     // ---------- Spurköpfe ----------
     await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 0; });
