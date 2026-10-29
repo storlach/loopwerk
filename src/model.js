@@ -449,6 +449,22 @@ export class Store extends Emitter {
     }, { coalesce });
   }
 
+  // Klang eines Patterns auf einmal setzen: Klangfarbe, Name und Effekte der Spuren, auf denen es liegt (ein Schritt)
+  applySound(patternId, { preset, name, fx }, trackIds) {
+    if (!this.project.patterns?.[patternId]) return;
+    this.dispatch('sound', (p) => {
+      const pat = p.patterns[patternId];
+      if (preset) pat.preset = preset;
+      if (name) pat.name = name.slice(0, 30);
+      for (const id of trackIds) {
+        const t = this.track(id);
+        if (!t || !fx) continue;
+        t.fx = withFx(t.fx);
+        for (const [fxId, patch] of Object.entries(fx)) if (t.fx[fxId]) Object.assign(t.fx[fxId], patch);
+      }
+    });
+  }
+
   setMaster(patch, coalesce) {
     this.dispatch('master', (p) => { p.master = { volume: 0.85, fx: null, ...(p.master || {}), ...patch }; }, { coalesce });
   }

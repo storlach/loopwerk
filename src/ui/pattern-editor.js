@@ -11,6 +11,7 @@ import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
 import { runJob } from '../dsp/run.js';
 import { startMicCapture } from '../recorder.js';
 import { decodeAudio } from '../samples.js';
+import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
 
 const KEY_W = 46;
@@ -630,7 +631,76 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     fitClips(bars);
     say(`${notes.length} Töne erkannt (${bars} ${bars === 1 ? 'Takt' : 'Takte'}). Hör sie dir mit „▶ Anhören“ an und wähle oben den Klang.`);
     requestAnimationFrame(() => reveal(notes[0].pitch));
+    if ($('sing-desc').value.trim()) await buildSound();
   }
+
+  // ---------- Klang aus Beschreibung ----------
+
+  const FX_NAMES = { drive: 'Verzerrer', filter: 'Filter', eq: 'EQ', comp: 'Kompressor', pump: 'Pumpen', echo: 'Echo', hall: 'Hall' };
+  async function buildSound() {
+    const desc = $('sing-desc').value.trim();
+    if (!desc || !pat()) { if (!desc) say('Beschreibe zuerst, wie es klingen soll – z. B. „warmes E-Piano mit Echo“.'); return; }
+    const btn = $('sing-sound');
+    btn.disabled = true;
+    const prev = singStatus.textContent;
+    say(`${prev ? prev + ' ' : ''}Baue den Klang …`);
+    try {
+      const res = await designSound(desc, SYNTH_PRESETS);
+      const sid = patternSampleId(id);
+      const trackIds = store.project.tracks.filter((t) => t.clips.some((c) => c.sampleId === sid)).map((t) => t.id);
+      const fxOn = Object.entries(res.fx).filter(([, f]) => f.on).map(([k]) => FX_NAMES[k]);
+      if (!res.preset && !fxOn.length) { say(`${prev ? prev + ' ' : ''}Zu „${desc}“ fällt mir nichts ein – nenne ein Instrument (Flöte, Klavier, Streicher …) oder eine Eigenschaft (warm, verzerrt, Hall).`); return; }
+      store.applySound(id, { preset: res.preset, name: res.name, fx: res.fx }, trackIds);
+      const label = SYNTH_PRESETS.find((x) => x.id === (res.preset || pat().preset))?.label;
+      say(`${prev ? prev + ' ' : ''}Klang: ${label}${fxOn.length ? ` mit ${fxOn.join(', ')}` : ''}${trackIds.length ? '' : ' (Effekte wirken, sobald das Pattern auf einer Spur liegt)'}${res.source === 'claude' ? ' – von Claude eingestellt.' : ' – nach Stichworten eingestellt.'}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  $('sing-sound').addEventListener('click', buildSound);
+  $('sing-desc').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); buildSound(); } });
+
+  // ---------- Melodie weiterführen ----------
+
+  let lastCont = null; // { id, from, beats, seed, notesKey }
+  const notesKey = (notes) => JSON.stringify(notes.map((n) => [n.pitch, n.start, n.len]));
+  $('pat-continue').addEventListener('click', async () => {
+    const btn = $('pat-continue');
+    const p = pat();
+    if (!p || btn.getAttribute('aria-busy') === 'true') return;
+    let base = p.notes;
+    let from;
+    let beats;
+    let seed = 1;
+    // Nochmal klicken ohne Änderung dazwischen: die letzte Fortsetzung durch eine neue Idee ersetzen
+    if (lastCont && lastCont.id === id && lastCont.notesKey === notesKey(p.notes)) {
+      ({ from, beats } = lastCont);
+      seed = lastCont.seed + 1;
+      base = p.notes.filter((n) => n.start < from);
+    } else {
+      if (!p.notes.length) { ui.flash('Erst ein paar Töne setzen oder einsingen – dann führt „Weiterführen“ sie fort.'); return; }
+      const end = Math.max(...p.notes.map((n) => n.start + n.len));
+      from = Math.ceil(end / 4 - 1e-9) * 4;
+      beats = Math.min(from, 64 - from);
+    }
+    if (beats <= 0) { ui.flash('Das Pattern ist schon 16 Takte lang – mehr passt nicht hinein.'); return; }
+    btn.setAttribute('aria-busy', 'true');
+    btn.textContent = '✨ Denkt nach …';
+    try {
+      const res = await continueMelody(base, { from, beats, seed });
+      const bars = [1, 2, 4, 8, 16].find((b) => b * 4 >= from + beats) ?? 16;
+      const all = [...base, ...res.notes];
+      update((q) => { q.notes = all; q.bars = Math.max(q.bars, bars); });
+      fitClips(Math.max(p.bars, bars));
+      lastCont = { id, from, beats, seed, notesKey: notesKey(all) };
+      ui.flash(`${res.notes.length} Töne angehängt (${res.key.label}, ${res.source === 'claude' ? 'Idee von Claude' : 'nach Regeln: Motiv variiert'}). Nochmal klicken für eine andere Idee.`);
+    } catch (err) {
+      if (err?.code !== 'cancelled') ui.flash(`Weiterführen hat nicht geklappt: ${err?.message || err}`);
+    } finally {
+      btn.removeAttribute('aria-busy');
+      btn.textContent = '✨ Weiterführen';
+    }
+  });
 
   let mic = null;
   $('sing-rec').addEventListener('click', async () => {
@@ -685,6 +755,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (const b of viewBtns) b.setAttribute('aria-pressed', String(b.dataset.view === view));
     liveBtn.setAttribute('aria-pressed', String(looper.running));
     singBtn.hidden = drums;
+    $('pat-continue').hidden = drums;
     singBtn.setAttribute('aria-pressed', String(singOpen && !drums));
     singEl.hidden = drums || !singOpen;
     liveBtn.textContent = looper.running ? '■ Live stoppen' : '● Live';
@@ -736,5 +807,5 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   });
   window.addEventListener('resize', () => render());
 
-  return { open, transcribe, get id() { return id; }, get looper() { return looper; } };
+  return { open, transcribe, buildSound, get id() { return id; }, get looper() { return looper; } };
 }

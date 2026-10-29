@@ -100,8 +100,13 @@
 - Sample-Editor: Autotune (Tonart, Stärke, Roboter), Stimme entfernen/isolieren, Song in vier Ebenen zerlegen (Näherung, ADR 003)
 - Spec: `docs/specs/v1.5-einsingen-trennen.md`, Tests: `tests/v15.test.cjs`
 
-## Als Nächstes (Wunschliste vom 29.10.2026)
-- Melodie fortsetzen, Instrument per Beschreibung erzeugen (über Claude im Artifact)
+## ✅ 1.6 – Ideen von Claude
+- „✨ Weiterführen“ im Melodie-Editor: Claude (im Artifact) oder Regeln führen die Melodie fort, nochmal klicken = neue Idee
+- „Wie soll es klingen?“: Beschreibung → Klang, Name und Effekte (Claude oder Stichwörter); nach dem Einsingen automatisch
+- Spec: `docs/specs/v1.6-ideen-von-claude.md`
+
+## Als Nächstes
+- GitHub-Repo verbinden, GitHub Pages (dort geht das Mikrofon)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Später

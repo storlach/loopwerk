@@ -663,6 +663,9 @@
   .pat-sing-intro, .pat-sing-status { margin: 0; font-size: 13px; }
   .pat-sing-status:empty { display: none; }
   .pat-sing-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .sing-desc-field { flex: 1 1 260px; }
+  #sing-desc { flex: 1; min-width: 0; height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+  #pat-continue[aria-busy="true"] { opacity: 0.7; cursor: progress; }
   #sing-rec.recording { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
   .ed-sel-small { height: 28px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
   .ed-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
@@ -873,6 +876,7 @@
     .pat-keys { display: none !important; }
     #pattern[data-type="synth"] #pat-live, #pattern[data-type="synth"] #pat-quant-field { display: none; }
     #pat-live { order: -1; }
+    #sing-desc { font-size: 16px; height: 44px; }
     .pat-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(72px, 1fr); }
     .pat-pad-key { display: none; }
     .seg { min-height: 44px; }
@@ -945,7 +949,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.5</span>
+      <span class="brand-tag">Version 1.6</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -1179,6 +1183,7 @@
           <select id="pat-len"><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1" selected>1/4</option><option value="2">1/2</option><option value="4">1/1</option></select>
         </label>
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
+        <button class="dbtn" id="pat-continue" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
         <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
         <button class="dbtn" id="pat-live" type="button" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">● Live</button>
         <label class="pat-field" id="pat-quant-field">Raster
@@ -1200,6 +1205,12 @@
           <input type="file" id="sing-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" hidden>
           <label class="ed-inline"><input type="checkbox" id="sing-lead"> Song mit Begleitung: Lead-Melodie heraushören</label>
           <label class="pat-field">Töne <select id="sing-key"></select></label>
+        </div>
+        <div class="pat-sing-row">
+          <label class="pat-field sing-desc-field">Wie soll es klingen?
+            <input type="text" id="sing-desc" maxlength="200" placeholder="z. B. weiche Flöte mit viel Hall" autocomplete="off">
+          </label>
+          <button class="dbtn" id="sing-sound" type="button" title="Klang und Effekte nach deiner Beschreibung einstellen">Klang bauen</button>
         </div>
         <p class="pat-sing-status" id="sing-status" role="status"></p>
       </div>

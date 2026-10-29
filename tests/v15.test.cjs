@@ -167,7 +167,9 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     check('Mikrofon: eingesungene Melodie wird erkannt', inOrder, `${await page.locator('#sing-status').textContent()} ${JSON.stringify(pat.notes.map((n) => [n.pitch, n.start]))}`);
     // Wann das simulierte Mikrofon die Datei startet, ist zufällig; geprüft wird das Raster ab dem zweiten Ton
     const steps = pat.notes.slice(2, MEL.length).map((n, i) => n.start - pat.notes[i + 1].start);
-    check('Mikrofon: Abstände im Takt (je ein Schlag)', steps.length === MEL.length - 2 && steps.every((d) => d === 1), JSON.stringify(steps));
+    // Liegt der zufällige Versatz genau zwischen zwei 1/16, darf ein Ton um ein Raster kippen
+    const spanOk = Math.abs(steps.reduce((a, b) => a + b, 0) - steps.length) <= 0.25;
+    check('Mikrofon: Abstände im Takt (je ein Schlag, ± ein 1/16)', steps.length === MEL.length - 2 && steps.every((d) => Math.abs(d - 1) <= 0.25) && spanOk, JSON.stringify(steps));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-einsingen.png') });
     await page.evaluate(() => window.loopwerk.ui.setDock(null));
 
@@ -264,6 +266,85 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await page.keyboard.press('Control+z');
     check('Rückgängig holt den Song zurück', await page.evaluate((id) => !!window.loopwerk.store.findClip(id) && window.loopwerk.store.project.tracks.length === 8, prep));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-editor.png') });
+
+    // ---------- Weiterführen und Klang bauen (ohne Claude: Regeln) ----------
+    await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createEmptyProject()); });
+    await page.click('#new-melody-btn');
+    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    const START = [[69, 0, 1], [72, 1, 1], [76, 2, 1], [74, 3, 1], [72, 4, 2], [71, 6, 2]];
+    const setNotes = (list) => page.evaluate((l) => {
+      const { store, patternEditor } = window.loopwerk;
+      store.updatePattern(patternEditor.id, (p) => { p.notes = l.map(([pitch, start, len]) => ({ pitch, start, len, vel: 1 })); p.bars = 2; });
+    }, list);
+    await setNotes(START);
+    const synth = () => page.evaluate(() => window.loopwerk.store.project.patterns[window.loopwerk.patternEditor.id]);
+    await page.click('#pat-continue');
+    await page.waitForFunction(() => !document.getElementById('pat-continue').hasAttribute('aria-busy'));
+    let sp = await synth();
+    const added = sp.notes.filter((n) => n.start >= 8);
+    const last = added[added.length - 1];
+    check('Weiterführen (Regeln): gleich lange Fortsetzung ab Takt 3', sp.bars === 4 && added.length >= 4 && added.every((n) => n.start < 16) && sp.notes.length === START.length + added.length, JSON.stringify(added.map((n) => [n.pitch, n.start, n.len])));
+    check('Fortsetzung endet auf dem Grundton (A) und bleibt in A-Moll', last.pitch % 12 === 9 && last.start + last.len === 16 && added.every((n) => [9, 11, 0, 2, 4, 5, 7].includes(n.pitch % 12)), JSON.stringify(last));
+    const flashC = await page.locator('#hint-text').textContent();
+    check('Meldung nennt Tonart und Herkunft', /A-Moll/.test(flashC) && /Regeln/.test(flashC), flashC);
+    const firstIdea = JSON.stringify(added);
+    await page.click('#pat-continue');
+    await page.waitForFunction(() => !document.getElementById('pat-continue').hasAttribute('aria-busy'));
+    sp = await synth();
+    check('Nochmal klicken ersetzt die Fortsetzung (statt weiter anzuhängen)', sp.notes.filter((n) => n.start >= 8).length > 0 && sp.notes.every((n) => n.start < 16) && sp.bars === 4, `${sp.notes.length} Noten; vorher ${firstIdea}`);
+    const openSing = async () => { if (await page.locator('#pat-sing').isHidden()) await page.click('#pat-sing-btn'); };
+    await openSing();
+    await page.fill('#sing-desc', 'weiche Flöte mit viel Hall');
+    await page.click('#sing-sound');
+    await page.waitForFunction(() => /Klang:/.test(document.getElementById('sing-status').textContent));
+    let snd = await page.evaluate(() => {
+      const { store, patternEditor } = window.loopwerk;
+      const p = store.project.patterns[patternEditor.id];
+      const t = store.project.tracks.find((x) => x.clips.some((c) => c.sampleId === 'pat-' + patternEditor.id));
+      return { preset: p.preset, hall: t.fx?.hall, filter: t.fx?.filter, status: document.getElementById('sing-status').textContent };
+    });
+    check('Klang nach Stichworten: Flöte, weich (Tiefpass), viel Hall', snd.preset === 'flute' && snd.hall?.on && snd.hall.mix >= 0.4 && snd.filter?.on && snd.filter.type === 'lowpass', JSON.stringify(snd));
+    await page.keyboard.press('Control+z');
+    check('Klang bauen ist ein Rückgängig-Schritt', await page.evaluate(() => window.loopwerk.store.project.patterns[window.loopwerk.patternEditor.id].preset) === 'pluck');
+
+    // ---------- Mit Claude (nachgebildet) ----------
+    await page.reload();
+    await page.waitForFunction(() => window.loopwerk?.ready);
+    await page.evaluate(async () => {
+      const mm = await import('./src/model.js');
+      window.loopwerk.store.replace(mm.createEmptyProject());
+      window.__asked = [];
+      const fakeSample = async () => ({ text: '' });
+      fakeSample.json = async (prompt) => {
+        window.__asked.push(prompt);
+        if (prompt.includes('Sounddesigner')) return { preset: 'bell', name: 'Glitzerglocke', fx: { echo: { on: true, mix: 0.4, time: '1/8' }, drive: { on: true, drive: 5, type: 'quatsch' } } };
+        // Fortsetzung mit Ausreißern, die bereinigt werden müssen
+        return [{ pitch: 72, start: 8, len: 1 }, { pitch: 74, start: 9.1, len: 0.9 }, { pitch: 200, start: 10, len: 2 }, { pitch: 69, start: 12, len: 4 }, { pitch: 60, start: 40, len: 1 }, { pitch: 'x' }];
+      };
+      window.claude = { use: async (name) => (name === 'sample' ? fakeSample : null) };
+    });
+    await page.click('#new-melody-btn');
+    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await setNotes(START);
+    await page.click('#pat-continue');
+    await page.waitForFunction(() => !document.getElementById('pat-continue').hasAttribute('aria-busy'));
+    sp = await synth();
+    const asked = await page.evaluate(() => window.__asked[0] || '');
+    check('Claude bekommt Melodie, Tonart und Länge', asked.includes('"pitch":69') && asked.includes('A-Moll') && asked.includes('genau 8 Schläge'), asked.slice(0, 160));
+    check('Antwort von Claude wird bereinigt (Raster, Tonumfang, Bereich)', JSON.stringify(sp.notes.filter((n) => n.start >= 8).map((n) => [n.pitch, n.start, n.len])) === '[[72,8,1],[74,9,1],[84,10,2],[69,12,4]]', JSON.stringify(sp.notes.filter((n) => n.start >= 8)));
+    check('Meldung: Idee von Claude', /Claude/.test(await page.locator('#hint-text').textContent()));
+    await openSing();
+    await page.fill('#sing-desc', 'glitzernd wie eine Spieluhr');
+    await page.press('#sing-desc', 'Enter');
+    await page.waitForFunction(() => /Klang:/.test(document.getElementById('sing-status').textContent));
+    snd = await page.evaluate(() => {
+      const { store, patternEditor } = window.loopwerk;
+      const p = store.project.patterns[patternEditor.id];
+      const t = store.project.tracks.find((x) => x.clips.some((c) => c.sampleId === 'pat-' + patternEditor.id));
+      return { preset: p.preset, name: p.name, echo: t.fx.echo, drive: t.fx.drive };
+    });
+    check('Klang von Claude: Grundklang, Name und Effekte übernommen, Werte begrenzt', snd.preset === 'bell' && snd.name === 'Glitzerglocke' && snd.echo.on && snd.echo.time === '1/8' && snd.drive.on && snd.drive.drive === 1 && snd.drive.type === 'soft', JSON.stringify(snd));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-weiterfuehren.png') });
 
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
     await app.close();

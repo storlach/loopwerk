@@ -11,6 +11,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - `src/dsp/` – Time-Stretching (WSOLA), Bearbeitungsfunktionen, Aufnahme-Worklet, FFT, Tonhöhe (YIN → Noten), Autotune (PSOLA), Trennung (HPSS + Mitte, ADR 003). Lange Rechnungen über `runJob` im Worker.
 - `src/own-sounds.js`, `src/recorder.js` – eigene Sounds (IndexedDB, Projektdatei), Mikrofon-Aufnahme.
 - `src/instruments.js`, `src/patterns.js` – Beat-/Melodie-Patterns, als Sounds „pat-…“ gerendert.
+- `src/ai.js` – Melodie weiterführen, Klang aus Beschreibung: Claude über die Artifact-Capability `sample`, sonst Regeln.
 - `src/export.js`, `src/zip.js`, `src/wav.js`, `vendor/lamejs/` – Export WAV/MP3.
 - `src/ui/*` – Regal, Arranger, Deck, Docks (Mixer, Sample-Editor, Pattern-Editor, Export). Die UI liest aus dem Store und schreibt nur über Store-Aktionen. Docks über `ui.setDock(name)`.
 - Entscheidungen: `docs/adr/`, Specs je Stufe: `docs/specs/`, Stand: `docs/ROADMAP.md`.
