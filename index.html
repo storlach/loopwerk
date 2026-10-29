@@ -368,6 +368,27 @@
   .tbtn.tbtn-del:hover, .tbtn.tbtn-del:focus-visible { opacity: 1; border-color: var(--line); }
   .tbtn.tbtn-del.confirm { opacity: 1; background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
   .tbtn-del:disabled { visibility: hidden; }
+  .tbtn.tbtn-menu { width: 22px; border-color: transparent; background: transparent; font-size: 15px; line-height: 1; opacity: 0.6; }
+  .tbtn.tbtn-menu:hover, .tbtn.tbtn-menu:focus-visible, .tbtn.tbtn-menu[aria-expanded="true"] { opacity: 1; border-color: var(--line); }
+  .track-head { cursor: grab; }
+  .track-row.moving { opacity: 0.55; }
+  .track-row.moving .track-head { cursor: grabbing; }
+  .track-row.copying { opacity: 0.85; }
+  .track-drop-line { position: absolute; left: 0; right: 0; height: 2px; background: var(--amber); z-index: 6; pointer-events: none; }
+  .track-menu {
+    position: fixed; z-index: 50; min-width: 170px;
+    display: flex; flex-direction: column; padding: 4px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.22);
+  }
+  .track-menu[hidden] { display: none; }
+  .track-menu-item {
+    text-align: left; padding: 8px 10px; border: 0; border-radius: 4px;
+    background: transparent; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .track-menu-item:hover:not(:disabled), .track-menu-item:focus-visible { background: var(--lane-alt); outline: none; }
+  .track-menu-item:disabled { opacity: 0.4; cursor: default; }
+  .track-menu-item.confirm { background: var(--meter-hot); color: #fff; }
   .add-row { display: flex; height: 40px; }
   .add-track {
     position: sticky; left: 0; z-index: 3;
@@ -766,7 +787,9 @@
     .track-head { gap: 4px; }
     .tbtn { position: relative; width: 38px; height: 30px; font-size: 12px; }
     .tbtn::after { content: ""; position: absolute; inset: -7px -2px; }
-    .tbtn.tbtn-del { width: 32px; font-size: 18px; }
+    .tbtn.tbtn-del { display: none; }
+    .tbtn.tbtn-menu { width: 34px; font-size: 18px; }
+    .track-menu-item { padding: 12px 14px; font-size: 15px; }
     .track-vol { display: none; }
     .add-row { height: 52px; }
     .app.armed-mode .lane { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 50%, transparent); }

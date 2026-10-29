@@ -64,10 +64,14 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const top = el('div', 'track-top');
     const name = el('div', 'track-name');
     name.title = 'Doppelklick zum Umbenennen';
+    const menuBtn = el('button', 'tbtn tbtn-menu', '⋯');
+    menuBtn.type = 'button';
+    menuBtn.title = 'Spur: duplizieren, verschieben, umbenennen, löschen';
+    menuBtn.setAttribute('aria-haspopup', 'menu');
     const del = el('button', 'tbtn tbtn-del', '×');
     del.type = 'button';
     del.title = 'Spur löschen';
-    top.append(name, del);
+    top.append(name, menuBtn, del);
     const btns = el('div', 'track-btns');
     const mute = el('button', 'tbtn tbtn-mute', 'M');
     mute.type = 'button';
@@ -105,7 +109,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       armed = setTimeout(() => { armed = null; del.classList.remove('confirm'); del.textContent = '×'; del.title = 'Spur löschen'; }, 3000);
     });
 
-    const r = { row, name, top, del, mute, solo, vol, lane };
+    menuBtn.addEventListener('click', () => openMenu(track.id, menuBtn));
+    head.addEventListener('pointerdown', (e) => startTrackDrag(e, track.id));
+
+    const r = { row, head, name, top, menuBtn, del, mute, solo, vol, lane };
     rows.set(track.id, r);
     return r;
   }
@@ -153,11 +160,110 @@ export function mountArranger({ root, store, engine, library, ui }) {
       r.solo.setAttribute('aria-pressed', String(t.solo));
       r.vol.setAttribute('aria-label', `Lautstärke ${t.name}`);
       r.del.setAttribute('aria-label', `Spur ${t.name} löschen`);
+      r.menuBtn.setAttribute('aria-label', `Menü für Spur ${t.name}`);
       r.del.disabled = tracks.length <= 1;
       if (document.activeElement !== r.vol) r.vol.value = String(t.volume);
       r.row.classList.toggle('silent', t.mute || (anySolo && !t.solo));
     });
     addRow.hidden = tracks.length >= MAX_TRACKS;
+  }
+
+  // ---------- Spur-Menü und Spuren ziehen ----------
+
+  const menu = el('div', 'track-menu');
+  menu.setAttribute('role', 'menu');
+  menu.hidden = true;
+  document.body.append(menu);
+  let menuFor = null;
+
+  function closeMenu(focusBack = false) {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    const btn = rows.get(menuFor)?.menuBtn;
+    btn?.setAttribute('aria-expanded', 'false');
+    if (focusBack) btn?.focus();
+    menuFor = null;
+  }
+
+  function openMenu(trackId, btn) {
+    if (menuFor === trackId) { closeMenu(); return; }
+    closeMenu();
+    menuFor = trackId;
+    const tracks = store.project.tracks;
+    const i = tracks.findIndex((t) => t.id === trackId);
+    const item = (label, action, disabled = false) => {
+      const b = el('button', 'track-menu-item', label);
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.disabled = disabled;
+      b.addEventListener('click', () => action(b));
+      return b;
+    };
+    menu.replaceChildren(
+      item('Duplizieren', () => { closeMenu(); store.duplicateTrack(trackId); }, tracks.length >= MAX_TRACKS),
+      item('Nach oben', () => { closeMenu(); store.moveTrack(trackId, i - 1); }, i === 0),
+      item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
+      item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
+      item('Löschen', (b) => {
+        if (b.classList.contains('confirm')) { closeMenu(); store.removeTrack(trackId); return; }
+        b.classList.add('confirm');
+        b.textContent = 'Wirklich löschen?';
+      }, tracks.length <= 1),
+    );
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    const r = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth;
+    const mh = menu.offsetHeight;
+    menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
+    menu.style.top = (r.bottom + 4 + mh > innerHeight - 8 ? r.top - mh - 4 : r.bottom + 4) + 'px';
+    menu.querySelector('button:not(:disabled)')?.focus();
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('.tbtn-menu')) closeMenu();
+  }, true);
+  menu.addEventListener('keydown', (e) => {
+    const items = [...menu.querySelectorAll('button:not(:disabled)')];
+    const k = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(k + 1) % items.length]?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(k - 1 + items.length) % items.length]?.focus(); }
+  });
+  root.addEventListener('scroll', () => closeMenu(), { passive: true });
+
+  // Spurkopf ziehen: verschiebt die Spur, mit Alt/Strg wird sie kopiert. (Finger nutzen das Menü.)
+  const dropLine = el('div', 'track-drop-line');
+  function startTrackDrag(e, trackId) {
+    if (e.button !== 0 || e.pointerType === 'touch' || e.target.closest('button, input')) return;
+    const r = rows.get(trackId);
+    const sy = e.clientY;
+    let to = null;
+    const indexAt = (y) => {
+      const list = [...rowsEl.children];
+      let k = list.findIndex((n) => y < n.getBoundingClientRect().top + n.offsetHeight / 2);
+      return k < 0 ? list.length : k;
+    };
+    trackPointer(e, (ev) => {
+      if (to == null && Math.abs(ev.clientY - sy) < 6) return;
+      const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
+      to = indexAt(ev.clientY);
+      r.row.classList.add('moving');
+      r.row.classList.toggle('copying', copy);
+      const list = [...rowsEl.children];
+      const y = to < list.length ? list[to].offsetTop : rowsEl.offsetHeight;
+      dropLine.style.top = rowsEl.offsetTop + y - 1 + 'px';
+      if (!dropLine.parentElement) grid.append(dropLine);
+      ui.status(copy ? 'Spur kopieren: loslassen, wo die Kopie hin soll' : 'Spur verschieben');
+    }, (ev) => {
+      r.row.classList.remove('moving', 'copying');
+      dropLine.remove();
+      ui.status(null);
+      if (to == null) return;
+      const from = store.project.tracks.findIndex((t) => t.id === trackId);
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) store.duplicateTrack(trackId, to);
+      else store.moveTrack(trackId, to > from ? to - 1 : to);
+    }, () => { r.row.classList.remove('moving', 'copying'); dropLine.remove(); ui.status(null); });
   }
 
   // ---------- Clips ----------

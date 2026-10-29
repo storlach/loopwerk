@@ -5,6 +5,7 @@ import { Emitter } from './util.js';
 import { withFx } from './effects.js';
 
 export const EPS = 1e-6;
+export const DEFAULT_TRACK_NAME = /^Spur \d+$/;
 export const PROJECT_VERSION = 1;
 
 export function createEmptyProject() {
@@ -108,9 +109,10 @@ export function isValidProject(p) {
 }
 
 export class Store extends Emitter {
-  constructor(project, { sampleBeats }) {
+  constructor(project, { sampleBeats, sampleName }) {
     super();
     this.sampleBeats = sampleBeats;
+    this.sampleName = sampleName;
     this.replace(project, 'init');
   }
 
@@ -136,7 +138,26 @@ export class Store extends Emitter {
     this.lastKey = coalesce || null;
     this.lastTime = now;
     mutate(this.project);
+    this._autoName();
     this.emit(this.project, label);
+  }
+
+  // Spuren mit Standardnamen („Spur 3“) heißen wie ihr erster Clip, bis man sie selbst umbenennt.
+  _autoName() {
+    if (!this.sampleName) return;
+    this.project.tracks.forEach((t, i) => {
+      if (!(t.autoName ?? DEFAULT_TRACK_NAME.test(t.name))) return;
+      const first = t.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
+      if (!first) {
+        if (t.autoName) t.name = t.baseName || 'Spur ' + (i + 1);
+        return;
+      }
+      const name = this.sampleName(first.sampleId);
+      if (!name) return;
+      if (!t.autoName) t.baseName = t.name;
+      t.name = name.slice(0, 32);
+      t.autoName = true;
+    });
   }
 
   get canUndo() { return this.undoStack.length > 0; }
@@ -325,10 +346,13 @@ export class Store extends Emitter {
     return id;
   }
 
+  _newTrackId() {
+    return 't' + (1 + Math.max(0, ...this.project.tracks.map((t) => parseInt(t.id.slice(1), 10) || 0)));
+  }
+
   addTrack() {
     if (this.project.tracks.length >= MAX_TRACKS) return null;
-    const n = 1 + Math.max(0, ...this.project.tracks.map((t) => parseInt(t.id.slice(1), 10) || 0));
-    const id = 't' + n;
+    const id = this._newTrackId();
     this.dispatch('add-track', (p) => {
       p.tracks.push({ id, name: 'Spur ' + (p.tracks.length + 1), volume: 0.8, pan: 0, mute: false, solo: false, clips: [] });
     });
@@ -341,7 +365,38 @@ export class Store extends Emitter {
   }
 
   setTrack(trackId, patch, coalesce) {
+    // Selbst vergebene Namen bleiben; ein leerer Standardname schaltet die Automatik wieder ein
+    if ('name' in patch) patch = { ...patch, autoName: DEFAULT_TRACK_NAME.test(patch.name) ? undefined : false };
     this.dispatch('track', () => Object.assign(this.track(trackId), patch), { coalesce });
+  }
+
+  // Spur samt Clips, Effekten und Einstellungen direkt darunter kopieren
+  duplicateTrack(trackId, toIndex) {
+    const src = this.track(trackId);
+    if (!src || this.project.tracks.length >= MAX_TRACKS) return null;
+    const id = this._newTrackId();
+    this.dispatch('duplicate-track', (p) => {
+      const copy = JSON.parse(JSON.stringify(src));
+      copy.id = id;
+      copy.name = `${src.name} (Kopie)`.slice(0, 32);
+      copy.autoName = false;
+      copy.solo = false;
+      copy.clips = copy.clips.map((c) => ({ ...c, id: this.newId() }));
+      p.tracks.splice(toIndex ?? p.tracks.indexOf(src) + 1, 0, copy);
+    });
+    return id;
+  }
+
+  // Spur an eine neue Position der Liste schieben (0 = ganz oben)
+  moveTrack(trackId, toIndex) {
+    const tracks = this.project.tracks;
+    const from = tracks.findIndex((t) => t.id === trackId);
+    const to = Math.max(0, Math.min(tracks.length - 1, toIndex));
+    if (from < 0 || from === to) return;
+    this.dispatch('move-track', (p) => {
+      const [t] = p.tracks.splice(from, 1);
+      p.tracks.splice(to, 0, t);
+    });
   }
 
   // ---------- Patterns (Beats, Melodien) ----------

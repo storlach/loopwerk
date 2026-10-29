@@ -118,6 +118,87 @@ const { check, finish } = createChecker();
     check('Ganz groß: höchstens 192 px pro Schlag, Wellenform bleibt zeichenbar', zmax.ppb <= 192 && zmax.canvas > 0 && zmax.canvas <= 16000, JSON.stringify(zmax));
     await page.evaluate(() => { window.loopwerk.ui.pxPerBeat = 24; window.loopwerk.arranger.render(); });
 
+    // ---------- Spuren: automatische Namen ----------
+    await page.evaluate(async () => {
+      const m = await import('./src/model.js');
+      window.loopwerk.store.replace(m.createEmptyProject());
+    });
+    const names = () => page.evaluate(() => window.loopwerk.store.project.tracks.map((t) => t.name));
+    await page.evaluate(() => {
+      const { store } = window.loopwerk;
+      store.addClip('t1', 'drums-break', 4, 8);
+      store.addClip('t1', 'drums-four', 0, 4);
+      store.addClip('t2', 'bass-prog', 0, 16);
+    });
+    let n = await names();
+    check('Spur heißt wie ihr erster Clip', n[0] === 'Four to the Floor' && n[1] === 'Bass Am–F–C–G' && n[2] === 'Spur 3', n.slice(0, 3).join(' | '));
+    await page.evaluate(() => { const { store } = window.loopwerk; store.deleteClip(store.track('t1').clips[0].id); });
+    n = await names();
+    check('Name folgt, wenn der erste Clip wegfällt', n[0] === 'Breakbeat', n[0]);
+    await page.evaluate(() => { const { store } = window.loopwerk; store.deleteClip(store.track('t1').clips[0].id); });
+    n = await names();
+    check('Leere Spur bekommt ihren Standardnamen zurück', n[0] === 'Spur 1', n[0]);
+    await page.locator('.track-row').nth(1).locator('.track-name').dblclick();
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('Mein Bass');
+    await page.keyboard.press('Enter');
+    await page.evaluate(() => window.loopwerk.store.addClip('t2', 'bass-sub', 0, 4));
+    n = await names();
+    check('Selbst vergebener Name bleibt', n[1] === 'Mein Bass', n[1]);
+    await page.evaluate(() => window.loopwerk.store.undo());
+    await page.evaluate(() => window.loopwerk.store.undo());
+    n = await names();
+    check('Rückgängig stellt den automatischen Namen wieder her', n[1] === 'Bass Am–F–C–G', n[1]);
+
+    // ---------- Spuren: Menü ----------
+    await page.locator('.track-row').nth(1).locator('.tbtn-menu').click();
+    const items = await page.locator('.track-menu:not([hidden]) .track-menu-item').allTextContents();
+    check('Spur-Menü zeigt die Befehle', items.join(',') === 'Duplizieren,Nach oben,Nach unten,Umbenennen,Löschen', items.join(','));
+    await page.locator('.track-menu-item', { hasText: 'Duplizieren' }).click();
+    const dup = await page.evaluate(() => {
+      const t = window.loopwerk.store.project.tracks;
+      return { n: t.length, name: t[2].name, clips: t[2].clips.length, ids: t[2].clips[0].id !== t[1].clips[0].id, same: t[2].clips[0].sampleId === t[1].clips[0].sampleId };
+    });
+    check('Duplizieren legt die Kopie direkt darunter an', dup.n === 9 && dup.name === 'Bass Am–F–C–G (Kopie)' && dup.clips === 1 && dup.ids && dup.same, JSON.stringify(dup));
+    check('Menü schließt nach dem Befehl', await page.locator('.track-menu').isHidden());
+    await page.locator('.track-row').nth(2).locator('.tbtn-menu').click();
+    await page.locator('.track-menu-item', { hasText: 'Nach oben' }).click();
+    await page.locator('.track-row').nth(1).locator('.tbtn-menu').click();
+    await page.locator('.track-menu-item', { hasText: 'Nach oben' }).click();
+    n = await names();
+    check('„Nach oben“ verschiebt die Spur', n[0] === 'Bass Am–F–C–G (Kopie)' && n[1] === 'Spur 1', n.slice(0, 3).join(' | '));
+    check('Arranger zeigt die neue Reihenfolge', (await page.locator('.track-row .track-name').first().textContent()) === 'Bass Am–F–C–G (Kopie)');
+    await page.locator('.track-row').nth(0).locator('.tbtn-menu').click();
+    await page.keyboard.press('Escape');
+    check('Escape schließt das Menü', await page.locator('.track-menu').isHidden());
+    await page.locator('.track-row').nth(0).locator('.tbtn-menu').click();
+    const delItem = page.locator('.track-menu-item', { hasText: 'Löschen' });
+    await delItem.click();
+    const stillThere = await page.evaluate(() => window.loopwerk.store.project.tracks.length);
+    await page.locator('.track-menu-item', { hasText: 'Wirklich löschen?' }).click();
+    const gone = await page.evaluate(() => window.loopwerk.store.project.tracks.length);
+    check('Löschen im Menü mit Bestätigung', stillThere === 9 && gone === 8, `${stillThere} → ${gone}`);
+
+    // ---------- Spuren ziehen ----------
+    const headBox = async (i) => page.locator('.track-row').nth(i).locator('.track-btns').boundingBox();
+    const rowH = (await page.locator('.track-row').first().boundingBox()).height;
+    let hb = await headBox(1);
+    await drag(hb.x + hb.width - 4, hb.y - 4, 0, 2.2 * rowH);
+    n = await names();
+    check('Spurkopf ziehen verschiebt die Spur', n[0] === 'Spur 1' && n[1] === 'Spur 3' && n[2] === 'Spur 4' && n[3] === 'Bass Am–F–C–G', n.slice(0, 4).join(' | '));
+    hb = await headBox(3);
+    await page.mouse.move(hb.x + hb.width - 4, hb.y - 4);
+    await page.keyboard.down('Alt');
+    await page.mouse.down();
+    await page.mouse.move(hb.x + hb.width - 4, hb.y - 4 - 1.5 * rowH, { steps: 6 });
+    await page.mouse.move(hb.x + hb.width - 4, hb.y - 4 - 3 * rowH, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+    n = await names();
+    check('Mit Alt gezogen entsteht eine Kopie', n.length === 9 && n[0] === 'Bass Am–F–C–G (Kopie)' && n[4] === 'Bass Am–F–C–G', n.slice(0, 5).join(' | '));
+    await page.evaluate(() => window.loopwerk.store.undo());
+    check('Kopieren ist ein Rückgängig-Schritt', (await names()).length === 8);
+
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 

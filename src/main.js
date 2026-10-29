@@ -63,7 +63,7 @@ function createUi() {
 function mountHints({ root, ui, library, store, engine }) {
   const text = root.querySelector('#hint-text');
   const done = root.querySelector('#hint-done');
-  const base = 'Leertaste: Start/Stopp · Lineal: klicken setzt die Position, ziehen setzt den Loop · Alt+Ziehen: kopieren · T: teilen · Strg+D: duplizieren · Strg+Z: rückgängig';
+  const base = 'Leertaste: Start/Stopp · Lineal: klicken setzt die Position, ziehen setzt den Loop · Alt+Ziehen: kopieren · Umschalt+Ziehen: frei · Alt+←/→: schieben · Strg+Mausrad: Zoom · Spurkopf ziehen: Spur verschieben · T: teilen · Strg+Z: rückgängig';
   // Am Handy gibt es keine Tastatur: dort erklärt die Zeile die Fingerbedienung
   const touchBase = 'Tippe auf „Sounds“, wähle einen Sound und tippe dann in eine Spur. Antippen des Lineals setzt die Abspielmarke.';
   const sync = () => {
@@ -241,6 +241,7 @@ async function boot() {
   const patterns = new Patterns(library);
   const store = new Store((await loadSaved(library, patterns)) ?? createDemoProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
+    sampleName: (id) => library.get(id)?.name,
   });
   const engine = new Engine(store, library);
   const ui = createUi();
