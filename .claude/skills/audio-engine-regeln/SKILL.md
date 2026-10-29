@@ -22,7 +22,7 @@ description: Wissen und Regeln für die Audio-Engine von Loopwerk – Web Audio 
 - Pegeländerungen mit `setTargetAtTime(…, 0.012)`, nie hart setzen während der Wiedergabe.
 
 ## Klicks vermeiden
-- Einstieg mitten im Sample: 3 ms Rampe. Abschneiden vor Sample-Ende: 4 ms Rampe. Stimmen beenden über `_kill` (10 ms).
+- Schnittkanten (Einstieg mitten im Sample, Abschneiden vor dem Ende): benachbarte Stimmen überlappen ±96 Samples mit komplementären linearen Rampen (`startVoice`) – Teilen bleibt unhörbar. Stimmen beenden über `_kill` (10 ms).
 - Loops werden beim Erzeugen „gefaltet“ (Ausklang an den Anfang addiert), damit Wiederholungen nahtlos sind. Fremd-Samples brauchen dafür saubere Schnittpunkte.
 
 ## AudioWorklet (ab Stufe 4)
@@ -35,4 +35,4 @@ description: Wissen und Regeln für die Audio-Engine von Loopwerk – Web Audio 
 - Ausgleich = `ctx.outputLatency + ctx.baseLatency` + Eingangslatenz (`track.getSettings().latency`), umgesetzt in `src/recorder.js`. Offen: per Loopback-Klick kalibrierbar machen.
 
 ## Lizenzen
-- Time-Stretching: Signalsmith Stretch (MIT). Rubber Band ist GPL – nicht einbinden.
+- Time-Stretching: eigenes WSOLA (`src/dsp/stretch.js`, ADR 001). Alternative für tonales Material: Signalsmith Stretch (MIT). Rubber Band ist GPL – nicht einbinden.
