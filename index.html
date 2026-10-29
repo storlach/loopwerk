@@ -1,0 +1,478 @@
+<title>Loopwerk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    /* Layout: Werkbank – Transport-Deck oben, Sound-Regal links, Arranger als Taktraster rechts */
+    --bg: #E2E6EC;
+    --panel: #F5F7FA;
+    --lane: #EEF1F5;
+    --lane-alt: #E7EBF1;
+    --ink: #172031;
+    --muted: #586377;
+    --line: #CAD1DC;
+    --grid-bar: #B6BFCD;
+    --grid-beat: #DCE1E8;
+    --deck: #1D2532;
+    --deck-2: #283243;
+    --deck-ink: #E6EBF2;
+    --deck-muted: #8F9AAD;
+    --lcd: #1A1409;
+    --amber: #F0A01C;
+    --amber-dim: #5E4313;
+    --focus: #3B74F0;
+    --meter-ok: #3BB273;
+    --meter-warm: #E6B422;
+    --meter-hot: #E5483A;
+    --meter-off: #2F3A4C;
+    --cat-drums: #D9502F;
+    --cat-bass: #2770CF;
+    --cat-chords: #158F74;
+    --cat-synth: #8250D4;
+    --cat-fx: #A57B00;
+    --font-display: "Chakra Petch", "Bahnschrift", "Segoe UI", sans-serif;
+    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --radius: 6px;
+    --track-h: 58px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0F141B; --panel: #171E28; --lane: #151B24; --lane-alt: #19202B; --ink: #E3E8F0; --muted: #8C97A9;
+      --line: #2A3444; --grid-bar: #354053; --grid-beat: #212937; --deck: #0B0F15; --deck-2: #1A212C;
+      --deck-ink: #E3E8F0; --deck-muted: #7F8A9C; --lcd: #140F06; --amber: #F4A92A; --amber-dim: #4F3810;
+      --focus: #6F9BFF; --meter-off: #232C3A;
+      --cat-drums: #F06A4A; --cat-bass: #5797F2; --cat-chords: #33BC98; --cat-synth: #A57CF2; --cat-fx: #D3A82A;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F141B; --panel: #171E28; --lane: #151B24; --lane-alt: #19202B; --ink: #E3E8F0; --muted: #8C97A9;
+    --line: #2A3444; --grid-bar: #354053; --grid-beat: #212937; --deck: #0B0F15; --deck-2: #1A212C;
+    --deck-ink: #E3E8F0; --deck-muted: #7F8A9C; --lcd: #140F06; --amber: #F4A92A; --amber-dim: #4F3810;
+    --focus: #6F9BFF; --meter-off: #232C3A;
+    --cat-drums: #F06A4A; --cat-bass: #5797F2; --cat-chords: #33BC98; --cat-synth: #A57CF2; --cat-fx: #D3A82A;
+    color-scheme: dark;
+  }
+
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.4 var(--font-body);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .cat-drums { --cat: var(--cat-drums); }
+  .cat-bass { --cat: var(--cat-bass); }
+  .cat-chords { --cat: var(--cat-chords); }
+  .cat-synth { --cat: var(--cat-synth); }
+  .cat-fx { --cat: var(--cat-fx); }
+
+  /* ---------- Gerüst ---------- */
+  .app {
+    box-sizing: border-box;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "deck deck" "shelf arr" "hint hint";
+    gap: 10px;
+    padding-block: 10px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* ---------- Transport-Deck ---------- */
+  .deck {
+    grid-area: deck;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 18px;
+    padding: 10px 14px;
+    background: var(--deck);
+    color: var(--deck-ink);
+    border-radius: var(--radius);
+  }
+  .brand { display: flex; align-items: baseline; gap: 8px; }
+  .brand-name {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 21px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .brand-name b { color: var(--amber); font-weight: 700; }
+  .brand-tag {
+    font: 500 10px/1 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--deck-muted);
+    border: 1px solid var(--deck-2);
+    padding: 3px 5px;
+    border-radius: 3px;
+  }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 36px;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #00000040;
+    border-radius: 5px;
+    background: var(--deck-2);
+    color: var(--deck-ink);
+    cursor: pointer;
+    font: 600 12px/1 var(--font-display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    box-shadow: inset 0 1px 0 #ffffff14;
+  }
+  .key svg { width: 16px; height: 16px; fill: currentColor; flex: none; }
+  .key:hover { filter: brightness(1.15); }
+  .key:disabled { opacity: 0.4; cursor: default; filter: none; }
+  .key[aria-pressed="true"] { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber-dim), inset 0 1px 0 #ffffff14; }
+  .key.play { min-width: 52px; height: 40px; background: var(--amber); color: #1B1204; }
+  .key.play[aria-pressed="true"] { background: var(--amber); color: #1B1204; }
+  .key.confirm { background: var(--meter-hot); color: #fff; }
+
+  .lcd {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--lcd);
+    border-radius: 5px;
+    padding: 4px;
+    box-shadow: inset 0 0 0 1px #000, inset 0 2px 6px #00000080;
+  }
+  .lcd-cell { display: grid; padding: 2px 10px; min-width: 0; }
+  .lcd-cell + .lcd-cell { border-left: 1px solid var(--amber-dim); }
+  .lcd-label { font: 500 9px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-dim); }
+  .lcd-value {
+    font: 600 20px/1.1 var(--font-mono);
+    color: var(--amber);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 8px #f0a01c55;
+  }
+  .meter-wrap { display: grid; gap: 4px; }
+  .meter-wrap .lcd-label { color: var(--deck-muted); }
+  #meter { width: 132px; height: 10px; display: block; }
+  .deck .spacer { flex: 1; }
+  .snap {
+    height: 36px;
+    border-radius: 5px;
+    border: 1px solid #00000040;
+    background: var(--deck-2);
+    color: var(--deck-ink);
+    padding: 0 8px;
+  }
+
+  /* ---------- Sound-Regal ---------- */
+  .shelf {
+    grid-area: shelf;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+  }
+  .shelf-head { padding: 12px 14px 8px; border-bottom: 1px solid var(--line); }
+  .shelf-head h2 {
+    margin: 0;
+    font: 700 15px/1.2 var(--font-display);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .shelf-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  .shelf-list { overflow-y: auto; padding: 6px 8px 12px; display: grid; gap: 10px; align-content: start; }
+  .shelf-cat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 6px 4px;
+    font: 600 11px/1 var(--font-display);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--cat); }
+  .shelf-count { margin-left: auto; font-family: var(--font-mono); font-weight: 400; }
+  .shelf-items { display: grid; gap: 2px; }
+  .loop-item {
+    display: grid;
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    text-align: left;
+    cursor: grab;
+    touch-action: pan-y;
+  }
+  .loop-item:hover { background: color-mix(in srgb, var(--cat) 10%, transparent); }
+  .loop-item.armed { background: color-mix(in srgb, var(--cat) 18%, var(--panel)); border-color: var(--cat); }
+  .loop-play {
+    width: 0; height: 0;
+    border-left: 8px solid var(--cat);
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    justify-self: center;
+  }
+  .loop-item.previewing .loop-play { border: 0; width: 9px; height: 9px; background: var(--cat); border-radius: 1px; animation: pulse 0.5s ease-in-out infinite alternate; }
+  @keyframes pulse { to { opacity: 0.35; } }
+  .loop-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loop-len { font: 400 11px/1 var(--font-mono); color: var(--muted); }
+
+  /* ---------- Arranger ---------- */
+  .arranger {
+    grid-area: arr;
+    min-width: 0;
+    min-height: 0;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .arr-scroll { height: 100%; overflow: auto; overscroll-behavior: contain; }
+  .arr-grid { position: relative; min-height: 100%; }
+  .ruler-row { display: flex; position: sticky; top: 0; z-index: 4; height: 30px; }
+  .corner {
+    position: sticky; left: 0; z-index: 5;
+    flex: 0 0 var(--head-w);
+    display: flex; align-items: center; padding: 0 12px; box-sizing: border-box;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    font: 600 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  }
+  .ruler {
+    position: relative; flex: 1;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    background-image: repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar));
+    background-size: 100% 9px; background-repeat: no-repeat; background-position: 0 100%;
+  }
+  .bar-mark {
+    position: absolute; top: 6px; padding-left: 5px;
+    font: 500 11px/1 var(--font-mono); color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  .loop-band {
+    position: absolute; top: 2px; height: 8px;
+    background: var(--amber); border-radius: 2px;
+    opacity: 0.9;
+    pointer-events: none;
+  }
+  .loop-band.off { opacity: 0.25; }
+  .loop-shade {
+    position: absolute; top: 30px; bottom: 0; z-index: 1;
+    background: color-mix(in srgb, var(--amber) 9%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--amber) 60%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--amber) 60%, transparent);
+    pointer-events: none;
+  }
+  .loop-shade.off { display: none; }
+  .track-row { display: flex; height: var(--track-h); border-bottom: 1px solid var(--line); }
+  .track-head {
+    position: sticky; left: 0; z-index: 3;
+    flex: 0 0 var(--head-w);
+    width: var(--head-w);
+    min-width: 0;
+    box-sizing: border-box;
+    display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; gap: 5px;
+    padding: 0 10px 0 12px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+  .track-name { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track-btns { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .tbtn {
+    width: 24px; height: 20px; padding: 0;
+    border: 1px solid var(--line); border-radius: 3px;
+    background: var(--lane);
+    font: 600 11px/1 var(--font-mono);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .tbtn-mute[aria-pressed="true"] { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
+  .tbtn-solo[aria-pressed="true"] { background: var(--meter-warm); border-color: var(--meter-warm); color: #231a00; }
+  .track-vol { flex: 1 1 0; width: 0; min-width: 0; height: 18px; margin: 0; accent-color: var(--amber); }
+  .track-row.silent .lane { opacity: 0.45; }
+  .lane {
+    position: relative; flex: 1;
+    background-color: var(--lane);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
+      repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb)),
+      repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
+    touch-action: pan-x pan-y;
+  }
+  .app.armed-mode .lane { cursor: copy; }
+
+  .clip {
+    position: absolute; top: 3px; bottom: 3px;
+    box-sizing: border-box;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--cat) 22%, var(--panel));
+    border: 1px solid color-mix(in srgb, var(--cat) 75%, transparent);
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    z-index: 2;
+  }
+  .clip.selected { box-shadow: 0 0 0 2px var(--ink); }
+  .clip.dragging { opacity: 0.85; cursor: grabbing; z-index: 6; box-shadow: 0 6px 16px #0003; }
+  .clip.copying { outline: 2px dashed var(--ink); outline-offset: 1px; }
+  .clip-label {
+    position: absolute; top: 3px; left: 6px; right: 12px;
+    font-size: 11px; font-weight: 600; line-height: 1.1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none;
+  }
+  .clip-wave { --wave: var(--cat); position: absolute; left: 0; top: 17px; height: calc(100% - 19px); display: block; pointer-events: none; }
+  .clip-handle { position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize; }
+  .clip-handle::after { content: ""; position: absolute; top: 30%; bottom: 30%; right: 3px; width: 2px; border-radius: 1px; background: var(--cat); opacity: 0.7; }
+  .drop-preview {
+    position: absolute; top: 3px; bottom: 3px; z-index: 5;
+    border: 2px dashed var(--cat); border-radius: 4px;
+    background: color-mix(in srgb, var(--cat) 15%, transparent);
+    pointer-events: none;
+  }
+  .playhead {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -1px;
+    background: var(--amber); z-index: 2;
+    pointer-events: none;
+  }
+  .playhead::before {
+    content: ""; position: absolute; top: 18px; left: -5px;
+    border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 9px solid var(--amber);
+  }
+  .drag-ghost {
+    position: fixed; left: 0; top: 0; z-index: 50;
+    padding: 6px 10px; border-radius: 4px;
+    background: var(--cat); color: #fff; font-weight: 600; font-size: 12px;
+    box-shadow: 0 6px 18px #0004;
+    pointer-events: none;
+  }
+  body.is-dragging, body.is-dragging * { cursor: grabbing !important; }
+
+  /* ---------- Hinweiszeile ---------- */
+  .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
+  .hint.armed { color: var(--ink); font-weight: 500; }
+
+  .boot {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: var(--bg); color: var(--muted);
+    font: 500 13px/1.4 var(--font-mono); letter-spacing: 0.04em;
+  }
+  .boot.error { color: var(--meter-hot); }
+
+  /* ---------- Schmale Bildschirme ---------- */
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    .app {
+      height: auto; min-height: 100%;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(380px, 70vh) auto;
+      grid-template-areas: "deck" "shelf" "arr" "hint";
+    }
+    .shelf { max-height: 260px; }
+    .deck .spacer { display: none; }
+    :root { --track-h: 54px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .loop-item.previewing .loop-play { animation: none; }
+  }
+</style>
+
+<div class="app" id="app">
+  <header class="deck">
+    <div class="brand">
+      <span class="brand-name">Loop<b>werk</b></span>
+      <span class="brand-tag">Spike 0.1</span>
+    </div>
+
+    <div class="group" role="group" aria-label="Transport">
+      <button class="key" id="home-btn" type="button" aria-label="Zum Anfang" title="Zum Anfang (Pos1)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg>
+      </button>
+      <button class="key play" id="play-btn" type="button" aria-label="Abspielen" title="Start/Stopp (Leertaste)">
+        <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg>
+        <svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M3 3h10v10H3z"/></svg>
+      </button>
+      <button class="key" id="loop-btn" type="button" title="Loop-Bereich wiederholen">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 5h7V3l3 3-3 3V7H4v3H2V7a2 2 0 012-2zm8 6H5v2l-3-3 3-3v2h7V6h2v3a2 2 0 01-2 2z"/></svg>
+        Loop
+      </button>
+      <button class="key" id="metro-btn" type="button" title="Metronom">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l3 14H3zm1.6 2L5.4 13h5.2L8.4 3zM8 6l4-3 .6.8-4 3z"/></svg>
+        Klick
+      </button>
+    </div>
+
+    <div class="lcd" aria-live="off">
+      <div class="lcd-cell"><span class="lcd-label">Takt</span><span class="lcd-value" id="lcd-bar">001</span></div>
+      <div class="lcd-cell"><span class="lcd-label">Schlag</span><span class="lcd-value" id="lcd-beat">1</span></div>
+      <div class="lcd-cell"><span class="lcd-label">Zeit</span><span class="lcd-value" id="lcd-time">0:00.0</span></div>
+      <div class="lcd-cell" title="Im Spike fest: alle Loops sind mit 120 BPM in A-Moll erzeugt"><span class="lcd-label">Tempo · Tonart</span><span class="lcd-value">120 · Am</span></div>
+    </div>
+
+    <div class="meter-wrap">
+      <span class="lcd-label">Master</span>
+      <canvas id="meter" aria-hidden="true"></canvas>
+    </div>
+
+    <span class="spacer"></span>
+
+    <div class="group" role="group" aria-label="Bearbeiten">
+      <button class="key" id="undo-btn" type="button" aria-label="Rückgängig" title="Rückgängig (Strg+Z)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3L1 7l5 4V8h4a3 3 0 010 6H8v2h2a5 5 0 000-10H6z"/></svg>
+      </button>
+      <button class="key" id="redo-btn" type="button" aria-label="Wiederholen" title="Wiederholen (Strg+Umschalt+Z)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3l5 4-5 4V8H6a3 3 0 000 6h2v2H6A5 5 0 016 6h4z"/></svg>
+      </button>
+      <button class="key" id="zoom-out" type="button" aria-label="Verkleinern" title="Verkleinern">−</button>
+      <button class="key" id="zoom-in" type="button" aria-label="Vergrößern" title="Vergrößern">+</button>
+      <label class="sr" for="snap-sel" hidden>Raster</label>
+      <select class="snap" id="snap-sel" title="Raster">
+        <option value="4" selected>Raster: Takt</option>
+        <option value="2">Raster: ½ Takt</option>
+        <option value="1">Raster: Schlag</option>
+      </select>
+      <button class="key" id="demo-btn" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
+      <button class="key" id="new-btn" type="button" title="Alle Spuren leeren">Leeren</button>
+    </div>
+  </header>
+
+  <aside class="shelf" aria-label="Sounds">
+    <div class="shelf-head">
+      <h2>Sounds</h2>
+      <p>Klicken zum Anhören, auf eine Spur ziehen zum Einfügen. Alle Loops: 120 BPM, A-Moll.</p>
+    </div>
+    <div class="shelf-list" id="library"></div>
+  </aside>
+
+  <main class="arranger" aria-label="Arranger">
+    <div class="arr-scroll" id="arr-scroll"></div>
+  </main>
+
+  <footer class="hint" id="hint"></footer>
+</div>
+<div class="boot" id="boot">Sounds werden erzeugt …</div>
+
+<script type="module" src="src/main.js"></script>
