@@ -807,7 +807,20 @@
   }
   .sheet-grip::before { content: ""; width: 44px; height: 5px; border-radius: 999px; background: var(--line); }
   .sheet-grip:hover::before, .sheet.dragging .sheet-grip::before { background: var(--muted); }
+  /* Einrasten, Hinein- und Hinausgleiten: weich auslaufend, auf der Grafikkarte */
+  .sheet { transition: height 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.42s cubic-bezier(0.22, 1, 0.36, 1); will-change: transform, height; }
   .sheet.dragging { transition: none !important; }
+  .sheet.entering { animation: sheet-in 0.46s cubic-bezier(0.22, 1, 0.36, 1); }
+  .sheet.leaving { animation: sheet-out 0.32s cubic-bezier(0.5, 0, 0.75, 0) forwards; pointer-events: none; }
+  /* Beim Hinausgleiten bleibt die Schublade sichtbar, obwohl sie schon „zu“ ist */
+  .dock.sheet.leaving[hidden] { display: grid !important; }
+  .more-panel.sheet.leaving[hidden] { display: flex !important; }
+  @keyframes sheet-in { from { transform: translateY(100%); } }
+  @keyframes sheet-out { from { transform: var(--leave-from, translateY(0)); } to { transform: translateY(110%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet { transition-duration: 0.12s; }
+    .sheet.entering, .sheet.leaving { animation-duration: 0.12s; }
+  }
   .more-panel .sheet-grip::before { background: var(--deck-2); }
 
   /* ---------- Aufklappfelder (Menüs, Export, Tastenkürzel) ---------- */
@@ -964,7 +977,7 @@
 
     /* Fächer (Mixer, Editoren): Schubladen über dem Arranger */
     .dock {
-      grid-area: arr; align-self: end; z-index: 20; height: var(--sheet-h, 52%); max-height: 100%;
+      grid-area: arr; align-self: end; z-index: 20; height: var(--sheet-h, 50%); max-height: 100%;
       grid-template-rows: auto auto minmax(0, 1fr);
       border-radius: 12px 12px var(--radius) var(--radius);
       box-shadow: 0 -14px 34px rgb(0 0 0 / 0.22);
@@ -1004,7 +1017,10 @@
     .ed-tools[data-tab="loop"] .ed-group:not([data-tab="loop"]) { display: none; }
 
     /* Leiste unten: Fächer, Hinweis, Tastenkürzel */
-    .deskbar { grid-area: bar; display: flex; align-items: center; gap: 10px; min-height: 36px; }
+    .deskbar {
+      grid-area: bar; display: flex; align-items: center; gap: 10px; min-height: 36px;
+      position: relative; z-index: 30; background: var(--bg); box-shadow: 0 0 0 8px var(--bg);
+    }
     .deskbar-tabs { display: flex; gap: 6px; }
     .dtab, .deskbar-tabs #mixer-btn {
       display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; box-shadow: none;
@@ -1073,14 +1089,15 @@
     /* Schublade über den Spuren: Griff oben, Schatten nach oben, Höhe ziehbar */
     .shelf, .dock {
       grid-area: arr; align-self: end; z-index: 20; min-height: 0; max-height: 100%;
-      height: var(--sheet-h, 58%);
+      height: var(--sheet-h, 50%);
       border-radius: 14px 14px 0 0; border-width: 1px 0 0;
       box-shadow: 0 -12px 30px rgb(0 0 0 / 0.25);
     }
     .shelf { display: none; overflow-y: auto; overscroll-behavior: contain; }
     .shelf > * { flex: none; }
     .shelf > .sheet-grip { position: sticky; top: 0; z-index: 3; background: var(--panel); }
-    .app[data-dock="sounds"] .shelf { display: flex; }
+    .app[data-dock="sounds"] .shelf, .shelf.sheet.leaving { display: flex; }
+    .hint, .tabbar, .clipbar { position: relative; z-index: 30; }
     .dock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
     .more-panel { height: auto; }
 

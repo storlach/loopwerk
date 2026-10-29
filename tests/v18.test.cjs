@@ -73,33 +73,62 @@ const { check, finish } = createChecker();
     await page.keyboard.press('Control+z');
 
     // ---------- Schubladen ----------
+    // Ziehen am Griff mit der Maus: wait = Pause je Schritt (langsam ziehen) oder 0 (Schubs)
+    const mdrag = async (sel, dy, steps, wait) => {
+      const g = await rect(`${sel} > .sheet-grip`);
+      await page.mouse.move(g.x + g.w / 2, g.y + 8);
+      await page.mouse.down();
+      for (let i = 1; i <= steps; i++) { await page.mouse.move(g.x + g.w / 2, g.y + 8 + (dy * i) / steps); if (wait) await page.waitForTimeout(wait); }
+      if (wait) await page.waitForTimeout(120);
+      await page.mouse.up();
+    };
     await page.click('#mixer-btn');
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(40);
+    const entering = await page.evaluate(() => document.getElementById('mixer').classList.contains('entering'));
+    check('Schublade fährt animiert herein', entering);
+    await page.waitForTimeout(550);
     const dk = await rect('#mixer');
     const ar = await rect('.arranger');
     check('Mixer liegt als Schublade über dem Arranger', Math.abs(dk.b - ar.b) < 2 && dk.h < ar.h && Math.abs(ar.h - arr0.h) < 1, JSON.stringify({ dk, ar }));
+    check('Schublade öffnet in der Mitte (50 %)', Math.abs(dk.h / ar.h - 0.5) < 0.02, `${dk.h} / ${ar.h}`);
     const shadow = await page.evaluate(() => getComputedStyle(document.getElementById('mixer')).boxShadow);
     check('Schublade hat Griff und Schatten', shadow !== 'none' && await page.locator('#mixer > .sheet-grip').isVisible(), shadow);
     const pad1 = await page.evaluate(() => getComputedStyle(document.querySelector('.arr-grid')).paddingBottom);
     check('Arranger lässt unten Platz zum Scrollen', parseFloat(pad1) >= dk.h - 2, pad1);
-    // Griff nach oben ziehen: größer, rastet ein
-    const grip = await rect('#mixer > .sheet-grip');
-    await page.mouse.move(grip.x + grip.w / 2, grip.y + 8);
-    await page.mouse.down();
-    await page.mouse.move(grip.x + grip.w / 2, grip.y - 120, { steps: 8 });
-    await page.mouse.up();
-    await page.waitForTimeout(100);
+    // Langsam nach oben ziehen: rastet am nächsten Haltepunkt (oben, 80 %) ein, animiert
+    await mdrag('#mixer', -ar.h * 0.25, 10, 16);
+    await page.waitForTimeout(600);
     const dk2 = await rect('#mixer');
-    check('Am Griff aufziehen macht die Schublade größer', dk2.h > dk.h + 60, `${dk.h} → ${dk2.h}`);
-    check('Höhe wird gemerkt', await page.evaluate(() => !!JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide));
-    // Nach unten wischen schließt
-    const grip2 = await rect('#mixer > .sheet-grip');
-    await page.mouse.move(grip2.x + grip2.w / 2, grip2.y + 8);
-    await page.mouse.down();
-    await page.mouse.move(grip2.x + grip2.w / 2, grip2.y + 200, { steps: 3 });
-    await page.mouse.up();
+    check('Aufziehen rastet oben ein (80 %)', Math.abs(dk2.h / ar.h - 0.8) < 0.02, `${dk.h} → ${dk2.h} / ${ar.h}`);
+    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide === 0.8));
+    // Kurzer Schubs nach unten: eine Stufe tiefer (Mitte), nicht zu
+    await mdrag('#mixer', 40, 2, 0);
+    await page.waitForTimeout(80);
+    const moving = await rect('#mixer');
+    await page.waitForTimeout(500);
+    const dk3 = await rect('#mixer');
+    check('Schubs nach unten rastet in der Mitte ein', Math.abs(dk3.h / ar.h - 0.5) < 0.02 && await page.evaluate(() => window.loopwerk.ui.dock === 'mixer'), `${dk3.h} / ${ar.h}`);
+    check('Einrasten ist animiert (Zwischenhöhe)', moving.h < dk2.h - 5 && moving.h > dk3.h + 5, `${dk2.h} → ${moving.h} → ${dk3.h}`);
+    // Kurzer Schubs nach oben: eine Stufe höher
+    await mdrag('#mixer', -40, 2, 0);
+    await page.waitForTimeout(550);
+    check('Schubs nach oben rastet oben ein', Math.abs((await rect('#mixer')).h / ar.h - 0.8) < 0.02);
+    // Langsam fast ganz herunter ziehen: zu
+    await mdrag('#mixer', ar.h * 0.65, 10, 16);
     await page.waitForTimeout(60);
-    check('Nach unten wischen schließt die Schublade', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    check('Nach unten ziehen schließt die Schublade', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    const leaving = await page.evaluate(() => { const m = document.getElementById('mixer'); return m.classList.contains('leaving') && getComputedStyle(m).display !== 'none'; });
+    check('Schließen ist animiert (verschwindet nicht sofort)', leaving);
+    await page.waitForTimeout(450);
+    check('Nach der Animation ist die Schublade weg', await page.evaluate(() => getComputedStyle(document.getElementById('mixer')).display === 'none'));
+    // Mit dem Knopf öffnen und schließen: ebenfalls animiert, öffnet am gemerkten Haltepunkt
+    await page.click('#mixer-btn');
+    await page.waitForTimeout(550);
+    check('Öffnet am gemerkten Haltepunkt', Math.abs((await rect('#mixer')).h / ar.h - 0.8) < 0.02);
+    await page.click('#mixer-btn');
+    await page.waitForTimeout(40);
+    check('Schließen per Knopf ist animiert', await page.evaluate(() => document.getElementById('mixer').classList.contains('leaving')));
+    await page.waitForTimeout(450);
     await page.click('#mixer-btn');
     await page.keyboard.press('Escape');
     check('Esc schließt das Fach', await page.evaluate(() => window.loopwerk.ui.dock === null));
@@ -275,17 +304,27 @@ const { check, finish } = createChecker();
     };
     const arrM = await rect('.arranger');
     await page.tap('#tab-sounds');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(550);
     const sh = await rect('.shelf');
     const arrM2 = await rect('.arranger');
     check('Handy: Regal liegt als Schublade über den Spuren (Arranger bleibt gleich groß)', Math.abs(sh.b - arrM2.b) < 2 && Math.abs(arrM2.h - arrM.h) < 1 && sh.h < arrM.h, JSON.stringify({ sh, arrM, arrM2 }));
+    check('Handy: Regal öffnet in der Mitte', Math.abs(sh.h / arrM2.h - 0.5) < 0.02, `${sh.h} / ${arrM2.h}`);
+    // Schubs nach oben: rastet oben (80 %) ein
     const gM = await rect('.shelf > .sheet-grip');
-    await drag(gM.x + gM.w / 2, gM.y + 8, -200);
+    await drag(gM.x + gM.w / 2, gM.y + 8, -60, 3, 10);
+    await page.waitForTimeout(400);
     const sh2 = await rect('.shelf');
-    check('Handy: Griff nach oben ziehen zeigt mehr', sh2.h > sh.h + 100, `${sh.h} → ${sh2.h}`);
-    const gM2 = await rect('.shelf > .sheet-grip');
-    await drag(gM2.x + gM2.w / 2, gM2.y + 8, 300, 3, 10);
+    check('Handy: Schubs nach oben rastet oben ein (80 %)', Math.abs(sh2.h / arrM2.h - 0.8) < 0.02, `${sh.h} → ${sh2.h}`);
+    // Kurzer Schubs nach unten: zurück zur Mitte
+    let gs = await rect('.shelf > .sheet-grip');
+    await drag(gs.x + gs.w / 2, gs.y + 8, 50, 3, 10);
+    await page.waitForTimeout(400);
+    check('Handy: Schubs nach unten rastet in der Mitte ein', Math.abs((await rect('.shelf')).h / arrM2.h - 0.5) < 0.02 && await page.evaluate(() => window.loopwerk.ui.dock === 'sounds'));
+    // Weiter Wisch nach unten: zu, animiert
+    gs = await rect('.shelf > .sheet-grip');
+    await drag(gs.x + gs.w / 2, gs.y + 8, 300, 3, 10);
     check('Handy: nach unten wischen schließt', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    await page.waitForTimeout(400);
     // Drumpad am Handy: Antippen = ein Schlag
     await page.evaluate(() => {
       window.__starts = 0;
@@ -309,7 +348,7 @@ const { check, finish } = createChecker();
     await page.tap('#tab-sounds');
     await page.tap('#new-melody-btn');
     await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(550);
     const vk = await page.evaluate(() => {
       const keys = document.querySelectorAll('#pat-vkeys .vkey');
       const k = document.querySelector('#pat-vkeys .vkey[data-pitch="60"]').getBoundingClientRect();
@@ -318,6 +357,8 @@ const { check, finish } = createChecker();
     });
     check('Handy: senkrechte Klaviertasten links an der Piano-Roll', vk.n === 49 && vk.blacks === 20 && vk.w >= 60 && vk.h >= 28 && vk.left <= 1, JSON.stringify(vk));
     await page.tap('#pat-rec');
+    await page.evaluate(() => document.querySelector('#pat-vkeys .vkey[data-pitch="64"]').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(100);
     const k64 = await rect('#pat-vkeys .vkey[data-pitch="64"]');
     await page.touchscreen.tap(k64.x + 20, k64.y + k64.h / 2);
     await page.waitForTimeout(300);

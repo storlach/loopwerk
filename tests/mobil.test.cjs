@@ -99,6 +99,7 @@ const { check, finish } = createChecker();
     await page.fill('#shelf-search', 'snare');
     const forced = await page.evaluate(() => [...document.querySelectorAll('.shelf-cat')].map((b) => [b.id, b.getAttribute('aria-expanded'), b.disabled]));
     check('Suche zeigt alle Treffer aufgeklappt', forced.length >= 1 && forced.every(([, e, d]) => e === 'true' && d), JSON.stringify(forced));
+    await page.waitForTimeout(500); // Schublade fährt auf volle Höhe
     const kbd = await page.evaluate(() => {
       const a = document.getElementById('app');
       return { on: a.classList.contains('kbd'), where: a.dataset.kbdIn, tabs: getComputedStyle(document.getElementById('tabbar')).display, deck: getComputedStyle(document.querySelector('.deck')).display, arr: getComputedStyle(document.querySelector('.arranger')).visibility, shelfH: document.querySelector('.shelf').getBoundingClientRect().height, h: innerHeight };
@@ -184,6 +185,7 @@ const { check, finish } = createChecker();
     const fx = await box('#mixer .fx-toggle');
     check('Effekt-Schalter im Mixer gut treffbar', fx.height >= 32, `${fx.height} px`);
     await page.tap('#tab-more');
+    await page.waitForTimeout(400); // Mixer fährt hinaus
     check('„Mehr“ ersetzt den Mixer', (await lw()).dock === 'more' && !(await page.locator('#mixer').isVisible()) && await page.locator('#more').isVisible());
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-mehr.png') });
     const ppb = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
