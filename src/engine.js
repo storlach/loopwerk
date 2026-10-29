@@ -24,8 +24,8 @@ function createStrip(ctx, dest, { pan = true } = {}) {
 }
 
 // Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet.
-function installChain(ctx, strip, fx, spb, live) {
-  const chain = buildFxChain(ctx, fx, spb);
+function installChain(ctx, strip, fx, spb, live, grid) {
+  const chain = buildFxChain(ctx, fx, spb, grid);
   const xf = ctx.createGain();
   chain.output.connect(xf).connect(strip.out);
   strip.input.connect(chain.input);
@@ -48,12 +48,12 @@ function installChain(ctx, strip, fx, spb, live) {
   strip.xf = xf;
 }
 
-function syncStrip(ctx, strip, level, panValue, fx, spb, live) {
+function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid) {
   const t = live ? ctx.currentTime : null;
   if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
   if (strip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
-  if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live);
-  else updateFxParams(strip.chain, fx, t, spb);
+  if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live, grid);
+  else updateFxParams(strip.chain, fx, t, spb, grid);
 }
 
 export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
@@ -87,7 +87,8 @@ export async function limiterLatency(sampleRate) {
   return at;
 }
 
-export function buildMix(ctx, project, { limiter = true } = {}) {
+// grid: Kontextzeit, zu der Schlag 0 des Songs läge – Bezug für taktsynchrone Effekte (Filter-LFO, Pumpen)
+export function buildMix(ctx, project, { limiter = true, grid = 0 } = {}) {
   const post = ctx.createGain();
   let output = post;
   if (limiter) {
@@ -97,7 +98,7 @@ export function buildMix(ctx, project, { limiter = true } = {}) {
   }
   output.connect(ctx.destination);
   const masterStrip = createStrip(ctx, post, { pan: false });
-  const mix = { master: masterStrip.input, masterStrip, output, tracks: new Map() };
+  const mix = { master: masterStrip.input, masterStrip, output, tracks: new Map(), grid };
   syncMix(ctx, project, mix, 60 / project.bpm, false);
   return mix;
 }
@@ -116,10 +117,10 @@ export function syncMix(ctx, project, mix, spb, live = true) {
       mix.tracks.set(track.id, strip);
       mix.onStrip?.(track.id, strip);
     }
-    syncStrip(ctx, strip, trackLevel(track, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null);
+    syncStrip(ctx, strip, trackLevel(track, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid);
   }
   const m = masterOf(project);
-  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null);
+  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);
 }
 
 // Stützpunkte der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat],
@@ -192,7 +193,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
   const lat = limiter && compensate ? await limiterLatency(sampleRate) : 0;
   const ctx = new OfflineAudioContext(2, frames + lat, sampleRate);
-  const mix = buildMix(ctx, project, { limiter });
+  const mix = buildMix(ctx, project, { limiter, grid: -fromBeat * spb });
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
@@ -295,6 +296,9 @@ export class Engine extends Emitter {
     this.playing = true;
     this.startBeat = fromBeat;
     this.anchors = [{ time: t0, beat: fromBeat }];
+    // Taktsynchrone Effekte auf den neuen Start ausrichten
+    this.mix.grid = t0 - fromBeat * this.spb;
+    syncMix(this.ctx, this.project, this.mix, this.spb, true);
     this.cursorBeat = fromBeat;
     this.cursorTime = t0;
     this.knownSigs = this._signatures();

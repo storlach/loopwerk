@@ -120,7 +120,7 @@ const { check, finish } = createChecker();
     const stripCount = await page.locator('#mixer .strip').count();
     check('Mixer öffnet mit Kanalzug je Spur plus Master', visible && stripCount === 9, `${stripCount} Kanalzüge`);
 
-    await page.locator('#mixer .strip[data-strip-id="t1"] .fx-toggle').nth(3).click();
+    await page.locator('#mixer .strip[data-strip-id="t1"] .fx-toggle', { hasText: 'Hall' }).click();
     const hallOn = await page.evaluate(() => window.loopwerk.store.track('t1').fx.hall.on);
     check('Hall-Schalter im Kanalzug schaltet Hall ein', hallOn === true);
     const detail = await page.locator('#mixer-detail .detail-title').textContent();
@@ -143,9 +143,9 @@ const { check, finish } = createChecker();
     // Wiedergabe mit Effekten, Effekt live umschalten
     await page.click('#play-btn');
     await page.waitForTimeout(700);
-    await page.locator('#mixer .strip[data-strip-id="t4"] .fx-toggle').nth(0).click();
+    await page.locator('#mixer .strip[data-strip-id="t4"] .fx-toggle', { hasText: 'EQ' }).click();
     await page.waitForTimeout(300);
-    await page.locator('#mixer .strip[data-strip-id="t4"] .fx-toggle').nth(0).click();
+    await page.locator('#mixer .strip[data-strip-id="t4"] .fx-toggle', { hasText: 'EQ' }).click();
     await page.waitForTimeout(300);
     const live = await page.evaluate(() => ({ playing: window.loopwerk.engine.playing, meter: window.loopwerk.engine.trackPeak('t4') }));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'stufe4-light.png') });

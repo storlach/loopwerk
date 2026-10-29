@@ -270,6 +270,140 @@ const { check, finish } = createChecker();
     await page.click('.shelf-sort [data-sort="cat"]');
     check('Zurück nach Kategorie', await page.evaluate(() => !!document.getElementById('shelf-cat-drums')));
 
+    // ---------- Effekte: Verzerrer, Filter, Kompressor, Pumpen ----------
+    const fxm = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const { defaultFx } = await import('./src/effects.js');
+      const { mulberry32 } = await import('./src/util.js');
+      const sr = 44100;
+      const mk = (id, secs, fill) => {
+        const b = new AudioBuffer({ numberOfChannels: 2, length: secs * sr, sampleRate: sr });
+        for (let c = 0; c < 2; c++) fill(b.getChannelData(c));
+        library.register({ id, name: id, category: 'fx', lengthBeats: secs * 2, bpm: 120, buffer: b });
+      };
+      const rnd = mulberry32(9);
+      mk('v-sine', 2, (d) => { for (let i = 0; i < d.length; i++) d[i] = 0.5 * Math.sin(2 * Math.PI * 220 * i / sr); });
+      mk('v-noise', 2, (d) => { for (let i = 0; i < d.length; i++) d[i] = (rnd() * 2 - 1) * 0.3; });
+      mk('v-dc', 2, (d) => d.fill(1));
+      mk('v-quiet', 2, (d) => { for (let i = 0; i < d.length; i++) d[i] = 0.1 * Math.sin(2 * Math.PI * 220 * i / sr); });
+      const fxWith = (id, patch) => { const f = defaultFx(); Object.assign(f[id], { on: true }, patch); return f; };
+      const proj = (sampleId, fx, len = 16) => ({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: 8, loop: { on: false, startBeat: 0, endBeat: 16 },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0, mute: false, solo: false, fx, clips: [{ id: 'a', sampleId, startBeat: 0, lengthBeats: len }] }],
+      });
+      const render = async (p, fromBeat = 0, toBeat = 8) => (await renderProject(p, library, { limiter: false, fromBeat, toBeat })).getChannelData(0);
+      const bandDb = (d, lo, hi, at = 4410) => {
+        const N = 16384, re = new Float64Array(N), im = new Float64Array(N);
+        for (let i = 0; i < N; i++) re[i] = d[i + at] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+        for (let i = 1, j = 0; i < N; i++) { let bit = N >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+        for (let len = 2; len <= N; len <<= 1) {
+          const a = -2 * Math.PI / len;
+          for (let i = 0; i < N; i += len) for (let k = 0; k < len / 2; k++) {
+            const wr = Math.cos(a * k), wi = Math.sin(a * k);
+            const ur = re[i + k], ui = im[i + k];
+            const vr = re[i + k + len / 2] * wr - im[i + k + len / 2] * wi, vi = re[i + k + len / 2] * wi + im[i + k + len / 2] * wr;
+            re[i + k] = ur + vr; im[i + k] = ui + vi; re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+          }
+        }
+        let e = 0;
+        for (let k = Math.floor(lo * N / sr); k < Math.ceil(hi * N / sr); k++) e += re[k] * re[k] + im[k] * im[k];
+        return 10 * Math.log10(e + 1e-20);
+      };
+      const rms = (d, a, b) => { let e = 0; for (let i = a; i < b; i++) e += d[i] * d[i]; return Math.sqrt(e / (b - a)); };
+      const db = (x) => 20 * Math.log10(x);
+      const out = {};
+
+      const dry = await render(proj('v-sine', null));
+      const harm = (d) => bandDb(d, 630, 690) - bandDb(d, 200, 240); // 3. Oberton relativ zum Grundton
+      const even = (d) => bandDb(d, 420, 460) - bandDb(d, 200, 240); // 2. Oberton
+      out.drive = {};
+      for (const type of ['soft', 'hard', 'fuzz', 'crush']) {
+        const d = await render(proj('v-sine', fxWith('drive', { type, drive: type === 'crush' ? 1 : 0.8, tone: 1 })));
+        out.drive[type] = { h3: harm(d) - harm(dry), h2: even(d) - even(dry), level: db(rms(d, 4410, 44100) / rms(dry, 4410, 44100)), noise: bandDb(d, 3000, 8000) - bandDb(dry, 3000, 8000) };
+      }
+      const mix0 = await render(proj('v-sine', fxWith('drive', { drive: 1, mix: 0 })));
+      let diff = 0; for (let i = 0; i < dry.length; i++) diff = Math.max(diff, Math.abs(mix0[i] - dry[i]));
+      out.driveMix0 = diff;
+      const toneDark = await render(proj('v-sine', fxWith('drive', { type: 'hard', drive: 0.8, tone: 0 })));
+      const toneBright = await render(proj('v-sine', fxWith('drive', { type: 'hard', drive: 0.8, tone: 1 })));
+      out.tone = bandDb(toneBright, 4000, 10000) - bandDb(toneDark, 4000, 10000);
+
+      const nDry = await render(proj('v-noise', null));
+      const lp = await render(proj('v-noise', fxWith('filter', { type: 'lowpass', cutoff: 0.3, reso: 0 })));
+      const hp = await render(proj('v-noise', fxWith('filter', { type: 'highpass', cutoff: 0.6, reso: 0 })));
+      const bp = await render(proj('v-noise', fxWith('filter', { type: 'bandpass', cutoff: 0.6, reso: 0.6 })));
+      out.filter = {
+        lpHigh: bandDb(lp, 4000, 8000) - bandDb(nDry, 4000, 8000), lpLow: bandDb(lp, 50, 150) - bandDb(nDry, 50, 150),
+        hpLow: bandDb(hp, 50, 200) - bandDb(nDry, 50, 200), hpHigh: bandDb(hp, 5000, 9000) - bandDb(nDry, 5000, 9000),
+        bpSides: Math.max(bandDb(bp, 50, 300) - bandDb(nDry, 50, 300), bandDb(bp, 8000, 12000) - bandDb(nDry, 8000, 12000)), bpCenter: bandDb(bp, 1400, 1700) - bandDb(nDry, 1400, 1700),
+      };
+      // LFO im Takt: Höhen-Energie schwankt über den Takt, und gleich, egal ob ab Takt 1 oder Takt 2 gerendert wird
+      const lfoFx = fxWith('filter', { type: 'lowpass', cutoff: 0.5, reso: 0.2, lfo: '1bar', depth: 0.8 });
+      const quarters = (d) => [0, 1, 2, 3].map((q) => db(rms(d, q * 22050 + 2000, (q + 1) * 22050 - 2000) + 1e-9));
+      const hpF = (d) => { const o = new Float32Array(d.length); let y = 0, x1 = 0; for (let i = 0; i < d.length; i++) { y = 0.9 * (y + d[i] - x1); x1 = d[i]; o[i] = y; } return o; };
+      const l1 = quarters(hpF(await render(proj('v-noise', lfoFx), 0, 8)));
+      const l2 = quarters(hpF(await render(proj('v-noise', lfoFx), 4, 12)));
+      out.lfo = { l1, l2, swing: Math.max(...l1) - Math.min(...l1), same: Math.max(...l1.map((v, i) => Math.abs(v - l2[i]))) };
+
+      // Kompressor: eigener Pegel hebt an
+      const cq0 = await render(proj('v-quiet', fxWith('comp', { amount: 0, gain: 0 })));
+      const cq6 = await render(proj('v-quiet', fxWith('comp', { amount: 0, gain: 6, attack: 30, release: 400 })));
+      out.compGain = db(rms(cq6, 22050, 66150) / rms(cq0, 22050, 66150));
+
+      // Pumpen mit Gleichspannung: der Ausgang IST die Pegelkurve
+      const pump = async (patch, fromBeat = 0) => { const pr = proj('v-dc', fxWith('pump', patch)); pr.master = { volume: 1 }; return render(pr, fromBeat, fromBeat + 8); };
+      const p1 = await pump({ rate: '1/4', depth: 0.6, release: 0.5 });
+      const p2 = await pump({ rate: '1/4', depth: 0.6, release: 0.5 }, 1);
+      const ph = await pump({ rate: '1/2', depth: 0.6, release: 0.5 });
+      const at = (d, f) => d[Math.round(f)];
+      out.pump = {
+        onBeat: at(p1, 200), beforeNext: at(p1, 22050 - 300), onBeat2: at(p1, 22050 + 200), fromBeat1: at(p2, 200),
+        halfOn: at(ph, 200), halfOff: at(ph, 22050 + 200), halfOn2: at(ph, 44100 + 200),
+      };
+      return out;
+    });
+    const fmt = (o) => JSON.stringify(o, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v));
+    for (const t of ['soft', 'hard', 'fuzz']) {
+      const d = fxm.drive[t];
+      check(`Verzerrer „${t}“: deutliche Obertöne, Lautstärke bleibt im Rahmen`, d.h3 > 20 && Math.abs(d.level) < 6, fmt(d));
+    }
+    check('Fuzz erzeugt auch geradzahlige Obertöne', fxm.drive.fuzz.h2 > 20, fmt(fxm.drive.fuzz));
+    check('Bitcrusher erzeugt Quantisierungsrauschen', fxm.drive.crush.noise > 20, fmt(fxm.drive.crush));
+    check('Verzerrer mit Anteil 0 lässt das Signal unverändert', fxm.driveMix0 < 1e-4, String(fxm.driveMix0));
+    check('Ton-Regler dunkelt die Verzerrung ab', fxm.tone > 12, fxm.tone.toFixed(1) + ' dB');
+    check('Tiefpass schneidet Höhen, lässt Tiefen', fxm.filter.lpHigh < -20 && Math.abs(fxm.filter.lpLow) < 3, fmt(fxm.filter));
+    check('Hochpass schneidet Tiefen, lässt Höhen', fxm.filter.hpLow < -20 && Math.abs(fxm.filter.hpHigh) < 3, fmt(fxm.filter));
+    check('Bandpass lässt die Mitte durch', fxm.filter.bpSides < -10 && fxm.filter.bpCenter > fxm.filter.bpSides + 10, fmt(fxm.filter));
+    check('Filter-Bewegung schwankt im Takt', fxm.lfo.swing > 6, fmt(fxm.lfo));
+    check('Filter-Bewegung ist am Takt ausgerichtet (gleich ab Takt 1 und Takt 2)', fxm.lfo.same < 1.5, fmt(fxm.lfo));
+    check('Kompressor: Regler „Pegel“ hebt um 6 dB', Math.abs(fxm.compGain - 6) < 0.5, fxm.compGain.toFixed(2) + ' dB');
+    const pm = fxm.pump;
+    check('Pumpen taucht auf dem Schlag ab und kommt zurück', Math.abs(pm.onBeat - 0.4) < 0.06 && pm.beforeNext > 0.95 && Math.abs(pm.onBeat2 - 0.4) < 0.06, fmt(pm));
+    check('Pumpen sitzt auch ab Schlag 2 auf dem Schlag', Math.abs(pm.fromBeat1 - 0.4) < 0.06, fmt(pm));
+    check('Pumpen „jeder 2. Schlag“', Math.abs(pm.halfOn - 0.4) < 0.06 && pm.halfOff > 0.6 && Math.abs(pm.halfOn2 - 0.4) < 0.06, fmt(pm));
+
+    // Mixer zeigt die neuen Effekte
+    await page.evaluate(async () => {
+      const m = await import('./src/model.js');
+      window.loopwerk.store.replace(m.createDemoProject());
+      window.loopwerk.mixer.setOpen(true);
+    });
+    const strip = page.locator('.strip[data-strip-id="t1"]');
+    const toggles = await strip.locator('.fx-toggle').allTextContents();
+    check('Kanalzug hat sieben Effekt-Schalter', toggles.join(',') === 'Zerr,Filter,EQ,Komp,Pump,Echo,Hall', toggles.join(','));
+    await strip.locator('.fx-toggle', { hasText: 'Pump' }).click();
+    check('Pumpen per Schalter an', await page.evaluate(() => window.loopwerk.store.track('t1').fx.pump.on === true));
+    await page.selectOption('#fx-drive-type', 'crush');
+    const dv = await page.evaluate(() => window.loopwerk.store.track('t1').fx.drive);
+    check('Verzerrer-Art wählbar, schaltet ein', dv.type === 'crush' && dv.on, JSON.stringify(dv));
+    const cutoffLabel = await page.locator('#fx-filter-cutoff').locator('xpath=..').locator('.fx-param-value').textContent();
+    check('Filterfrequenz wird in Hz angezeigt', /Hz/.test(cutoffLabel), cutoffLabel);
+    await page.click('#play-btn');
+    await page.waitForTimeout(700);
+    await page.click('#play-btn');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-mixer.png') });
+    await page.evaluate(() => window.loopwerk.mixer.setOpen(false));
+
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 

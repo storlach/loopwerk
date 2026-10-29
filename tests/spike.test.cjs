@@ -34,7 +34,7 @@ function check(name, ok, detail = '') {
         silent: list.filter((s) => { const d = s.buffer.getChannelData(0); let m = 0; for (const v of d) m = Math.max(m, Math.abs(v)); return m < 0.05; }).map((s) => s.id),
       };
     });
-    check('Bibliothek: 15 synthetische Loops plus Katalog', lib.synth === 15 && lib.count >= 15, `${lib.synth} synthetisch, ${lib.count} gesamt`);
+    check('Bibliothek: 29 synthetische Loops (15 + 14 Techno) plus Katalog', lib.synth === 29 && lib.count >= 29, `${lib.synth} synthetisch, ${lib.count} gesamt`);
     check('Loop-Längen exakt in Takten', lib.lengthsOk);
     check('Kein Loop ist stumm', lib.silent.length === 0, lib.silent.join(', '));
 

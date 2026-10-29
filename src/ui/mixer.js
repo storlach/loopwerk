@@ -7,9 +7,11 @@ import { clamp, el } from '../util.js';
 import { formatDb } from './arranger.js';
 
 const MASTER = '__master';
-const SHORT = { eq: 'EQ', comp: 'Komp', echo: 'Echo', hall: 'Hall' };
+const SHORT = { drive: 'Zerr', filter: 'Filter', eq: 'EQ', comp: 'Komp', pump: 'Pump', echo: 'Echo', hall: 'Hall' };
 
 const formatParam = (p, v) => {
+  if (p.format) return p.format(v);
+  if (p.unit === 'ms') return `${Math.round(v)} ms`;
   if (p.unit === 'dB') return `${v > 0 ? '+' : ''}${String(v).replace('.', ',').replace('-', '−')} dB`;
   if (p.unit === '%') return `${Math.round(v * 100)} %`;
   return String(v);
