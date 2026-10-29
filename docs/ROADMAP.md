@@ -57,8 +57,14 @@
 ### Offen aus Stufe 6
 - Einzelspuren (Stems) exportieren, Normalisieren beim Export
 
-## Stufe 7 – Instrumente
-- Drum-Step-Sequencer, einfacher Synth mit Piano-Roll, MIDI-Eingang
+## ✅ Stufe 7 – Instrumente (1.0)
+- Beat-Editor (Stepsequencer, 8 Instrumente, zwei Kits) und Melodie-Editor (Piano-Roll, vier Klänge)
+- Eingabe per Maus, Computertastatur (Schritt-Eingabe) und MIDI-Keyboard
+- Patterns werden zu Loops gerendert und verhalten sich wie jeder Clip
+- Spec: `docs/specs/stufe-7-instrumente.md`, Tests: `tests/stufe7.test.cjs`
+
+### Offen aus Stufe 7
+- Anschlagstärke pro Schritt/Note, Swing, Akkord-Eingabe, Echtzeit-Aufnahme von MIDI
 
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

@@ -5,9 +5,15 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 ## Technik
 - Reine ES-Module ohne Build-Schritt, Web Audio API. `index.html` hat bewusst kein `<!doctype>`/`<head>`: die Artifact-Veröffentlichung ergänzt das Gerüst (lokal macht das `tests/serve.cjs`).
 - `src/model.js` – Projektmodell + `Store` (alle Änderungen über Aktionen → Undo/Redo). Positionen immer in Schlägen.
-- `src/engine.js` – Scheduler mit Vorlauf auf der AudioContext-Uhr, Loop-Sprünge, Live-Resync geänderter Clips, `renderProject` für Offline-Rendering.
-- `src/samples.js` – synthetische Start-Bibliothek (120 BPM, A-Moll), `Library`.
-- `src/ui/*` – Sound-Regal, Arranger, Transport-Deck. UI liest aus dem Store und schreibt nur über Store-Aktionen.
+- `src/engine.js` – Scheduler mit Vorlauf, Loop-Sprünge, Live-Resync, Kanalzüge mit Effektketten (`buildMix`/`syncMix`), `renderProject` für Offline-Rendering/Export.
+- `src/samples.js` + `src/catalog.js` – Bibliothek: synthetische Loops und CC0-Sounds (Sonic Pi), Tempo-Vorbereitung (`setTempo`).
+- `src/effects.js` – Effekt-Rack (EQ, Kompressor, Echo, Hall).
+- `src/dsp/` – Time-Stretching (WSOLA), Bearbeitungsfunktionen, Aufnahme-Worklet.
+- `src/own-sounds.js`, `src/recorder.js` – eigene Sounds (IndexedDB, Projektdatei), Mikrofon-Aufnahme.
+- `src/instruments.js`, `src/patterns.js` – Beat-/Melodie-Patterns, als Sounds „pat-…“ gerendert.
+- `src/export.js`, `src/zip.js`, `src/wav.js`, `vendor/lamejs/` – Export WAV/MP3.
+- `src/ui/*` – Regal, Arranger, Deck, Docks (Mixer, Sample-Editor, Pattern-Editor, Export). Die UI liest aus dem Store und schreibt nur über Store-Aktionen. Docks über `ui.setDock(name)`.
+- Entscheidungen: `docs/adr/`, Specs je Stufe: `docs/specs/`, Stand: `docs/ROADMAP.md`.
 
 ## Regeln
 - Timing nie mit `setTimeout` planen, immer über `ctx.currentTime` + Vorlauf.
@@ -38,6 +44,6 @@ Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer 
 - Persönliche Skills von Martin: `kritiker` (unabhängige Prüfung), `scout` (Skill-Review)
 
 ## Fertig heißt
-- `node tests/spike.test.cjs` grün (Timing-Test samplegenau, UI-Interaktionen, keine Konsolenfehler).
+- `npm test` grün (alle Stufen: Timing samplegenau, Effekte, Export, UI-Interaktionen, keine Konsolenfehler).
 - Ein Screenshot (`--shots`, `SHOT_DIR=…`) angesehen, hell/dunkel und Handy-Breite.
 - Klang beurteilt der Mensch: bei hörbaren Änderungen um ein Ohr-Feedback bitten.

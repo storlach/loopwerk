@@ -556,6 +556,30 @@
   .ex-note { margin: 0; font-size: 11px; color: var(--muted); }
   .ex-note a { color: inherit; }
 
+
+  /* ---------- Instrumente ---------- */
+  .shelf-make { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .pat-field { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+  .pat-field select { height: 28px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  #pat-rec[aria-pressed="true"] { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
+  .pat-body { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; padding: 10px 14px; min-height: 0; }
+  .pat-drums {
+    display: grid; grid-template-columns: 96px repeat(var(--steps, 16), minmax(14px, 1fr)); gap: 3px;
+    align-content: start; overflow: auto; min-height: 0;
+  }
+  .pat-row-label {
+    position: sticky; left: 0; z-index: 1; height: 24px; padding: 0 6px; text-align: left;
+    border: 0; border-radius: 3px; background: var(--panel); cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .pat-row-label:hover { background: var(--lane); }
+  .pat-cell { height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: var(--lane); cursor: pointer; }
+  .pat-cell.alt { background: var(--lane-alt); }
+  .pat-cell.bar { border-left: 2px solid var(--grid-bar); }
+  .pat-cell[aria-pressed="true"] { background: var(--cat); border-color: var(--cat); }
+  .pat-roll-wrap { overflow: auto; min-height: 0; border: 1px solid var(--line); border-radius: 4px; }
+  #pat-roll { display: block; cursor: crosshair; touch-action: none; }
+  .pat-hint { margin: 0; font-size: 12px; color: var(--muted); }
+
   /* ---------- Hinweiszeile ---------- */
   .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
   .hint.armed { color: var(--ink); font-weight: 500; }
@@ -597,7 +621,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 0.6</span>
+      <span class="brand-tag">Version 1.0</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -683,6 +707,10 @@
       <div class="shelf-title"><h2>Sounds</h2><span class="shelf-total" id="shelf-total"></span></div>
       <button class="shelf-import" id="import-btn" type="button" title="Audiodateien (WAV, MP3, OGG …) als eigene Sounds importieren – oder Dateien direkt auf eine Spur ziehen">+ Eigene Sounds importieren</button>
       <input type="file" id="import-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" multiple hidden>
+      <div class="shelf-make">
+        <button class="shelf-import" id="new-beat-btn" type="button" title="Neuen Beat im Stepsequencer bauen">+ Beat bauen</button>
+        <button class="shelf-import" id="new-melody-btn" type="button" title="Neue Melodie in der Piano-Roll schreiben">+ Melodie</button>
+      </div>
       <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
       <div class="chips" id="shelf-chips" role="group" aria-label="Kategorie"></div>
     </div>
@@ -783,6 +811,32 @@
         <p class="ex-status" id="ex-status" role="status"></p>
         <p class="ex-note">In claude.ai wird die Audiodatei als ZIP gespeichert. MP3-Kodierung mit <a href="https://lame.sourceforge.net" target="_blank" rel="noopener">LAME</a> (LGPL).</p>
       </div>
+    </div>
+  </section>
+
+  <section class="dock" id="pattern" aria-label="Pattern-Editor" hidden>
+    <div class="dock-head">
+      <h2 id="pat-title">Beat-Editor</h2>
+      <div class="dock-actions">
+        <input class="ed-name" id="pat-name" type="text" maxlength="30" aria-label="Name des Patterns">
+        <label class="pat-field">Takte
+          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option></select>
+        </label>
+        <label class="pat-field" id="pat-kit-field">Kit <select id="pat-kit"></select></label>
+        <label class="pat-field" id="pat-preset-field">Klang <select id="pat-preset"></select></label>
+        <label class="pat-field" id="pat-len-field">Notenlänge
+          <select id="pat-len"><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1" selected>1/4</option><option value="2">1/2</option><option value="4">1/1</option></select>
+        </label>
+        <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
+        <button class="dbtn" id="pat-play" type="button">▶ Anhören</button>
+        <button class="dbtn" id="pat-clear" type="button">Leeren</button>
+        <button class="dock-close" id="pattern-close" type="button" aria-label="Pattern-Editor schließen">×</button>
+      </div>
+    </div>
+    <div class="pat-body">
+      <div class="pat-drums cat-own" id="pat-drums"></div>
+      <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
+      <p class="pat-hint" id="pat-hint"></p>
     </div>
   </section>
 

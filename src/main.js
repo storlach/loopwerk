@@ -12,15 +12,19 @@ import { mountProjectIO } from './ui/project-io.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
+import { mountPatternEditor } from './ui/pattern-editor.js';
+import { Patterns, patternSampleId } from './patterns.js';
+import { newDrumPattern, newSynthPattern } from './instruments.js';
 import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
-function loadSaved(library) {
+async function loadSaved(library, patterns) {
   try {
     const p = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!isValidProject(p)) return null;
+    await patterns.sync(p);
     for (const t of p.tracks) t.clips = t.clips.filter((c) => library.get(c.sampleId));
     return p;
   } catch {
@@ -225,7 +229,8 @@ async function boot() {
   });
   const own = new OwnSounds(library);
   await own.loadAll();
-  const store = new Store(loadSaved(library) ?? createDemoProject(), {
+  const patterns = new Patterns(library);
+  const store = new Store((await loadSaved(library, patterns)) ?? createDemoProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
   });
   const engine = new Engine(store, library);
@@ -240,20 +245,57 @@ async function boot() {
         return;
       }
       if (ui.armedSampleId === id) ui.arm(null);
+      const pat = library.get(id)?.patternId;
+      if (pat) { store.removePattern(pat); ui.flash('Pattern gelöscht (Strg+Z holt es zurück).'); return; }
       await own.remove(id);
       ui.flash('Eigener Sound gelöscht.');
     },
   });
   mountTransport({ store, engine, ui, arranger });
-  mountProjectIO({ store, engine, ui, library, own });
+  mountProjectIO({ store, engine, ui, library, own, patterns });
   const tools = mountClipTools({ store, engine, ui, arranger });
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
   const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
-  tools.onEdit = (id) => editor.open(id);
+  const patternEditor = mountPatternEditor({ root: document.getElementById('pattern'), store, engine, library, ui });
+  // Pattern-Clips öffnen den Pattern-Editor, alle anderen den Sample-Editor
+  const openClip = (clipId) => {
+    const c = store.findClip(clipId)?.clip;
+    const pid = c && library.get(c.sampleId)?.patternId;
+    if (pid) patternEditor.open(pid); else editor.open(clipId);
+  };
+  tools.onEdit = openClip;
   document.getElementById('arr-scroll').addEventListener('dblclick', (e) => {
     const clip = e.target.closest('.clip');
-    if (clip && !e.target.closest('.clip-grip')) editor.open(clip.dataset.clipId);
+    if (clip && !e.target.closest('.clip-grip')) openClip(clip.dataset.clipId);
   });
+
+  // Patterns synchron halten; geänderte Pattern-Sounds sofort hörbar und sichtbar
+  let redraw = 0;
+  patterns.onChange = () => {
+    engine.refresh();
+    cancelAnimationFrame(redraw);
+    redraw = requestAnimationFrame(() => arranger.render());
+  };
+  store.on(() => patterns.sync(store.project));
+  await patterns.sync(store.project);
+
+  // Neues Pattern: auf eine freie Spur an der Abspielmarke legen und Editor öffnen
+  async function createPattern(make) {
+    const n = 1 + Object.values(store.project.patterns || {}).filter((p) => p.type === make().type).length;
+    const pattern = make(n);
+    const pid = store.addPattern(pattern);
+    await patterns.sync(store.project);
+    const len = pattern.bars * 4;
+    const bpb = store.project.beatsPerBar;
+    const at = Math.floor(engine.currentBeat() / bpb) * bpb;
+    const free = store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < at + len && c.startBeat + c.lengthBeats > at));
+    const trackId = free?.id ?? store.addTrack();
+    if (trackId) arranger.select(store.addClip(trackId, patternSampleId(pid), at, len));
+    patternEditor.open(pid);
+  }
+  document.getElementById('new-beat-btn').addEventListener('click', () => createPattern(newDrumPattern));
+  document.getElementById('new-melody-btn').addEventListener('click', () => createPattern(newSynthPattern));
+  library.on(() => { cancelAnimationFrame(redraw); redraw = requestAnimationFrame(() => arranger.render()); });
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
   mountRecording({ store, engine, ui, arranger, recorder });
@@ -316,7 +358,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, patterns, patternEditor, renderProject, encodeWav, ready: true };
 }
 
 boot().catch((err) => {

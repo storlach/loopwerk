@@ -344,6 +344,26 @@ export class Store extends Emitter {
     this.dispatch('track', () => Object.assign(this.track(trackId), patch), { coalesce });
   }
 
+  // ---------- Patterns (Beats, Melodien) ----------
+
+  addPattern(pattern) {
+    const n = 1 + Math.max(0, ...Object.keys(this.project.patterns || {}).map((k) => parseInt(k.slice(1), 10) || 0));
+    const id = 'p' + n;
+    this.dispatch('add-pattern', (p) => { p.patterns = { ...(p.patterns || {}), [id]: pattern }; });
+    return id;
+  }
+
+  // Pattern ändern; fn bekommt das Pattern-Objekt und verändert es direkt
+  updatePattern(id, fn, coalesce) {
+    if (!this.project.patterns?.[id]) return;
+    this.dispatch('pattern', (p) => fn(p.patterns[id]), { coalesce });
+  }
+
+  removePattern(id) {
+    if (!this.project.patterns?.[id]) return;
+    this.dispatch('remove-pattern', (p) => { const { [id]: _, ...rest } = p.patterns; p.patterns = rest; });
+  }
+
   setTrackFx(trackId, fxId, patch, coalesce) {
     if (!this.track(trackId)) return;
     this.dispatch('fx', () => {

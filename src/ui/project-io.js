@@ -6,7 +6,7 @@ import { saveFile, safeName } from './save-file.js';
 
 const fileName = (name) => `${safeName(name)}.json`;
 
-export function mountProjectIO({ store, engine, ui, library, own }) {
+export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
   const saveBtn = document.getElementById('save-btn');
   const openBtn = document.getElementById('open-btn');
   const input = document.getElementById('open-input');
@@ -44,6 +44,7 @@ export function mountProjectIO({ store, engine, ui, library, own }) {
       try { await own.restore(project.ownSounds); } catch { ui.flash('Einige eigene Sounds aus der Datei konnten nicht gelesen werden.'); }
     }
     delete project.ownSounds;
+    if (patterns) await patterns.sync(project);
     let missing = 0;
     for (const t of project.tracks) {
       const before = t.clips.length;

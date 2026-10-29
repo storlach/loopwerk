@@ -24,7 +24,7 @@ const PEAKS_PER_BEAT = 64;
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 // Klangbausteine. Alle Zeiten werden in Schlägen übergeben.
-function createKit(ctx, out, spb) {
+export function createKit(ctx, out, spb) {
   const rand = mulberry32(1234);
   const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const nd = noise.getChannelData(0);
@@ -201,6 +201,15 @@ function createKit(ctx, out, spb) {
       o.connect(og);
       o.start(t);
       o.stop(t + d);
+    },
+    tom(beat, freq = 110, vel = 1) {
+      const t = T(beat);
+      const o = osc('sine', freq * 1.6);
+      o.frequency.setValueAtTime(freq * 1.6, t);
+      o.frequency.exponentialRampToValueAtTime(freq, t + 0.12);
+      o.connect(decayGain(t, 0.8 * vel, 0.35));
+      o.start(t);
+      o.stop(t + 0.45);
     },
     crash(beat) {
       const t = T(beat);
