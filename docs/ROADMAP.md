@@ -40,9 +40,14 @@
 ### Offen aus Stufe 4
 - Freie Effekt-Slots, Send-Effekte, Automation
 
-## Stufe 5 – Aufnahme und Sample-Editor
-- Mikrofon-Aufnahme mit Einzähler und Latenzausgleich, eigene Dateien importieren
-- Editor: schneiden, normalisieren, rückwärts, Fades, Pitch
+## ✅ Stufe 5 – Eigene Sounds (0.5)
+- Import per Knopf oder Datei auf eine Spur ziehen; eigene Sounds bleiben im Browser gespeichert und werden in Projektdateien eingebettet
+- Mikrofon-Aufnahme mit Vorzähler und Latenzausgleich (außerhalb von claude.ai)
+- Sample-Editor: Auswahl, Zuschneiden, Entfernen, Stille, Fades, Rückwärts, Normalisieren, Pegel, Tonhöhe, „Als Loop“
+- Spec: `docs/specs/stufe-5-aufnahme-editor.md`, Tests: `tests/stufe5.test.cjs`
+
+### Offen aus Stufe 5
+- Manuelle Latenz-Korrektur, Mehrspur-Aufnahme, Aufnahme im Loop (Takes)
 
 ## Stufe 6 – Export
 - WAV (Encoder vorhanden: `src/wav.js`), MP3

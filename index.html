@@ -504,6 +504,45 @@
   .fx-param-label { grid-row: 1; }
   .fx-param-value { grid-row: 1; grid-column: 2; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+
+  /* ---------- Aufnahme, Import, Editor ---------- */
+  .key.rec svg { fill: var(--meter-hot); }
+  .key.rec.recording { background: var(--meter-hot); color: #fff; animation: pulse 0.6s ease-in-out infinite alternate; }
+  .key.rec.recording svg { fill: #fff; }
+  .shelf-import {
+    height: 30px; border: 1px dashed color-mix(in srgb, var(--cat-own) 60%, var(--line)); border-radius: 4px;
+    background: transparent; color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 600;
+  }
+  .shelf-import:hover { background: color-mix(in srgb, var(--cat-own) 10%, transparent); }
+  .loop-row.own { grid-template-columns: minmax(0, 1fr) 26px 26px; }
+  .loop-del { width: 26px; height: 26px; border: 0; background: transparent; cursor: pointer; color: var(--muted); font-size: 14px; }
+  .loop-del.confirm { color: #fff; background: var(--meter-hot); border-radius: 3px; }
+  .app.file-over .lane { outline: 1px dashed var(--cat-own); outline-offset: -2px; }
+  .dock-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .dbtn {
+    height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px;
+    background: var(--panel); cursor: pointer; font-size: 12px; font-weight: 500;
+  }
+  .dbtn:hover:not(:disabled) { background: var(--lane); }
+  .dbtn:disabled { opacity: 0.45; cursor: default; }
+  .dbtn.primary { background: var(--amber); border-color: var(--amber); color: #1B1204; font-weight: 600; }
+  .editor-body { padding: 10px 14px; overflow: auto; display: grid; gap: 8px; align-content: start; min-height: 0; }
+  .ed-wave-wrap { position: relative; height: 140px; border: 1px solid var(--line); border-radius: 4px; background: var(--lane); }
+  #ed-wave { --wave: var(--cat-own); width: 100%; height: 100%; display: block; cursor: text; touch-action: none; }
+  .ed-sel { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--amber) 22%, transparent); border-left: 1px solid var(--amber); border-right: 1px solid var(--amber); pointer-events: none; }
+  .ed-head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); pointer-events: none; }
+  .ed-info { margin: 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .ed-tools { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+  .ed-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .ed-group-label { width: 100%; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .ed-pitch { min-width: 2.5ch; text-align: center; font: 600 13px/1 var(--font-mono); }
+  .ed-check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .ed-beats-label { font-size: 12px; color: var(--muted); margin-left: 6px; }
+  .ed-beats, .ed-name { height: 28px; box-sizing: border-box; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); -webkit-user-select: text; user-select: text; }
+  .ed-beats { width: 56px; }
+  .ed-name { width: 200px; max-width: 100%; }
+  .ed-bpm { font-size: 12px; color: var(--muted); }
+
   /* ---------- Hinweiszeile ---------- */
   .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
   .hint.armed { color: var(--ink); font-weight: 500; }
@@ -545,7 +584,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 0.4</span>
+      <span class="brand-tag">Version 0.5</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -559,6 +598,10 @@
       <button class="key" id="loop-btn" type="button" title="Loop-Bereich wiederholen">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 5h7V3l3 3-3 3V7H4v3H2V7a2 2 0 012-2zm8 6H5v2l-3-3 3-3v2h7V6h2v3a2 2 0 01-2 2z"/></svg>
         Loop
+      </button>
+      <button class="key rec" id="rec-btn" type="button" title="Mit dem Mikrofon aufnehmen (ein Takt Vorzähler)" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
+        <span class="rec-label">Aufnahme</span>
       </button>
       <button class="key" id="mixer-btn" type="button" title="Mixer und Effekte" aria-pressed="false">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg>
@@ -607,6 +650,7 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 1a2.5 2.5 0 012.3 3.5L8 5.7l5.3-5.3 1.4 1.4L9.4 7.1l5.3 5.3-1.4 1.4L8 8.5 6.8 9.7A2.5 2.5 0 114.5 8.3l.9-.9.2-.3-.2-.3-.9-.9A2.5 2.5 0 014.5 1zm0 1.6a.9.9 0 100 1.8.9.9 0 000-1.8zm0 7.8a.9.9 0 100 1.8.9.9 0 000-1.8z"/></svg>
         Teilen
       </button>
+      <button class="key" id="edit-btn" type="button" title="Ausgewählten Clip im Sample-Editor öffnen (Doppelklick auf den Clip)">Bearbeiten</button>
       <button class="key" id="dup-btn" type="button" title="Ausgewählten Clip duplizieren (Strg+D)">Duplizieren</button>
       <button class="key" id="del-btn" type="button" title="Ausgewählten Clip löschen (Entf)">Löschen</button>
     </div>
@@ -623,6 +667,8 @@
   <aside class="shelf" aria-label="Sounds">
     <div class="shelf-head">
       <div class="shelf-title"><h2>Sounds</h2><span class="shelf-total" id="shelf-total"></span></div>
+      <button class="shelf-import" id="import-btn" type="button" title="Audiodateien (WAV, MP3, OGG …) als eigene Sounds importieren – oder Dateien direkt auf eine Spur ziehen">+ Eigene Sounds importieren</button>
+      <input type="file" id="import-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" multiple hidden>
       <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
       <div class="chips" id="shelf-chips" role="group" aria-label="Kategorie"></div>
     </div>
@@ -642,6 +688,61 @@
     <div class="dock-body">
       <div class="mixer-strips" id="mixer-strips"></div>
       <div class="mixer-detail" id="mixer-detail"></div>
+    </div>
+  </section>
+
+  <section class="dock" id="editor" aria-label="Sample-Editor" hidden>
+    <div class="dock-head">
+      <h2 id="editor-title">Sample-Editor</h2>
+      <div class="dock-actions">
+        <button class="dbtn" id="ed-play" type="button">▶ Anhören</button>
+        <button class="dbtn" id="ed-undo" type="button">Rückgängig</button>
+        <button class="dbtn" id="ed-cancel" type="button">Abbrechen</button>
+        <button class="dbtn primary" id="ed-apply" type="button">Übernehmen</button>
+        <button class="dock-close" id="editor-close" type="button" aria-label="Editor schließen">×</button>
+      </div>
+    </div>
+    <div class="editor-body">
+      <div class="ed-wave-wrap cat-own">
+        <canvas id="ed-wave" aria-label="Wellenform – ziehen wählt einen Bereich aus"></canvas>
+        <div class="ed-sel" hidden></div>
+        <div class="ed-head" hidden></div>
+      </div>
+      <p class="ed-info" id="ed-info"></p>
+      <div class="ed-tools">
+        <div class="ed-group" role="group" aria-label="Auswahl">
+          <span class="ed-group-label">Auswahl</span>
+          <button class="dbtn" id="ed-crop" type="button" title="Nur die Auswahl behalten">Zuschneiden</button>
+          <button class="dbtn" id="ed-cut" type="button" title="Auswahl entfernen">Entfernen</button>
+          <button class="dbtn" id="ed-silence" type="button" title="Auswahl stumm schalten">Stille</button>
+        </div>
+        <div class="ed-group" role="group" aria-label="Bearbeiten">
+          <span class="ed-group-label">Auswahl oder alles</span>
+          <button class="dbtn" id="ed-fadein" type="button">Einblenden</button>
+          <button class="dbtn" id="ed-fadeout" type="button">Ausblenden</button>
+          <button class="dbtn" id="ed-reverse" type="button">Rückwärts</button>
+          <button class="dbtn" id="ed-normalize" type="button" title="Auf −1 dB anheben">Normalisieren</button>
+          <button class="dbtn" id="ed-louder" type="button">+3 dB</button>
+          <button class="dbtn" id="ed-quieter" type="button">−3 dB</button>
+        </div>
+        <div class="ed-group" role="group" aria-label="Tonhöhe">
+          <span class="ed-group-label">Tonhöhe (Halbtöne)</span>
+          <button class="dbtn" id="ed-pitch-down" type="button" aria-label="Einen Halbton tiefer">−</button>
+          <output class="ed-pitch" id="ed-pitch-value">0</output>
+          <button class="dbtn" id="ed-pitch-up" type="button" aria-label="Einen Halbton höher">+</button>
+          <button class="dbtn" id="ed-pitch-apply" type="button">Anwenden</button>
+        </div>
+        <div class="ed-group" role="group" aria-label="Loop">
+          <label class="ed-check"><input type="checkbox" id="ed-loop"> Als Loop</label>
+          <label class="ed-beats-label" for="ed-beats">Schläge</label>
+          <input class="ed-beats" id="ed-beats" type="number" min="1" max="64" step="1">
+          <span class="ed-bpm" id="ed-bpm"></span>
+        </div>
+        <div class="ed-group ed-name-group">
+          <label class="ed-group-label" for="ed-name">Name</label>
+          <input class="ed-name" id="ed-name" type="text" maxlength="40">
+        </div>
+      </div>
     </div>
   </section>
 

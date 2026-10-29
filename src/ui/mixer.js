@@ -226,12 +226,16 @@ export function mountMixer({ root, store, engine, ui }) {
   requestAnimationFrame(drawMeters);
 
   function setOpen(open) {
-    root.hidden = !open;
-    document.getElementById('mixer-btn').setAttribute('aria-pressed', String(open));
-    document.getElementById('app').classList.toggle('dock-open', open);
-    if (open) sync();
+    ui.setDock(open ? 'mixer' : ui.dock === 'mixer' ? null : ui.dock);
   }
-  document.getElementById('mixer-btn').addEventListener('click', () => setOpen(root.hidden));
+  ui.on(() => {
+    const show = ui.dock === 'mixer';
+    document.getElementById('mixer-btn').setAttribute('aria-pressed', String(show));
+    if (root.hidden === !show) return;
+    root.hidden = !show;
+    if (show) sync();
+  });
+  document.getElementById('mixer-btn').addEventListener('click', () => setOpen(ui.dock !== 'mixer'));
   root.querySelector('#mixer-close').addEventListener('click', () => setOpen(false));
   store.on(sync);
   return { setOpen, select, MASTER };

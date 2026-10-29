@@ -26,7 +26,7 @@ const describe = (s) => {
   return parts.join(' · ');
 };
 
-export function mountLibrary({ root, library, store, engine, ui, arranger }) {
+export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn }) {
   const search = document.getElementById('shelf-search');
   const chipsEl = document.getElementById('shelf-chips');
   const totalEl = document.getElementById('shelf-total');
@@ -71,6 +71,21 @@ export function mountLibrary({ root, library, store, engine, ui, arranger }) {
       render();
     });
     row.append(item, star);
+    if (s.category === 'own' && onDeleteOwn) {
+      row.classList.add('own');
+      const del = el('button', 'loop-del', '×');
+      del.type = 'button';
+      del.title = 'Eigenen Sound löschen';
+      del.setAttribute('aria-label', `${s.name} löschen`);
+      let armed = null;
+      del.addEventListener('click', () => {
+        if (armed) { clearTimeout(armed); onDeleteOwn(s.id); return; }
+        del.classList.add('confirm');
+        del.textContent = '?';
+        armed = setTimeout(() => { armed = null; del.classList.remove('confirm'); del.textContent = '×'; }, 3000);
+      });
+      row.append(del);
+    }
     return { row, item, star };
   }
 

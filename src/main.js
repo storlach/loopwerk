@@ -10,6 +10,9 @@ import { mountArranger } from './ui/arranger.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
 import { mountMixer } from './ui/mixer.js';
+import { mountEditor } from './ui/editor.js';
+import { OwnSounds } from './own-sounds.js';
+import { Recorder } from './recorder.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
@@ -34,6 +37,8 @@ function createUi() {
     armedSampleId: null,
     statusText: null,
     flashText: null,
+    dock: null,
+    setDock(name) { if (ui.dock !== name) { ui.dock = name; ui.emit(); } },
     select(id) { if (ui.selectedClipId !== id) { ui.selectedClipId = id; ui.emit(); } },
     arm(id) { if (ui.armedSampleId !== id) { ui.armedSampleId = id; ui.emit(); } },
     // Laufende Anzeige beim Ziehen (z. B. „Fade-In: 1,5 Schläge“)
@@ -71,6 +76,7 @@ function mountHints({ root, ui, library, store }) {
 function mountClipTools({ store, engine, ui, arranger }) {
   const splitBtn = document.getElementById('split-btn');
   const dupBtn = document.getElementById('dup-btn');
+  const editBtn = document.getElementById('edit-btn');
   const delBtn = document.getElementById('del-btn');
 
   const tools = {
@@ -95,11 +101,15 @@ function mountClipTools({ store, engine, ui, arranger }) {
       store.deleteClip(ui.selectedClipId);
       ui.select(null);
     },
+    edit() {
+      if (ui.selectedClipId) tools.onEdit?.(ui.selectedClipId);
+    },
   };
+  editBtn.addEventListener('click', () => tools.edit());
   splitBtn.addEventListener('click', tools.split);
   dupBtn.addEventListener('click', tools.duplicate);
   delBtn.addEventListener('click', tools.remove);
-  const sync = () => { dupBtn.disabled = delBtn.disabled = !ui.selectedClipId; };
+  const sync = () => { dupBtn.disabled = delBtn.disabled = editBtn.disabled = !ui.selectedClipId; };
   ui.on(sync);
   sync();
   return tools;
@@ -128,6 +138,83 @@ function mountTempo({ store, engine, library, ui, arranger }) {
   return { apply, get busy() { return !!running; } };
 }
 
+// Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
+function mountRecording({ store, engine, ui, arranger, recorder }) {
+  const btn = document.getElementById('rec-btn');
+  const label = btn.querySelector('.rec-label');
+  const freeTrack = (from, to) => store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < to && c.startBeat + c.lengthBeats > from));
+  btn.addEventListener('click', async () => {
+    if (recorder.state === 'recording') { recorder.stop(); return; }
+    if (recorder.state !== 'idle') return;
+    const startBeat = Math.floor(engine.currentBeat() / store.project.beatsPerBar) * store.project.beatsPerBar;
+    if (engine.playing) engine.stop();
+    const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
+    let trackId = sel?.track.id ?? freeTrack(startBeat, startBeat + 16)?.id;
+    if (!trackId) trackId = store.addTrack();
+    if (!trackId) { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
+    try {
+      await recorder.start({ trackId, startBeat });
+      ui.flash('Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.');
+    } catch (err) {
+      ui.flash(err.code === 'denied'
+        ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
+        : 'Aufnahmen sind in dieser Ansicht nicht möglich (z. B. in claude.ai). Nimm mit einer anderen App auf und importiere die Datei über „+ Eigene Sounds importieren“.');
+    }
+  });
+  recorder.on((what, payload) => {
+    const rec = recorder.state === 'recording' || recorder.state === 'arming';
+    btn.classList.toggle('recording', recorder.state === 'recording');
+    btn.setAttribute('aria-pressed', String(rec));
+    label.textContent = recorder.state === 'recording' ? 'Stopp' : recorder.state === 'saving' ? 'Speichert …' : 'Aufnahme';
+    if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
+    if (what === 'error') ui.flash(payload.message);
+  });
+}
+
+function mountImport({ store, ui, arranger, own }) {
+  const btn = document.getElementById('import-btn');
+  const input = document.getElementById('import-input');
+  const app = document.getElementById('app');
+  async function importFiles(files, target) {
+    let placed = null;
+    let at = target?.startBeat ?? 0;
+    for (const file of files) {
+      try {
+        const sample = await own.importFile(file);
+        if (target) {
+          placed = store.addClip(target.trackId, sample.id, at, sample.lengthBeats);
+          at += sample.lengthBeats;
+        } else ui.arm(sample.id);
+        ui.flash(`„${sample.name}“ importiert${target ? ' und eingesetzt' : ' – klicke in eine Spur, um ihn einzusetzen'}.`);
+      } catch (err) {
+        ui.flash(err.message);
+      }
+    }
+    if (placed) arranger.select(placed);
+  }
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { const files = [...input.files]; input.value = ''; importFiles(files); });
+  // Dateien direkt auf eine Spur ziehen
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  const probe = { category: 'own', lengthBeats: 4 };
+  document.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    app.classList.add('file-over');
+    arranger.dropTargetAt(e.clientX, e.clientY, probe);
+  });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) { app.classList.remove('file-over'); arranger.clearDropPreview(); } });
+  document.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    app.classList.remove('file-over');
+    const target = arranger.dropTargetAt(e.clientX, e.clientY, probe);
+    arranger.clearDropPreview();
+    importFiles([...e.dataTransfer.files].filter((f) => f.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name)), target);
+  });
+  return { importFiles };
+}
+
 async function boot() {
   const bootEl = document.getElementById('boot');
   const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
@@ -135,6 +222,8 @@ async function boot() {
     bpm: isValidProject(saved) ? saved.bpm : 120,
     onProgress: (done, total) => { bootEl.textContent = `Sounds werden geladen … ${done} von ${total}`; },
   });
+  const own = new OwnSounds(library);
+  await own.loadAll();
   const store = new Store(loadSaved(library) ?? createDemoProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
   });
@@ -142,22 +231,49 @@ async function boot() {
   const ui = createUi();
 
   const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui });
-  mountLibrary({ root: document.getElementById('library'), library, store, engine, ui, arranger });
+  mountLibrary({
+    root: document.getElementById('library'), library, store, engine, ui, arranger,
+    onDeleteOwn: async (id) => {
+      if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
+        ui.flash('Dieser Sound wird im Projekt benutzt. Entferne erst die Clips.');
+        return;
+      }
+      if (ui.armedSampleId === id) ui.arm(null);
+      await own.remove(id);
+      ui.flash('Eigener Sound gelöscht.');
+    },
+  });
   mountTransport({ store, engine, ui, arranger });
-  mountProjectIO({ store, engine, ui, library });
+  mountProjectIO({ store, engine, ui, library, own });
   const tools = mountClipTools({ store, engine, ui, arranger });
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
+  const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
+  tools.onEdit = (id) => editor.open(id);
+  document.getElementById('arr-scroll').addEventListener('dblclick', (e) => {
+    const clip = e.target.closest('.clip');
+    if (clip && !e.target.closest('.clip-grip')) editor.open(clip.dataset.clipId);
+  });
+  ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
+  const recorder = new Recorder({ engine, store, own });
+  mountRecording({ store, engine, ui, arranger, recorder });
+  const importer = mountImport({ store, ui, arranger, own });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   if (library.bpm !== store.project.bpm) await tempo.apply();
   mountHints({ root: document.getElementById('hint'), ui, library, store });
 
   let saveTimer = null;
+  const saveNow = () => {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(store.project)); } catch { /* Speicher nicht verfügbar */ }
+  };
   store.on(() => {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(store.project)); } catch { /* Speicher nicht verfügbar */ }
-    }, 300);
+    saveTimer = setTimeout(saveNow, 300);
   });
+  // Beim Verlassen oder Neuladen sofort sichern, sonst ginge die letzte Änderung verloren
+  window.addEventListener('pagehide', () => { if (saveTimer) saveNow(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && saveTimer) saveNow(); });
 
   const typing = (t) => (t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT';
   document.addEventListener('keydown', (e) => {
@@ -198,7 +314,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, renderProject, encodeWav, ready: true };
 }
 
 boot().catch((err) => {

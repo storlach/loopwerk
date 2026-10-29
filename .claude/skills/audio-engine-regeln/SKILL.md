@@ -27,11 +27,12 @@ description: Wissen und Regeln für die Audio-Engine von Loopwerk – Web Audio 
 
 ## AudioWorklet (ab Stufe 4)
 - In `process()` keine Allokation, keine neuen Arrays/Objekte, keine Closures, kein Logging. Puffer im Konstruktor anlegen.
+- Ausnahme Aufnahme (`src/dsp/recorder-worklet.js`): neuer Puffer nur alle 4096 Frames, per Transfer ohne Kopie an den Hauptthread – SharedArrayBuffer steht im Artifact nicht zur Verfügung.
 - Parameter über `AudioParam`, nicht per `postMessage` pro Block.
 - Worklet-Module als eigene Dateien unter `src/dsp/`, geladen mit `ctx.audioWorklet.addModule()` – für Realtime **und** OfflineAudioContext.
 
-## Latenz (Aufnahme, ab Stufe 5)
-- Ausgleich = `ctx.outputLatency + ctx.baseLatency` + Eingangslatenz; per Loopback-Klick kalibrierbar machen.
+## Latenz (Aufnahme)
+- Ausgleich = `ctx.outputLatency + ctx.baseLatency` + Eingangslatenz (`track.getSettings().latency`), umgesetzt in `src/recorder.js`. Offen: per Loopback-Klick kalibrierbar machen.
 
 ## Lizenzen
 - Time-Stretching: Signalsmith Stretch (MIT). Rubber Band ist GPL – nicht einbinden.

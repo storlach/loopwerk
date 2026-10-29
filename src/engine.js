@@ -243,10 +243,13 @@ export class Engine extends Emitter {
 
   // ---------- Transport ----------
 
-  async play(fromBeat = this.positionBeat) {
+  // countIn: Vorzähler in Schlägen (Metronom-Klicks vor dem eigentlichen Start, z. B. für Aufnahmen)
+  async play(fromBeat = this.positionBeat, { countIn = 0 } = {}) {
     await this._ensure();
     if (this.playing) this._halt();
-    const t0 = this.ctx.currentTime + START_DELAY;
+    const pre = this.ctx.currentTime + START_DELAY;
+    if (countIn > 0) this._metronome(0, countIn, pre, true);
+    const t0 = pre + countIn * this.spb;
     this.playing = true;
     this.startBeat = fromBeat;
     this.anchors = [{ time: t0, beat: fromBeat }];
@@ -379,8 +382,8 @@ export class Engine extends Emitter {
     try { v.src.stop(t + 0.012); } catch { /* bereits gestoppt */ }
   }
 
-  _metronome(b0, b1, t0) {
-    const bpb = this.project.beatsPerBar;
+  _metronome(b0, b1, t0, countIn = false) {
+    const bpb = countIn ? b1 : this.project.beatsPerBar;
     for (let k = Math.ceil(b0 - EPS); k < b1 - EPS; k++) {
       const t = t0 + (k - b0) * this.spb;
       const o = this.ctx.createOscillator();
@@ -473,6 +476,24 @@ export class Engine extends Emitter {
     src.onended = () => { if (this.preview === preview) { this.preview = null; this.emit('preview'); } };
     this.preview = preview;
     this.emit('preview');
+  }
+
+  // Beliebigen Puffer vorhören (Sample-Editor). Gibt Startzeit und Dauer zurück.
+  async previewBuffer(buffer, offset = 0, duration = buffer.duration - offset) {
+    await this._ensure();
+    this.stopPreview();
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.8;
+    src.connect(g).connect(this.mix.master);
+    const when = this.ctx.currentTime + 0.02;
+    src.start(when, offset, duration);
+    const preview = { sampleId: null, src, g, when, offset, duration };
+    src.onended = () => { if (this.preview === preview) { this.preview = null; this.emit('preview'); } };
+    this.preview = preview;
+    this.emit('preview');
+    return preview;
   }
 
   stopPreview() {

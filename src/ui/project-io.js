@@ -21,13 +21,14 @@ async function saveFile(filename, text) {
 
 const fileName = (name) => `${(name || 'Loopwerk-Projekt').replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'Loopwerk-Projekt'}.json`;
 
-export function mountProjectIO({ store, engine, ui, library }) {
+export function mountProjectIO({ store, engine, ui, library, own }) {
   const saveBtn = document.getElementById('save-btn');
   const openBtn = document.getElementById('open-btn');
   const input = document.getElementById('open-input');
 
   saveBtn.addEventListener('click', async () => {
-    const data = JSON.stringify({ ...store.project, app: 'Loopwerk' }, null, 2);
+    const ownSounds = own ? await own.embed(store.project) : [];
+    const data = JSON.stringify({ ...store.project, app: 'Loopwerk', ownSounds }, null, 2);
     try {
       await saveFile(fileName(store.project.name), data);
       ui.flash('Projekt gespeichert.');
@@ -54,6 +55,10 @@ export function mountProjectIO({ store, engine, ui, library }) {
       return;
     }
     delete project.app;
+    if (own && project.ownSounds?.length) {
+      try { await own.restore(project.ownSounds); } catch { ui.flash('Einige eigene Sounds aus der Datei konnten nicht gelesen werden.'); }
+    }
+    delete project.ownSounds;
     let missing = 0;
     for (const t of project.tracks) {
       const before = t.clips.length;
