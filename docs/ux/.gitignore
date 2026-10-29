@@ -1,0 +1,2 @@
+# Screenshots für den Desktop-Vorschlag gehören ins Repo (die Wurzel-.gitignore schließt *.png aus)
+!*.png
