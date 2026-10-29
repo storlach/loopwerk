@@ -66,5 +66,9 @@
 ### Offen aus Stufe 7
 - Anschlagstärke pro Schritt/Note, Swing, Akkord-Eingabe, Echtzeit-Aufnahme von MIDI
 
+## ✅ 1.1 – Handy-Bedienung
+- Sound-Regal als Akkordeon: Kategorien auf- und zuklappen, am Handy immer nur eine offen, kein eigener Scrollbereich mehr, größere Tippziele
+- Tests: `tests/mobil.test.cjs` (echte Touch-Eingabe)
+
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

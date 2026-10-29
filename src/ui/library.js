@@ -4,6 +4,17 @@ import { CATEGORIES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
 
 const FAV_KEY = 'loopwerk.favs';
+const OPEN_KEY = 'loopwerk.shelfOpen';
+// Auf schmalen Bildschirmen ist immer nur eine Kategorie offen (Akkordeon)
+const narrow = window.matchMedia('(max-width: 760px)');
+
+function loadOpen() {
+  try { const v = JSON.parse(localStorage.getItem(OPEN_KEY)); if (Array.isArray(v)) return new Set(v); } catch { /* Standard */ }
+  return new Set(['drums']);
+}
+function saveOpen(open) {
+  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* Speicher nicht verfügbar */ }
+}
 
 function loadFavs() {
   try { return new Set(JSON.parse(localStorage.getItem(FAV_KEY)) || []); } catch { return new Set(); }
@@ -31,6 +42,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   const chipsEl = document.getElementById('shelf-chips');
   const totalEl = document.getElementById('shelf-total');
   const favs = loadFavs();
+  const open = loadOpen();
   let filter = 'all';
   const items = new Map();
 
@@ -109,10 +121,23 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     for (const cat of CATEGORIES) {
       const samples = shown.filter((s) => s.category === cat.id);
       if (!samples.length) continue;
+      // Bei Suche oder Filter sind alle Treffer-Gruppen offen, sonst gilt der gemerkte Zustand
+      const forced = !!q || filter !== 'all';
+      const expanded = forced || open.has(cat.id);
       const group = el('section', `shelf-group cat-${cat.id}`);
-      const head = el('h3', 'shelf-cat');
-      head.append(el('span', 'swatch'), el('span', null, cat.label), el('span', 'shelf-count', String(samples.length)));
+      const h = el('h3', 'shelf-cat-wrap');
+      const head = el('button', 'shelf-cat');
+      head.type = 'button';
+      head.id = `shelf-cat-${cat.id}`;
+      head.setAttribute('aria-expanded', String(expanded));
+      head.setAttribute('aria-controls', `shelf-items-${cat.id}`);
+      head.disabled = forced;
+      head.append(el('span', 'swatch'), el('span', null, cat.label), el('span', 'shelf-count', String(samples.length)), el('span', 'shelf-chevron'));
+      head.addEventListener('click', () => toggle(cat.id));
+      h.append(head);
       const list = el('div', 'shelf-items');
+      list.id = `shelf-items-${cat.id}`;
+      list.hidden = !expanded;
       for (const s of samples) {
         const { row, star } = makeItem(s);
         items.set(s.id, row);
@@ -122,10 +147,21 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         star.setAttribute('aria-label', `${s.name} als Favorit ${fav ? 'entfernen' : 'markieren'}`);
         list.append(row);
       }
-      group.append(head, list);
+      group.append(h, list);
       root.append(group);
     }
     sync();
+  }
+
+  function toggle(catId) {
+    if (open.has(catId)) open.delete(catId);
+    else {
+      if (narrow.matches) open.clear();
+      open.add(catId);
+    }
+    saveOpen(open);
+    render();
+    if (narrow.matches && open.has(catId)) document.getElementById(`shelf-cat-${catId}`)?.scrollIntoView({ block: 'nearest' });
   }
 
   function bindItem(item, sample) {
@@ -171,6 +207,11 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   ui.on(sync);
   engine.on(sync);
   library.on?.(render);
+  narrow.addEventListener('change', () => {
+    if (narrow.matches && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); saveOpen(open); }
+    render();
+  });
+  if (narrow.matches && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); }
   render();
   return { render };
 }

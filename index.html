@@ -232,17 +232,36 @@
   }
   .lcd-input::-webkit-inner-spin-button, .lcd-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .lcd-input:focus-visible { outline: 1px solid var(--amber); outline-offset: 1px; border-radius: 2px; }
-  .shelf-list { overflow-y: auto; padding: 6px 8px 12px; display: grid; gap: 10px; align-content: start; }
+  .shelf-list { overflow-y: auto; padding: 6px 8px 12px; display: grid; gap: 2px; align-content: start; }
+  .shelf-items { padding: 2px 0 8px; }
+  .shelf-cat-wrap { margin: 0; }
   .shelf-cat {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 6px 6px 4px;
+    width: 100%;
+    min-height: 36px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
     font: 600 11px/1 var(--font-display);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted);
+    text-align: left;
   }
+  .shelf-cat:hover:not(:disabled) { background: color-mix(in srgb, var(--cat) 10%, transparent); color: var(--ink); }
+  .shelf-cat:disabled { cursor: default; }
+  .shelf-cat[aria-expanded="true"] { color: var(--ink); }
+  .shelf-chevron {
+    width: 7px; height: 7px; margin: 0 4px 3px 2px;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg); transition: transform 0.15s;
+  }
+  .shelf-cat[aria-expanded="false"] .shelf-chevron { transform: rotate(-45deg); margin-bottom: 0; }
+  .shelf-cat:disabled .shelf-chevron { visibility: hidden; }
   .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--cat); }
   .shelf-count { margin-left: auto; font-family: var(--font-mono); font-weight: 400; }
   .shelf-items { display: grid; gap: 2px; }
@@ -607,11 +626,19 @@
     .dock-body { grid-template-columns: minmax(0, 1fr); }
     .mixer-strips { min-height: 300px; }
     .mixer-detail { border-left: 0; border-top: 1px solid var(--line); }
-    .shelf { max-height: 260px; }
+    /* Akkordeon statt eigenem Scrollbereich: das Regal wächst mit, gescrollt wird die Seite */
+    .shelf { max-height: none; }
+    .shelf-list { overflow: visible; }
+    .loop-item { min-height: 40px; }
+    .loop-fav, .loop-del { width: 40px; height: 40px; }
+    .loop-row { grid-template-columns: minmax(0, 1fr) 40px; }
+    .loop-row.own { grid-template-columns: minmax(0, 1fr) 40px 40px; }
+    .shelf-cat { min-height: 44px; }
     .deck .spacer { display: none; }
     :root { --track-h: 54px; }
   }
   @media (prefers-reduced-motion: reduce) {
+    .shelf-chevron { transition: none; }
     .loop-item.previewing .loop-play { animation: none; }
     .clip-grip { transition: none; }
   }
@@ -621,7 +648,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.0</span>
+      <span class="brand-tag">Version 1.1</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -715,7 +742,7 @@
       <div class="chips" id="shelf-chips" role="group" aria-label="Kategorie"></div>
     </div>
     <div class="shelf-list" id="library"></div>
-    <p class="shelf-credit">Klicken zum Anhören, auf eine Spur ziehen zum Einfügen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
+    <p class="shelf-credit">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
   </aside>
 
   <main class="arranger" aria-label="Arranger">

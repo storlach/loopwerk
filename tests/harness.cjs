@@ -2,11 +2,11 @@
 const { chromium } = require('playwright');
 const { start } = require('./serve.cjs');
 
-async function openApp({ viewport = { width: 1400, height: 820 }, args = [] } = {}) {
+async function openApp({ viewport = { width: 1400, height: 820 }, args = [], hasTouch = false, deviceScaleFactor = 1 } = {}) {
   const server = await start();
   const url = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', ...args] });
-  const page = await browser.newPage({ viewport });
+  const page = await browser.newPage({ viewport, hasTouch, isMobile: hasTouch, deviceScaleFactor });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
