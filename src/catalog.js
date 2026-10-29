@@ -1,13 +1,14 @@
 // Katalog der mitgelieferten Fremd-Sounds. Alle aus dem Sonic-Pi-Projekt, dort als CC0 veröffentlicht
 // (https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md), Originale auf freesound.org.
-// Loops: Schlagzahl per Onset-Analyse bestimmt (tests/… bzw. docs/adr/002), Tempo = Schläge · 60 / Dauer.
+// Als WAV (16 Bit) mitgeliefert; One-Shots über 4 s gekürzt und ausgeblendet.
+// Loops: Schlagzahl per Onset-Analyse bestimmt (siehe docs/specs/stufe-3-bibliothek-tempo.md), Tempo = Schläge · 60 / Dauer.
 
 const CC0 = { license: 'CC0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/', origin: 'Sonic Pi' };
 const fs = (n) => `https://freesound.org/people/${n}`;
 
 const entry = (file, name, category, extra) => ({
   id: 'sp-' + file.replace(/_/g, '-'),
-  file: `assets/samples/sonicpi/${file}.flac`,
+  file: `assets/samples/sonicpi/${file}.wav`,
   name,
   category,
   kind: 'oneshot',
