@@ -2,7 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
 <style>
   :root {
     /* Layout: Werkbank – Transport-Deck oben, Sound-Regal links, Arranger als Taktraster rechts */
@@ -710,6 +710,7 @@
   .pat-key.c { border-left-color: var(--grid-bar); }
   .pat-key.down, .pat-key:active { background: var(--cat-own); color: #fff; }
   .pat-key-name { position: absolute; top: 4px; font-size: 9px; opacity: 0.6; }
+  .pat-vkeys { display: none; }
   .pat-cell { height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: var(--lane); cursor: pointer; }
   .pat-cell.alt { background: var(--lane-alt); }
   .pat-cell.bar { border-left: 2px solid var(--grid-bar); }
@@ -933,10 +934,22 @@
 
     /* Editoren und Export */
     .ed-wave-wrap { height: 120px; }
-    #pat-rec { display: none; }
-    /* Klaviatur und Live-Eingabe von Melodien bleiben dem Desktop vorbehalten */
+    /* Am Handy liegt die Klaviatur senkrecht links an der Piano-Roll (spielbar, halten, gleiten) */
     .pat-keys { display: none !important; }
-    #pattern[data-type="synth"] #pat-live, #pattern[data-type="synth"] #pat-quant-field { display: none; }
+    .pat-vkeys + #pat-roll { margin-top: calc(-1 * var(--vk-h, 0px)); }
+    .pat-vkeys {
+      display: block; position: sticky; left: 0; z-index: 2; width: 64px;
+      touch-action: none; -webkit-user-select: none; user-select: none;
+      box-shadow: 2px 0 6px rgb(0 0 0 / 0.18);
+    }
+    .vkey {
+      box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px;
+      background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted);
+      font: 500 10px/1 var(--font-mono);
+    }
+    .vkey.black { background: var(--ink); width: 62%; border-bottom-color: var(--ink); border-radius: 0 4px 4px 0; }
+    .vkey.c { border-bottom: 1px solid var(--grid-bar); }
+    .vkey.down { background: var(--cat-own); color: #fff; }
     #pat-live { order: -1; }
     #sing-desc { font-size: 16px; height: 44px; }
     .pat-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(72px, 1fr); }
@@ -1006,6 +1019,17 @@
     .clip-grip { transition: none; }
   }
 </style>
+
+<div class="splash" id="boot" role="status" aria-live="polite" aria-label="Loopwerk wird geladen">
+  <div class="splash-inner">
+    <div class="splash-bars" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <h1 class="splash-name">Loop<b>werk</b></h1>
+    <p class="splash-tag">Musik bauen aus Loops – einfach losklicken</p>
+    <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
+    <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
+    <p class="splash-version" id="boot-version">Version 1.7</p>
+  </div>
+</div>
 
 <div class="app" id="app">
   <header class="deck">
@@ -1278,7 +1302,7 @@
         <p class="pat-sing-status" id="sing-status" role="status"></p>
       </div>
       <div class="pat-pads cat-own" id="pat-pads" hidden></div>
-      <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
+      <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><div class="pat-vkeys" id="pat-vkeys" role="group" aria-label="Klaviertasten"></div><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
       <div class="pat-keys" id="pat-keys" hidden>
         <button type="button" class="dbtn pat-oct" id="pat-oct-down" aria-label="Oktave tiefer">◀</button>
         <div class="pat-keybed" id="pat-keybed" role="group" aria-label="Klaviatur"></div>
@@ -1362,15 +1386,6 @@
     </button>
   </nav>
 </div>
-<div class="splash" id="boot" role="status" aria-live="polite" aria-label="Loopwerk wird geladen">
-  <div class="splash-inner">
-    <div class="splash-bars" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-    <h1 class="splash-name">Loop<b>werk</b></h1>
-    <p class="splash-tag">Musik bauen aus Loops – einfach losklicken</p>
-    <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
-    <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
-    <p class="splash-version" id="boot-version">Version 1.7</p>
-  </div>
-</div>
+
 
 <script type="module" src="src/main.js"></script>

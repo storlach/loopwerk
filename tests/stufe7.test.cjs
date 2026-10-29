@@ -104,7 +104,6 @@ const { check, finish } = createChecker();
 
     // Schritt-Eingabe mit der Computertastatur: A (C4), D (E4), G (G4)
     await page.click('#pat-rec');
-    await page.locator('#pat-roll').click({ position: { x: 5, y: 5 } }); // Fokus weg von Knöpfen (Klick auf Tastenleiste)
     await page.keyboard.press('a');
     await page.keyboard.press('d');
     await page.keyboard.press('g');

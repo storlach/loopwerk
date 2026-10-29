@@ -185,7 +185,31 @@ export function previewNote(ctx, dest, preset, pitch) {
   playNote(k, preset, pitch, t, preset === 'pad' || preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
 }
 
-export function previewDrum(ctx, dest, kitId, rowId, library) {
+// Gehaltener Ton (Klaviatur, Tasten, Finger): klingt bis stop(), höchstens 12 s. Eigener Ausgang je Ton,
+// damit sich ein einzelner Ton weich beenden lässt.
+const HOLD_MAX = 12;
+export function startNote(ctx, dest, preset, pitch) {
+  const g = ctx.createGain();
+  g.connect(dest);
+  g.gain.value = 0.8;
+  const t = ctx.currentTime + 0.005;
+  playNote(createKit(ctx, g, 1), preset, pitch, t, HOLD_MAX, 1, 1);
+  let stopped = false;
+  return {
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const now = ctx.currentTime;
+      g.gain.cancelScheduledValues(now);
+      g.gain.setValueAtTime(g.gain.value, now);
+      g.gain.setTargetAtTime(0, now, preset === 'pad' || preset === 'strings' ? 0.12 : 0.04);
+      setTimeout(() => g.disconnect(), 1500);
+    },
+  };
+}
+
+// when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort
+export function previewDrum(ctx, dest, kitId, rowId, library, when) {
   const map = KITS.find((k) => k.id === kitId)?.map;
   if (map) {
     const s = library.get(map[rowId]);
@@ -193,10 +217,10 @@ export function previewDrum(ctx, dest, kitId, rowId, library) {
     const src = ctx.createBufferSource();
     src.buffer = s.orig;
     src.connect(dest);
-    src.start();
+    src.start(when ?? 0);
     return;
   }
   const k = previewKit(ctx, dest);
-  const t = ctx.currentTime + 0.01;
+  const t = when ?? ctx.currentTime + 0.01;
   (SYNTH_DRUMS[kitId] || SYNTH_DRUMS.elektro)[rowId]?.(k, t, 1);
 }

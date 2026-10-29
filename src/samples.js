@@ -35,12 +35,23 @@ const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 // Frequenzen der sechs Rechteck-Oszillatoren eines 808/909-Beckens (metallischer Klang)
 const METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];
 
+// Rauschen einmal je Kontext erzeugen (gleich bei jedem Laden), auch wenn viele Kits entstehen (gehaltene Töne)
+const noiseCache = new WeakMap();
+function noiseFor(ctx) {
+  let noise = noiseCache.get(ctx);
+  if (!noise) {
+    const rand = mulberry32(1234);
+    noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const nd = noise.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = rand() * 2 - 1;
+    noiseCache.set(ctx, noise);
+  }
+  return noise;
+}
+
 // Klangbausteine. Alle Zeiten werden in Schlägen übergeben.
 export function createKit(ctx, out, spb) {
-  const rand = mulberry32(1234);
-  const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-  const nd = noise.getChannelData(0);
-  for (let i = 0; i < nd.length; i++) nd[i] = rand() * 2 - 1;
+  const noise = noiseFor(ctx);
   const T = (beat) => beat * spb;
 
   const osc = (type, freq) => {

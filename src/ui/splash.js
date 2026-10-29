@@ -1,6 +1,10 @@
 // Splash-Screen beim Start: Logo, Fortschrittsbalken und der aktuelle Schritt. Blendet sich am Ende aus.
 
+// Damit man den Ladescreen sieht, bleibt er mindestens so lange stehen (nicht in automatisierten Tests)
+const MIN_VISIBLE_MS = navigator.webdriver ? 0 : 1400;
+
 export function createSplash(root = document.getElementById('boot')) {
+  const shownAt = performance.now();
   const fill = root.querySelector('#boot-fill');
   const bar = root.querySelector('[role="progressbar"]');
   const step = root.querySelector('#boot-step');
@@ -18,9 +22,12 @@ export function createSplash(root = document.getElementById('boot')) {
     },
     done() {
       this.set(1, 'Fertig – viel Spaß!');
-      root.classList.add('done');
-      root.setAttribute('aria-busy', 'false');
-      setTimeout(() => { root.hidden = true; }, 500);
+      const wait = Math.max(0, MIN_VISIBLE_MS - (performance.now() - shownAt));
+      setTimeout(() => {
+        root.classList.add('done');
+        root.setAttribute('aria-busy', 'false');
+        setTimeout(() => { root.hidden = true; }, 500);
+      }, wait);
     },
     fail(message) {
       root.classList.add('error');

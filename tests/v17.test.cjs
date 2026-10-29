@@ -86,7 +86,10 @@ const { check, finish } = createChecker();
     await page.evaluate(() => new Promise((r) => { const lp = window.loopwerk.patternEditor.looper; const go = () => (window.loopwerk.engine.ctx.currentTime > lp.t0 + 0.2 ? r() : setTimeout(go, 5)); go(); }));
     const t = Date.now();
     for (let i = 0; i < 10; i++) { await page.keyboard.press('d'); await page.waitForTimeout(Math.max(0, t + (i + 1) * 125 - Date.now())); }
-    await page.evaluate(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true })); });
+    await page.evaluate(() => {
+      const k = (type) => document.dispatchEvent(new KeyboardEvent(type, { key: 'g', bubbles: true }));
+      k('keydown'); k('keyup'); k('keydown'); k('keyup');
+    });
     await page.waitForTimeout(300);
     await page.click('#pat-live');
     const rows = await page.evaluate(() => { const p = Object.values(window.loopwerk.store.project.patterns)[0]; return { clap: p.rows.clap.reduce((a, v) => a + (v ? 1 : 0), 0), open: p.rows.open.reduce((a, v) => a + (v ? 1 : 0), 0) }; });

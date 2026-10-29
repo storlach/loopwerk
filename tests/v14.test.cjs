@@ -432,21 +432,23 @@ const { check, finish } = createChecker();
     }), beat);
     const press = (key) => page.evaluate((k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })), key);
     const release = (key) => page.evaluate((k) => document.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true })), key);
+    // Kurz antippen (drücken und sofort loslassen) – Halten würde einen Wirbel auslösen
+    const tap = (key) => page.evaluate((k) => { document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); document.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true })); }, key);
     await page.click('#pat-live');
     const liveOn = await page.evaluate(() => ({ running: window.loopwerk.patternEditor.looper.running, pressed: document.getElementById('pat-live').getAttribute('aria-pressed') }));
     check('„Live“ startet die Schleife', liveOn.running && liveOn.pressed === 'true', JSON.stringify(liveOn));
     await waitBeat(-2);
-    await press('d'); // im Vorzähler: wird nicht eingetragen
+    await tap('d'); // im Vorzähler: wird nicht eingetragen
     await waitBeat(1.02);
-    await press('d');
+    await tap('d');
     await waitBeat(2.47);
-    await press('d');
+    await tap('d');
     await page.waitForTimeout(150);
     let clap = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.clap.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
     check('Live-Schläge landen auf dem nächsten 1/16', JSON.stringify(clap) === '[4,10]', JSON.stringify(clap));
     await page.selectOption('#pat-quant', '2');
     await waitBeat(4 + 3.3);
-    await press('d');
+    await tap('d');
     await page.waitForTimeout(150);
     clap = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.clap.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
     check('Raster 1/8: Schlag rastet auf Achtel (zweiter Durchlauf)', JSON.stringify(clap) === '[4,10,14]', JSON.stringify(clap));

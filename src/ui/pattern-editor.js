@@ -4,7 +4,7 @@
 
 import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
-  noteName, resizeDrumRows, previewNote, previewDrum,
+  noteName, resizeDrumRows, previewNote, previewDrum, startNote,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
@@ -14,10 +14,11 @@ import { decodeAudio } from '../samples.js';
 import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
 
-const KEY_W = 46;
+// Breite der Tastenspalte links in der Piano-Roll; am Handy breiter (spielbare Tasten)
+const keyW = () => (narrow.matches ? 64 : 46);
 // Am Handy größere Zeilen und Felder, damit Noten mit dem Finger treffbar sind
 const narrow = window.matchMedia('(max-width: 760px)');
-const rowH = () => (narrow.matches ? 24 : 14);
+const rowH = () => (narrow.matches ? 30 : 14);
 // Computertastatur → Halbton über dem Grundton (deutsches und englisches Layout: Z und Y)
 const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, z: 8, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
 const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
@@ -204,22 +205,50 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (next !== page) { page = next; render(); }
   });
 
+  // Klick setzt oder löscht einen Schlag. Gedrückt halten und über die Zeile ziehen malt weiter (gleicher Zustand).
+  let painting = null;
+  drumsEl.addEventListener('pointerdown', async (e) => {
+    const cell = e.target.closest('.pat-cell');
+    if (!cell || e.button !== 0 || e.pointerType === 'touch') return;
+    e.preventDefault();
+    const row = cell.dataset.row;
+    const on = !pat().rows?.[row]?.[Number(cell.dataset.step)];
+    painting = { row, on, done: new Set() };
+    const paint = async (c) => {
+      const i = Number(c.dataset.step);
+      if (painting.done.has(i)) return;
+      painting.done.add(i);
+      update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? 1 : 0; }, `paint-${id}-${e.timeStamp}`);
+      if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
+    };
+    paint(cell);
+    trackPointer(e, (ev) => {
+      const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.pat-cell');
+      if (over && over.dataset.row === row) paint(over);
+    }, () => { painting = null; }, () => { painting = null; });
+  });
   drumsEl.addEventListener('click', async (e) => {
     const cell = e.target.closest('.pat-cell');
     if (!cell || swiped) { swiped = false; return; }
+    // Maus/Stift erledigt pointerdown (malen); hier nur Finger und Tastatur (Enter/Leertaste)
+    if (e.pointerType && e.pointerType !== 'touch') return;
+    if (e.detail !== 0 && !lastTouch) return;
+    lastTouch = false;
     const row = cell.dataset.row;
     const i = Number(cell.dataset.step);
     const on = !pat().rows?.[row]?.[i];
     update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? 1 : 0; });
     if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
   });
+  let lastTouch = false;
+  drumsEl.addEventListener('pointerup', (e) => { if (e.pointerType === 'touch') lastTouch = true; }, true);
 
   // ---------- Piano-Roll ----------
 
   function rollGeometry() {
     const n = steps();
-    const cellW = Math.max(narrow.matches ? 28 : 12, Math.floor((rollWrap.clientWidth - KEY_W - 2) / n));
-    return { n, cellW, w: KEY_W + n * cellW, h: (PITCH_HIGH - PITCH_LOW + 1) * rowH() };
+    const cellW = Math.max(narrow.matches ? 28 : 12, Math.floor((rollWrap.clientWidth - keyW() - 2) / n));
+    return { n, cellW, w: keyW() + n * cellW, h: (PITCH_HIGH - PITCH_LOW + 1) * rowH() };
   }
 
   function drawRoll(p, notes = p.notes) {
@@ -236,32 +265,32 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (let m = PITCH_HIGH; m >= PITCH_LOW; m--) {
       const y = (PITCH_HIGH - m) * rowH();
       c.fillStyle = col(isBlack(m) ? '--lane-alt' : '--lane');
-      c.fillRect(KEY_W, y, w - KEY_W, rowH());
+      c.fillRect(keyW(), y, w - keyW(), rowH());
       c.fillStyle = col(isBlack(m) ? '--ink' : '--panel');
-      c.fillRect(0, y, KEY_W - 1, rowH() - 1);
+      c.fillRect(0, y, keyW() - 1, rowH() - 1);
       if (m % 12 === 0) {
         c.fillStyle = col(isBlack(m) ? '--panel' : '--muted');
         c.font = '10px ' + col('--font-mono');
         c.fillText(noteName(m), 4, y + rowH() - 3);
         c.fillStyle = col('--grid-bar');
-        c.fillRect(KEY_W, y + rowH() - 1, w - KEY_W, 1);
+        c.fillRect(keyW(), y + rowH() - 1, w - keyW(), 1);
       }
     }
     for (let i = 0; i <= n; i++) {
       c.fillStyle = col(i % 16 === 0 ? '--grid-bar' : i % 4 === 0 ? '--grid-beat' : '--line');
       c.globalAlpha = i % 4 === 0 ? 1 : 0.35;
-      c.fillRect(KEY_W + i * cellW, 0, 1, h);
+      c.fillRect(keyW() + i * cellW, 0, 1, h);
     }
     c.globalAlpha = 1;
     if (rec) {
       c.fillStyle = col('--amber');
       c.globalAlpha = 0.25;
-      c.fillRect(KEY_W + cursor * cellW, 0, cellW, h);
+      c.fillRect(keyW() + cursor * cellW, 0, cellW, h);
       c.globalAlpha = 1;
     }
     const noteCol = col('--cat-own');
     for (const note of notes) {
-      const x = KEY_W + note.start * STEPS_PER_BEAT * cellW;
+      const x = keyW() + note.start * STEPS_PER_BEAT * cellW;
       const y = (PITCH_HIGH - note.pitch) * rowH();
       c.fillStyle = noteCol;
       c.fillRect(x + 1, y + 1, Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2), rowH() - 2);
@@ -278,9 +307,14 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const x = e.clientX - rect.left;
     const pitch = clamp(PITCH_HIGH - Math.floor((e.clientY - rect.top) / rowH()), PITCH_LOW, PITCH_HIGH);
     const p = pat();
-    if (x < KEY_W) { previewNote(await audio(), engine.mix.master, p.preset, pitch); return; }
+    if (x < keyW()) {
+      // Tasten am Rand: Ton klingt, solange gedrückt
+      noteOn(pitch);
+      trackPointer(e, () => {}, () => noteOff(pitch), () => noteOff(pitch));
+      return;
+    }
     const total = p.bars * 4;
-    const stepAt = (cx) => clamp(Math.floor((cx - rect.left - KEY_W) / cellW), 0, steps() - 1);
+    const stepAt = (cx) => clamp(Math.floor((cx - rect.left - keyW()) / cellW), 0, steps() - 1);
     const beat = stepAt(e.clientX) / STEPS_PER_BEAT;
     const notes = p.notes.map((n) => ({ ...n }));
     const hit = noteAt(notes, pitch, beat);
@@ -299,7 +333,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
     if (hit >= 0) {
       const n = notes[hit];
-      const right = KEY_W + (n.start + n.len) * STEPS_PER_BEAT * cellW;
+      const right = keyW() + (n.start + n.len) * STEPS_PER_BEAT * cellW;
       const resize = right - x <= 6;
       const start0 = n.start;
       const pitch0 = n.pitch;
@@ -308,7 +342,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         const dy = Math.round((ev.clientY - e.clientY) / rowH());
         if (!moved && !dx && !dy) return;
         moved = true;
-        if (resize) n.len = clamp(Math.round((ev.clientX - rect.left - KEY_W) / cellW) / STEPS_PER_BEAT - n.start, 0.25, total - n.start);
+        if (resize) n.len = clamp(Math.round((ev.clientX - rect.left - keyW()) / cellW) / STEPS_PER_BEAT - n.start, 0.25, total - n.start);
         else {
           n.start = clamp(start0 + dx, 0, total - n.len);
           n.pitch = clamp(pitch0 - dy, PITCH_LOW, PITCH_HIGH);
@@ -342,17 +376,29 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (y < top + rowH() || y > top + h - 2 * rowH()) rollWrap.scrollTop = Math.max(0, y - h / 2);
   }
 
-  async function playKey(pitch) {
+  // Schritt-Eingabe: Taste setzt eine Note an der Marke; wer länger hält, bekommt eine längere Note
+  let stepHold = new Map(); // Tonhöhe → { start, len, time }
+  function stepPress(pitch) {
     const p = pat();
-    if (!p || p.type !== 'synth') return;
-    reveal(pitch);
-    previewNote(await audio(), engine.mix.master, p.preset, pitch);
-    if (!rec) return;
+    if (!p || p.type !== 'synth' || !rec) return;
     const len = Number(lenSel.value);
     const start = cursor / STEPS_PER_BEAT;
     if (start + len > p.bars * 4 + 1e-9) return;
-    update((q) => { q.notes = [...q.notes.filter((n) => !(n.pitch === pitch && n.start === start)), { pitch, start, len, vel: 1 }]; });
+    update((q) => { q.notes = [...q.notes.filter((n) => !(n.pitch === pitch && n.start === start)), { pitch, start, len, vel: 1 }]; }, `step-${id}-${start}`);
+    stepHold.set(pitch, { start, len, time: engine.ctx?.currentTime ?? 0 });
     cursor = (cursor + len * STEPS_PER_BEAT) % steps();
+    render();
+  }
+  function stepRelease(pitch) {
+    const h = stepHold.get(pitch);
+    stepHold.delete(pitch);
+    if (!h || !engine.ctx) return;
+    const heldBeats = (engine.ctx.currentTime - h.time) / engine.spb;
+    const total = pat().bars * 4;
+    const len = Math.min(total - h.start, Math.max(h.len, Math.round(heldBeats * STEPS_PER_BEAT) / STEPS_PER_BEAT));
+    if (len <= h.len + 1e-9) return;
+    update((q) => { const n = q.notes.find((x) => x.pitch === pitch && x.start === h.start); if (n) n.len = len; }, `step-${id}-${h.start}`);
+    cursor = Math.round(((h.start + len) * STEPS_PER_BEAT)) % steps();
     render();
   }
 
@@ -368,7 +414,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       if (i < 0) return;
       e.preventDefault();
       e.stopPropagation();
-      if (!e.repeat) hitPad(DRUM_ROWS[i].id);
+      if (!e.repeat) padDown(DRUM_ROWS[i].id);
       return;
     }
     if (key === 'arrowup' || key === 'arrowdown') {
@@ -385,8 +431,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   }, true);
   document.addEventListener('keyup', (e) => {
-    if (root.hidden || pat()?.type !== 'synth') return;
+    if (root.hidden || !pat()) return;
     const key = e.key.toLowerCase();
+    if (pat().type === 'drums') {
+      const i = PAD_KEYS.indexOf(key);
+      if (i >= 0) padUp(DRUM_ROWS[i].id);
+      return;
+    }
     if (key in KEYMAP) noteOff(clamp(octave + KEYMAP[key], PITCH_LOW, PITCH_HIGH));
   }, true);
 
@@ -399,7 +450,11 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         for (const input of access.inputs.values()) {
           input.onmidimessage = (m) => {
             const [status, note, vel] = m.data;
-            if ((status & 0xf0) === 0x90 && vel > 0 && !root.hidden) playKey(clamp(note, PITCH_LOW, PITCH_HIGH));
+            if (root.hidden) return;
+            const pitch = clamp(note, PITCH_LOW, PITCH_HIGH);
+            const type = status & 0xf0;
+            if (type === 0x90 && vel > 0) noteOn(pitch);
+            else if (type === 0x80 || type === 0x90) noteOff(pitch);
           };
         }
       };
@@ -481,6 +536,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       this.srcs = [];
       render();
     },
+    // Schritt für einen geplanten Schlag (Kontextzeit, liegt schon auf dem Raster)
+    stepAt(when) {
+      const x = ((when - this.t0) / this.spb) * STEPS_PER_BEAT;
+      if (x < -0.5) return null;
+      const n = steps();
+      return ((Math.round(x) % n) + n) % n;
+    },
     // Schritt (16tel) für den Moment, den man gerade hört; null im Vorzähler
     // Zwei schnelle Schläge auf derselben Spur, die aufs gleiche Raster fallen würden, verschmelzen nicht:
     // liegt der vorige schon dort und mindestens ein halbes Raster zurück, rückt der neue einen Platz weiter.
@@ -517,31 +579,77 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   }
 
-  async function hitPad(rowId) {
+  // when: Kontextzeit des Schlags (Wiederholung beim Halten); ohne Angabe sofort
+  async function hitPad(rowId, when) {
     const p = pat();
     if (!p || p.type !== 'drums') return;
     const ctx = await audio();
-    previewDrum(ctx, engine.mix.master, p.kit, rowId, library);
+    previewDrum(ctx, engine.mix.master, p.kit, rowId, library, when);
     const pad = padsEl.querySelector(`[data-row="${rowId}"]`);
     if (pad) {
       // Jeder Schlag leuchtet neu auf, auch wenn der vorige noch leuchtet
-      clearTimeout(pad.hitTimer);
-      pad.classList.remove('hit');
-      void pad.offsetWidth;
-      pad.classList.add('hit');
-      pad.hitTimer = setTimeout(() => pad.classList.remove('hit'), 110);
+      const flash = () => {
+        clearTimeout(pad.hitTimer);
+        pad.classList.remove('hit');
+        void pad.offsetWidth;
+        pad.classList.add('hit');
+        pad.hitTimer = setTimeout(() => pad.classList.remove('hit'), 110);
+      };
+      if (when == null) flash(); else setTimeout(flash, Math.max(0, (when - engine.heardTime()) * 1000));
     }
     if (!looper.running) return;
-    const step = looper.stepNow(rowId);
+    const step = when == null ? looper.stepNow(rowId) : looper.stepAt(when);
     if (step == null) return;
     update((q) => { q.rows = resizeDrumRows(q.rows, q.bars); q.rows[rowId][step] = 1; }, 'live-' + id);
   }
+
+  // Pad halten = Wirbel: der Schlag wiederholt sich im Raster (1/16 oder 1/8), solange man hält.
+  // Geplant auf der Audio-Uhr mit kurzem Vorlauf, in der Live-Aufnahme genau auf den Loop-Schritten.
+  const HOLD_DELAY = 0.16; // s: kürzeres Antippen ist ein einzelner Schlag
+  const held = new Map(); // Zeile → { from, next }
+  let rollTimer = null;
+  function rollTick() {
+    if (!held.size || !engine.ctx) { clearInterval(rollTimer); rollTimer = null; return; }
+    const ctx = engine.ctx;
+    const iv = (Number(quantSel.value) / STEPS_PER_BEAT) * engine.spb;
+    const horizon = ctx.currentTime + 0.1;
+    for (const [rowId, h] of held) {
+      if (h.from == null) continue;
+      if (h.next == null) {
+        // Erster Wiederholungsschlag: nächster Rasterpunkt nach der Haltezeit
+        const base = looper.running ? looper.t0 : h.from;
+        const after = h.from + HOLD_DELAY;
+        h.next = base + Math.ceil((after - base) / iv - 1e-9) * iv;
+      }
+      while (h.next <= horizon) {
+        if (h.next > ctx.currentTime) hitPad(rowId, h.next);
+        h.next += iv;
+      }
+    }
+  }
+  async function padDown(rowId) {
+    if (held.has(rowId)) return;
+    // Sofort als gedrückt merken: ein schnelles Loslassen während des Startens beendet den Halt sicher
+    const h = { from: null, next: null };
+    held.set(rowId, h);
+    hitPad(rowId);
+    const ctx = await audio();
+    if (held.get(rowId) !== h) return;
+    h.from = ctx.currentTime;
+    if (!rollTimer) rollTimer = setInterval(rollTick, 20);
+  }
+  function padUp(rowId) { held.delete(rowId); }
+  function padsUpAll() { held.clear(); }
+  window.addEventListener('blur', padsUpAll);
+
   // Auf pointerdown reagieren (nicht click): kürzeste Verzögerung beim Trommeln
   padsEl.addEventListener('pointerdown', (e) => {
     const pad = e.target.closest('.pat-pad');
     if (!pad) return;
     e.preventDefault();
-    hitPad(pad.dataset.row);
+    const rowId = pad.dataset.row;
+    padDown(rowId);
+    trackPointer(e, () => {}, () => padUp(rowId), () => padUp(rowId));
   });
   padsEl.addEventListener('click', (e) => { const pad = e.target.closest('.pat-pad'); if (pad && e.detail === 0) hitPad(pad.dataset.row); });
 
@@ -583,32 +691,90 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   $('pat-oct-down').addEventListener('click', () => { octave = clamp(octave - 12, PITCH_LOW, PITCH_HIGH - 12); render(); });
   $('pat-oct-up').addEventListener('click', () => { octave = clamp(octave + 12, PITCH_LOW, PITCH_HIGH - 12); render(); });
 
-  // Taste gedrückt: anspielen; bei Live-Aufnahme Startschritt merken, beim Loslassen Länge setzen
+  // Taste gedrückt: Ton klingt, solange gehalten wird. Live-Aufnahme: Startschritt merken, beim Loslassen Länge setzen.
+  // Schritt-Eingabe: Note an der Marke, Haltedauer bestimmt die Länge.
+  const voices = new Map(); // Tonhöhe → gehaltener Ton
   function noteOn(pitch) {
+    const p = pat();
+    if (!p || p.type !== 'synth' || voices.has(pitch)) return;
     keyEl(pitch)?.classList.add('down');
-    if (looper.running && pat()?.type === 'synth') {
-      reveal(pitch);
-      audio().then((ctx) => previewNote(ctx, engine.mix.master, pat().preset, pitch));
-      const step = looper.stepNow();
-      if (step != null) looper.held.set(pitch, { step, time: engine.ctx.currentTime });
-      return;
-    }
-    playKey(pitch);
+    vkeyEl(pitch)?.classList.add('down');
+    reveal(pitch);
+    const token = {};
+    voices.set(pitch, token);
+    audio().then((ctx) => {
+      const still = voices.get(pitch) === token;
+      // Schon wieder losgelassen (sehr kurzer Tipp): kurz anspielen und trotzdem eintragen
+      if (still) voices.set(pitch, startNote(ctx, engine.mix.master, pat().preset, pitch));
+      else previewNote(ctx, engine.mix.master, pat().preset, pitch);
+      if (looper.running) {
+        const step = looper.stepNow();
+        if (step != null) {
+          looper.held.set(pitch, { step, time: ctx.currentTime });
+          if (!still) finishLive(pitch);
+        }
+      } else {
+        stepPress(pitch);
+        if (!still) stepRelease(pitch);
+      }
+    });
   }
   function noteOff(pitch) {
     keyEl(pitch)?.classList.remove('down');
+    vkeyEl(pitch)?.classList.remove('down');
+    voices.get(pitch)?.stop?.();
+    voices.delete(pitch);
+    stepRelease(pitch);
+    finishLive(pitch);
+  }
+  function finishLive(pitch) {
     const h = looper.held?.get(pitch);
     if (!h) return;
     looper.held.delete(pitch);
     const q = Number(quantSel.value);
-    const held = ((engine.ctx.currentTime - h.time) / looper.spb) * STEPS_PER_BEAT;
-    const lenSteps = Math.max(q, Math.round(held / q) * q);
+    const heldSteps = ((engine.ctx.currentTime - h.time) / looper.spb) * STEPS_PER_BEAT;
+    const lenSteps = Math.max(q, Math.round(heldSteps / q) * q);
     const start = h.step / STEPS_PER_BEAT;
     update((p) => {
       const len = Math.min(lenSteps / STEPS_PER_BEAT, p.bars * 4 - start);
       p.notes = [...p.notes.filter((n) => !(n.pitch === pitch && n.start === start)), { pitch, start, len, vel: 1 }];
     }, 'live-' + id);
   }
+  const notesOffAll = () => { for (const pitch of [...voices.keys()]) noteOff(pitch); };
+  window.addEventListener('blur', notesOffAll);
+
+  // ---------- Senkrechte Klaviertasten (Handy): links neben der Piano-Roll, spielbar mit Halten und Gleiten ----------
+
+  const vkeys = $('pat-vkeys');
+  const vkeyEl = (pitch) => vkeys.querySelector(`[data-pitch="${pitch}"]`);
+  function renderVkeys() {
+    const key = `${rowH()}`;
+    if (vkeys.dataset.key === key) return;
+    vkeys.dataset.key = key;
+    vkeys.innerHTML = '';
+    vkeys.style.height = (PITCH_HIGH - PITCH_LOW + 1) * rowH() + 'px';
+    rollWrap.style.setProperty('--vk-h', vkeys.style.height);
+    for (let m = PITCH_HIGH; m >= PITCH_LOW; m--) {
+      const k = el('div', `vkey${isBlack(m) ? ' black' : ''}${m % 12 === 0 ? ' c' : ''}`);
+      k.dataset.pitch = String(m);
+      k.style.height = rowH() + 'px';
+      if (m % 12 === 0) k.textContent = noteName(m);
+      vkeys.append(k);
+    }
+  }
+  vkeys.addEventListener('pointerdown', (e) => {
+    const k = e.target.closest('.vkey');
+    if (!k) return;
+    e.preventDefault();
+    let pitch = Number(k.dataset.pitch);
+    noteOn(pitch);
+    // Mit dem Finger über die Tasten gleiten spielt die nächste Taste
+    trackPointer(e, (ev) => {
+      const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.vkey');
+      const next = over ? Number(over.dataset.pitch) : pitch;
+      if (next !== pitch) { noteOff(pitch); pitch = next; noteOn(pitch); }
+    }, () => noteOff(pitch), () => noteOff(pitch));
+  });
 
   // ---------- Einsingen: Melodie aus Gesang oder Datei ----------
 
@@ -807,6 +973,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     } else {
       drawRoll(p);
       renderKeys();
+      if (narrow.matches) renderVkeys();
       hint.textContent = narrow.matches
         ? `Antippen setzt eine Note in der gewählten Notenlänge, Antippen einer Note löscht sie. Wischen blättert durch die Oktaven.`
         : `Klick ins Raster setzt eine Note (ziehen = länger), Klick auf eine Note löscht sie, Ziehen verschiebt. Klaviatur oder Tasten A–K spielen ab ${noteName(octave)}, Pfeil hoch/runter wechselt die Oktave${rec ? ' – Schritt-Eingabe aktiv: jede Taste setzt eine Note an der markierten Stelle.' : '.'}${looper.running ? ' Live-Aufnahme läuft: gespielte Töne landen mit ihrer Länge im Raster.' : ''}`;

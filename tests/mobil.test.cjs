@@ -245,7 +245,7 @@ const { check, finish } = createChecker();
     await swipe(wrap.x + 150, wrap.y + wrap.height - 20, 0, -150);
     const top1 = await page.evaluate(() => document.getElementById('pat-roll-wrap').scrollTop);
     check('Piano-Roll: Wischen blättert durch die Tonhöhen, ohne Noten zu setzen', top1 > top0 + 50 && await notes() === n1, `${top0} → ${top1}`);
-    check('Schritt-Eingabe (braucht Tastatur) ist am Handy ausgeblendet', !(await page.locator('#pat-rec').isVisible()));
+    check('Schritt-Eingabe ist am Handy da (mit den senkrechten Klaviertasten)', await page.locator('#pat-rec').isVisible());
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-melodie.png') });
     await page.tap('#pattern-close');
 
