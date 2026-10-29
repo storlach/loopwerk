@@ -16,6 +16,27 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - Texte in der Oberfläche auf Deutsch, Code-Bezeichner Englisch, Kommentare Deutsch und sparsam.
 - Fremd-Samples nur mit geprüfter Lizenz (bevorzugt CC0); Lizenz in den Metadaten vermerken.
 
+## Team (Subagenten in `.claude/agents/`)
+| Agent | Aufgabe | Modell |
+|---|---|---|
+| `architekt` | Spec + ADR vor jedem Feature, kein Code | opus |
+| `audio-engineer` | Engine, Scheduler, Effekte, DSP, Aufnahme | opus |
+| `ui-engineer` | Arranger, Regal, Deck, Mixer, Editoren | sonnet |
+| `qa` | Tests schreiben, Randfälle, Fehler melden (ändert kein `src/`) | sonnet |
+| `sound-kurator` | Bibliothek, Lizenzen, Metadaten | haiku |
+
+Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer Feature-Scheibe.
+
+## Skills (`.claude/skills/`)
+- `feature-slice` – Standardablauf für jedes Feature
+- `audio-engine-regeln` – vor Engine-Änderungen laden
+- `audio-test` – Klang messbar prüfen
+- `effekt-bauen` – Vorlage für Effekte (ab Stufe 4)
+- `sample-import` – Sounds mit Lizenzprüfung aufnehmen
+- `ux-check` – Bedienprinzipien und Zugänglichkeit prüfen
+- `artifact-sync` – Sichern/Wiederherstellen über das Artifact (solange kein GitHub)
+- Persönliche Skills von Martin: `kritiker` (unabhängige Prüfung), `scout` (Skill-Review)
+
 ## Fertig heißt
 - `node tests/spike.test.cjs` grün (Timing-Test samplegenau, UI-Interaktionen, keine Konsolenfehler).
 - Ein Screenshot (`--shots`, `SHOT_DIR=…`) angesehen, hell/dunkel und Handy-Breite.
