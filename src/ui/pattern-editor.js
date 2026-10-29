@@ -1,5 +1,6 @@
-// Pattern-Editor: Stepsequencer für Beats, Piano-Roll für Melodien.
-// Eingabe per Maus, Computertastatur (A–K wie Klaviertasten, Pfeil hoch/runter = Oktave) oder MIDI-Keyboard.
+// Pattern-Editor: Stepsequencer und Drumpad für Beats, Piano-Roll und Klaviatur für Melodien.
+// Eingabe per Maus/Finger, Computertastatur (A–K wie Klaviertasten, Pfeil hoch/runter = Oktave) oder MIDI-Keyboard.
+// „Live“: das Pattern läuft im Loop, Gespieltes wird ins Raster quantisiert.
 
 import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
@@ -15,6 +16,9 @@ const rowH = () => (narrow.matches ? 24 : 14);
 // Computertastatur → Halbton über dem Grundton (deutsches und englisches Layout: Z und Y)
 const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, z: 8, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
 const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
+const KEY_OF = Object.fromEntries(Object.entries(KEYMAP).filter(([k]) => k !== 'y').map(([k, v]) => [v, k.toUpperCase()]));
+// Drumpad: Pads in der Reihenfolge der Zeilen, Tasten der mittleren Buchstabenreihe
+const PAD_KEYS = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k'];
 
 export function mountPatternEditor({ root, store, engine, library, ui }) {
   const $ = (id) => root.querySelector('#' + id);
@@ -28,6 +32,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   const rollWrap = $('pat-roll-wrap');
   const canvas = $('pat-roll');
   const hint = $('pat-hint');
+  const liveBtn = $('pat-live');
+  const quantSel = $('pat-quant');
+  const padsEl = $('pat-pads');
+  const keysEl = $('pat-keys');
+  const keybed = $('pat-keybed');
+  const viewBtns = [...root.querySelectorAll('#pat-view .seg')];
+  let view = 'grid';
   let id = null;
   let rec = false;
   let cursor = 0;
@@ -48,7 +59,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   }
 
   function open(patternId) {
-    if (id !== patternId) page = 0;
+    if (id !== patternId) { page = 0; looper.stop(); }
     id = patternId;
     cursor = 0;
     ui.setDock('pattern');
@@ -76,6 +87,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   kitSel.addEventListener('change', () => update((p) => { p.kit = kitSel.value; }));
   presetSel.addEventListener('change', () => update((p) => { p.preset = presetSel.value; }));
   recBtn.addEventListener('click', () => { rec = !rec; render(); });
+  liveBtn.addEventListener('click', () => (looper.running ? looper.stop() : looper.start()));
+  for (const b of viewBtns) b.addEventListener('click', () => { view = b.dataset.view; render(); });
   $('pat-play').addEventListener('click', () => {
     if (engine.preview?.sampleId === patternSampleId(id)) engine.stopPreview();
     else engine.previewSample(patternSampleId(id));
@@ -328,11 +341,18 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     render();
   }
 
+  const typingIn = (t) => (t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';
   document.addEventListener('keydown', (e) => {
-    if (root.hidden || pat()?.type !== 'synth' || e.ctrlKey || e.metaKey || e.altKey) return;
-    const t = e.target;
-    if ((t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA') return;
+    if (root.hidden || !pat() || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target)) return;
     const key = e.key.toLowerCase();
+    if (pat().type === 'drums') {
+      const i = PAD_KEYS.indexOf(key);
+      if (i < 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) hitPad(DRUM_ROWS[i].id);
+      return;
+    }
     if (key === 'arrowup' || key === 'arrowdown') {
       octave = clamp(octave + (key === 'arrowup' ? 12 : -12), PITCH_LOW, PITCH_HIGH - 12);
       e.preventDefault();
@@ -343,8 +363,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (key in KEYMAP && !e.repeat) {
       e.preventDefault();
       e.stopPropagation();
-      playKey(clamp(octave + KEYMAP[key], PITCH_LOW, PITCH_HIGH));
+      noteOn(clamp(octave + KEYMAP[key], PITCH_LOW, PITCH_HIGH));
     }
+  }, true);
+  document.addEventListener('keyup', (e) => {
+    if (root.hidden || pat()?.type !== 'synth') return;
+    const key = e.key.toLowerCase();
+    if (key in KEYMAP) noteOff(clamp(octave + KEYMAP[key], PITCH_LOW, PITCH_HIGH));
   }, true);
 
   async function setupMidi() {
@@ -368,13 +393,205 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   }
 
+  // ---------- Live-Aufnahme im Loop ----------
+
+  // Das Pattern läuft als Schleife (mit Klick und einem Takt Vorzähler). Geänderte Pattern-Sounds
+  // werden an der nächsten Loop-Grenze nahtlos ausgetauscht.
+  const looper = {
+    running: false,
+    srcs: [],
+    t0: 0,
+    rev: null,
+    async start() {
+      const p = pat();
+      if (!p) return;
+      const ctx = await audio();
+      engine.stop();
+      engine.stopPreview();
+      const spb = engine.spb;
+      this.spb = spb;
+      this.len = p.bars * 4 * spb;
+      this.t0 = ctx.currentTime + 0.1 + 4 * spb;
+      this.running = true;
+      this.held = new Map();
+      // Klick: ein Takt als Puffer, im Loop ab dem Vorzähler
+      const bar = 4 * spb;
+      const click = new AudioBuffer({ numberOfChannels: 1, length: Math.round(bar * ctx.sampleRate), sampleRate: ctx.sampleRate });
+      const cd = click.getChannelData(0);
+      for (let b = 0; b < 4; b++) {
+        const f = b === 0 ? 1760 : 1175;
+        const at = Math.round(b * spb * ctx.sampleRate);
+        for (let i = 0; i < 0.03 * ctx.sampleRate && at + i < cd.length; i++) cd[at + i] = 0.16 * Math.sign(Math.sin(2 * Math.PI * f * i / ctx.sampleRate)) * Math.exp(-i / (0.008 * ctx.sampleRate));
+      }
+      const cs = ctx.createBufferSource();
+      cs.buffer = click;
+      cs.loop = true;
+      cs.connect(ctx.destination);
+      cs.start(this.t0 - bar);
+      this.click = cs;
+      this.srcs = [];
+      this._schedule(this.t0);
+      render();
+    },
+    // Pattern-Sound ab `when` (eine Loop-Grenze) im Loop spielen; bisherigen dort beenden
+    _schedule(when) {
+      const s = library.get(patternSampleId(id));
+      if (!s?.buffer || !this.running) return;
+      const ctx = engine.ctx;
+      const src = ctx.createBufferSource();
+      src.buffer = s.buffer;
+      src.loop = true;
+      src.connect(engine.mix.master);
+      src.start(when);
+      for (const old of this.srcs) old.stop(when);
+      this.srcs = [src];
+      this.rev = s.rev;
+    },
+    refresh() {
+      if (!this.running) return;
+      const s = library.get(patternSampleId(id));
+      if (!s || s.rev === this.rev) return;
+      const now = engine.ctx.currentTime + 0.03;
+      const k = Math.max(0, Math.ceil((now - this.t0) / this.len));
+      this._schedule(this.t0 + k * this.len);
+    },
+    stop() {
+      if (!this.running) return;
+      this.running = false;
+      for (const x of [...this.srcs, this.click]) { try { x.stop(); } catch { /* schon beendet */ } }
+      this.srcs = [];
+      render();
+    },
+    // Schritt (16tel) für den Moment, den man gerade hört; null im Vorzähler
+    stepNow() {
+      const ctx = engine.ctx;
+      const heard = ctx.currentTime - (ctx.outputLatency || 0) - (ctx.baseLatency || 0);
+      const q = Number(quantSel.value);
+      const x = ((heard - this.t0) / this.spb) * STEPS_PER_BEAT;
+      if (x < -q / 2) return null;
+      const n = steps();
+      return ((Math.round(x / q) * q) % n + n) % n;
+    },
+  };
+  library.on?.(() => looper.refresh());
+
+  // ---------- Drumpad ----------
+
+  function renderPads(p) {
+    const key = `${p.kit}`;
+    if (padsEl.dataset.key !== key) {
+      padsEl.dataset.key = key;
+      padsEl.innerHTML = '';
+      DRUM_ROWS.forEach((row, i) => {
+        const pad = el('button', 'pat-pad');
+        pad.type = 'button';
+        pad.dataset.row = row.id;
+        pad.append(el('span', 'pat-pad-name', drumLabel(p.kit, row.id)), el('span', 'pat-pad-key', PAD_KEYS[i].toUpperCase()));
+        pad.setAttribute('aria-label', `${drumLabel(p.kit, row.id)} (Taste ${PAD_KEYS[i].toUpperCase()})`);
+        padsEl.append(pad);
+      });
+    }
+  }
+
+  async function hitPad(rowId) {
+    const p = pat();
+    if (!p || p.type !== 'drums') return;
+    const ctx = await audio();
+    previewDrum(ctx, engine.mix.master, p.kit, rowId, library);
+    const pad = padsEl.querySelector(`[data-row="${rowId}"]`);
+    if (pad) { pad.classList.add('hit'); setTimeout(() => pad.classList.remove('hit'), 110); }
+    if (!looper.running) return;
+    const step = looper.stepNow();
+    if (step == null) return;
+    update((q) => { q.rows = resizeDrumRows(q.rows, q.bars); q.rows[rowId][step] = 1; }, 'live-' + id);
+  }
+  // Auf pointerdown reagieren (nicht click): kürzeste Verzögerung beim Trommeln
+  padsEl.addEventListener('pointerdown', (e) => {
+    const pad = e.target.closest('.pat-pad');
+    if (!pad) return;
+    e.preventDefault();
+    hitPad(pad.dataset.row);
+  });
+  padsEl.addEventListener('click', (e) => { const pad = e.target.closest('.pat-pad'); if (pad && e.detail === 0) hitPad(pad.dataset.row); });
+
+  // ---------- Klaviatur (Desktop) ----------
+
+  function renderKeys() {
+    const base = octave;
+    if (keybed.dataset.key === String(base)) return;
+    keybed.dataset.key = String(base);
+    keybed.innerHTML = '';
+    const whites = [];
+    for (let m = base; m <= Math.min(base + 24, PITCH_HIGH); m++) if (!isBlack(m)) whites.push(m);
+    const w = 100 / whites.length;
+    for (let m = base; m <= Math.min(base + 24, PITCH_HIGH); m++) {
+      const black = isBlack(m);
+      const k = el('button', `pat-key${black ? ' black' : ''}${m % 12 === 0 ? ' c' : ''}`);
+      k.type = 'button';
+      k.dataset.pitch = String(m);
+      k.setAttribute('aria-label', noteName(m));
+      if (KEY_OF[m - base]) k.append(el('span', null, KEY_OF[m - base]));
+      if (m % 12 === 0) k.append(el('span', 'pat-key-name', noteName(m)));
+      if (black) {
+        const i = whites.filter((x) => x < m).length;
+        k.style.left = `calc(${i * w}% - ${w * 0.3}%)`;
+        k.style.width = `${w * 0.6}%`;
+      }
+      keybed.append(k);
+    }
+  }
+  const keyEl = (pitch) => keybed.querySelector(`[data-pitch="${pitch}"]`);
+  keybed.addEventListener('pointerdown', (e) => {
+    const k = e.target.closest('.pat-key');
+    if (!k) return;
+    e.preventDefault();
+    const pitch = Number(k.dataset.pitch);
+    noteOn(pitch);
+    trackPointer(e, () => {}, () => noteOff(pitch), () => noteOff(pitch));
+  });
+  $('pat-oct-down').addEventListener('click', () => { octave = clamp(octave - 12, PITCH_LOW, PITCH_HIGH - 12); render(); });
+  $('pat-oct-up').addEventListener('click', () => { octave = clamp(octave + 12, PITCH_LOW, PITCH_HIGH - 12); render(); });
+
+  // Taste gedrückt: anspielen; bei Live-Aufnahme Startschritt merken, beim Loslassen Länge setzen
+  function noteOn(pitch) {
+    keyEl(pitch)?.classList.add('down');
+    if (looper.running && pat()?.type === 'synth') {
+      reveal(pitch);
+      audio().then((ctx) => previewNote(ctx, engine.mix.master, pat().preset, pitch));
+      const step = looper.stepNow();
+      if (step != null) looper.held.set(pitch, { step, time: engine.ctx.currentTime });
+      return;
+    }
+    playKey(pitch);
+  }
+  function noteOff(pitch) {
+    keyEl(pitch)?.classList.remove('down');
+    const h = looper.held?.get(pitch);
+    if (!h) return;
+    looper.held.delete(pitch);
+    const q = Number(quantSel.value);
+    const held = ((engine.ctx.currentTime - h.time) / looper.spb) * STEPS_PER_BEAT;
+    const lenSteps = Math.max(q, Math.round(held / q) * q);
+    const start = h.step / STEPS_PER_BEAT;
+    update((p) => {
+      const len = Math.min(lenSteps / STEPS_PER_BEAT, p.bars * 4 - start);
+      p.notes = [...p.notes.filter((n) => !(n.pitch === pitch && n.start === start)), { pitch, start, len, vel: 1 }];
+    }, 'live-' + id);
+  }
+
   // ---------- Darstellung ----------
 
   function render() {
     const p = pat();
     if (!p || root.hidden) return;
     const drums = p.type === 'drums';
+    root.dataset.type = p.type;
     $('pat-title').textContent = drums ? 'Beat-Editor' : 'Melodie-Editor';
+    $('pat-view').hidden = !drums;
+    for (const b of viewBtns) b.setAttribute('aria-pressed', String(b.dataset.view === view));
+    liveBtn.setAttribute('aria-pressed', String(looper.running));
+    liveBtn.textContent = looper.running ? '■ Live stoppen' : '● Live';
+    const pads = drums && view === 'pads';
     if (document.activeElement !== nameIn) nameIn.value = p.name;
     barsSel.value = String(p.bars);
     $('pat-kit-field').hidden = !drums;
@@ -384,18 +601,28 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     recBtn.setAttribute('aria-pressed', String(rec));
     kitSel.value = p.kit || 'elektro';
     presetSel.value = p.preset || 'pluck';
-    drumsEl.hidden = !drums;
+    drumsEl.hidden = !drums || pads;
+    padsEl.hidden = !pads;
+    $('pat-pages').hidden = !drums || pads || !narrow.matches;
     rollWrap.hidden = drums;
-    if (drums) {
+    keysEl.hidden = drums;
+    const liveHint = looper.running ? ' Live-Aufnahme läuft: nach einem Takt Vorzähler landet alles, was du spielst, im Raster.' : '';
+    if (pads) {
+      renderPads(p);
+      hint.textContent = (narrow.matches
+        ? 'Pads antippen spielt die Sounds. „● Live“ lässt den Beat im Loop laufen und nimmt deine Schläge auf.'
+        : 'Pads anklicken oder Tasten A S D F G H J K spielen. „● Live“ lässt den Beat im Loop laufen und nimmt deine Schläge auf.') + liveHint;
+    } else if (drums) {
       renderDrums(p);
-      hint.textContent = narrow.matches
+      hint.textContent = (narrow.matches
         ? 'Feld antippen setzt oder löscht einen Schlag, Namen antippen spielt das Instrument. Die Schalter oben oder Wischen wechseln die Takthälfte; ein Punkt zeigt, wo schon Schläge liegen.'
-        : 'Klick auf ein Feld setzt oder löscht einen Schlag. Klick auf den Namen spielt das Instrument.';
+        : 'Klick auf ein Feld setzt oder löscht einen Schlag. Klick auf den Namen spielt das Instrument. Tasten A–K spielen die Instrumente.') + liveHint;
     } else {
       drawRoll(p);
+      renderKeys();
       hint.textContent = narrow.matches
         ? `Antippen setzt eine Note in der gewählten Notenlänge, Antippen einer Note löscht sie. Wischen blättert durch die Oktaven.`
-        : `Klick ins Raster setzt eine Note (ziehen = länger), Klick auf eine Note löscht sie, Ziehen verschiebt. Tastatur A–K spielt ab ${noteName(octave)}, Pfeil hoch/runter wechselt die Oktave${rec ? ' – Schritt-Eingabe aktiv: jede Taste setzt eine Note an der markierten Stelle.' : '.'}`;
+        : `Klick ins Raster setzt eine Note (ziehen = länger), Klick auf eine Note löscht sie, Ziehen verschiebt. Klaviatur oder Tasten A–K spielen ab ${noteName(octave)}, Pfeil hoch/runter wechselt die Oktave${rec ? ' – Schritt-Eingabe aktiv: jede Taste setzt eine Note an der markierten Stelle.' : '.'}${looper.running ? ' Live-Aufnahme läuft: gespielte Töne landen mit ihrer Länge im Raster.' : ''}`;
     }
   }
 
@@ -404,7 +631,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (root.hidden === !show) return;
     root.hidden = !show;
     if (show) requestAnimationFrame(render);
-    else rec = false;
+    else { rec = false; looper.stop(); }
   });
   store.on(() => {
     if (id && !store.project.patterns?.[id]) { id = null; if (ui.dock === 'pattern') ui.setDock(null); return; }
@@ -412,5 +639,5 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   });
   window.addEventListener('resize', () => render());
 
-  return { open, get id() { return id; } };
+  return { open, get id() { return id; }, get looper() { return looper; } };
 }

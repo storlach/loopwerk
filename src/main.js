@@ -65,7 +65,7 @@ function mountHints({ root, ui, library, store, engine }) {
   const done = root.querySelector('#hint-done');
   const base = 'Leertaste: Start/Stopp · Lineal: klicken setzt die Position, ziehen setzt den Loop · Alt+Ziehen: kopieren · Umschalt+Ziehen: frei · Alt+←/→: schieben · Strg+Mausrad: Zoom · Spurkopf ziehen: Spur verschieben · T: teilen · Strg+Z: rückgängig';
   // Am Handy gibt es keine Tastatur: dort erklärt die Zeile die Fingerbedienung
-  const touchBase = 'Tippe auf „Sounds“, wähle einen Sound und tippe dann in eine Spur. Antippen des Lineals setzt die Abspielmarke.';
+  const touchBase = 'Tippe auf „Sounds“, wähle einen Sound und tippe dann in eine Spur. Antippen des Lineals setzt die Abspielmarke, zwei Finger zoomen.';
   const sync = () => {
     const armed = ui.armedSampleId && library.get(ui.armedSampleId);
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);

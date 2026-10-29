@@ -84,5 +84,20 @@
 - Beat-Editor am Handy mit Umschalter für die Takthälften (und Wischen), Tempo-Fach ohne Tastatur, Tastatur-Modus für Suche und Namen
 - Spec: `docs/specs/mobil-ux.md` (Abschnitt 1.3), Tests: `tests/mobil.test.cjs`
 
+## ✅ 1.4 – Feiner arbeiten, Techno, Effekte, Drumpad
+- Raster bis 1/16 und frei (Umschalt), Alt+Pfeil schiebt Clips, Zoom 4–192 px/Schlag mit Strg+Mausrad und zwei Fingern
+- Spuren heißen automatisch wie ihr erster Clip; Spur-Menü (duplizieren, verschieben, umbenennen, löschen), Spurkopf ziehen
+- Techno-Paket (14 Sounds) und Techno-Kit; Genres an allen Sounds, Regal nach Genre ordnen
+- Neue Effekte: Verzerrer (Warm, Hart, Fuzz, Bitcrusher), Filter mit taktsynchroner Bewegung, Pumpen; Kompressor mit Ansprache, Ausklang, Pegel
+- Drumpad mit Live-Aufnahme im Loop (quantisiert), Klaviatur im Melodie-Editor (Desktop), Live-Melodie
+- Markt-Scout-Agent: `docs/markt-scout/2026-10-29.md`
+- Spec: `docs/specs/v1.4-komfort-techno-effekte.md`, Tests: `tests/v14.test.cjs`
+
+## Als Nächstes (Wunschliste vom 29.10.2026)
+- Import prüfen (lief bei Martin nicht), Einsingen, gesungene Melodie → Instrument, Lead-Melodie aus Datei, Autotune
+- Stimmen entfernen/isolieren, Song in Instrument-Ebenen zerlegen (als Näherung im Browser)
+- Melodie fortsetzen, Instrument per Beschreibung erzeugen (über Claude im Artifact)
+- Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
+
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

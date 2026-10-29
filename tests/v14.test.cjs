@@ -404,6 +404,104 @@ const { check, finish } = createChecker();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-mixer.png') });
     await page.evaluate(() => window.loopwerk.mixer.setOpen(false));
 
+    // ---------- Drumpad ----------
+    await page.evaluate(async () => {
+      const m = await import('./src/model.js');
+      window.loopwerk.store.replace(m.createEmptyProject());
+    });
+    await page.click('#new-beat-btn');
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
+    await page.click('#pat-view [data-view="pads"]');
+    const pads = await page.locator('#pat-pads .pat-pad').allTextContents();
+    check('Drumpad zeigt acht Pads mit Tasten', pads.length === 8 && pads[0] === 'KickA' && pads[7].endsWith('K'), pads.join(' | '));
+    check('Raster ist in der Pad-Ansicht ausgeblendet', await page.locator('#pat-drums').isHidden());
+    await page.keyboard.down('d');
+    const flashed = await page.locator('#pat-pads .pat-pad[data-row="clap"]').evaluate((n) => n.classList.contains('hit'));
+    await page.keyboard.up('d');
+    check('Taste D spielt das Clap-Pad', flashed);
+    const notRecorded = await page.evaluate(() => { const p = Object.values(window.loopwerk.store.project.patterns)[0]; return p.rows.clap.some(Boolean); });
+    check('Ohne Live-Aufnahme wird nichts eingetragen', !notRecorded);
+
+    // Live: Pattern läuft im Loop, Schläge landen quantisiert im Raster
+    const waitBeat = (beat) => page.evaluate((b) => new Promise((res) => {
+      const { engine, patternEditor } = window.loopwerk;
+      const lp = patternEditor.looper;
+      const target = lp.t0 + b * lp.spb + (engine.ctx.outputLatency || 0) + (engine.ctx.baseLatency || 0);
+      const poll = () => (engine.ctx.currentTime >= target ? res(engine.ctx.currentTime) : setTimeout(poll, 2));
+      poll();
+    }), beat);
+    const press = (key) => page.evaluate((k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })), key);
+    const release = (key) => page.evaluate((k) => document.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true })), key);
+    await page.click('#pat-live');
+    const liveOn = await page.evaluate(() => ({ running: window.loopwerk.patternEditor.looper.running, pressed: document.getElementById('pat-live').getAttribute('aria-pressed') }));
+    check('„Live“ startet die Schleife', liveOn.running && liveOn.pressed === 'true', JSON.stringify(liveOn));
+    await waitBeat(-2);
+    await press('d'); // im Vorzähler: wird nicht eingetragen
+    await waitBeat(1.02);
+    await press('d');
+    await waitBeat(2.47);
+    await press('d');
+    await page.waitForTimeout(150);
+    let clap = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.clap.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
+    check('Live-Schläge landen auf dem nächsten 1/16', JSON.stringify(clap) === '[4,10]', JSON.stringify(clap));
+    await page.selectOption('#pat-quant', '2');
+    await waitBeat(4 + 3.3);
+    await press('d');
+    await page.waitForTimeout(150);
+    clap = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.clap.map((v, i) => (v ? i : -1)).filter((i) => i >= 0));
+    check('Raster 1/8: Schlag rastet auf Achtel (zweiter Durchlauf)', JSON.stringify(clap) === '[4,10,14]', JSON.stringify(clap));
+    const swapped = await page.evaluate(() => { const { patternEditor, library } = window.loopwerk; return patternEditor.looper.rev === library.get('pat-' + Object.keys(window.loopwerk.store.project.patterns)[0]).rev; });
+    check('Schleife spielt den neuen Stand des Beats', swapped);
+    await page.click('#pat-live');
+    check('„Live stoppen“ beendet die Schleife', await page.evaluate(() => !window.loopwerk.patternEditor.looper.running));
+    await page.click('#pat-view [data-view="grid"]');
+    check('Raster-Ansicht zeigt die eingespielten Schläge', await page.locator('#pat-drums .pat-cell[data-row="clap"][data-step="10"]').getAttribute('aria-pressed') === 'true');
+
+    // ---------- Klaviatur im Melodie-Editor ----------
+    await page.click('#new-melody-btn');
+    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    const keys = await page.evaluate(() => ({
+      visible: !document.getElementById('pat-keys').hidden && document.getElementById('pat-keys').offsetHeight > 40,
+      n: document.querySelectorAll('#pat-keybed .pat-key').length,
+      black: document.querySelectorAll('#pat-keybed .pat-key.black').length,
+      first: document.querySelector('#pat-keybed .pat-key').getAttribute('aria-label'),
+      labelA: document.querySelector('#pat-keybed .pat-key[data-pitch="60"]').textContent,
+      labelK: document.querySelector('#pat-keybed .pat-key[data-pitch="72"]').textContent,
+    }));
+    check('Klaviatur mit zwei Oktaven ab C4 und Tastenbeschriftung', keys.visible && keys.n === 25 && keys.black === 10 && keys.first === 'C4' && keys.labelA.startsWith('A') && keys.labelK.startsWith('K'), JSON.stringify(keys));
+    await page.keyboard.down('h');
+    const down = await page.locator('#pat-keybed .pat-key[data-pitch="69"]').evaluate((n) => n.classList.contains('down'));
+    await page.keyboard.up('h');
+    const up = await page.locator('#pat-keybed .pat-key[data-pitch="69"]').evaluate((n) => n.classList.contains('down'));
+    check('Computertaste H leuchtet auf der Klaviatur (A4)', down && !up);
+    await page.click('#pat-rec');
+    await page.locator('#pat-keybed .pat-key[data-pitch="64"]').click();
+    await page.locator('#pat-keybed .pat-key[data-pitch="67"]').click();
+    const stepNotes = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns).find((p) => p.type === 'synth').notes.map((n) => [n.pitch, n.start, n.len]));
+    check('Klaviatur-Klick mit Schritt-Eingabe setzt Noten', JSON.stringify(stepNotes) === '[[64,0,1],[67,1,1]]', JSON.stringify(stepNotes));
+    await page.click('#pat-rec');
+    await page.click('#pat-oct-up');
+    check('Oktave höher verschiebt die Klaviatur', await page.evaluate(() => document.querySelector('#pat-keybed .pat-key').getAttribute('aria-label')) === 'C5');
+    await page.click('#pat-oct-down');
+    // Live-Melodie: Ton halten bestimmt die Länge
+    await page.click('#pat-clear');
+    await page.selectOption('#pat-quant', '1');
+    await page.click('#pat-live');
+    await waitBeat(1.03);
+    await press('h');
+    await waitBeat(2.02);
+    await release('h');
+    await waitBeat(3.0);
+    await press('k');
+    await waitBeat(3.3);
+    await release('k');
+    await page.waitForTimeout(150);
+    await page.click('#pat-live');
+    const liveNotes = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns).find((p) => p.type === 'synth').notes.map((n) => [n.pitch, n.start, n.len]));
+    check('Live-Melodie: Startpunkt und Länge aus dem Spiel, mindestens ein Raster', JSON.stringify(liveNotes) === '[[69,1,1],[72,3,0.25]]', JSON.stringify(liveNotes));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-klaviatur.png') });
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 
@@ -425,6 +523,25 @@ const { check, finish } = createChecker();
     const p1 = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
     check('Finger auseinander zoomt hinein', p1 > p0 * 1.8, `${p0} → ${p1}`);
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-zoom-mobil.png') });
+
+    // Am Handy: Drumpad mit großen Pads, Melodie-Editor ohne Klaviatur (bleibt wie bisher)
+    await page.evaluate(() => window.loopwerk.ui.setDock('more'));
+    await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
+    await page.tap('#new-beat-btn');
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
+    await page.tap('#pat-view [data-view="pads"]');
+    const mpads = await page.evaluate(() => {
+      const ps = [...document.querySelectorAll('#pat-pads .pat-pad')].map((n) => n.getBoundingClientRect());
+      return { n: ps.length, minH: Math.min(...ps.map((r) => r.height)), minW: Math.min(...ps.map((r) => r.width)), cols: new Set(ps.map((r) => Math.round(r.left))).size, live: !document.getElementById('pat-live').hidden && getComputedStyle(document.getElementById('pat-live')).display !== 'none', overflow: document.documentElement.scrollWidth - innerWidth };
+    });
+    check('Handy: acht große Pads in zwei Spalten, Live-Knopf da', mpads.n === 8 && mpads.minH >= 60 && mpads.minW >= 120 && mpads.cols === 2 && mpads.live && mpads.overflow <= 0, JSON.stringify(mpads));
+    await page.locator('#pat-pads .pat-pad').first().tap();
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-pads-mobil.png') });
+    await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
+    await page.tap('#new-melody-btn');
+    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    const mkeys = await page.evaluate(() => getComputedStyle(document.getElementById('pat-keys')).display);
+    check('Handy: Melodie-Editor ohne Klaviatur', mkeys === 'none', mkeys);
     check('Keine Fehler in der Konsole (Handy)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

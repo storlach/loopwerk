@@ -7,7 +7,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - `src/model.js` – Projektmodell + `Store` (alle Änderungen über Aktionen → Undo/Redo). Positionen immer in Schlägen.
 - `src/engine.js` – Scheduler mit Vorlauf, Loop-Sprünge, Live-Resync, Kanalzüge mit Effektketten (`buildMix`/`syncMix`), `renderProject` für Offline-Rendering/Export.
 - `src/samples.js` + `src/catalog.js` – Bibliothek: synthetische Loops und CC0-Sounds (Sonic Pi), Tempo-Vorbereitung (`setTempo`).
-- `src/effects.js` – Effekt-Rack (EQ, Kompressor, Echo, Hall).
+- `src/effects.js` – Effekt-Rack (Verzerrer, Filter, EQ, Kompressor, Pumpen, Echo, Hall); taktsynchrone LFOs über `mix.grid`.
 - `src/dsp/` – Time-Stretching (WSOLA), Bearbeitungsfunktionen, Aufnahme-Worklet.
 - `src/own-sounds.js`, `src/recorder.js` – eigene Sounds (IndexedDB, Projektdatei), Mikrofon-Aufnahme.
 - `src/instruments.js`, `src/patterns.js` – Beat-/Melodie-Patterns, als Sounds „pat-…“ gerendert.
@@ -30,6 +30,8 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 | `ui-engineer` | Arranger, Regal, Deck, Mixer, Editoren | sonnet |
 | `qa` | Tests schreiben, Randfälle, Fehler melden (ändert kein `src/`) | sonnet |
 | `sound-kurator` | Bibliothek, Lizenzen, Metadaten | haiku |
+| `ux-designer` | Bedienung prüfen und verbessern (Handy, Desktop) | opus |
+| `markt-scout` | Konkurrenz recherchieren, Funktionen vorschlagen (`docs/markt-scout/`) | opus |
 
 Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer Feature-Scheibe.
 

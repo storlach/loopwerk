@@ -1,11 +1,11 @@
 {
   "name": "loopwerk",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "description": "Loop-basierter Music Maker im Browser",
   "scripts": {
-    "test": "node tests/spike.test.cjs && node tests/stufe2.test.cjs && node tests/stufe3.test.cjs && node tests/stufe4.test.cjs && node tests/stufe5.test.cjs && node tests/stufe6.test.cjs && node tests/stufe7.test.cjs && node tests/mobil.test.cjs",
+    "test": "node tests/spike.test.cjs && node tests/stufe2.test.cjs && node tests/stufe3.test.cjs && node tests/stufe4.test.cjs && node tests/stufe5.test.cjs && node tests/stufe6.test.cjs && node tests/stufe7.test.cjs && node tests/mobil.test.cjs && node tests/v14.test.cjs",
     "serve": "node tests/serve.cjs 8080"
   }
 }
