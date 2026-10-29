@@ -9,6 +9,7 @@ import { mountLibrary } from './ui/library.js';
 import { mountArranger } from './ui/arranger.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
+import { createSplash } from './ui/splash.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
@@ -245,15 +246,20 @@ function mountImport({ store, ui, arranger, own, shelf }) {
   return { importFiles };
 }
 
+const splash = createSplash();
+
 async function boot() {
-  const bootEl = document.getElementById('boot');
+  splash.set(0.03, 'Starte …');
   const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
+  // Sounds machen den Großteil der Ladezeit aus: 5–80 %
   const library = await buildLibrary({
     bpm: isValidProject(saved) ? saved.bpm : 120,
-    onProgress: (done, total) => { bootEl.textContent = `Sounds werden geladen … ${done} von ${total}`; },
+    onProgress: (done, total) => splash.set(0.05 + 0.75 * (done / total), `Sounds werden geladen – ${done} von ${total}`),
   });
+  splash.set(0.82, 'Eigene Sounds …');
   const own = new OwnSounds(library);
   await own.loadAll();
+  splash.set(0.88, 'Projekt wird geöffnet …');
   const patterns = new Patterns(library);
   const store = new Store((await loadSaved(library, patterns)) ?? createDemoProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
@@ -328,7 +334,8 @@ async function boot() {
   const importer = mountImport({ store, ui, arranger, own, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
-  if (library.bpm !== store.project.bpm) await tempo.apply();
+  splash.set(0.94, 'Oberfläche wird aufgebaut …');
+  if (library.bpm !== store.project.bpm) { splash.set(0.95, 'Sounds werden ans Tempo angepasst …'); await tempo.apply(); }
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
   mountMobile({ store, ui, tools });
 
@@ -383,7 +390,7 @@ async function boot() {
   // Leertaste soll keinen fokussierten Button zusätzlich auslösen.
   document.addEventListener('keyup', (e) => { if (e.code === 'Space' && !typing(e.target)) e.preventDefault(); });
 
-  bootEl.hidden = true;
+  splash.done();
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
@@ -391,8 +398,6 @@ async function boot() {
 }
 
 boot().catch((err) => {
-  const bootEl = document.getElementById('boot');
-  bootEl.textContent = `Loopwerk konnte nicht starten: ${err.message}`;
-  bootEl.classList.add('error');
+  splash.fail(`Loopwerk konnte nicht starten: ${err.message}`);
   console.error(err);
 });

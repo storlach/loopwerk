@@ -109,8 +109,18 @@
 
 - GitHub: https://github.com/storlach/loopwerk (führend), Seite: https://storlach.github.io/loopwerk/ (bei jedem Push auf main über `.github/workflows/pages.yml`, Bau mit `tools/build-pages.cjs`; Mikrofon geht dort)
 
+## ✅ 1.7 – Flüssige Tasteneingabe, Splash-Screen
+- Tasten und Pads: kein Schlag geht mehr verloren. Der Arranger zeichnet nur noch geänderte Spuren neu (15 ms → 0,3 ms je Eingabe). Live-Aufnahme verschmilzt schnelle Sechzehntel nicht mehr. Jedes Pad leuchtet bei jedem Schlag neu auf. Auswahlfelder schlucken keine Buchstaben mehr.
+- Splash-Screen mit Logo, animierten Pegelbalken, Fortschrittsbalken (Prozent und aktueller Ladeschritt) und Ausblenden.
+- Tests: `tests/v17.test.cjs`
+
 ## Als Nächstes
+- Desktop-Layout neu ordnen (UX-Agent prüft und schlägt vor: `docs/ux/`)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
+
+## Danach: neuer Look
+- Das jetzige Aussehen gilt als Wireframe. Wenn die Bedienung steht, bekommt Loopwerk einen eigenen visuellen Stil.
+- Vorbereitung: Farben, Schriften und Abstände nur über die Tokens in `:root` (index.html) setzen und keine neuen festen Farbwerte einführen. Dann lässt sich der Look an einer Stelle tauschen.
 
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

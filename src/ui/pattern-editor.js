@@ -56,6 +56,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   let midiTried = false;
 
   for (const k of KITS) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
+  // Nach einer Auswahl den Fokus vom Auswahlfeld nehmen: sonst „frisst“ es die Buchstabentasten
+  // (A springt z. B. zum Kit „Akustik“), statt dass sie Pads oder Klaviatur spielen
+  root.addEventListener('change', (e) => { if (e.target.tagName === 'SELECT') e.target.blur(); });
   for (const p of SYNTH_PRESETS) { const o = el('option', null, p.label); o.value = p.id; presetSel.append(o); }
 
   const pat = () => (id ? store.project.patterns?.[id] : null);
@@ -353,10 +356,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     render();
   }
 
-  const typingIn = (t) => (t.tagName === 'INPUT' && t.type !== 'range') || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';
+  // Nur echte Texteingaben behalten ihre Tasten; auf Auswahlfeldern und Reglern spielen die Buchstaben das Instrument
+  const typingIn = (t) => (t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.isContentEditable;
   document.addEventListener('keydown', (e) => {
     if (root.hidden || !pat() || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target)) return;
     const key = e.key.toLowerCase();
+    // Buchstaben auf einem Auswahlfeld im Editor nicht als Schnellwahl nutzen (sonst springt z. B. „T“ zum Techno-Kit)
+    if (e.target.tagName === 'SELECT' && root.contains(e.target) && /^[a-zäöüß]$/.test(key)) e.preventDefault();
     if (pat().type === 'drums') {
       const i = PAD_KEYS.indexOf(key);
       if (i < 0) return;
@@ -426,6 +432,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       this.t0 = ctx.currentTime + 0.1 + 4 * spb;
       this.running = true;
       this.held = new Map();
+      this.last = new Map();
       // Klick: ein Takt als Puffer, im Loop ab dem Vorzähler
       const bar = 4 * spb;
       const click = new AudioBuffer({ numberOfChannels: 1, length: Math.round(bar * ctx.sampleRate), sampleRate: ctx.sampleRate });
@@ -475,14 +482,20 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       render();
     },
     // Schritt (16tel) für den Moment, den man gerade hört; null im Vorzähler
-    stepNow() {
+    // Zwei schnelle Schläge auf derselben Spur, die aufs gleiche Raster fallen würden, verschmelzen nicht:
+    // liegt der vorige schon dort und mindestens ein halbes Raster zurück, rückt der neue einen Platz weiter.
+    stepNow(lane = null) {
       const ctx = engine.ctx;
       const heard = ctx.currentTime - (ctx.outputLatency || 0) - (ctx.baseLatency || 0);
       const q = Number(quantSel.value);
       const x = ((heard - this.t0) / this.spb) * STEPS_PER_BEAT;
       if (x < -q / 2) return null;
+      let k = Math.round(x / q) * q;
+      const last = lane != null ? this.last?.get(lane) : null;
+      if (last && k <= last.k && x - last.x >= q / 2) k = last.k + q;
+      if (lane != null) (this.last ||= new Map()).set(lane, { k, x });
       const n = steps();
-      return ((Math.round(x / q) * q) % n + n) % n;
+      return ((k % n) + n) % n;
     },
   };
   library.on?.(() => looper.refresh());
@@ -511,9 +524,16 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const ctx = await audio();
     previewDrum(ctx, engine.mix.master, p.kit, rowId, library);
     const pad = padsEl.querySelector(`[data-row="${rowId}"]`);
-    if (pad) { pad.classList.add('hit'); setTimeout(() => pad.classList.remove('hit'), 110); }
+    if (pad) {
+      // Jeder Schlag leuchtet neu auf, auch wenn der vorige noch leuchtet
+      clearTimeout(pad.hitTimer);
+      pad.classList.remove('hit');
+      void pad.offsetWidth;
+      pad.classList.add('hit');
+      pad.hitTimer = setTimeout(() => pad.classList.remove('hit'), 110);
+    }
     if (!looper.running) return;
-    const step = looper.stepNow();
+    const step = looper.stepNow(rowId);
     if (step == null) return;
     update((q) => { q.rows = resizeDrumRows(q.rows, q.bars); q.rows[rowId][step] = 1; }, 'live-' + id);
   }

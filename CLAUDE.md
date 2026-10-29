@@ -21,6 +21,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - Timing nie mit `setTimeout` planen, immer über `ctx.currentTime` + Vorlauf.
 - Realtime und Offline nutzen dieselbe Signalkette (`buildMix`, `startVoice`).
 - UX wie im Original: alles ist ein Objekt, Drag & Drop, Raster rastet ein, keine Pflichtdialoge, sinnvolle Voreinstellungen. Höchstens zwei Klicks für Grundfunktionen.
+- Aussehen ist vorerst Wireframe (neuer Look nach der UX-Arbeit): Farben, Schriften und Abstände nur über die Tokens in `:root`, keine neuen festen Farbwerte.
 - Texte in der Oberfläche auf Deutsch, Code-Bezeichner Englisch, Kommentare Deutsch und sparsam.
 - Fremd-Samples nur mit geprüfter Lizenz (bevorzugt CC0); Lizenz in den Metadaten vermerken.
 

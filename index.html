@@ -722,12 +722,66 @@
   .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
   .hint.armed { color: var(--ink); font-weight: 500; }
 
-  .boot {
-    position: fixed; inset: 0; display: grid; place-items: center;
-    background: var(--bg); color: var(--muted);
-    font: 500 13px/1.4 var(--font-mono); letter-spacing: 0.04em;
+  /* ---------- Splash-Screen beim Laden ---------- */
+  .splash {
+    position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px;
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 42%, color-mix(in srgb, var(--amber) 22%, transparent), transparent 70%),
+      radial-gradient(ellipse 120% 80% at 50% 120%, #00000066, transparent 60%),
+      var(--deck);
+    color: var(--deck-ink);
+    transition: opacity 0.45s ease, visibility 0.45s;
   }
-  .boot.error { color: var(--meter-hot); }
+  .splash.done { opacity: 0; visibility: hidden; pointer-events: none; }
+  .splash-inner { width: min(420px, 100%); display: grid; justify-items: center; gap: 18px; text-align: center; }
+  .splash-bars { display: flex; align-items: flex-end; gap: 6px; height: 64px; }
+  .splash-bars span {
+    width: 10px; height: 100%; border-radius: 3px; background: var(--amber);
+    transform-origin: bottom; transform: scaleY(0.2);
+    animation: splash-eq 1.1s ease-in-out infinite;
+    box-shadow: 0 0 18px color-mix(in srgb, var(--amber) 55%, transparent);
+  }
+  .splash-bars span:nth-child(2) { animation-delay: -0.85s; animation-duration: 0.9s; }
+  .splash-bars span:nth-child(3) { animation-delay: -0.3s; animation-duration: 1.3s; }
+  .splash-bars span:nth-child(4) { animation-delay: -0.6s; }
+  .splash-bars span:nth-child(5) { animation-delay: -0.15s; animation-duration: 0.95s; }
+  .splash-bars span:nth-child(6) { animation-delay: -0.7s; animation-duration: 1.2s; }
+  .splash-bars span:nth-child(7) { animation-delay: -0.45s; animation-duration: 1s; }
+  @keyframes splash-eq { 0%, 100% { transform: scaleY(0.18); } 50% { transform: scaleY(1); } }
+  .splash-name {
+    margin: 0; font: 700 clamp(40px, 9vw, 64px)/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
+    animation: splash-in 0.7s cubic-bezier(.2, .8, .2, 1) both;
+  }
+  .splash-name b { color: var(--amber); font-weight: 700; }
+  .splash-tag { margin: -8px 0 6px; color: var(--deck-muted); font: 500 14px/1.3 var(--font-body); animation: splash-in 0.7s 0.12s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes splash-in { from { opacity: 0; transform: translateY(10px); } }
+  .splash-progress {
+    position: relative; width: 100%; height: 8px; border-radius: 999px; overflow: hidden;
+    background: var(--deck-2); box-shadow: inset 0 0 0 1px #00000055;
+  }
+  .splash-fill {
+    position: absolute; inset: 0 auto 0 0; width: 0; border-radius: inherit;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--amber) 70%, #fff 0%), var(--amber));
+    box-shadow: 0 0 14px color-mix(in srgb, var(--amber) 60%, transparent);
+    transition: width 0.25s ease-out;
+  }
+  .splash-fill::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, #ffffff66, transparent);
+    transform: translateX(-100%); animation: splash-shine 1.4s ease-in-out infinite;
+  }
+  @keyframes splash-shine { to { transform: translateX(100%); } }
+  .splash-status { display: flex; justify-content: space-between; width: 100%; margin: -8px 0 0; font: 500 12px/1.4 var(--font-mono); color: var(--deck-muted); letter-spacing: 0.03em; }
+  .splash-pct { color: var(--deck-ink); font-variant-numeric: tabular-nums; }
+  .splash-version { margin: 8px 0 0; font: 500 10px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--deck-muted); border: 1px solid var(--deck-2); padding: 4px 7px; }
+  .splash.error .splash-bars span { animation: none; background: var(--meter-hot); box-shadow: none; }
+  .splash.error .splash-fill { background: var(--meter-hot); }
+  .splash.error .splash-fill::after { display: none; }
+  .splash.error .splash-step { color: #ff9b8f; }
+  @media (prefers-reduced-motion: reduce) {
+    .splash-bars span, .splash-name, .splash-tag, .splash-fill::after { animation: none; }
+    .splash-bars span { transform: scaleY(0.6); }
+  }
 
   /* ---------- Handy-Bausteine (nur auf schmalen Bildschirmen sichtbar) ---------- */
   [hidden] { display: none !important; }
@@ -957,7 +1011,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.6</span>
+      <span class="brand-tag">Version 1.7</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -1308,6 +1362,15 @@
     </button>
   </nav>
 </div>
-<div class="boot" id="boot">Sounds werden erzeugt …</div>
+<div class="splash" id="boot" role="status" aria-live="polite" aria-label="Loopwerk wird geladen">
+  <div class="splash-inner">
+    <div class="splash-bars" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <h1 class="splash-name">Loop<b>werk</b></h1>
+    <p class="splash-tag">Musik bauen aus Loops – einfach losklicken</p>
+    <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
+    <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
+    <p class="splash-version" id="boot-version">Version 1.7</p>
+  </div>
+</div>
 
 <script type="module" src="src/main.js"></script>

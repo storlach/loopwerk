@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { clipEnvelope, clipGain, clipSegments, totalBeats, MAX_TRACKS } from '../model.js';
+import { clipEnvelope, clipGain, clipSegments, clipSignature, totalBeats, MAX_TRACKS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
@@ -356,7 +356,14 @@ export function mountArranger({ root, store, engine, library, ui }) {
     return { node, canvas, sample };
   }
 
+  // Nur Spuren neu zeichnen, deren Clips sich geändert haben: schnelle Eingaben (Tasten, Pads) bleiben flüssig.
+  // Während eines Ziehens verändert die Vorschau das DOM direkt – dann zeichnet der nächste Durchlauf alles neu.
+  let forceAll = true;
+  const laneKey = (track) => `${ppb()}|${headW()}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}`).join(',')}`;
   function renderLane(r, track) {
+    const key = laneKey(track);
+    if (!forceAll && r.key === key) return;
+    r.key = key;
     for (const n of r.lane.querySelectorAll('.clip')) n.remove();
     for (const clip of track.clips) {
       const { node, canvas, sample } = makeClip(clip);
@@ -392,7 +399,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }
   }
 
-  function render() {
+  function render(force = false) {
+    if (force) forceAll = true;
     const p = store.project;
     grid.style.setProperty('--ppb', ppb() + 'px');
     grid.style.setProperty('--bar', ppb() * p.beatsPerBar + 'px');
@@ -404,7 +412,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
     renderRuler();
     syncRows();
     for (const t of p.tracks) renderLane(rows.get(t.id), t);
+    forceAll = false;
     if (ui.selectedClipId && !store.findClip(ui.selectedClipId)) ui.select(null);
+    for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', n.dataset.clipId === ui.selectedClipId);
     showLoop(p.loop.startBeat, p.loop.endBeat, p.loop.on);
     setPlayhead(engine.currentBeat());
   }
@@ -435,6 +445,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const sample = library.get(clip.sampleId);
     const canvas = node.querySelector('canvas');
     select(clip.id);
+    forceAll = true;
     node.classList.add('editing');
     let result = null;
     trackPointer(e, (ev) => {
@@ -450,7 +461,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
       node.classList.remove('editing');
       ui.status(null);
       if (result) commit(clip, result.clip);
-    }, () => { node.classList.remove('editing'); ui.status(null); render(); });
+    }, () => { node.classList.remove('editing'); ui.status(null); render(true); });
   }
 
   function startMove(e, node) {
@@ -463,6 +474,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const sy = e.clientY;
     let moved = false;
     let newStart = clip.startBeat;
+    forceAll = true;
     trackPointer(e, (ev) => {
       if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
       moved = true;
@@ -479,10 +491,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       if (!moved) return;
       const targetId = node.parentElement.dataset.trackId;
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
-      if (!copy && targetId === track.id && newStart === clip.startBeat) { render(); return; }
+      if (!copy && targetId === track.id && newStart === clip.startBeat) { render(true); return; }
       const id = store.moveClip(clip.id, targetId, newStart, { copy });
       select(id);
-    }, () => { ui.status(null); render(); });
+    }, () => { ui.status(null); render(true); });
   }
 
   function startResize(e, node) {
@@ -492,7 +504,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
         const len = clamp(snap(clip.lengthBeats + dx / ppb(), ev), step(ev), total - clip.startBeat);
         return { clip: { lengthBeats: len }, status: `Länge: ${formatBeats(len)}` };
       },
-      commit: (clip, r) => { if (r.lengthBeats !== clip.lengthBeats) store.resizeClip(clip.id, r.lengthBeats); else render(); },
+      commit: (clip, r) => { if (r.lengthBeats !== clip.lengthBeats) store.resizeClip(clip.id, r.lengthBeats); else render(true); },
     });
   }
 
@@ -505,7 +517,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
         const offsetBeats = ((((clip.offsetBeats || 0) + start - clip.startBeat) % sb) + sb) % sb;
         return { clip: { startBeat: start, lengthBeats: end - start, offsetBeats }, left: start, status: `Anfang: ${formatPos(start, store.project.beatsPerBar)}` };
       },
-      commit: (clip, r) => { if (r.startBeat !== clip.startBeat) store.trimClipStart(clip.id, r.startBeat); else render(); },
+      commit: (clip, r) => { if (r.startBeat !== clip.startBeat) store.trimClipStart(clip.id, r.startBeat); else render(true); },
     });
   }
 
@@ -661,8 +673,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
     return true;
   }
 
-  store.on(render);
-  narrow.addEventListener('change', render);
-  render();
+  store.on(() => render());
+  narrow.addEventListener('change', () => render(true));
+  // Farben der Wellenformen hängen vom Farbschema ab
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render(true));
+  render(true);
   return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, nudge };
 }
