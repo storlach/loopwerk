@@ -17,14 +17,14 @@ const { check, finish } = createChecker();
     // ---------- Grundaufteilung ----------
     const deck = await rect('.deck');
     const lay = await page.evaluate(() => ({
-      insp: !!document.getElementById('insp').offsetParent, bar: getComputedStyle(document.getElementById('deskbar')).display,
-      tabs: getComputedStyle(document.getElementById('tabbar')).display, overflow: document.documentElement.scrollWidth - innerWidth,
-      mixerInBar: !!document.getElementById('mixer-btn').closest('.deskbar'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
+      insp: !!document.getElementById('insp').offsetParent, bar: getComputedStyle(document.getElementById('tabbar')).display,
+      tabs: getComputedStyle(document.getElementById('tab-sounds')).display, overflow: document.documentElement.scrollWidth - innerWidth,
+      mixerInBar: !!document.getElementById('mixer-btn').closest('#tabbar'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
       saveInMenu: !!document.getElementById('save-btn').closest('#project-menu'), exportInDeck: !!document.getElementById('export-btn').closest('.deck'),
       menuName: document.getElementById('project-menu-name').textContent,
     }));
     check('Deck in einer Zeile (≤ 64 px)', deck.h <= 64, `${deck.h} px`);
-    check('Inspektor rechts, Leiste unten, keine Handy-Leiste, kein Querscrollen', lay.insp && lay.bar === 'flex' && lay.tabs === 'none' && lay.overflow <= 0, JSON.stringify(lay));
+    check('Inspektor rechts, Fachleiste unten ohne Handy-Reiter, kein Querscrollen', lay.insp && lay.bar === 'flex' && lay.tabs === 'none' && lay.overflow <= 0, JSON.stringify(lay));
     check('Knöpfe an ihren neuen Plätzen', lay.mixerInBar && lay.zoomInBar && lay.saveInMenu && lay.exportInDeck && lay.menuName === 'Beispiel-Arrangement', JSON.stringify(lay));
 
     // Projekt-Menü
@@ -100,7 +100,7 @@ const { check, finish } = createChecker();
     await page.waitForTimeout(600);
     const dk2 = await rect('#mixer');
     check('Aufziehen rastet oben ein (80 %)', Math.abs(dk2.h / ar.h - 0.8) < 0.02, `${dk.h} → ${dk2.h} / ${ar.h}`);
-    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide === 0.8));
+    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide.mixer === 0.8));
     // Kurzer Schubs nach unten: eine Stufe tiefer (Mitte), nicht zu
     await mdrag('#mixer', 40, 2, 0);
     await page.waitForTimeout(80);
@@ -366,7 +366,7 @@ const { check, finish } = createChecker();
     check('Handy: Taste antippen setzt in der Schritt-Eingabe eine Note', JSON.stringify(mn) === '[64]', JSON.stringify(mn));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v18-mobil-tasten.png') });
     const ov = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-    check('Handy: kein Querscrollen, Desktop-Teile ausgeblendet', ov <= 0 && await page.evaluate(() => ['.insp', '.deskbar', '.arr-bar', '.left-tabs'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')));
+    check('Handy: kein Querscrollen, Desktop-Teile ausgeblendet', ov <= 0 && await page.evaluate(() => ['.insp', '.tabbar-end', '.arr-bar', '.left-tabs'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')));
     check('Keine Fehler in der Konsole (Handy)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

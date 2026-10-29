@@ -148,10 +148,10 @@ const { check, finish } = createChecker();
     check('Regler ändern Lautstärke und Einblenden am Clip', riserClip.gain === 0.5 && riserClip.fadeInBeats === 2, JSON.stringify(riserClip));
     check('Mehrere Reglerbewegungen sind ein Rückgängig-Schritt je Regler', s.undo - undo0 === 2, `${s.undo - undo0} Schritte`);
     check('Wertanzeige in dB', (await page.locator('#lvl-gain-out').textContent()).includes('dB'));
-    await page.tap('#tab-undo');
-    await page.tap('#tab-undo');
+    await page.tap('#undo-btn');
+    await page.tap('#undo-btn');
     const restored = (await lw()).tracks[6].find((c) => c.id === riserId);
-    check('„Rückgängig“ in der Leiste nimmt beides zurück', (restored.gain ?? 1) === 1 && !restored.fadeInBeats, JSON.stringify(restored));
+    check('„Rückgängig“ im Deck nimmt beides zurück', (restored.gain ?? 1) === 1 && !restored.fadeInBeats, JSON.stringify(restored));
     await page.tap('#cb-levels');
 
     const count = async () => (await lw()).tracks[6].filter((c) => c.sampleId === 'fx-riser').length;
@@ -160,13 +160,13 @@ const { check, finish } = createChecker();
     check('„Duplizieren“ legt eine Kopie dahinter', await count() === n0 + 1);
     await page.tap('#cb-del');
     check('„Löschen“ entfernt den ausgewählten Clip', await count() === n0);
-    await page.tap('#tab-undo');
+    await page.tap('#undo-btn');
     check('„Rückgängig“ holt ihn zurück', await count() === n0 + 1);
-    await page.tap('#tab-undo');
+    await page.tap('#undo-btn');
     await page.evaluate((id) => { const c = window.loopwerk.store.findClip(id).clip; window.loopwerk.engine.setPosition(c.startBeat + 4); window.loopwerk.arranger.select(id); }, riserId);
     await page.tap('#cb-split');
     check('„Teilen“ teilt an der Abspielmarke', await count() === n0 + 1, `${await count()} Clips`);
-    await page.tap('#tab-undo');
+    await page.tap('#undo-btn');
     await page.evaluate((id) => window.loopwerk.arranger.select(id), riserId);
 
     // Ausgewählter Clip lässt sich ziehen
@@ -175,15 +175,24 @@ const { check, finish } = createChecker();
     await swipe(Math.max(sel.x, 140) + 30, sel.y + 8, 96, 0);
     const start1 = (await lw()).tracks[6].find((c) => c.id === riserId)?.startBeat;
     check('Ein ausgewählter Clip lässt sich mit dem Finger verschieben', start1 === start0 + 4, `${start0} → ${start1}`);
-    await page.tap('#tab-undo');
+    await page.tap('#undo-btn');
 
     // ---------- Fächer: immer nur eins ----------
-    await page.tap('#tab-mixer');
+    await page.tap('#mixer-btn');
     s = await lw();
     check('„Mixer“ öffnet den Mixer im Fach', s.dock === 'mixer' && await page.locator('#mixer').isVisible());
     check('Bei offenem Mixer sind Regal und Clip-Werkzeuge weg', !(await page.locator('.shelf').isVisible()) && !(await page.locator('#clipbar').isVisible()));
-    const fx = await box('#mixer .fx-toggle');
-    check('Effekt-Schalter im Mixer gut treffbar', fx.height >= 32, `${fx.height} px`);
+    await page.waitForTimeout(500);
+    const sum = await box('#mixer .strip[data-strip-id="t1"] .strip-sum');
+    const fader = await box('#fader-t1');
+    check('Mixer: Effekt-Zusammenfassung gut treffbar, Fader lang', sum.height >= 40 && fader.height >= 160, `Effekte ${sum.height} px, Fader ${fader.height} px`);
+    await page.tap('#mixer .strip[data-strip-id="t1"] .strip-sum');
+    check('Mixer: Antippen zeigt die Effekte des Kanals als eigene Seite', await page.locator('#fx-hall-on').isVisible() && !(await page.locator('#fader-t1').isVisible()));
+    await page.tap('#fx-hall-on');
+    check('Mixer: Effekt einschalten', await page.evaluate(() => window.loopwerk.store.track('t1').fx.hall.on === true));
+    await page.tap('#mixer .detail-back');
+    check('Mixer: „Alle Kanäle“ führt zurück, Zusammenfassung zählt den Effekt', await page.locator('#fader-t1').isVisible() && (await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').textContent()) === '1 Effekt');
+    await page.tap('#undo-btn');
     await page.tap('#tab-more');
     await page.waitForTimeout(400); // Mixer fährt hinaus
     check('„Mehr“ ersetzt den Mixer', (await lw()).dock === 'more' && !(await page.locator('#mixer').isVisible()) && await page.locator('#more').isVisible());
@@ -235,7 +244,7 @@ const { check, finish } = createChecker();
     await page.tap('#tab-sounds');
     await page.tap('#new-melody-btn');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && !document.getElementById('pat-roll-wrap').hidden);
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(600); // Schublade fährt herein
     const notes = () => page.evaluate(() => window.loopwerk.store.project.patterns[window.loopwerk.patternEditor.id].notes.length);
     const wrap = await box('#pat-roll-wrap');
     const n1 = await notes();
@@ -289,7 +298,7 @@ const { check, finish } = createChecker();
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.waitForTimeout(100);
     const dark = await page.evaluate(() => ({ tabs: getComputedStyle(document.getElementById('tabbar')).backgroundColor, hint: getComputedStyle(document.getElementById('hint')).backgroundColor }));
-    check('Dunkel: Leiste und Hinweiszeile nutzen die dunklen Tokens', dark.tabs === 'rgb(11, 15, 21)' && dark.hint === 'rgb(23, 30, 40)', JSON.stringify(dark));
+    check('Dunkel: Leiste und Einblender nutzen die dunklen Tokens', dark.tabs === 'rgb(11, 15, 21)' && dark.hint === dark.tabs, JSON.stringify(dark));
     if (SHOTS) {
       await page.tap('#tab-sounds');
       await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-dunkel.png') });
@@ -309,13 +318,13 @@ const { check, finish } = createChecker();
     const desk = await page.evaluate(() => ({
       // Desktop-Plätze: Transport im Deck, Zoom in der Arranger-Leiste, Speichern im Projekt-Menü, Mixer in der Leiste unten
       back: ['rec-btn', 'metro-btn'].every((id) => document.getElementById(id).closest('.deck')) && !!document.getElementById('zoom-in').closest('.arr-bar')
-        && !!document.getElementById('save-btn').closest('#project-menu') && !!document.getElementById('mixer-btn').closest('.deskbar'),
+        && !!document.getElementById('save-btn').closest('#project-menu') && !!document.getElementById('mixer-btn').closest('#tabbar') && getComputedStyle(document.getElementById('tab-sounds')).display === 'none',
       tabs: getComputedStyle(document.getElementById('tabbar')).display,
       shelf: getComputedStyle(document.querySelector('.shelf')).display,
       dock: window.loopwerk.ui.dock,
       order: [...document.querySelector('.deck .group[aria-label="Transport"]').children].map((b) => b.id).join(','),
     }));
-    check('Desktop: Knöpfe zurück im Deck, ohne Leiste unten, Regal sichtbar', desk.back && desk.tabs === 'none' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
+    check('Desktop: Knöpfe zurück im Deck, dieselbe Fachleiste ohne Sounds/Mehr, Regal sichtbar', desk.back && desk.tabs === 'flex' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
     check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
     check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,metro-btn', desk.order);
     await page.click('#shelf-cat-synth');

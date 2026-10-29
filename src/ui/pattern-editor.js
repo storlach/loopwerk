@@ -16,10 +16,10 @@ import { clamp, el, trackPointer } from '../util.js';
 import { place } from './place.js';
 
 // Breite der Tastenspalte links in der Piano-Roll; am Handy breiter (spielbare Tasten)
-const keyW = () => (narrow.matches ? 64 : 46);
+const keyW = () => (narrow.matches ? 72 : 46);
 // Am Handy größere Zeilen und Felder, damit Noten mit dem Finger treffbar sind
 const narrow = window.matchMedia('(max-width: 760px)');
-const rowH = () => (narrow.matches ? 30 : 14);
+const rowH = () => (narrow.matches ? 34 : 14);
 // Computertastatur → Halbton über dem Grundton (deutsches und englisches Layout: Z und Y)
 const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, z: 8, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
 const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
@@ -969,24 +969,17 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     $('pat-pages').hidden = !drums || pads || !narrow.matches;
     rollWrap.hidden = drums;
     keysEl.hidden = drums;
-    const liveHint = looper.running ? ' Live-Aufnahme läuft: nach einem Takt Vorzähler landet alles, was du spielst, im Raster.' : '';
-    if (pads) {
-      renderPads(p);
-      hint.textContent = (narrow.matches
-        ? 'Pads antippen spielt die Sounds. „● Live“ lässt den Beat im Loop laufen und nimmt deine Schläge auf.'
-        : 'Pads anklicken oder Tasten A S D F G H J K spielen. „● Live“ lässt den Beat im Loop laufen und nimmt deine Schläge auf.') + liveHint;
-    } else if (drums) {
-      renderDrums(p);
-      hint.textContent = (narrow.matches
-        ? 'Feld antippen setzt oder löscht einen Schlag, Namen antippen spielt das Instrument. Die Schalter oben oder Wischen wechseln die Takthälfte; ein Punkt zeigt, wo schon Schläge liegen.'
-        : 'Klick auf ein Feld setzt oder löscht einen Schlag. Klick auf den Namen spielt das Instrument. Tasten A–K spielen die Instrumente.') + liveHint;
-    } else {
+    // Erklärungen stehen in den Tipps; hier nur, was gerade läuft
+    hint.textContent = !looper.running ? '' : pads || drums
+      ? 'Live-Aufnahme läuft: nach einem Takt Vorzähler landet alles, was du spielst, im Raster.'
+      : 'Live-Aufnahme läuft: gespielte Töne landen mit ihrer Länge im Raster.';
+    hint.hidden = !hint.textContent;
+    if (pads) renderPads(p);
+    else if (drums) renderDrums(p);
+    else {
       drawRoll(p);
       renderKeys();
       if (narrow.matches) renderVkeys();
-      hint.textContent = narrow.matches
-        ? `Antippen setzt eine Note in der gewählten Notenlänge, Antippen einer Note löscht sie. Wischen blättert durch die Oktaven.`
-        : `Klick ins Raster setzt eine Note (ziehen = länger), Klick auf eine Note löscht sie, Ziehen verschiebt. Klaviatur oder Tasten A–K spielen ab ${noteName(octave)}, Pfeil hoch/runter wechselt die Oktave${rec ? ' – Schritt-Eingabe aktiv: jede Taste setzt eine Note an der markierten Stelle.' : '.'}${looper.running ? ' Live-Aufnahme läuft: gespielte Töne landen mit ihrer Länge im Raster.' : ''}`;
     }
   }
 

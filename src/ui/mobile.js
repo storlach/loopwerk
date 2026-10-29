@@ -1,4 +1,4 @@
-// Handy-Bedienung: Leiste unten (Sounds, Mixer, Rückgängig, Mehr), darüber ein Fach für Regal oder Dock,
+// Handy-Bedienung: Fachleiste unten (Sounds, Mixer, Editor, Mehr), darüber ein Fach für Regal oder Dock,
 // Werkzeuge für den ausgewählten Clip. Auf breiten Bildschirmen bleibt alles, wie es ist.
 
 import { clipGain } from '../model.js';
@@ -26,16 +26,15 @@ export function mountMobile({ store, ui, tools }) {
 
   // ---------- Leiste unten ----------
 
-  const tabs = [['tab-sounds', 'sounds'], ['tab-mixer', 'mixer'], ['tab-more', 'more']];
+  // Mixer und Editor bedienen mixer.js und layout.js – dieselben Reiter wie am Desktop
+  const tabs = [['tab-sounds', 'sounds'], ['tab-more', 'more']];
   for (const [id, dock] of tabs) $(id).addEventListener('click', () => ui.setDock(ui.dock === dock ? null : dock));
-  $('tab-undo').addEventListener('click', () => store.undo());
   $('more-close').addEventListener('click', () => ui.setDock(null));
 
   function syncTabs() {
     app.dataset.dock = ui.dock || '';
     more.hidden = ui.dock !== 'more';
     for (const [id, dock] of tabs) $(id).setAttribute('aria-pressed', String(ui.dock === dock));
-    $('tab-undo').disabled = !store.canUndo;
   }
 
   // ---------- Werkzeuge für den ausgewählten Clip ----------

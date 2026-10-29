@@ -1,5 +1,7 @@
 <title>Loopwerk</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
@@ -723,9 +725,41 @@
   #pat-roll { display: block; cursor: crosshair; touch-action: none; }
   .pat-hint { margin: 0; font-size: 12px; color: var(--muted); }
 
-  /* ---------- Hinweiszeile ---------- */
-  .hint { grid-area: hint; color: var(--muted); font-size: 12px; min-height: 18px; }
-  .hint.armed { color: var(--ink); font-weight: 500; }
+  /* ---------- Rückmeldungen: kurzer Einblender unten über dem Arranger, nur wenn es etwas zu sagen gibt ---------- */
+  .hint {
+    grid-area: arr; align-self: end; justify-self: center; position: relative; z-index: 45;
+    display: flex; align-items: center; gap: 10px; box-sizing: border-box; max-width: min(560px, calc(100% - 24px));
+    min-height: 40px; margin-bottom: 12px; padding: 6px 6px 6px 16px; border-radius: 22px;
+    background: var(--deck); color: var(--deck-ink); font-size: 13px; font-weight: 500; line-height: 1.3;
+    box-shadow: 0 10px 30px rgb(0 0 0 / 0.32);
+    animation: toast-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .hint:not(.show) { display: none; }
+  .hint-text { flex: 1; min-width: 0; padding-right: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hint-done {
+    display: inline-flex; align-items: center; flex: none; height: 36px; padding: 0 16px;
+    border: 0; border-radius: 18px; background: var(--amber); color: #1B1204; cursor: pointer;
+    font: 600 12px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+  @media (prefers-reduced-motion: reduce) { .hint { animation: none; } }
+
+  /* ---------- Fachleiste: dieselben Reiter auf jedem Bildschirm, jeder öffnet die Schublade direkt darüber ---------- */
+  .tabbar { position: relative; z-index: 30; background: var(--deck); }
+  .tab {
+    border: 0; background: transparent; color: var(--deck-muted); cursor: pointer;
+    font: 600 11px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .tab svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
+  .tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .tab:hover:not(:disabled) { color: var(--deck-ink); }
+  .tab[aria-pressed="true"] { color: var(--amber); background: var(--deck-2); box-shadow: inset 0 2px 0 var(--amber); }
+  .tab:disabled { opacity: 0.4; cursor: default; }
+  .tab-keys {
+    height: 100%; padding: 0 14px; border: 0; background: transparent; color: var(--deck-muted); cursor: pointer;
+    font: 500 12px/1 var(--font-body);
+  }
+  .tab-keys:hover { color: var(--deck-ink); }
 
   /* ---------- Splash-Screen beim Laden ---------- */
   .splash {
@@ -790,7 +824,7 @@
 
   /* ---------- Handy-Bausteine (nur auf schmalen Bildschirmen sichtbar) ---------- */
   [hidden] { display: none !important; }
-  .tabbar, .clipbar, .more-panel, .hint-done, .lbl-short { display: none; }
+  .clipbar, .more-panel, .lbl-short { display: none; }
 
   /* Touch: ein Clip wird erst angetippt (ausgewählt), dann gezogen – Wischen über Clips scrollt */
   @media (pointer: coarse) {
@@ -928,7 +962,7 @@
     .app, .app.dock-open {
       grid-template-columns: 272px minmax(0, 1fr) var(--insp-w, 300px);
       grid-template-rows: auto minmax(0, 1fr) auto;
-      grid-template-areas: "deck deck deck" "shelf arr insp" "bar bar bar";
+      grid-template-areas: "deck deck deck" "shelf arr insp" "shelf bar insp";
       gap: 8px; padding: 8px;
       padding-left: max(8px, env(safe-area-inset-left, 0px));
       padding-right: max(8px, env(safe-area-inset-right, 0px));
@@ -979,19 +1013,12 @@
     .dock {
       grid-area: arr; align-self: end; z-index: 20; height: var(--sheet-h, 50%); max-height: 100%;
       grid-template-rows: auto auto minmax(0, 1fr);
-      border-radius: 12px 12px var(--radius) var(--radius);
+      border-radius: 12px 12px 0 0;
       box-shadow: 0 -14px 34px rgb(0 0 0 / 0.22);
     }
     .dock .dock-head { cursor: default; }
     .dock-body { grid-template-columns: minmax(0, 1fr); }
     .mixer-detail { display: none; }
-    .strip-fx { display: none; }
-    .mixer-strips .strip-sum {
-      display: block; height: 30px; border: 1px dashed var(--line); border-radius: 4px; background: transparent; cursor: pointer;
-      color: var(--muted); font: 600 11px/1.1 var(--font-body);
-    }
-    .mixer-strips .strip-sum.on { border-style: solid; border-color: var(--amber); background: color-mix(in srgb, var(--amber) 22%, var(--lane)); color: var(--ink); }
-    .strip-master { position: sticky; right: 0; z-index: 1; box-shadow: -6px 0 12px var(--panel); }
 
     /* Melodie-Editor: Einsingen links neben der Piano-Roll; Hilfetexte stehen in den Tipps */
     .pat-hint, .pat-sing-intro { display: none; }
@@ -1016,23 +1043,15 @@
     .ed-tools[data-tab="trennen"] .ed-group:not([data-tab="trennen"]),
     .ed-tools[data-tab="loop"] .ed-group:not([data-tab="loop"]) { display: none; }
 
-    /* Leiste unten: Fächer, Hinweis, Tastenkürzel */
-    .deskbar {
-      grid-area: bar; display: flex; align-items: center; gap: 10px; min-height: 36px;
-      position: relative; z-index: 30; background: var(--bg); box-shadow: 0 0 0 8px var(--bg);
+    /* Fachleiste direkt unter dem Arranger: die Reiter hängen an ihrer Schublade */
+    .tabbar {
+      grid-area: bar; display: flex; align-items: stretch; gap: 2px; min-height: 42px; margin-top: -8px;
+      padding: 0 6px; border-radius: 0 0 var(--radius) var(--radius);
     }
-    .deskbar-tabs { display: flex; gap: 6px; }
-    .dtab, .deskbar-tabs #mixer-btn {
-      display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; box-shadow: none;
-      border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--ink); cursor: pointer;
-      font: 600 12px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
-    }
-    .dtab svg { width: 16px; height: 16px; fill: currentColor; }
-    .dtab[aria-pressed="true"], .deskbar-tabs #mixer-btn[aria-pressed="true"] { border-color: var(--amber); color: var(--ink); box-shadow: inset 0 -2px 0 var(--amber); }
-    .dtab:disabled { opacity: 0.45; cursor: default; }
-    .deskbar-hint { flex: 1; min-width: 0; }
-    .deskbar .hint { font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .deskbar #keys-btn { text-transform: none; letter-spacing: 0; font-family: var(--font-body); color: var(--muted); }
+    #tab-sounds, #tab-more { display: none; }
+    .tab { display: inline-flex; align-items: center; gap: 8px; max-width: 320px; padding: 0 16px; }
+    .tabbar-end { margin-left: auto; display: flex; }
+    .arranger { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
   }
   /* Kleinere Laptops: Inspektor eingeklappt, klappt bei Bedarf über den Arranger auf */
   @media (min-width: 761px) and (max-width: 1365px) {
@@ -1048,7 +1067,14 @@
     }
     .app.insp-open .insp-toggle { writing-mode: horizontal-tb; flex-direction: row; justify-content: flex-end; padding: 8px 12px; }
   }
-  .strip-sum { display: none; }
+  /* Kanalzug: Effekte als Zusammenfassung („2 Effekte“), Master rechts angeheftet – Handy und Desktop gleich */
+  .strip-fx { display: none; }
+  .strip-sum {
+    display: block; min-height: 30px; border: 1px dashed var(--line); border-radius: 4px; background: transparent; cursor: pointer;
+    color: var(--muted); font: 600 11px/1.1 var(--font-body);
+  }
+  .strip-sum.on { border-style: solid; border-color: var(--amber); background: color-mix(in srgb, var(--amber) 22%, var(--lane)); color: var(--ink); }
+  .strip-master { position: sticky; right: 0; z-index: 1; box-shadow: -6px 0 12px var(--panel); }
 
   /* ---------- Schmale Bildschirme: kompaktes Deck, Arranger, ein Fach, Leiste unten ---------- */
   @media (max-width: 760px) {
@@ -1056,12 +1082,12 @@
       height: 100%;
       height: 100dvh;
       grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: auto minmax(132px, 1fr) auto auto auto;
-      grid-template-areas: "deck" "arr" "clip" "hint" "tabs";
+      grid-template-rows: auto minmax(132px, 1fr) auto auto;
+      grid-template-areas: "deck" "arr" "clip" "tabs";
       gap: 0;
       padding: 0;
     }
-    .left-tabs, .create-panel, .insp, .deskbar, .arr-bar, .deck-right, .ed-tabs, .pat-more-wrap { display: none !important; }
+    .left-tabs, .create-panel, .insp, .arr-bar, .deck-right, .ed-tabs, .pat-more-wrap, .tabbar-end { display: none !important; }
     /* Am Handy unten im Arranger Platz lassen, damit die letzten Spuren über das offene Fach scrollen */
     .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
     /* Das Fach lässt dem Arranger immer mindestens gut 150 px */
@@ -1073,7 +1099,7 @@
       flex-wrap: nowrap; gap: 6px; border-radius: 0;
       padding: 6px max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px));
     }
-    .deck .meter-wrap, .deck .spacer, .deck .group[aria-label="Clip"], #mixer-btn, .lcd-more { display: none; }
+    .deck .meter-wrap, .deck .spacer, .deck .group[aria-label="Clip"], .deck .group:empty, .lcd-more { display: none; }
     .deck .group { flex-wrap: nowrap; }
     .key { min-width: 44px; height: 44px; }
     .key.play { min-width: 56px; height: 44px; }
@@ -1097,7 +1123,7 @@
     .shelf > * { flex: none; }
     .shelf > .sheet-grip { position: sticky; top: 0; z-index: 3; background: var(--panel); }
     .app[data-dock="sounds"] .shelf, .shelf.sheet.leaving { display: flex; }
-    .hint, .tabbar, .clipbar { position: relative; z-index: 30; }
+    .clipbar { position: relative; z-index: 30; }
     .dock { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
     .more-panel { height: auto; }
 
@@ -1108,6 +1134,11 @@
     /* Pattern-Einstellungen in einer Zeile zum Wischen, damit die Piano-Roll Platz behält */
     #pattern .dock-actions { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-right: 10px; }
     #pattern .dock-actions > * { flex: none; }
+    /* Pattern-Editor: Kopf in einer Zeile (der Reiter „Editor“ sagt, was offen ist), der Rest gehört Klavier und Raster */
+    #pattern > .dock-head { flex-wrap: nowrap; align-items: center; padding-bottom: 6px; }
+    #pattern > .dock-head h2 { display: none; }
+    #pattern .dock-actions { order: 0; flex: 1 1 auto; width: auto; min-width: 0; }
+    #pattern .pat-body { padding: 6px 8px 8px; }
     #pat-play { order: -1; }
     #pat-name { width: 150px; }
     .dbtn, .ed-beats, .ed-name { min-height: 44px; }
@@ -1146,10 +1177,10 @@
     /* Tastatur offen: nur der Bereich mit dem Eingabefeld bleibt, passend zur Höhe über der Tastatur */
     .app.kbd { height: var(--vvh, 100dvh); }
     .app.kbd .deck, .app.kbd .tabbar, .app.kbd .clipbar, .app.kbd .hint { display: none; }
-    .app.kbd[data-kbd-in="dock"] { grid-template-rows: 0 minmax(0, 1fr) 0 0 0; }
+    .app.kbd[data-kbd-in="dock"] { grid-template-rows: 0 minmax(0, 1fr) 0 0; }
     .app.kbd[data-kbd-in="dock"] .arranger { visibility: hidden; }
     .app.kbd[data-kbd-in="dock"] .shelf, .app.kbd[data-kbd-in="dock"] .dock { height: 100%; border-radius: 0; }
-    .app.kbd[data-kbd-in="arr"] { grid-template-rows: 0 minmax(0, 1fr) 0 0 0; }
+    .app.kbd[data-kbd-in="arr"] { grid-template-rows: 0 minmax(0, 1fr) 0 0; }
     .app.kbd[data-kbd-in="arr"] .shelf, .app.kbd[data-kbd-in="arr"] .dock { display: none; }
     .ed-name, #pat-name, .track-name-input, .ed-beats { font-size: 16px; }
 
@@ -1183,15 +1214,25 @@
     .add-row { height: 52px; }
     .app.armed-mode .lane { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 50%, transparent); }
 
-    /* Mixer */
+    /* Mixer: Kanäle füllen die Schublade; Effekte eines Kanals als eigene Seite */
     .dock-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
-    .mixer-strips { height: 300px; box-sizing: border-box; }
-    .strip { flex-basis: 94px; }
-    .strip-name { min-height: 32px; }
-    .fx-toggle { height: 32px; font-size: 10px; }
+    #mixer .dock-body { display: flex; flex-direction: column; overflow: hidden; }
+    .mixer-strips { flex: 1 1 auto; min-height: 0; box-sizing: border-box; padding: 8px 10px 10px; }
+    #mixer[data-view="detail"] .mixer-strips, #mixer:not([data-view="detail"]) .mixer-detail { display: none; }
+    .strip { flex-basis: 84px; flex-shrink: 0; gap: 6px; }
+    .strip-name { min-height: 28px; }
+    .strip-sum { min-height: 40px; }
     .strip-pan { height: 28px; }
+    .strip-fader-row { min-height: 90px; }
+    .strip-fader { width: 30px; }
     .strip-ms { gap: 6px; }
-    .mixer-detail { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+    .mixer-detail { flex: 1 1 auto; min-height: 0; border-left: 0; overflow-y: auto; padding: 4px 12px 16px; }
+    .detail-head { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 2; padding: 4px 0 8px; background: var(--panel); }
+    .detail-back {
+      flex: none; height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--lane);
+      color: var(--ink); cursor: pointer; font: 600 13px/1 var(--font-body);
+    }
+    .detail-head .detail-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .fx-switch { min-height: 40px; padding: 0 14px; }
     .fx-param input[type="range"] { height: 32px; }
     .fx-param select { height: 40px; }
@@ -1202,7 +1243,7 @@
     .pat-keys { display: none !important; }
     .pat-vkeys + #pat-roll { margin-top: calc(-1 * var(--vk-h, 0px)); }
     .pat-vkeys {
-      display: block; position: sticky; left: 0; z-index: 2; width: 64px;
+      display: block; position: sticky; left: 0; z-index: 2; width: 72px;
       touch-action: none; -webkit-user-select: none; user-select: none;
       box-shadow: 2px 0 6px rgb(0 0 0 / 0.18);
     }
@@ -1249,33 +1290,15 @@
     .lvl input { width: 100%; height: 44px; margin: 0; accent-color: var(--amber); }
     .lvl output { font: 500 11px/1 var(--font-mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
 
-    /* Hinweiszeile direkt über der Leiste, damit Rückmeldungen im Blick sind */
-    .hint {
-      display: flex; align-items: center; gap: 8px; min-height: 48px; box-sizing: border-box;
-      padding: 2px max(8px, env(safe-area-inset-right, 0px)) 2px max(12px, env(safe-area-inset-left, 0px));
-      background: var(--panel); border-top: 1px solid var(--line); line-height: 1.3;
-    }
-    .hint-text { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .hint-done {
-      display: inline-flex; align-items: center; flex: none; height: 44px; padding: 0 16px;
-      border: 0; border-radius: 5px; background: var(--amber); color: #1B1204; cursor: pointer;
-      font: 600 12px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
-    }
-
-    /* Leiste unten: Bereiche und Rückgängig in Daumennähe */
+    /* Fachleiste in Daumennähe: vier gleich breite Reiter */
     .tabbar {
       grid-area: tabs; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
       padding: 4px max(6px, env(safe-area-inset-right, 0px)) max(4px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
-      background: var(--deck);
     }
-    .tab {
-      display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 52px;
-      border: 0; border-radius: 5px; background: transparent; color: var(--deck-muted); cursor: pointer;
-      font: 600 10px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase;
-    }
-    .tab svg { width: 20px; height: 20px; fill: currentColor; }
-    .tab[aria-pressed="true"] { color: var(--amber); background: var(--deck-2); box-shadow: inset 0 2px 0 var(--amber); }
-    .tab:disabled { opacity: 0.4; cursor: default; }
+    .tab { display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 52px; padding: 0 4px; border-radius: 5px; font-size: 10px; }
+    .tab svg { width: 20px; height: 20px; }
+    /* Rückmeldungen über der Fachleiste */
+    .hint { margin-bottom: 10px; font-size: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .shelf-chevron { transition: none; }
@@ -1291,7 +1314,7 @@
     <p class="splash-tag">I Like To Loop it Loop it</p>
     <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
     <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
-    <p class="splash-version" id="boot-version">Version 1.8</p>
+    <p class="splash-version" id="boot-version">Version 1.9</p>
   </div>
 </div>
 
@@ -1299,7 +1322,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.8</span>
+      <span class="brand-tag">Version 1.9</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -1318,10 +1341,6 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
         <span class="rec-label">Aufnahme</span>
       </button>
-      <button class="key" id="mixer-btn" type="button" title="Mixer und Effekte" aria-pressed="false">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg>
-        Mixer
-      </button>
       <button class="key" id="metro-btn" type="button" title="Metronom">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l3 14H3zm1.6 2L5.4 13h5.2L8.4 3zM8 6l4-3 .6.8-4 3z"/></svg>
         Klick
@@ -1335,6 +1354,8 @@
       <div class="lcd-cell"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
       <div class="lcd-cell lcd-more" title="Die synthetischen Loops stehen in A-Moll"><span class="lcd-label">Tonart</span><span class="lcd-value">Am</span></div>
     </div>
+
+    <div class="group deck-undo" id="deck-undo" role="group" aria-label="Rückgängig"></div>
 
     <div class="meter-wrap">
       <span class="lcd-label">Master</span>
@@ -1393,7 +1414,7 @@
           <div class="pop-body" id="project-menu-body"></div>
           <div class="pop-sep"></div>
           <button class="pop-item" id="tips-reset" type="button">Tipps wieder zeigen</button>
-          <p class="pop-about" id="pop-about">Loopwerk 1.8 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
+          <p class="pop-about" id="pop-about">Loopwerk 1.9 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
         </div>
       </div>
       <div class="group deck-edit" id="deck-edit"></div>
@@ -1682,16 +1703,22 @@
 
   <footer class="hint" id="hint"><span class="hint-text" id="hint-text"></span><button class="hint-done" id="hint-done" type="button" hidden>Fertig</button></footer>
 
-  <div class="deskbar" id="deskbar">
-    <div class="deskbar-tabs" id="deskbar-tabs" role="group" aria-label="Fächer">
-      <button class="dtab" id="editor-tab" type="button" aria-pressed="false" disabled>
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h3l2-5 4 10 2-5h3v1.5h-2l-3 6.5-4-10-1 2.5H1z"/></svg>
-        <span id="editor-tab-label">Editor</span>
-      </button>
-    </div>
-    <div class="deskbar-hint" id="deskbar-hint"></div>
-    <div class="menu-wrap">
-      <button class="dtab" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false">? Tastenkürzel</button>
+  <!-- Fachleiste: dieselben Reiter am Handy und am Desktop, jeder öffnet die Schublade direkt darüber -->
+  <nav class="tabbar" id="tabbar" aria-label="Fächer">
+    <button class="tab" id="tab-sounds" type="button" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5l8-1.5v10.5a2.5 2.5 0 11-1.5-2.3V3L7.5 4v8.5A2.5 2.5 0 116 10.2z"/></svg><span class="tab-label">Sounds</span>
+    </button>
+    <button class="tab" id="mixer-btn" type="button" title="Mixer und Effekte" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg><span class="tab-label">Mixer</span>
+    </button>
+    <button class="tab" id="editor-tab" type="button" aria-pressed="false" disabled>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h3l2-5 4 10 2-5h3v1.5h-2l-3 6.5-4-10-1 2.5H1z"/></svg><span class="tab-label" id="editor-tab-label">Editor</span>
+    </button>
+    <button class="tab" id="tab-more" type="button" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5h3v3H2zm4.5 0h3v3h-3zm4.5 0h3v3h-3z"/></svg><span class="tab-label">Mehr</span>
+    </button>
+    <div class="menu-wrap tabbar-end">
+      <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false">? Tastenkürzel</button>
       <div class="pop keys-pop" id="keys-pop" hidden>
         <dl class="keys-list">
           <dt>Leertaste</dt><dd>Start / Stopp</dd>
@@ -1710,21 +1737,6 @@
         </dl>
       </div>
     </div>
-  </div>
-
-  <nav class="tabbar" id="tabbar" aria-label="Bereiche">
-    <button class="tab" id="tab-sounds" type="button" aria-pressed="false">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5l8-1.5v10.5a2.5 2.5 0 11-1.5-2.3V3L7.5 4v8.5A2.5 2.5 0 116 10.2z"/></svg>Sounds
-    </button>
-    <button class="tab" id="tab-mixer" type="button" aria-pressed="false">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg>Mixer
-    </button>
-    <button class="tab" id="tab-undo" type="button">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3L1 7l5 4V8h4a3 3 0 010 6H8v2h2a5 5 0 000-10H6z"/></svg>Rückgängig
-    </button>
-    <button class="tab" id="tab-more" type="button" aria-pressed="false">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5h3v3H2zm4.5 0h3v3h-3zm4.5 0h3v3h-3z"/></svg>Mehr
-    </button>
   </nav>
 </div>
 

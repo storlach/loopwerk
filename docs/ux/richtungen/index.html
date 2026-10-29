@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loopwerk UI-Richtungen</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0B0B0E;color:#ECEBEF;font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1500px;margin:0 auto;padding:40px 28px 64px}
+.top h1{margin:0;font-size:34px;letter-spacing:-.02em}
+.top p{margin:8px 0 0;color:#A6A4AE;max-width:900px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px;margin-top:30px}
+.card{background:#141419;border:1px solid #24242C;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:14px}
+.card header{display:flex;align-items:center;gap:12px}
+.badge{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-weight:800;color:#0B0B0E;font-size:18px}
+.card h2{margin:0;font-size:22px;letter-spacing:-.01em}
+.font{margin:0;color:#A6A4AE;font-size:13px}
+.mood{margin:0;min-height:68px}
+.sw{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}
+.sw i{display:block;height:26px;border-radius:6px;box-shadow:inset 0 0 0 1px #ffffff1c}
+.kw{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.kw li{font-size:12px;padding:4px 9px;border-radius:999px;background:#1E1E25;color:#C9C7D1}
+.shot{display:block;border-radius:14px;overflow:hidden;background:#000}
+.shot img{display:block;width:100%;height:auto}
+.links{margin:0;font-size:13px;color:#A6A4AE}
+a{color:#C9C2FF}
+.wide{margin-top:44px}
+.wide h3{font-size:18px;margin:0 0 12px;display:flex;align-items:center;gap:10px}
+.wide h3 span{width:28px;height:28px;border-radius:8px;background:#24242C;display:grid;place-items:center;font-size:14px}
+.wide img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid #24242C}
+.note{margin-top:40px;color:#8E8C96;font-size:13px}
+@media (max-width:1000px){.grid{grid-template-columns:1fr}.mood{min-height:0}}
+</style></head><body><main>
+<div class="top"><h1>Loopwerk – drei Richtungen für den neuen Look</h1>
+<p>Funktional, clean, modern, etwas verspielt, primär Darkmode. Alle drei Richtungen nutzen dasselbe kommende Layout (Deck oben, Arranger, unten eine Leiste mit Reitern, an der die Schubladen hängen) und zeigen je eine andere offene Schublade. Das Logo mit den Amplituden-Balken bleibt in allen erkennbar.</p></div>
+<div class="grid"><article class="card">
+    <header><span class="badge" style="background:linear-gradient(135deg,#8B7CFF,#45D6E6)">A</span><div><h2>Nachtglas</h2><p class="font">Geist · Geist Mono</p></div></header>
+    <p class="mood">Ein ruhiges Nachtstudio hinter Rauchglas: dunkel, weich leuchtend, präzise wie ein Profi-Werkzeug, mit einem Hauch Aurora.</p>
+    <div class="sw"><i title="Grund #0A0C12" style="background:#0A0C12"></i><i title="Fläche #11141C" style="background:#11141C"></i><i title="Text #ECEEF6" style="background:#ECEEF6"></i><i title="Leise #8E95A9" style="background:#8E95A9"></i><i title="Akzent #8B7CFF" style="background:#8B7CFF"></i><i title="Akzent 2 #45D6E6" style="background:#45D6E6"></i><i title="Drums #FF7A6B" style="background:#FF7A6B"></i><i title="Bass #5AA2FF" style="background:#5AA2FF"></i><i title="Akkorde #3FE0B5" style="background:#3FE0B5"></i><i title="Synth #B794FF" style="background:#B794FF"></i><i title="FX #FFC857" style="background:#FFC857"></i><i title="Vocals #FF7EB6" style="background:#FF7EB6"></i></div>
+    <ul class="kw"><li>Glas & Aurora</li><li>Glow nur auf Aktivem</li><li>Mixer-Schublade</li></ul>
+    <a class="shot" href="a-nachtglas.html"><img src="a-nachtglas-handy.png" alt="Richtung A am Handy: Mixer-Schublade offen" loading="lazy"></a>
+    <p class="links"><a href="a-nachtglas.html">Mockup öffnen</a> · <a href="a-nachtglas.png">Gesamtbild</a></p>
+  </article><article class="card">
+    <header><span class="badge" style="background:#FF5B1F">B</span><div><h2>Werkstück</h2><p class="font">Archivo · Martian Mono</p></div></header>
+    <p class="mood">Ein präzises Musikgerät aus Graphit und Gummi: grafisch, haptisch, mit LED-Punkten und genau einer Signalfarbe – wie ein Taschensynth auf dem Tisch.</p>
+    <div class="sw"><i title="Grund #0F0F0F" style="background:#0F0F0F"></i><i title="Fläche #181818" style="background:#181818"></i><i title="Text #F2EFE9" style="background:#F2EFE9"></i><i title="Leise #A39E94" style="background:#A39E94"></i><i title="Signal #FF5B1F" style="background:#FF5B1F"></i><i title="Display #050505" style="background:#050505"></i><i title="Drums #FFC21A" style="background:#FFC21A"></i><i title="Bass #3D7BFF" style="background:#3D7BFF"></i><i title="Akkorde #22C97C" style="background:#22C97C"></i><i title="Synth #A99BFF" style="background:#A99BFF"></i><i title="FX #E6E1D6" style="background:#E6E1D6"></i><i title="Vocals #FF7AA8" style="background:#FF7AA8"></i></div>
+    <ul class="kw"><li>Gehäuse & Gummitasten</li><li>LED-Punkte</li><li>Drumpad-Schublade</li></ul>
+    <a class="shot" href="b-werkstueck.html"><img src="b-werkstueck-handy.png" alt="Richtung B am Handy: Beat-Editor offen" loading="lazy"></a>
+    <p class="links"><a href="b-werkstueck.html">Mockup öffnen</a> · <a href="b-werkstueck.png">Gesamtbild</a></p>
+  </article><article class="card">
+    <header><span class="badge" style="background:#C8F94A">C</span><div><h2>Sticker</h2><p class="font">Bricolage Grotesque · DM Mono</p></div></header>
+    <p class="mood">Ein freches Skizzenbuch voller Aufkleber: dicke Konturen, satte Bonbonfarben, harte Schatten – alles sieht aus, als könnte man es anfassen und verschieben.</p>
+    <div class="sw"><i title="Grund #16131C" style="background:#16131C"></i><i title="Fläche #221E2A" style="background:#221E2A"></i><i title="Text #FFF6E9" style="background:#FFF6E9"></i><i title="Leise #B5ABC2" style="background:#B5ABC2"></i><i title="Limette #C8F94A" style="background:#C8F94A"></i><i title="Kontur #07060A" style="background:#07060A"></i><i title="Drums #FF7A5C" style="background:#FF7A5C"></i><i title="Bass #5CB6FF" style="background:#5CB6FF"></i><i title="Akkorde #4BE3A8" style="background:#4BE3A8"></i><i title="Synth #C4A0FF" style="background:#C4A0FF"></i><i title="FX #FFD84D" style="background:#FFD84D"></i><i title="Vocals #FF8AD2" style="background:#FF8AD2"></i></div>
+    <ul class="kw"><li>Kontur & Versatzschatten</li><li>Bonbonfarben</li><li>Piano-Roll-Schublade</li></ul>
+    <a class="shot" href="c-sticker.html"><img src="c-sticker-handy.png" alt="Richtung C am Handy: Melodie-Editor offen" loading="lazy"></a>
+    <p class="links"><a href="c-sticker.html">Mockup öffnen</a> · <a href="c-sticker.png">Gesamtbild</a></p>
+  </article></div>
+<section class="wide"><h3><span>A</span> Nachtglas · Desktop</h3><a href="a-nachtglas.html"><img src="a-nachtglas-desktop.png" alt="Richtung A am Desktop: Mixer-Schublade offen, Clip gewählt" loading="lazy"></a></section><section class="wide"><h3><span>B</span> Werkstück · Desktop</h3><a href="b-werkstueck.html"><img src="b-werkstueck-desktop.png" alt="Richtung B am Desktop: Beat-Editor offen: Pads und Schritte nebeneinander" loading="lazy"></a></section><section class="wide"><h3><span>C</span> Sticker · Desktop</h3><a href="c-sticker.html"><img src="c-sticker-desktop.png" alt="Richtung C am Desktop: Melodie-Editor offen: Piano-Roll mit Klaviatur" loading="lazy"></a></section>
+<p class="note">Entwurf von ux-designer. Grundlage ist Wissen über Premium-Musik- und Pro-Tool-Oberflächen, keine Live-Recherche auf Pinterest oder Dribbble. Vergleich, Empfehlung und offene Fragen stehen in README.md im selben Ordner.</p>
+</main></body></html>

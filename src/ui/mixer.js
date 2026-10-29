@@ -1,5 +1,5 @@
-// Mixer: ein Kanalzug pro Spur plus Master. Fader, Panorama, Mute/Solo, Effekt-Schalter, Pegel.
-// Rechts die Effekt-Details des ausgewählten Kanals.
+// Mixer: ein Kanalzug pro Spur plus Master. Fader, Panorama, Mute/Solo, Effekt-Zusammenfassung, Pegel.
+// Effekte des gewählten Kanals: am Desktop im Inspektor, am Handy als eigene Seite im Mixer (mit Zurück).
 
 import { EFFECTS, withFx } from '../effects.js';
 import { masterOf } from '../engine.js';
@@ -37,7 +37,7 @@ export function mountMixer({ root, store, engine, ui }) {
     name.type = 'button';
     name.title = 'Effekte dieses Kanals bearbeiten';
     name.addEventListener('click', () => select(id));
-    // Desktop: Zusammenfassung statt sieben Schalter; Klick zeigt die Effekte der Spur im Inspektor
+    // Zusammenfassung statt sieben Schalter; Klick zeigt die Effekte der Spur (Inspektor bzw. Effekt-Seite)
     const sum = el('button', 'strip-sum');
     sum.type = 'button';
     sum.addEventListener('click', () => select(id));
@@ -144,13 +144,8 @@ export function mountMixer({ root, store, engine, ui }) {
   // ---------- Effekt-Details ----------
 
   function renderDetail() {
-    if (!narrow.matches) { detailFor = null; detailEl.innerHTML = ''; return; }
-    if (!selected) {
-      detailFor = null;
-      detailEl.innerHTML = '';
-      detailEl.append(el('p', 'detail-empty', 'Tippe oder klicke auf einen Kanalnamen, um seine Effekte einzustellen.'));
-      return;
-    }
+    root.dataset.view = narrow.matches && selected ? 'detail' : 'strips';
+    if (!narrow.matches || !selected) { detailFor = null; detailEl.innerHTML = ''; return; }
     if (detailFor !== selected) buildDetail(selected);
     const fx = fxOf(selected);
     detailEl.querySelector('.detail-title').textContent = `Effekte: ${nameOf(selected)}`;
@@ -170,7 +165,12 @@ export function mountMixer({ root, store, engine, ui }) {
     detailFor = id;
     detailControls = new Map();
     detailEl.innerHTML = '';
-    detailEl.append(el('h3', 'detail-title'));
+    const back = el('button', 'detail-back', '‹ Alle Kanäle');
+    back.type = 'button';
+    back.addEventListener('click', () => select(null));
+    const head = el('div', 'detail-head');
+    head.append(back, el('h3', 'detail-title'));
+    detailEl.append(head);
     const grid = el('div', 'fx-cards');
     for (const e of EFFECTS) {
       const card = el('section', 'fx-card');
@@ -210,7 +210,7 @@ export function mountMixer({ root, store, engine, ui }) {
       grid.append(card);
       detailControls.set(e.id, { card, toggle, params });
     }
-    detailEl.append(grid, el('p', 'detail-hint', 'Regler bewegen schaltet den Effekt ein. Doppelklick setzt einen Regler zurück.'));
+    detailEl.append(grid);
   }
 
   // ---------- Pegel ----------
@@ -249,6 +249,8 @@ export function mountMixer({ root, store, engine, ui }) {
     document.getElementById('mixer-btn').setAttribute('aria-pressed', String(show));
     if (root.hidden === !show) return;
     root.hidden = !show;
+    // Am Handy öffnet der Mixer immer mit allen Kanälen
+    if (show && narrow.matches) selected = null;
     if (show) sync();
   });
   document.getElementById('mixer-btn').addEventListener('click', () => setOpen(ui.dock !== 'mixer'));

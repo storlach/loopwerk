@@ -82,21 +82,17 @@ function createUi() {
 function mountHints({ root, ui, library, store, engine }) {
   const text = root.querySelector('#hint-text');
   const done = root.querySelector('#hint-done');
-  // Am Handy gibt es keine Tastatur: dort erklärt die Zeile die Fingerbedienung
-  const touchBase = 'Tippe auf „Sounds“, wähle einen Sound und tippe dann in eine Spur. Antippen des Lineals setzt die Abspielmarke, zwei Finger zoomen.';
+  // Nur Rückmeldungen und der Einsetz-Modus erscheinen – erklärt wird über die Tipps
   const sync = () => {
     const armed = ui.armedSampleId && library.get(ui.armedSampleId);
-    const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
-    const selName = sel && (library.get(sel.clip.sampleId)?.name ?? 'Clip');
     const phone = narrow.matches;
-    root.classList.toggle('armed', !!(armed || ui.statusText || ui.flashText));
     document.getElementById('app').classList.toggle('armed-mode', !!armed);
     done.hidden = !armed;
-    text.textContent = ui.statusText
+    const msg = ui.statusText
       ?? ui.flashText
-      ?? (armed ? (phone ? `„${armed.name}“ ist ausgewählt. Tippe in eine Spur, um ihn einzusetzen.` : `„${armed.name}“ ausgewählt – in eine Spur klicken setzt ihn ein, Esc beendet`)
-        : sel ? (phone ? (ui.dock ? `„${selName}“ ausgewählt. Schließe das Fach für die Clip-Werkzeuge.` : `„${selName}“ ausgewählt. Ziehen verschiebt, die Ränder kürzen. Lautstärke und Fades unter „Pegel“.`) : `„${selName}“ ausgewählt`)
-          : phone ? touchBase : '');
+      ?? (armed ? (phone ? `„${armed.name}“ ausgewählt. Tippe in eine Spur.` : `„${armed.name}“ ausgewählt – in eine Spur klicken setzt ihn ein, Esc beendet`) : '');
+    text.textContent = msg;
+    root.classList.toggle('show', !!msg);
   };
   done.addEventListener('click', () => { ui.arm(null); engine.stopPreview(); });
   ui.on(sync);

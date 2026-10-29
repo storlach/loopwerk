@@ -1,5 +1,5 @@
 // Aufteilung der Oberfläche: Desktop mit Deck in einer Zeile, Sounds|Erstellen links, Inspektor rechts,
-// Leiste unten; am Handy wandern dieselben Knöpfe ins Fach „Mehr“. Menüs, Reiter und Export-Klappfeld.
+// Fachleiste unter dem Arranger; am Handy wandern dieselben Knöpfe ins Fach „Mehr“. Menüs, Reiter und Export-Klappfeld.
 
 import { place, narrow } from './place.js';
 
@@ -12,17 +12,15 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // ---------- Plätze: Desktop (wide) und Handy (narrow) ----------
   place($('rec-btn'), { narrow: slot('play') });
   place($('metro-btn'), { narrow: slot('play') });
-  for (const id of ['undo-btn', 'redo-btn']) place($(id), { wide: $('deck-edit'), narrow: slot('edit') });
+  // Rückgängig ist eine Funktion: am Handy als Taste im Deck, Wiederholen unter „Mehr“
+  place($('undo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
+  place($('redo-btn'), { wide: $('deck-edit'), narrow: slot('edit') });
   for (const id of ['zoom-out', 'zoom-in', 'snap-sel']) place($(id), { wide: $('arr-bar-view'), narrow: slot('edit') });
   for (const id of ['project-name', 'open-btn', 'save-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
   place($('export-btn'), { wide: $('deck-export'), narrow: slot('project') });
   for (const id of ['demo-btn', 'new-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
   place($('tips-reset'), { narrow: slot('project') });
   place(document.querySelector('.deck .brand'), { narrow: slot('about') });
-  place($('mixer-btn'), { wide: $('deskbar-tabs') });
-  // Editor-Reiter hinter den Mixer-Knopf
-  place($('editor-tab'), { wide: $('deskbar-tabs') });
-  place($('hint'), { wide: $('deskbar-hint') });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
   const pops = [];
@@ -87,7 +85,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   }
   for (const b of document.querySelectorAll('.ltab')) b.addEventListener('click', () => setLeft(b.dataset.left));
 
-  // ---------- Leiste unten: Editor-Reiter für den ausgewählten Clip ----------
+  // ---------- Fachleiste: Editor-Reiter für den ausgewählten Clip (am Handy nur „Editor“) ----------
   const editorTab = $('editor-tab');
   function syncTabs() {
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
@@ -95,10 +93,13 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
     const editing = ui.dock === 'editor' || ui.dock === 'pattern';
     editorTab.disabled = !sel && !editing;
     editorTab.setAttribute('aria-pressed', String(editing));
-    $('editor-tab-label').textContent = editing ? `Editor · ${editName(ui.dock) || name || ''}` : name ? `Editor · ${name}` : 'Editor';
+    const label = editing ? editName(ui.dock) || name : name;
+    $('editor-tab-label').textContent = label && !narrow.matches ? `Editor · ${label}` : 'Editor';
+    editorTab.title = label ? `Editor · ${label}` : 'Wähle einen Clip, um ihn zu bearbeiten';
   }
   ui.on(syncTabs);
   store.on(syncTabs);
+  narrow.addEventListener('change', syncTabs);
   syncTabs();
 
   return { setLeft, closePops, onEditorTab: (fn) => editorTab.addEventListener('click', fn) };

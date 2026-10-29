@@ -16,7 +16,8 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - `src/ui/*` – Regal, Arranger, Deck, Docks (Mixer, Sample-Editor, Pattern-Editor, Export). Die UI liest aus dem Store und schreibt nur über Store-Aktionen. Docks über `ui.setDock(name)`.
   - `layout.js` + `place.js`: dieselben Knöpfe je Bildschirm an ihren Platz (Desktop: Deck/Menüs/Leisten, Handy: Fach „Mehr“).
   - `inspector.js`: rechte Spalte (Clip/Spur/Song); `ui.selectTrack(id)` neben `ui.select(clipId)`.
-  - `sheets.js`: Fächer als Schubladen über dem Arranger; `create.js`: Erstellen-Karten; `tips.js`: Tutorial.
+  - `sheets.js`: Fächer als Schubladen über dem Arranger (Haltepunkte zu/Mitte/oben, je Fach gemerkt); `create.js`: Erstellen-Karten; `tips.js`: Tutorial.
+  - Eine Fachleiste `#tabbar` für Handy und Desktop; Rückmeldungen nur als Einblender (`#hint`), keine Erklärtexte (dafür Tipps).
 - Veröffentlichung: GitHub Pages (https://storlach.github.io/loopwerk/) baut sich bei jedem Push auf `main` (`tools/build-pages.cjs` ergänzt das HTML-Gerüst wie `tests/serve.cjs`); Artifact-Vorschau siehe Skill `artifact-sync`.
 - Entscheidungen: `docs/adr/`, Specs je Stufe: `docs/specs/`, Stand: `docs/ROADMAP.md`.
 

@@ -1,7 +1,8 @@
 // Schubladen: Fächer (Mixer, Editoren, am Handy auch Sounds und „Mehr“) liegen über den Spuren.
 // Drei Haltepunkte: zu (unter dem Rand), Mitte (50 %) und oben (80 % der Arranger-Höhe).
 // Öffnen, Schließen und Einrasten sind immer animiert. Ein Schubs am Griff springt zum nächsten Haltepunkt
-// in Wischrichtung, langsames Ziehen rastet am nächstgelegenen ein. Der zuletzt benutzte Haltepunkt wird gemerkt.
+// in Wischrichtung, langsames Ziehen rastet am nächstgelegenen ein. Jede Schublade merkt sich ihren Haltepunkt;
+// am Handy öffnen Mixer und Editoren oben, damit Fader, Klavier und Raster Platz haben.
 // Der Arranger bekommt unten so viel Platz, dass die letzten Spuren über das Fach gescrollt werden können.
 
 import { clamp, el, trackPointer } from '../util.js';
@@ -47,10 +48,15 @@ export function mountSheets({ ui, arranger }) {
   const arr = document.querySelector('.arranger');
   const snaps = loadSnaps();
   const mode = () => (narrow.matches ? 'narrow' : 'wide');
-  const openFrac = () => (snaps[mode()] === TOP ? TOP : MID);
+  const keyOf = (s) => s.id || 'sounds';
+  const stored = () => { const m = snaps[mode()]; return m && typeof m === 'object' ? m : (snaps[mode()] = {}); };
+  const openFrac = (s) => {
+    const v = s && stored()[keyOf(s)];
+    if (v === TOP || v === MID) return v;
+    return narrow.matches && s && ['pattern', 'editor', 'mixer'].includes(s.id) ? TOP : MID;
+  };
   const setFrac = (f) => app.style.setProperty('--sheet-h', `${f * 100}%`);
-  setFrac(openFrac());
-  narrow.addEventListener('change', () => setFrac(openFrac()));
+  setFrac(MID);
 
   const sheets = [];
   // „Mehr“ und Tempo am Handy sind so hoch wie ihr Inhalt: dort verschiebt Ziehen nur
@@ -96,7 +102,7 @@ export function mountSheets({ ui, arranger }) {
       if (now) {
         s.style.transform = '';
         s.style.removeProperty('--leave-from');
-        if (!sheets.some((o) => o !== s && o.classList.contains('dragging'))) setFrac(openFrac());
+        if (!sheets.some((o) => o !== s && o.classList.contains('dragging'))) setFrac(openFrac(s));
         play(s, 'entering', () => { syncPad(); reveal(); });
       } else {
         // Weggewischt: von der aktuellen Lage aus weiterfahren
@@ -104,7 +110,6 @@ export function mountSheets({ ui, arranger }) {
         play(s, 'leaving', () => {
           s.style.transform = '';
           s.style.removeProperty('--leave-from');
-          if (!current()) setFrac(openFrac());
           syncPad();
         });
       }
@@ -168,14 +173,14 @@ export function mountSheets({ ui, arranger }) {
         }
         const target = snapTarget(clamp(h0 - dy, 0, max) / max, v);
         if (target === 0) { close(); return; }
-        snaps[mode()] = target;
+        stored()[keyOf(sheet)] = target;
         try { localStorage.setItem(KEY, JSON.stringify(snaps)); } catch { /* egal */ }
         setFrac(target);
         afterTransition(sheet, () => { syncPad(); reveal(); });
       }, () => {
         sheet.classList.remove('dragging');
         sheet.style.transform = '';
-        setFrac(openFrac());
+        setFrac(openFrac(sheet));
       });
     };
     grip.addEventListener('pointerdown', startDrag);
@@ -197,6 +202,8 @@ export function mountSheets({ ui, arranger }) {
 
   ui.on(() => queueMicrotask(watch));
   narrow.addEventListener('change', () => {
+    const open = current();
+    if (open) setFrac(openFrac(open));
     for (const s of sheets) { was.set(s, shown(s)); pending.get(s)?.(); s.classList.remove('entering', 'leaving'); }
     requestAnimationFrame(syncPad);
   });

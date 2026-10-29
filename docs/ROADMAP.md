@@ -130,6 +130,15 @@
 - Handy: senkrechte Klaviertasten an der Piano-Roll; Ladescreen sofort sichtbar
 - Spec: `docs/specs/v1.8-layout-schubladen-tipps.md`, Tests: `tests/v18.test.cjs`
 
+## ✅ 1.9 – Handy und Desktop aus einem Guss
+- Eine Fachleiste für beide (Sounds, Mixer, Editor, Mehr); am Desktop nur unter dem Arranger, Reiter hängen an ihrer Schublade
+- Hinweiszeile entfällt: Rückmeldungen als Einblender, Erklärungen in den Tipps
+- Rückgängig am Handy als Taste im Deck
+- Handy: Mixer mit langen Fadern und Effekt-Seite je Kanal, Melodie-Editor öffnet oben mit großen Tasten, jede Schublade merkt sich ihre Höhe
+- Favicon aus den Intro-Balken
+- Drei UI-Richtungen für den neuen Look: `docs/ux/richtungen/` (Nachtglas, Werkstück, Sticker)
+- Spec: `docs/specs/v1.9-aus-einem-guss.md`, Tests: `tests/v19.test.cjs`
+
 ## Als Nächstes
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 

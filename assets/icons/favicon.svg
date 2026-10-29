@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Loopwerk: die Amplituden-Balken aus dem Intro -->
+  <defs>
+    <linearGradient id="b" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#E08A0C"/>
+      <stop offset="1" stop-color="#FFC24D"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#141A24"/>
+  <g fill="url(#b)">
+    <rect x="6.5" y="34" width="7" height="20" rx="2.5"/>
+    <rect x="17.5" y="18" width="7" height="36" rx="2.5"/>
+    <rect x="28.5" y="10" width="7" height="44" rx="2.5"/>
+    <rect x="39.5" y="24" width="7" height="30" rx="2.5"/>
+    <rect x="50.5" y="38" width="7" height="16" rx="2.5"/>
+  </g>
+</svg>
