@@ -85,6 +85,7 @@ const tmp = (name) => path.join(os.tmpdir(), name);
     await page.waitForSelector('#editor:not([hidden])');
     const title = await page.locator('#editor-title').textContent();
     check('Doppelklick öffnet den Sample-Editor', title.includes('Mein Gesang'), title);
+    await page.waitForTimeout(600); // Schublade fährt herein
     const wave = await page.locator('#ed-wave').boundingBox();
     await page.mouse.move(wave.x + wave.width * 0.25, wave.y + 40);
     await page.mouse.down();
@@ -104,7 +105,8 @@ const tmp = (name) => path.join(os.tmpdir(), name);
     await fillR(page, '#ed-name', 'Gesang kurz');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'stufe5-editor.png') });
     await page.click('#ed-apply');
-    await page.waitForFunction(() => window.loopwerk.library.list().some((s) => s.name === 'Gesang kurz'), null, { timeout: 10000 });
+    // Fertig ist es, wenn der Sound gespeichert und der Editor zu ist (Speichern in IndexedDB läuft dazwischen)
+    await page.waitForFunction(() => window.loopwerk.library.list().some((s) => s.name === 'Gesang kurz') && window.loopwerk.ui.dock === null, null, { timeout: 10000 });
     const applied = await page.evaluate((cid) => {
       const { store, library, ui } = window.loopwerk;
       const c = store.findClip(cid).clip;

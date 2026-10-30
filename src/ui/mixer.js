@@ -18,6 +18,56 @@ export const formatParam = (p, v) => {
   return String(v);
 };
 
+// Ziehen ändert einen Regler relativ – kein Sprung an die Antippstelle. Am Handy zählt nur senkrechtes Ziehen;
+// waagrechtes Wischen bleibt dem Browser (touch-action: pan-x) und scrollt die Kanäle.
+function relativeDrag(handle, input, { span, touchOnly = false }) {
+  handle.addEventListener('pointerdown', (e) => {
+    if (touchOnly && e.pointerType !== 'touch') return; // Maus am Fader: wie gewohnt
+    if (e.button !== 0) return;
+    const min = Number(input.min);
+    const max = Number(input.max);
+    const y0 = e.clientY;
+    const v0 = Number(input.value);
+    let active = false;
+    const move = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      const dy = ev.clientY - y0;
+      if (!active && Math.abs(dy) < 4) return;
+      active = true;
+      const v = clamp(v0 - (dy / span()) * (max - min), min, max);
+      input.value = String(v);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const end = (ev) => {
+      if (ev.pointerId !== e.pointerId) return;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
+}
+
+// Drehregler für das Panorama: senkrecht ziehen, Doppelklick = Mitte. Das Eingabefeld bleibt für Tastatur und Vorleser.
+function makeKnob(input) {
+  const knob = el('div', 'knob');
+  knob.setAttribute('aria-hidden', 'true');
+  knob.append(el('span', 'knob-ind'));
+  const update = () => {
+    const t = (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
+    knob.style.setProperty('--turn', `${Math.round(-135 + t * 270)}deg`);
+    knob.classList.toggle('center', Math.abs(Number(input.value)) < 0.01);
+  };
+  input.addEventListener('input', update);
+  relativeDrag(knob, input, { span: () => 140 });
+  knob.addEventListener('dblclick', () => input.dispatchEvent(new MouseEvent('dblclick')));
+  const wrap = el('div', 'strip-pan-wrap');
+  wrap.append(knob);
+  return { wrap, update };
+}
+
 export function mountMixer({ root, store, engine, ui }) {
   const stripsEl = root.querySelector('#mixer-strips');
   const detailEl = root.querySelector('#mixer-detail');
@@ -64,6 +114,7 @@ export function mountMixer({ root, store, engine, ui }) {
       pan.addEventListener('input', () => store.setTrack(id, { pan: Number(pan.value) }, 'pan-' + id));
       pan.addEventListener('dblclick', () => store.setTrack(id, { pan: 0 }));
     }
+    const knob = pan ? makeKnob(pan) : null;
     const faderRow = el('div', 'strip-fader-row');
     const fader = document.createElement('input');
     fader.type = 'range';
@@ -78,6 +129,9 @@ export function mountMixer({ root, store, engine, ui }) {
     });
     const meter = el('canvas', 'strip-meter');
     faderRow.append(fader, meter);
+    // Finger: relativ ziehen auf der ganzen Fader-Zeile, Wischen zur Seite scrollt
+    faderRow.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') e.preventDefault(); });
+    relativeDrag(faderRow, fader, { span: () => fader.getBoundingClientRect().height || 120, touchOnly: true });
     const value = el('div', 'strip-value');
     const ms = el('div', 'strip-ms');
     let mute = null;
@@ -94,9 +148,9 @@ export function mountMixer({ root, store, engine, ui }) {
       ms.append(mute, solo);
     }
     strip.append(name, sum, fxBtns);
-    if (pan) strip.append(pan);
+    if (pan) { knob.wrap.prepend(pan); strip.append(knob.wrap); }
     strip.append(faderRow, value, ms);
-    const s = { strip, name, sum, fxMap, pan, fader, meter, value, mute, solo, peak: 0 };
+    const s = { strip, name, sum, fxMap, pan, knob, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);
     return s;
   }
@@ -122,6 +176,7 @@ export function mountMixer({ root, store, engine, ui }) {
       if (s.pan) {
         const t = store.track(id);
         if (document.activeElement !== s.pan) s.pan.value = String(t.pan || 0);
+        s.knob.update();
         s.pan.setAttribute('aria-label', `Panorama ${t.name}`);
         s.mute.setAttribute('aria-pressed', String(t.mute));
         s.solo.setAttribute('aria-pressed', String(t.solo));

@@ -66,7 +66,60 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.z ?? 0}`;
+}
+
+// Stapel: Liegen Clips einer Spur übereinander, klingt der obere. Der untere bleibt unverändert erhalten
+// und ist wieder zu hören, sobald nichts mehr über ihm liegt. Oben liegt, wer zuletzt abgelegt wurde (z);
+// ohne z (alte Projekte) der später beginnende.
+export function isAbove(a, b, clips) {
+  const za = a.z ?? 0;
+  const zb = b.z ?? 0;
+  if (za !== zb) return za > zb;
+  if (Math.abs(a.startBeat - b.startBeat) > EPS) return a.startBeat > b.startBeat;
+  return clips.indexOf(a) > clips.indexOf(b);
+}
+
+// Hörbare Bereiche je Clip einer Spur: Clip-Bereich ohne alles, was ein höher liegender Clip verdeckt.
+export function audibleRanges(track) {
+  const map = new Map();
+  const clips = track.clips;
+  for (const c of clips) {
+    let parts = [[c.startBeat, c.startBeat + c.lengthBeats]];
+    for (const o of clips) {
+      if (o === c || !parts.length || !isAbove(o, c, clips)) continue;
+      const os = o.startBeat;
+      const oe = os + o.lengthBeats;
+      parts = parts.flatMap(([s, e]) => {
+        if (oe <= s + EPS || os >= e - EPS) return [[s, e]];
+        const rest = [];
+        if (os > s + EPS) rest.push([s, os]);
+        if (oe < e - EPS) rest.push([oe, e]);
+        return rest;
+      });
+    }
+    map.set(c.id, parts);
+  }
+  return map;
+}
+
+export function audibleMap(project) {
+  const map = new Map();
+  for (const t of project.tracks) for (const [id, r] of audibleRanges(t)) map.set(id, r);
+  return map;
+}
+
+// Wiederholungen eines Clips, beschnitten auf seine hörbaren Bereiche: [{ seg, from, to }]
+export function audibleSegments(clip, sampleBeats, ranges) {
+  const out = [];
+  for (const seg of clipSegments(clip, sampleBeats)) {
+    for (const [s, e] of ranges ?? [[seg.start, seg.end]]) {
+      const from = Math.max(seg.start, s);
+      const to = Math.min(seg.end, e);
+      if (to - from > EPS) out.push({ seg, from, to });
+    }
+  }
+  return out;
 }
 
 export const MAX_TRACKS = 16;
@@ -191,30 +244,13 @@ export class Store extends Emitter {
 
   track(trackId) { return this.project.tracks.find((t) => t.id === trackId); }
 
-  // Wer auf belegten Platz gelegt wird, überschreibt: überlappende Clips werden gekürzt oder geteilt.
-  _carve(track, keep) {
-    const ks = keep.startBeat;
-    const ke = ks + keep.lengthBeats;
-    const out = [];
-    for (const c of track.clips) {
-      if (c === keep) { out.push(c); continue; }
-      const cs = c.startBeat;
-      const ce = cs + c.lengthBeats;
-      if (ce <= ks + EPS || cs >= ke - EPS) { out.push(c); continue; }
-      if (cs < ks - EPS) out.push(normalizeClip({ ...c, lengthBeats: ks - cs, fadeOutBeats: 0 }));
-      if (ce > ke + EPS) {
-        const sb = this.sampleBeats(c.sampleId);
-        out.push(normalizeClip({
-          ...c,
-          id: cs < ks - EPS ? this.newId() : c.id,
-          startBeat: ke,
-          lengthBeats: ce - ke,
-          offsetBeats: ((c.offsetBeats || 0) + (ke - cs)) % sb,
-          fadeInBeats: 0,
-        }));
-      }
-    }
-    track.clips = out.sort((a, b) => a.startBeat - b.startBeat);
+  // Wer abgelegt oder bearbeitet wird, liegt oben. Überlappungen zerstören nichts: darunterliegende Clips
+  // bleiben vollständig erhalten, sie sind nur dort stumm, wo etwas über ihnen liegt (audibleRanges).
+  _raise(track, clip) {
+    const others = track.clips.filter((c) => c !== clip);
+    const overlaps = others.some((c) => c.startBeat < clip.startBeat + clip.lengthBeats - EPS && c.startBeat + c.lengthBeats > clip.startBeat + EPS);
+    if (overlaps) clip.z = 1 + Math.max(0, ...others.map((c) => c.z ?? 0));
+    track.clips.sort((a, b) => a.startBeat - b.startBeat);
   }
 
   _fit(startBeat, lengthBeats) {
@@ -230,7 +266,7 @@ export class Store extends Emitter {
       const { start, length } = this._fit(startBeat, lengthBeats);
       const clip = { id, sampleId, startBeat: start, lengthBeats: length, offsetBeats: 0 };
       track.clips.push(clip);
-      this._carve(track, clip);
+      this._raise(track, clip);
     });
     return id;
   }
@@ -254,7 +290,7 @@ export class Store extends Emitter {
       }
       normalizeClip(moved);
       target.clips.push(moved);
-      this._carve(target, moved);
+      this._raise(target, moved);
     });
     return newId;
   }
@@ -264,7 +300,7 @@ export class Store extends Emitter {
       const { track, clip } = this.findClip(clipId);
       clip.lengthBeats = this._fit(clip.startBeat, lengthBeats).length;
       normalizeClip(clip);
-      this._carve(track, clip);
+      this._raise(track, clip);
     });
   }
 
@@ -293,7 +329,7 @@ export class Store extends Emitter {
       clip.startBeat = start;
       clip.lengthBeats = end - start;
       normalizeClip(clip);
-      this._carve(track, clip);
+      this._raise(track, clip);
     });
   }
 
@@ -341,7 +377,7 @@ export class Store extends Emitter {
       const { track, clip } = this.findClip(clipId);
       const copy = normalizeClip({ ...clip, id, startBeat: start, lengthBeats: Math.min(clip.lengthBeats, total - start) });
       track.clips.push(copy);
-      this._carve(track, copy);
+      this._raise(track, copy);
     });
     return id;
   }

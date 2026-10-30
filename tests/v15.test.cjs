@@ -269,14 +269,17 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
 
     // ---------- Weiterführen und Klang bauen (ohne Claude: Regeln) ----------
     await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createEmptyProject()); });
+    const oldPat = await page.evaluate(() => window.loopwerk.patternEditor.id);
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    // Auf das neue Pattern warten – der Titel stimmt schon vom vorigen Melodie-Editor
+    await page.waitForFunction((o) => window.loopwerk.patternEditor.id !== o && document.getElementById('pat-title').textContent === 'Melodie-Editor', oldPat);
     const START = [[69, 0, 1], [72, 1, 1], [76, 2, 1], [74, 3, 1], [72, 4, 2], [71, 6, 2]];
     const setNotes = (list) => page.evaluate((l) => {
       const { store, patternEditor } = window.loopwerk;
       store.updatePattern(patternEditor.id, (p) => { p.notes = l.map(([pitch, start, len]) => ({ pitch, start, len, vel: 1 })); p.bars = 2; });
     }, list);
     await setNotes(START);
+    await page.waitForTimeout(600); // Schublade fährt herein
     const synth = () => page.evaluate(() => window.loopwerk.store.project.patterns[window.loopwerk.patternEditor.id]);
     await page.click('#pat-continue');
     await page.waitForFunction(() => !document.getElementById('pat-continue').hasAttribute('aria-busy'));

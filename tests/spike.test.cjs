@@ -62,7 +62,7 @@ function check(name, ok, detail = '') {
     const expected = [0, 4, 12, 22].map((b) => b * 22050);
     check('Clips starten samplegenau auf dem Raster', JSON.stringify(timing) === JSON.stringify(expected), `Frames ${timing.join(', ')}`);
 
-    // 3. Überschreiben: Clip in die Mitte eines langen Clips legen teilt ihn
+    // 3. Überlappen: Clip in die Mitte eines langen Clips legen – nichts wird gekürzt, der obere klingt
     const carved = await page.evaluate(async () => {
       const m = await import('./src/model.js');
       const lib = window.loopwerk.library;
@@ -70,13 +70,17 @@ function check(name, ok, detail = '') {
       s.addClip('t1', 'chords-pad', 0, 16);
       s.addClip('t1', 'drums-four', 4, 4);
       const clips = s.track('t1').clips.map((c) => [c.sampleId, c.startBeat, c.lengthBeats, c.offsetBeats]);
+      const heard = [...m.audibleRanges(s.track('t1'))].map(([id, r]) => [s.findClip(id).clip.sampleId, r]);
       s.undo();
       const afterUndo = s.track('t1').clips.length;
-      return { clips, afterUndo };
+      return { clips, heard, afterUndo };
     });
-    check('Überschreiben teilt den darunterliegenden Clip',
-      JSON.stringify(carved.clips) === JSON.stringify([['chords-pad', 0, 4, 0], ['drums-four', 4, 4, 0], ['chords-pad', 8, 8, 8]]),
+    check('Überlappen lässt den darunterliegenden Clip ganz',
+      JSON.stringify(carved.clips) === JSON.stringify([['chords-pad', 0, 16, 0], ['drums-four', 4, 4, 0]]),
       JSON.stringify(carved.clips));
+    check('Unter dem oberen Clip ist der untere stumm',
+      JSON.stringify(carved.heard) === JSON.stringify([['chords-pad', [[0, 4], [8, 16]]], ['drums-four', [[4, 8]]]]),
+      JSON.stringify(carved.heard));
     check('Rückgängig stellt den Zustand wieder her', carved.afterUndo === 1);
 
     // 4. Drag & Drop aus dem Sound-Regal auf Spur 8, Takt 3

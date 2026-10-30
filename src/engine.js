@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSegments, clipSignature, clipEnvelope, clipGain, totalBeats, EPS } from './model.js';
+import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 
@@ -194,15 +194,16 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const lat = limiter && compensate ? await limiterLatency(sampleRate) : 0;
   const ctx = new OfflineAudioContext(2, frames + lat, sampleRate);
   const mix = buildMix(ctx, project, { limiter, grid: -fromBeat * spb });
+  const audible = audibleMap(project);
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
       const sample = library.get(clip.sampleId);
       if (!sample?.buffer) continue;
-      for (const seg of clipSegments(clip, sample.lengthBeats)) {
-        if (seg.start >= end - EPS || seg.end <= fromBeat + EPS) continue;
-        const from = Math.max(seg.start, fromBeat);
-        playSegment(ctx, dest, clip, sample, seg, from, Math.min(seg.end, end), (from - fromBeat) * spb, spb);
+      for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, audible.get(clip.id))) {
+        if (from >= end - EPS || to <= fromBeat + EPS) continue;
+        const f = Math.max(from, fromBeat);
+        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), (f - fromBeat) * spb, spb);
       }
     }
   }
@@ -405,34 +406,41 @@ export class Engine extends Emitter {
 
   // ---------- Einplanen ----------
 
+  // Hörbare Bereiche aller Clips (übereinanderliegende Clips: nur der obere klingt); gilt bis zur nächsten Änderung
+  _audible() {
+    if (!this._aud || this._audFor !== this.project) { this._aud = audibleMap(this.project); this._audFor = this.project; }
+    return this._aud;
+  }
+
   _forEachClip(filter, fn) {
+    const audible = this._audible();
     for (const track of this.project.tracks) {
       const node = this.mix.tracks.get(track.id);
       for (const clip of track.clips) {
         if (filter && !filter(clip)) continue;
         const sample = this.library.get(clip.sampleId);
-        if (sample?.buffer && node) fn(track, clip, sample, node);
+        if (sample?.buffer && node) fn(track, clip, sample, node, audible.get(clip.id));
       }
     }
   }
 
-  // Alle Wiederholungen, die im Bereich [b0, b1) beginnen.
+  // Alle (hörbaren) Stücke, die im Bereich [b0, b1) beginnen.
   _scheduleSpan(b0, b1, t0, limit, filter) {
     const spb = this.spb;
-    this._forEachClip(filter, (track, clip, sample, node) => {
-      for (const seg of clipSegments(clip, sample.lengthBeats)) {
-        if (seg.start < b0 - EPS || seg.start >= b1 - EPS || seg.start >= limit - EPS) continue;
-        this._voice(track, clip, sample, node, seg, seg.start, Math.min(seg.end, limit), t0 + (seg.start - b0) * spb);
+    this._forEachClip(filter, (track, clip, sample, node, ranges) => {
+      for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, ranges)) {
+        if (from < b0 - EPS || from >= b1 - EPS || from >= limit - EPS) continue;
+        this._voice(track, clip, sample, node, seg, from, Math.min(to, limit), t0 + (from - b0) * spb);
       }
     });
   }
 
-  // Wiederholungen, die bei Schlag b bereits laufen: mitten im Sample einsteigen.
+  // Stücke, die bei Schlag b bereits laufen: mitten im Sample einsteigen.
   _scheduleActiveAt(b, t, limit, filter) {
-    this._forEachClip(filter, (track, clip, sample, node) => {
-      for (const seg of clipSegments(clip, sample.lengthBeats)) {
-        if (!(seg.start < b - EPS && seg.end > b + EPS)) continue;
-        this._voice(track, clip, sample, node, seg, b, Math.min(seg.end, limit), t);
+    this._forEachClip(filter, (track, clip, sample, node, ranges) => {
+      for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, ranges)) {
+        if (!(from < b - EPS && to > b + EPS)) continue;
+        this._voice(track, clip, sample, node, seg, b, Math.min(to, limit), t);
       }
     });
   }
@@ -470,8 +478,10 @@ export class Engine extends Emitter {
   }
 
   // Signatur enthält die Version des Sounds: wird er neu erzeugt (Tempo, Editor, Pattern), plant die Engine neu.
+  // Auch die hörbaren Bereiche gehören dazu: wird ein Clip verdeckt oder frei, plant die Engine ihn neu.
   _sig(track, clip) {
-    return clipSignature(track.id, clip) + '|' + (this.library.get(clip.sampleId)?.rev ?? 0);
+    const ranges = this._audible().get(clip.id) ?? [];
+    return clipSignature(track.id, clip) + '|' + (this.library.get(clip.sampleId)?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
   }
 
   _signatures() {
@@ -488,6 +498,7 @@ export class Engine extends Emitter {
   // ---------- Änderungen während der Wiedergabe ----------
 
   _onChange(reason) {
+    this._aud = null;
     if (!this.ctx) return;
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     if (this.playing) this._resync();

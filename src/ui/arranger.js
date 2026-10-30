@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { clipEnvelope, clipGain, clipSegments, clipSignature, totalBeats, MAX_TRACKS } from '../model.js';
+import { audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, isAbove, totalBeats, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
@@ -354,8 +354,15 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (!forceAll && r.key === key) return;
     r.key = key;
     for (const n of r.lane.querySelectorAll('.clip')) n.remove();
+    // Übereinanderliegende Clips: der obere klingt und liegt sichtbar oben, der untere bleibt erhalten
+    const order = [...track.clips].sort((a, b) => (isAbove(a, b, track.clips) ? 1 : -1));
+    const audible = audibleRanges(track);
     for (const clip of track.clips) {
       const { node, canvas, sample } = makeClip(clip);
+      node.style.setProperty('--stack', String(order.indexOf(clip) + 1));
+      const heard = (audible.get(clip.id) ?? []).reduce((s, [a, b]) => s + b - a, 0);
+      node.classList.toggle('covered', heard < clip.lengthBeats - EPS);
+      node.classList.toggle('on-top', track.clips.some((o) => o !== clip && isAbove(clip, o, track.clips) && o.startBeat < clip.startBeat + clip.lengthBeats - EPS && o.startBeat + o.lengthBeats > clip.startBeat + EPS));
       r.lane.append(node);
       if (sample) drawWave(canvas, clip, sample);
       placeHandles(node, clip);

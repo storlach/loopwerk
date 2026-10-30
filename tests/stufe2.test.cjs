@@ -142,7 +142,8 @@ const { check, finish } = createChecker();
     await page.mouse.click(b.x + b.width / 2, b.y + b.height - 8);
     await page.keyboard.press('Control+d');
     const fx = await page.evaluate(() => window.loopwerk.store.track('t7').clips.map((x) => [x.sampleId, x.startBeat, x.lengthBeats]));
-    check('Strg+D dupliziert direkt dahinter', JSON.stringify(fx) === JSON.stringify([['fx-riser', 8, 8], ['fx-riser', 16, 8]]), JSON.stringify(fx));
+    // Die Kopie liegt oben auf dem Crash; der bleibt erhalten (Überlappen zerstört nichts)
+    check('Strg+D dupliziert direkt dahinter, ohne den Clip dort zu löschen', JSON.stringify(fx) === JSON.stringify([['fx-riser', 8, 8], ['fx-crash', 16, 4], ['fx-riser', 16, 8]]), JSON.stringify(fx));
 
     // Spur umbenennen per Doppelklick
     await page.locator('.track-row').nth(7).locator('.track-name').dblclick();

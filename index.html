@@ -447,6 +447,7 @@
       repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb)),
       repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
     touch-action: pan-x pan-y;
+    isolation: isolate;
   }
   .arr-grid.fine .lane {
     background-image:
@@ -477,10 +478,13 @@
     overflow: hidden;
     cursor: grab;
     touch-action: none;
-    z-index: 2;
+    z-index: var(--stack, 1);
   }
+  /* Liegt ein Clip auf einem anderen, wirft er einen Schatten: darunter liegt noch etwas (stumm, aber erhalten) */
+  .clip.on-top { box-shadow: 0 2px 10px #0004; }
   .clip.selected { box-shadow: 0 0 0 2px var(--ink); }
-  .clip.dragging { opacity: 0.85; cursor: grabbing; z-index: 6; box-shadow: 0 6px 16px #0003; }
+  .clip.selected.on-top { box-shadow: 0 0 0 2px var(--ink), 0 2px 10px #0004; }
+  .clip.dragging { opacity: 0.85; cursor: grabbing; z-index: 999; box-shadow: 0 6px 16px #0003; }
   .clip.copying { outline: 2px dashed var(--ink); outline-offset: 1px; }
   .clip-label {
     position: absolute; top: 3px; left: 6px; right: 12px;
@@ -509,7 +513,7 @@
   .clip-vol { border-radius: 50%; cursor: ns-resize; }
   .clip-fade-in, .clip-fade-out { cursor: ew-resize; }
   .clip:hover .clip-grip, .clip.selected .clip-grip, .clip.editing .clip-grip { opacity: 1; }
-  .clip.editing { z-index: 6; }
+  .clip.editing { z-index: 999; }
   .drop-preview {
     position: absolute; top: 3px; bottom: 3px; z-index: 5;
     border: 2px dashed var(--cat); border-radius: 4px;
@@ -564,7 +568,25 @@
     font: 600 9px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
   }
   .fx-toggle[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: #1B1204; }
-  .strip-pan { width: 100%; margin: 0; accent-color: var(--muted); }
+  /* Panorama als Drehregler: senkrecht ziehen, Doppelklick = Mitte; das Eingabefeld dahinter bleibt für Tastatur */
+  .strip-pan-wrap { position: relative; display: flex; justify-content: center; }
+  .strip-pan-wrap .strip-pan { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+  .strip-pan-wrap:focus-within .knob { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .knob {
+    --turn: 0deg; position: relative; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--lane); border: 1px solid var(--line); box-shadow: inset 0 -2px 0 #0002;
+    cursor: ns-resize; touch-action: pan-x;
+  }
+  .knob-ind {
+    position: absolute; left: 50%; top: 4px; width: 2px; height: 11px; margin-left: -1px; border-radius: 1px;
+    background: var(--amber); transform-origin: 50% 13px; transform: rotate(var(--turn));
+  }
+  .knob.center .knob-ind { background: var(--muted); }
+  /* Finger am Fader: relativ ziehen statt springen, waagrecht wischen scrollt die Kanäle */
+  @media (pointer: coarse) {
+    .strip-fader { pointer-events: none; }
+    .strip-fader-row { touch-action: pan-x; }
+  }
   .strip-fader-row { flex: 1; min-height: 70px; display: flex; justify-content: center; gap: 8px; }
   .strip-fader { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 100%; margin: 0; accent-color: var(--amber); }
   .strip-meter { width: 8px; height: 100%; border-radius: 2px; }
@@ -1226,7 +1248,8 @@
     .strip { flex-basis: 84px; flex-shrink: 0; gap: 6px; }
     .strip-name { min-height: 28px; }
     .strip-sum { min-height: 40px; }
-    .strip-pan { height: 28px; }
+    .knob { width: 40px; height: 40px; }
+    .knob-ind { top: 5px; height: 13px; transform-origin: 50% 15px; }
     .strip-fader-row { min-height: 90px; }
     .strip-fader { width: 30px; }
     .strip-ms { gap: 6px; }
