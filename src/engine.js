@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, EPS } from './model.js';
+import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 
@@ -105,7 +105,7 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
 
 // Bringt Pegel, Panorama und Effekte aller Kanäle auf den Stand des Projekts.
 export function syncMix(ctx, project, mix, spb, live = true) {
-  const anySolo = project.tracks.some((t) => t.solo);
+  const anySolo = anySoloOf(project);
   const ids = new Set(project.tracks.map((t) => t.id));
   for (const [id, strip] of mix.tracks) {
     if (!ids.has(id)) { strip.out.disconnect(); mix.tracks.delete(id); }
@@ -117,7 +117,7 @@ export function syncMix(ctx, project, mix, spb, live = true) {
       mix.tracks.set(track.id, strip);
       mix.onStrip?.(track.id, strip);
     }
-    syncStrip(ctx, strip, trackLevel(track, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid);
+    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid);
   }
   const m = masterOf(project);
   syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);

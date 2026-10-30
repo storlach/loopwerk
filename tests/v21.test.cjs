@@ -103,6 +103,56 @@ const { check, finish } = createChecker();
     check('Clip zeigt die Laufzeit im Etikett', /×2/.test(await page.locator('.clip[data-clip-id="c4"] .clip-label').textContent()));
     await page.click('[data-run="1"]');
     check('Laufzeit ×1 stellt die Originallänge wieder her', await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats) === len0);
+    // ---------- Spurgruppen ----------
+    await page.keyboard.press('Escape');
+    await page.click('.track-row:has(.lane[data-track-id="t1"]) .tbtn-menu');
+    const items = await page.locator('.track-menu-item').allTextContents();
+    check('Spurmenü bietet „Gruppe bilden“', items.some((x) => /^Gruppe bilden/.test(x)), items.join(' | '));
+    await page.locator('.track-menu-item', { hasText: 'Gruppe bilden' }).click();
+    let gs = await page.evaluate(() => ({ groups: window.loopwerk.store.project.groups, t1: window.loopwerk.store.track('t1').groupId }));
+    check('Gruppe angelegt, Spur ist Mitglied', gs.groups?.length === 1 && gs.t1 === gs.groups[0].id, JSON.stringify(gs));
+    const gid = gs.groups[0].id;
+    // zweite Spur über das Menü dazu
+    await page.click('.track-row:has(.lane[data-track-id="t2"]) .tbtn-menu');
+    await page.locator('.track-menu-item', { hasText: 'hinzufügen' }).first().click();
+    check('Zweite Spur in die Gruppe aufgenommen', await page.evaluate((g) => window.loopwerk.store.project.tracks.filter((t) => t.groupId === g).length, gid) === 2);
+    check('Gruppenkopf steht über den Mitgliedern', await page.evaluate(() => {
+      const kids = [...document.querySelector('.rows').children];
+      const gi = kids.findIndex((n) => n.classList.contains('group-row'));
+      return gi >= 0 && kids[gi + 1].querySelector('.lane')?.dataset.trackId === 't1' && kids[gi + 2].querySelector('.lane')?.dataset.trackId === 't2';
+    }));
+    // einklappen: Mitglieder verschwinden, Übersicht erscheint
+    const h0 = await page.evaluate(() => document.querySelector('.rows').offsetHeight);
+    await page.click('.group-toggle');
+    await page.waitForTimeout(80);
+    const col = await page.evaluate(() => ({
+      hidden: [...document.querySelectorAll('.track-row.in-group')].every((r) => r.hidden),
+      h: document.querySelector('.rows').offsetHeight,
+      sum: (() => { const c = document.querySelector('.group-sum'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })(),
+      exp: document.querySelector('.group-toggle').getAttribute('aria-expanded'),
+    }));
+    check('Eingeklappt: Mitglieder verborgen, Spuren rücken nach oben', col.hidden && col.h < h0 - 60, JSON.stringify({ h0, ...col }));
+    check('Eingeklappt: Übersicht zeigt die Clips der Gruppe', col.sum > 50 && col.exp === 'false', JSON.stringify(col));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v21-gruppe.png') });
+    // Gruppe stumm: Mitglieder schweigen im Render, andere Spuren nicht
+    await page.click('.group-row .tbtn-mute');
+    const silent = await page.evaluate(async (g) => {
+      const { store, library, renderProject } = window.loopwerk;
+      const p = JSON.parse(JSON.stringify(store.project));
+      const only = (keep) => { const q = JSON.parse(JSON.stringify(p)); q.tracks = q.tracks.filter(keep); return q; };
+      const rms = async (q) => { const d = (await renderProject(q, library, { limiter: false, toBeat: 16 })).getChannelData(0); let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i]; return Math.sqrt(s / d.length); };
+      return { group: await rms(only((t) => t.groupId === g)), rest: await rms(only((t) => t.groupId !== g)), cls: [...document.querySelectorAll('.track-row.in-group')].every((r) => r.classList.contains('silent')) };
+    }, gid);
+    check('Gruppe stumm: Mitglieder klingen nicht, die übrigen schon', silent.group < 1e-4 && silent.rest > 0.005 && silent.cls, JSON.stringify(silent));
+    await page.click('.group-row .tbtn-mute');
+    await page.click('.group-toggle');
+    check('Aufklappen zeigt die Mitglieder wieder', await page.evaluate(() => [...document.querySelectorAll('.track-row.in-group')].every((r) => !r.hidden)));
+    // auflösen über das Gruppenmenü, ein Rückgängig holt sie zurück
+    await page.click('.group-row .tbtn-menu');
+    await page.locator('.track-menu-item', { hasText: 'Gruppe auflösen' }).click();
+    check('Gruppe auflösen entfernt Kopf und Zugehörigkeit', await page.evaluate(() => !document.querySelector('.group-row') && !window.loopwerk.store.project.tracks.some((t) => t.groupId) && !(window.loopwerk.store.project.groups || []).length));
+    await page.keyboard.press('Control+z');
+    check('Rückgängig stellt die Gruppe wieder her', await page.evaluate(() => !!document.querySelector('.group-row') && window.loopwerk.store.project.tracks.filter((t) => t.groupId).length === 2));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

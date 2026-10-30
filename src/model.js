@@ -127,6 +127,18 @@ export function sampleFor(library, clip) {
   return clip.stretch && clip.stretch !== 1 ? library.stretched(clip.sampleId, clip.stretch) : library.get(clip.sampleId);
 }
 
+// Spurgruppen: eine Gruppe kann ihre Spuren gemeinsam stumm oder solo schalten (die Spuren behalten ihre eigenen Schalter)
+export function groupOf(project, track) {
+  return track.groupId ? project.groups?.find((g) => g.id === track.groupId) ?? null : null;
+}
+export function trackState(project, track) {
+  const g = groupOf(project, track);
+  return { mute: !!track.mute || !!g?.mute, solo: !!track.solo || !!g?.solo };
+}
+export function anySoloOf(project) {
+  return project.tracks.some((t) => trackState(project, t).solo);
+}
+
 export const MAX_TRACKS = 16;
 export const MIN_BPM = 60;
 export const MAX_BPM = 200;
@@ -465,7 +477,68 @@ export class Store extends Emitter {
 
   removeTrack(trackId) {
     if (this.project.tracks.length <= 1 || !this.track(trackId)) return;
-    this.dispatch('remove-track', (p) => { p.tracks = p.tracks.filter((t) => t.id !== trackId); });
+    this.dispatch('remove-track', (p) => { p.tracks = p.tracks.filter((t) => t.id !== trackId); this._pruneGroups(); });
+  }
+
+  // ---------- Spurgruppen (Akkordeon) ----------
+
+  _pruneGroups() {
+    const p = this.project;
+    if (!p.groups) return;
+    p.groups = p.groups.filter((g) => p.tracks.some((t) => t.groupId === g.id));
+    for (const t of p.tracks) if (t.groupId && !p.groups.some((g) => g.id === t.groupId)) delete t.groupId;
+  }
+
+  // Spuren zu einer Gruppe zusammenfassen; sie rücken direkt unter die oberste von ihnen
+  groupTracks(trackIds, name) {
+    const p = this.project;
+    const members = p.tracks.filter((t) => trackIds.includes(t.id));
+    if (!members.length) return null;
+    const n = 1 + Math.max(0, ...(p.groups || []).map((g) => parseInt(g.id.slice(1), 10) || 0));
+    const id = 'g' + n;
+    this.dispatch('group', (q) => {
+      q.groups = [...(q.groups || []), { id, name: (name || `Gruppe ${n}`).slice(0, 32), collapsed: false }];
+      const at = q.tracks.findIndex((t) => trackIds.includes(t.id));
+      const rest = q.tracks.filter((t) => !trackIds.includes(t.id));
+      const mem = q.tracks.filter((t) => trackIds.includes(t.id));
+      for (const t of mem) t.groupId = id;
+      const before = q.tracks.slice(0, at).filter((t) => !trackIds.includes(t.id)).length;
+      rest.splice(before, 0, ...mem);
+      q.tracks = rest;
+      this._pruneGroups();
+    });
+    return id;
+  }
+
+  setGroup(groupId, patch, coalesce) {
+    if (!this.project.groups?.some((g) => g.id === groupId)) return;
+    if ('name' in patch) patch = { ...patch, name: String(patch.name).trim().slice(0, 32) || 'Gruppe' };
+    this.dispatch('group-set', (p) => Object.assign(p.groups.find((g) => g.id === groupId), patch), { coalesce });
+  }
+
+  ungroup(groupId) {
+    if (!this.project.groups?.some((g) => g.id === groupId)) return;
+    this.dispatch('ungroup', (p) => {
+      for (const t of p.tracks) if (t.groupId === groupId) delete t.groupId;
+      this._pruneGroups();
+    });
+  }
+
+  // Eine Spur in eine Gruppe aufnehmen (null: herausnehmen); sie rückt ans Ende bzw. hinter die Gruppe
+  setTrackGroup(trackId, groupId) {
+    const track = this.track(trackId);
+    if (!track || (track.groupId ?? null) === groupId) return;
+    this.dispatch('track-group', (p) => {
+      const t = p.tracks.find((x) => x.id === trackId);
+      const old = t.groupId;
+      p.tracks = p.tracks.filter((x) => x !== t);
+      if (groupId) t.groupId = groupId; else delete t.groupId;
+      const ref = groupId ?? old;
+      let at = p.tracks.length;
+      for (let i = p.tracks.length - 1; i >= 0; i--) if (p.tracks[i].groupId === ref) { at = i + 1; break; }
+      p.tracks.splice(at, 0, t);
+      this._pruneGroups();
+    });
   }
 
   setTrack(trackId, patch, coalesce) {

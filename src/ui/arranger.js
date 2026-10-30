@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, isAbove, sampleFor, totalBeats, MAX_TRACKS, EPS } from '../model.js';
+import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { makeKnob } from './knob.js';
 
@@ -142,15 +142,139 @@ export function mountArranger({ root, store, engine, library, ui }) {
     input.addEventListener('blur', () => finish(true));
   }
 
+  // ---------- Spurgruppen: Kopfzeile mit Akkordeon (eingeklappt: Übersicht aller Clips der Gruppe) ----------
+  const groupRows = new Map();
+  function makeGroupRow(g) {
+    const row = el('div', 'group-row');
+    row.dataset.groupId = g.id;
+    const head = el('div', 'track-head group-head');
+    const top = el('div', 'track-top');
+    const toggle = el('button', 'group-toggle');
+    toggle.type = 'button';
+    toggle.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4z"/></svg>';
+    const name = el('div', 'group-name');
+    name.title = 'Doppelklick zum Umbenennen';
+    const menuBtn = el('button', 'tbtn tbtn-menu', '⋯');
+    menuBtn.type = 'button';
+    menuBtn.setAttribute('aria-haspopup', 'menu');
+    top.append(toggle, name, menuBtn);
+    const btns = el('div', 'track-btns');
+    const mute = el('button', 'tbtn tbtn-mute', 'M');
+    mute.type = 'button';
+    mute.title = 'Gruppe stumm';
+    const solo = el('button', 'tbtn tbtn-solo', 'S');
+    solo.type = 'button';
+    solo.title = 'Gruppe solo';
+    const count = el('span', 'group-count');
+    btns.append(mute, solo, count);
+    head.append(top, btns);
+    const lane = el('div', 'group-lane');
+    const sum = el('canvas', 'group-sum');
+    lane.append(sum);
+    row.append(head, lane);
+    const grp = () => store.project.groups?.find((x) => x.id === g.id);
+    toggle.addEventListener('click', () => store.setGroup(g.id, { collapsed: !grp()?.collapsed }));
+    mute.addEventListener('click', () => store.setGroup(g.id, { mute: !grp()?.mute }));
+    solo.addEventListener('click', () => store.setGroup(g.id, { solo: !grp()?.solo }));
+    name.addEventListener('dblclick', () => renameGroup(g.id));
+    menuBtn.addEventListener('click', () => openGroupMenu(g.id, menuBtn));
+    // Klick auf den Kopf (nicht auf Knöpfe) klappt auf und zu
+    head.addEventListener('click', (e) => { if (!e.target.closest('button, input')) store.setGroup(g.id, { collapsed: !grp()?.collapsed }); });
+    const r = { row, head, top, toggle, name, menuBtn, mute, solo, count, lane, sum };
+    groupRows.set(g.id, r);
+    return r;
+  }
+
+  function renameGroup(groupId) {
+    const r = groupRows.get(groupId);
+    if (!r || r.top.querySelector('input')) return;
+    const input = document.createElement('input');
+    input.className = 'track-name-input';
+    input.maxLength = 32;
+    input.value = store.project.groups.find((g) => g.id === groupId)?.name ?? '';
+    input.setAttribute('aria-label', 'Gruppenname');
+    r.name.hidden = true;
+    r.toggle.after(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      input.remove();
+      r.name.hidden = false;
+      if (save && input.value.trim()) store.setGroup(groupId, { name: input.value });
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+  }
+
+  // Eingeklappt: alle Clips der Gruppe als farbige Bänder, eine Zeile je Spur
+  function drawGroupSum(r, members) {
+    const w = Math.max(1, Math.round(totalBeats(store.project) * ppb()));
+    const h = r.lane.clientHeight || 40;
+    const dpr = window.devicePixelRatio || 1;
+    const sx = Math.min(dpr, MAX_CANVAS / w);
+    r.sum.width = Math.max(1, Math.round(w * sx));
+    r.sum.height = Math.round(h * dpr);
+    r.sum.style.width = w + 'px';
+    r.sum.style.height = h + 'px';
+    const c = r.sum.getContext('2d');
+    c.setTransform(sx, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    const css = getComputedStyle(document.documentElement);
+    const band = Math.max(3, Math.min(10, (h - 8) / Math.max(1, members.length)));
+    const y0 = (h - band * members.length) / 2;
+    members.forEach((t, i) => {
+      for (const clip of t.clips) {
+        const s = library.get(clip.sampleId);
+        c.fillStyle = css.getPropertyValue(`--cat-${s?.colorCat ?? s?.category ?? 'fx'}`).trim() || '#888';
+        c.fillRect(clip.startBeat * ppb(), y0 + i * band + 1, Math.max(2, clip.lengthBeats * ppb() - 1), band - 2);
+      }
+    });
+  }
+
   function syncRows() {
-    const tracks = store.project.tracks;
+    const p = store.project;
+    const tracks = p.tracks;
     const ids = new Set(tracks.map((t) => t.id));
     for (const [id, r] of rows) if (!ids.has(id)) { r.row.remove(); rows.delete(id); }
-    const anySolo = tracks.some((x) => x.solo);
-    tracks.forEach((t, i) => {
+    const gids = new Set((p.groups || []).map((g) => g.id));
+    for (const [id, r] of groupRows) if (!gids.has(id)) { r.row.remove(); groupRows.delete(id); }
+    const anySolo = anySoloOf(p);
+    // Reihenfolge: Gruppenkopf vor dem ersten Mitglied, eingeklappte Mitglieder bleiben im DOM, aber verborgen
+    const seq = [];
+    const seen = new Set();
+    for (const t of tracks) {
+      const g = groupOf(p, t);
+      if (g && !seen.has(g.id)) {
+        seen.add(g.id);
+        const gr = groupRows.get(g.id) || makeGroupRow(g);
+        const members = tracks.filter((x) => x.groupId === g.id);
+        gr.name.textContent = g.name;
+        gr.count.textContent = `${members.length} ${members.length === 1 ? 'Spur' : 'Spuren'}`;
+        gr.toggle.setAttribute('aria-expanded', String(!g.collapsed));
+        gr.toggle.setAttribute('aria-label', `${g.collapsed ? 'Aufklappen' : 'Einklappen'}: ${g.name}`);
+        gr.mute.setAttribute('aria-pressed', String(!!g.mute));
+        gr.solo.setAttribute('aria-pressed', String(!!g.solo));
+        gr.menuBtn.setAttribute('aria-label', `Menü für Gruppe ${g.name}`);
+        gr.row.classList.toggle('collapsed', !!g.collapsed);
+        if (g.collapsed) requestAnimationFrame(() => drawGroupSum(gr, members));
+        seq.push(gr.row);
+      }
       const r = rows.get(t.id) || makeRow(t);
-      // Nur umhängen, wenn nötig – sonst verliert ein gerade gezogener Regler den Fokus.
-      if (rowsEl.children[i] !== r.row) rowsEl.insertBefore(r.row, rowsEl.children[i] || null);
+      r.row.hidden = !!g?.collapsed;
+      r.row.classList.toggle('in-group', !!g);
+      r.row.classList.toggle('group-last', !!g && tracks.filter((x) => x.groupId === g.id).at(-1) === t);
+      seq.push(r.row);
+    }
+    // Nur umhängen, wenn nötig – sonst verliert ein gerade gezogener Regler den Fokus.
+    seq.forEach((n, i) => { if (rowsEl.children[i] !== n) rowsEl.insertBefore(n, rowsEl.children[i] || null); });
+    tracks.forEach((t) => {
+      const r = rows.get(t.id);
       r.name.textContent = t.name;
       r.mute.setAttribute('aria-pressed', String(t.mute));
       r.solo.setAttribute('aria-pressed', String(t.solo));
@@ -161,7 +285,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
       const first = t.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
       const fs = first && library.get(first.sampleId);
       r.dot.className = `track-dot${fs ? ` cat-${fs.colorCat ?? fs.category}` : ''}`;
-      r.row.classList.toggle('silent', t.mute || (anySolo && !t.solo));
+      const st = trackState(p, t);
+      r.row.classList.toggle('silent', st.mute || (anySolo && !st.solo));
       r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === t.id);
     });
     addRow.hidden = tracks.length >= MAX_TRACKS;
@@ -178,10 +303,54 @@ export function mountArranger({ root, store, engine, library, ui }) {
   function closeMenu(focusBack = false) {
     if (menu.hidden) return;
     menu.hidden = true;
-    const btn = rows.get(menuFor)?.menuBtn;
+    const btn = String(menuFor).startsWith('g:') ? groupRows.get(menuFor.slice(2))?.menuBtn : rows.get(menuFor)?.menuBtn;
     btn?.setAttribute('aria-expanded', 'false');
     if (focusBack) btn?.focus();
     menuFor = null;
+  }
+
+  // Gruppen im Spur-Menü: bilden (mit den Spuren der ausgewählten Clips), aufnehmen, herausnehmen
+  function groupItems(trackId, item) {
+    const p = store.project;
+    const t = store.track(trackId);
+    const g = groupOf(p, t);
+    if (g) return [item(`Aus Gruppe „${g.name}“ nehmen`, () => { closeMenu(); store.setTrackGroup(trackId, null); })];
+    const fromSel = [...new Set(ui.selectedIds().map((id) => store.findClip(id)?.track.id).filter(Boolean))];
+    const ids = [...new Set([trackId, ...fromSel])];
+    return [
+      item(ids.length > 1 ? `Gruppe bilden (${ids.length} Spuren)` : 'Gruppe bilden', () => { closeMenu(); store.groupTracks(ids); }),
+      ...(p.groups || []).map((x) => item(`Zu „${x.name}“ hinzufügen`, () => { closeMenu(); store.setTrackGroup(trackId, x.id); })),
+    ];
+  }
+
+  function openGroupMenu(groupId, btn) {
+    const key = `g:${groupId}`;
+    if (menuFor === key) { closeMenu(); return; }
+    closeMenu();
+    menuFor = key;
+    const item = (label, action) => {
+      const b = el('button', 'track-menu-item', label);
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.addEventListener('click', () => action(b));
+      return b;
+    };
+    menu.replaceChildren(
+      item('Umbenennen', () => { closeMenu(); renameGroup(groupId); }),
+      item('Gruppe auflösen', () => { closeMenu(); store.ungroup(groupId); }),
+    );
+    showMenu(btn);
+  }
+
+  function showMenu(btn) {
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    const r = btn.getBoundingClientRect();
+    const mw = menu.offsetWidth;
+    const mh = menu.offsetHeight;
+    menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
+    menu.style.top = (r.bottom + 4 + mh > innerHeight - 8 ? r.top - mh - 4 : r.bottom + 4) + 'px';
+    menu.querySelector('button:not(:disabled)')?.focus();
   }
 
   function openMenu(trackId, btn) {
@@ -203,6 +372,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
       item('Nach oben', () => { closeMenu(); store.moveTrack(trackId, i - 1); }, i === 0),
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
+      ...groupItems(trackId, item),
       item('Löschen', (b) => {
         if (b.classList.contains('confirm')) { closeMenu(); store.removeTrack(trackId); return; }
         b.classList.add('confirm');
@@ -238,10 +408,11 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const r = rows.get(trackId);
     const sy = e.clientY;
     let to = null;
+    // Ziel als Index in der Spurliste; Gruppenköpfe und eingeklappte Spuren zählen nicht
+    const visible = () => store.project.tracks.map((t, i) => ({ i, row: rows.get(t.id)?.row })).filter((x) => x.row && !x.row.hidden);
     const indexAt = (y) => {
-      const list = [...rowsEl.children];
-      let k = list.findIndex((n) => y < n.getBoundingClientRect().top + n.offsetHeight / 2);
-      return k < 0 ? list.length : k;
+      const hit = visible().find((x) => y < x.row.getBoundingClientRect().top + x.row.offsetHeight / 2);
+      return hit ? hit.i : store.project.tracks.length;
     };
     trackPointer(e, (ev) => {
       if (to == null && Math.abs(ev.clientY - sy) < 6) return;
@@ -249,8 +420,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
       to = indexAt(ev.clientY);
       r.row.classList.add('moving');
       r.row.classList.toggle('copying', copy);
-      const list = [...rowsEl.children];
-      const y = to < list.length ? list[to].offsetTop : rowsEl.offsetHeight;
+      const target = rows.get(store.project.tracks[to]?.id)?.row;
+      const y = target && !target.hidden ? target.offsetTop : rowsEl.offsetHeight;
       dropLine.style.top = rowsEl.offsetTop + y - 1 + 'px';
       if (!dropLine.parentElement) grid.append(dropLine);
       ui.status(copy ? 'Spur kopieren: loslassen, wo die Kopie hin soll' : 'Spur verschieben');
