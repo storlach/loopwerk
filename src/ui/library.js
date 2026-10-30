@@ -94,7 +94,10 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       engine.stopPreview();
     } else {
       ui.arm(sample.id);
-      engine.previewSample(sample.id);
+      // Noch nicht geladen: kurz „lädt“ zeigen, bis der Klang da ist
+      const item = root.querySelector(`.loop-item[data-sample-id="${sample.id}"]`);
+      if (sample.lazy) item?.classList.add('loading');
+      engine.previewSample(sample.id).finally(() => item?.classList.remove('loading'));
     }
   }
 
