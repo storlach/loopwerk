@@ -154,6 +154,7 @@
 - Spurgruppen als Akkordeon: einklappen mit Übersicht, Gruppe stumm/solo, umbenennen, auflösen
 - Licht aus der Musik: Umgebungslicht folgt Pegel und Farben der klingenden Clips, Leuchten und Funken nur an der Abspielmarke
 - Wunsch-Agent: ein Satz → Plan (Claude im Artifact, sonst Regeln) → ein Rückgängig-Schritt
+- Nur noch dunkel: Hell-Modus gestrichen
 - Neue UI-Richtung F · Phosphor (schwarz, Licht aus der Musik), vom Creative Director mit Auflagen zur Durchsicht freigegeben
 - Spec: `docs/specs/v2.1-griff-und-licht.md`, Tests: `tests/v21.test.cjs`
 
@@ -161,7 +162,7 @@
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Look
-- Seit 2.0 „Werkstück“ (siehe `docs/ux/richtungen/`). Farben, Schriften und Bausteine nur über die Tokens in `:root`.
+- Seit 2.0 „Werkstück“ (siehe `docs/ux/richtungen/`), seit 2.1 nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
 
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

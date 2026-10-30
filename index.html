@@ -73,35 +73,36 @@
 <style>
   :root {
     /* Look „Werkstück“: ein Musikgerät aus Graphit und Gummi, genau eine Signalfarbe (Orange) für Transport und Aktives.
-       Hell ist das „silberne Gehäuse“, dunkel (Hauptmodus) das Graphit-Gehäuse; das Display bleibt immer schwarz. */
-    --bg: #E9E7E2;
-    --panel: #F5F4F0;
-    --lane: #EFEDE8;
-    --lane-alt: #E8E6E0;
-    --ink: #141414;
-    --muted: #5F5B54;
-    --line: #D3D0C8;
-    --grid-bar: #C4C0B7;
-    --grid-beat: #DFDCD5;
-    --deck: #F5F4F0;
-    --deck-2: #E4E2DC;
-    --deck-ink: #141414;
-    --deck-muted: #5F5B54;
-    --lcd: #070707;
-    --amber: #C2410C;
+       Nur dunkel (seit 2.1); das Display ist schwarz. */
+    color-scheme: dark;
+    --bg: #0F0F0F;
+    --panel: #181818;
+    --lane: #121212;
+    --lane-alt: #151515;
+    --ink: #F2EFE9;
+    --muted: #A39E94;
+    --line: #2C2C2C;
+    --grid-bar: #2A2A2A;
+    --grid-beat: #1C1C1C;
+    --deck: #181818;
+    --deck-2: #232323;
+    --deck-ink: #F2EFE9;
+    --deck-muted: #A39E94;
+    --lcd: #050505;
+    --amber: #FF5B1F;
     --amber-dim: #8F8A80;
-    --focus: #141414;
-    --meter-ok: #1FA968;
-    --meter-warm: #E0A800;
-    --meter-hot: #E5372C;
-    --meter-off: #D3D0C8;
-    --cat-drums: #E0A800;
-    --cat-bass: #2F6BEF;
-    --cat-chords: #17A866;
-    --cat-synth: #7C6AF0;
-    --cat-fx: #8A8478;
-    --cat-own: #E2508A;
-    --ambient-max: 0.32; --glow-blend: multiply;
+    --focus: #FFFFFF;
+    --meter-ok: #22C97C;
+    --meter-warm: #FFC21A;
+    --meter-hot: #FF3B30;
+    --meter-off: #262626;
+    --cat-drums: #FFC21A;
+    --cat-bass: #3D7BFF;
+    --cat-chords: #22C97C;
+    --cat-synth: #A99BFF;
+    --cat-fx: #E6E1D6;
+    --cat-own: #FF7AA8;
+    --ambient-max: 0.55; --glow-blend: screen;
     /* Spuren durchscheinend, damit das Umgebungslicht dahinter wirkt */
     --lane-a: color-mix(in srgb, var(--lane) 40%, transparent);
     --lane-alt-a: color-mix(in srgb, var(--lane-alt) 40%, transparent);
@@ -111,59 +112,27 @@
     --radius: 8px;
     /* Werkstück-Bausteine: Gummitasten, Mulden, Display, LED, Punktraster */
     --accent-ink: #140600;
-    --key-face: linear-gradient(180deg, #FFFFFF, #ECEAE4);
-    --key-shadow: inset 0 1px 0 #FFFFFF, inset 0 -2px 0 rgb(0 0 0 / 0.12), 0 1px 0 rgb(0 0 0 / 0.16), 0 0 0 1px rgb(0 0 0 / 0.07);
-    --well: #E2E0DA;
-    --well-shadow: inset 0 1px 3px rgb(0 0 0 / 0.18);
-    --dots: radial-gradient(circle, rgb(0 0 0 / 0.06) 1px, transparent 1.3px) 0 0 / 12px 12px;
-    --clip-body: #FBFAF7;
+    --key-face: linear-gradient(180deg, #2B2B2B, #222222);
+    --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
+    --well: #0B0B0B;
+    --well-shadow: inset 0 1px 3px #000;
+    --dots: radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px;
+    --clip-body: #1B1B1B;
     --label-ink: #111111;
     --lcd-face: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 3px), var(--lcd);
-    --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.5);
+    --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.06);
     --lcd-sep: #1D1D1D;
     --display-ink: #F2EFE9;
     --lcd-label: #8F8A80;
-    --sheet-bg: #F7F6F3;
-    --sheet-shadow: 0 -1px 0 rgb(0 0 0 / 0.08), 0 -18px 44px rgb(0 0 0 / 0.18);
-    --led-off: #C9C5BC;
-    --knob-hi: #FFFFFF;
-    --knob-lo: #DEDBD4;
-    --knob-edge: rgb(0 0 0 / 0.25);
-    /* Klaviertasten sehen in hell und dunkel wie ein Klavier aus */
+    --sheet-bg: #161616;
+    --sheet-shadow: 0 -1px 0 #3A3A3A, 0 -20px 50px rgb(0 0 0 / 0.7);
+    --led-off: #3A3A3A;
+    --knob-hi: #353535;
+    --knob-lo: #1F1F1F;
+    --knob-edge: #000;
+    /* Klaviertasten sehen wie ein Klavier aus */
     --key-white: #fdfdfb; --key-white-ink: #5b6475; --key-black: #1d2330; --key-black-ink: #b9c2d3;
     --track-h: 58px;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0F0F0F; --panel: #181818; --lane: #121212; --lane-alt: #151515; --ink: #F2EFE9; --muted: #A39E94;
-      --line: #2C2C2C; --grid-bar: #2A2A2A; --grid-beat: #1C1C1C; --deck: #181818; --deck-2: #232323;
-      --deck-ink: #F2EFE9; --deck-muted: #A39E94; --lcd: #050505; --amber: #FF5B1F; --amber-dim: #8F8A80;
-      --focus: #FFFFFF; --meter-ok: #22C97C; --meter-warm: #FFC21A; --meter-hot: #FF3B30; --meter-off: #262626;
-      --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8; --ambient-max: 0.55; --glow-blend: screen;
-      --key-face: linear-gradient(180deg, #2B2B2B, #222222);
-      --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
-      --well: #0B0B0B; --well-shadow: inset 0 1px 3px #000;
-      --dots: radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px;
-      --clip-body: #1B1B1B; --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.06);
-      --sheet-bg: #161616; --sheet-shadow: 0 -1px 0 #3A3A3A, 0 -20px 50px rgb(0 0 0 / 0.7);
-      --led-off: #3A3A3A; --knob-hi: #353535; --knob-lo: #1F1F1F; --knob-edge: #000;
-      color-scheme: dark;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0F0F0F; --panel: #181818; --lane: #121212; --lane-alt: #151515; --ink: #F2EFE9; --muted: #A39E94;
-    --line: #2C2C2C; --grid-bar: #2A2A2A; --grid-beat: #1C1C1C; --deck: #181818; --deck-2: #232323;
-    --deck-ink: #F2EFE9; --deck-muted: #A39E94; --lcd: #050505; --amber: #FF5B1F; --amber-dim: #8F8A80;
-    --focus: #FFFFFF; --meter-ok: #22C97C; --meter-warm: #FFC21A; --meter-hot: #FF3B30; --meter-off: #262626;
-    --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8; --ambient-max: 0.55; --glow-blend: screen;
-    --key-face: linear-gradient(180deg, #2B2B2B, #222222);
-    --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
-    --well: #0B0B0B; --well-shadow: inset 0 1px 3px #000;
-    --dots: radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px;
-    --clip-body: #1B1B1B; --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.06);
-    --sheet-bg: #161616; --sheet-shadow: 0 -1px 0 #3A3A3A, 0 -20px 50px rgb(0 0 0 / 0.7);
-    --led-off: #3A3A3A; --knob-hi: #353535; --knob-lo: #1F1F1F; --knob-edge: #000;
-    color-scheme: dark;
   }
 
   html, body { height: 100%; }

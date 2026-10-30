@@ -27,7 +27,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - Timing nie mit `setTimeout` planen, immer über `ctx.currentTime` + Vorlauf.
 - Realtime und Offline nutzen dieselbe Signalkette (`buildMix`, `startVoice`).
 - UX wie im Original: alles ist ein Objekt, Drag & Drop, Raster rastet ein, keine Pflichtdialoge, sinnvolle Voreinstellungen. Höchstens zwei Klicks für Grundfunktionen.
-- Look „Werkstück“ (seit 2.0, `docs/specs/v2.0-werkstueck.md`): Farben, Schriften und Bausteine (Tasten, Mulden, Display, LED) nur über die Tokens in `:root`, keine neuen festen Farbwerte. Orange nur für Transport und Aktives.
+- Look „Werkstück“ (seit 2.0, `docs/specs/v2.0-werkstueck.md`): Farben, Schriften und Bausteine (Tasten, Mulden, Display, LED) nur über die Tokens in `:root`, keine neuen festen Farbwerte. Orange nur für Transport und Aktives. Seit 2.1 nur dunkel, kein Hell-Modus.
 - Texte in der Oberfläche auf Deutsch, Code-Bezeichner Englisch, Kommentare Deutsch und sparsam.
 - Fremd-Samples nur mit geprüfter Lizenz (bevorzugt CC0); Lizenz in den Metadaten vermerken.
 
@@ -59,5 +59,5 @@ Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer 
 
 ## Fertig heißt
 - `npm test` grün (alle Stufen: Timing samplegenau, Effekte, Export, UI-Interaktionen, keine Konsolenfehler).
-- Ein Screenshot (`--shots`, `SHOT_DIR=…`) angesehen, hell/dunkel und Handy-Breite.
+- Ein Screenshot (`--shots`, `SHOT_DIR=…`) angesehen, Desktop und Handy-Breite (es gibt nur dunkel).
 - Klang beurteilt der Mensch: bei hörbaren Änderungen um ein Ohr-Feedback bitten.

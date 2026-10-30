@@ -1031,8 +1031,6 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   store.on(() => render());
   narrow.addEventListener('change', () => render(true));
-  // Farben der Wellenformen hängen vom Farbschema ab
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => render(true));
   render(true);
   ui.on(() => {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);

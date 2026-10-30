@@ -227,6 +227,10 @@ const { check, finish } = createChecker();
     });
     check('Claude plant: Tempo, Bass auf neuer Spur in Takt 3–6, Echo auf genau dieser Spur', wc.by === 'claude' && wc.bpm === 99 && wc.clip?.startBeat === 8 && wc.clip?.lengthBeats === 16 && wc.echo?.on && wc.echo.mix === 0.4, JSON.stringify(wc));
     check('Ungültige Bausteine werden übersprungen, alles ist ein Schritt', wc.done === 3 && wc.skipped === 2 && wc.steps === 1 && wc.prompt, JSON.stringify(wc));
+    // ---------- Nur dunkel ----------
+    await page.emulateMedia({ colorScheme: 'light' });
+    const dk = await page.evaluate(() => ({ bg: getComputedStyle(document.body).backgroundColor, scheme: getComputedStyle(document.documentElement).colorScheme }));
+    check('Auch bei hellem System bleibt Loopwerk dunkel', dk.bg === 'rgb(15, 15, 15)' && dk.scheme === 'dark', JSON.stringify(dk));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);
