@@ -109,7 +109,7 @@ const { check, finish } = createChecker();
       };
     });
     // Seit 2.2 Phosphor (Werkstück abgelöst): Schwarz, Linse statt Gummitaste, Display ohne Kasten, Clipname als Licht
-    check('Phosphor: schwarzer Grund, Start-Taste als Linse, Display ohne Kasten', look.bg === 'rgb(3, 3, 4)' && look.play === 'rgba(0, 0, 0, 0)' && look.lcd === 'rgba(0, 0, 0, 0)', JSON.stringify(look));
+    check('Phosphor: Anthrazit-Grund, Start-Taste als Linse, Display ohne Kasten', look.bg === 'rgb(22, 23, 26)' && look.play === 'rgba(0, 0, 0, 0)' && look.lcd === 'rgba(0, 0, 0, 0)', JSON.stringify(look));
     check('Phosphor: Funnel Sans für Text, Azeret Mono für Anzeigen, Drums gelb', /Funnel Sans/.test(look.body) && /Azeret Mono/.test(look.mono) && look.drums.toUpperCase() === '#FFC53D', JSON.stringify(look));
     check('Phosphor: Clipname leuchtet in der Kategoriefarbe, kein Etikett', look.label === 'rgba(0, 0, 0, 0)' && look.labelInk === 'rgb(255, 197, 61)', JSON.stringify(look));
     // Clips und Spurköpfe wie im Entwurf: LED-Wellenform, Pattern-Schild, Farbpunkt, Lautstärke-Drehregler

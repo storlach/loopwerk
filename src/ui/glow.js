@@ -1,5 +1,6 @@
-// Licht aus der Musik: unscharfer Hintergrund hinter der ganzen Seite (Pegel × Farben der klingenden Clips),
-// Leuchten und Funken nur direkt an der Abspielmarke. Läuft nur, solange etwas spielt oder ausklingt.
+// Licht aus der Musik: unscharfer Hintergrund hinter der ganzen Seite – in Ruhe ein langsames, graues Wabern,
+// mit den Sounds kommen Farbe und Rhythmus (Pegel × Farben der klingenden Clips). Dazu eine helle Lichtleiste
+// ganz oben, Licht im Regal beim Vorhören und Leuchten mit Funken nur direkt an der Abspielmarke.
 
 import { anySoloOf, isAbove, trackState, EPS } from '../model.js';
 import { headW } from './arranger.js';
@@ -22,8 +23,29 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   beam.className = 'beam';
   beam.setAttribute('aria-hidden', 'true');
   grid.append(beam);
+  // Lichtleiste oben: ein schmaler Streifen und darunter sein weicher Schein
+  const bar = document.createElement('canvas');
+  bar.className = 'lightbar';
+  bar.width = 96;
+  bar.height = 1;
+  const barGlow = document.createElement('canvas');
+  barGlow.className = 'lightbar-glow';
+  barGlow.width = 96;
+  barGlow.height = 1;
+  for (const n of [bar, barGlow]) { n.setAttribute('aria-hidden', 'true'); document.body.append(n); }
+  // Regal: Licht beim Vorhören, nur innerhalb der linken Leiste
+  const shelfEl = document.querySelector('.shelf');
+  const shelfLight = document.createElement('canvas');
+  shelfLight.className = 'shelf-light';
+  shelfLight.width = 24;
+  shelfLight.height = 40;
+  shelfLight.setAttribute('aria-hidden', 'true');
+  shelfEl?.prepend(shelfLight);
   const ac = amb.getContext('2d');
   const bc = beam.getContext('2d');
+  const barC = bar.getContext('2d');
+  const glowC = barGlow.getContext('2d');
+  const shelfC = shelfLight.getContext('2d');
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   // Farben aus den Tokens (Hell/Dunkel), regelmäßig neu gelesen
@@ -65,7 +87,6 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   function hide() {
     if (!shown) return;
     shown = false;
-    amb.style.opacity = '0';
     beam.hidden = true;
     sparks = [];
   }
@@ -77,12 +98,16 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     try { draw(now); } finally { cost += (performance.now() - t0 - cost) * 0.1; }
   }
 
+  let preview = 0;
+  let previewCat = null;
   function draw(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const live = engine.playing;
-    if (!live && !shown) return;
     if (++colorAge > 60) readColors();
+    // Raumlicht (Hintergrund, Leiste oben, Regal) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde
+    if (frameNo++ % 3 === 0) drawRoom(now / 1000);
+    if (!live && !shown) return;
 
     const p = store.project;
     const beat = engine.heardBeat();
@@ -115,14 +140,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const hitIds = new Set(hits.map((h) => h.trackId));
     for (const [id, g] of trackGlow) if (!hitIds.has(id)) { if (g < 0.003) trackGlow.delete(id); else trackGlow.set(id, g * 0.85); }
 
-    const total = CATS.reduce((n, c) => n + level[c], 0);
     if (!live && amp < 0.01 && !sparks.length && !trackGlow.size) { hide(); return; }
     if (!shown) { shown = true; beam.hidden = false; }
-
-    // ---------- Hintergrund: höchstens 30 Bilder pro Sekunde ----------
-    if (frameNo++ % 2 === 0) drawAmbient(now / 1000, total);
-    // Grundlicht, sobald etwas klingt; darüber pumpt es mit der Lautstärke
-    amb.style.opacity = String(total > 0.002 ? ambientMax * (0.35 + 0.65 * amp) : 0);
 
     // ---------- Marke: Leuchten und Funken ----------
     const ppb = ui.pxPerBeat;
@@ -146,7 +165,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     bc.globalCompositeOperation = 'lighter';
     for (const t of p.tracks) {
       const g = trackGlow.get(t.id);
-      if (!g) continue;
+      if (g === undefined) continue;
       const lane = grid.querySelector(`.lane[data-track-id="${t.id}"]`);
       if (!lane?.offsetParent) continue;
       const hit = hits.find((hh) => hh.trackId === t.id);
@@ -169,9 +188,14 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       bc.fillStyle = grd;
       bc.fillRect(-30, -30, 60, 60);
       bc.restore();
-      // heller Kern
-      bc.fillStyle = `rgba(255,255,255,${0.55 * I})`;
-      bc.fillRect(BEHIND - 1, y0 + 4, 2, lh - 8);
+      // heller Kern mit Schein: nur wo die Marke einen Clip trifft (sonst bleibt die Linie leise)
+      bc.save();
+      bc.globalCompositeOperation = 'source-over';
+      bc.shadowColor = 'rgba(255,255,255,0.9)';
+      bc.shadowBlur = 10;
+      bc.fillStyle = `rgba(255,255,255,${0.7 + 0.3 * I})`;
+      bc.fillRect(BEHIND - 1, y0 + 2, 2, lh - 4);
+      bc.restore();
       // Funken in der Clip-Farbe, meist gegen die Laufrichtung
       if (hit && !reduced.matches && sparks.length < MAX_SPARKS && Math.random() < I * 0.6) {
         const life = 0.35 + Math.random() * 0.5;
@@ -195,40 +219,110 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     bc.globalCompositeOperation = 'source-over';
   }
 
-  // Farbflächen nach Anteil: nur Drums → alles gelb, kommen Bässe dazu → auch blau
-  function drawAmbient(t, total) {
+  // Wo jede Farbe gerade „steht“ (0…1 quer über den Raum), langsam wandernd
+  const spot = (i, k, t, speed = 1) => [0.5 + 0.42 * Math.sin(t * 0.21 * speed + i * 1.7 + k * 2.9), 0.5 + 0.4 * Math.cos(t * 0.17 * speed + (i * 1.7 + k * 2.9) * 1.3)];
+  const GREY = [150, 154, 166];
+
+  function drawRoom(t) {
+    // Musik ausklingen lassen, auch wenn die Marke schon steht
+    if (!engine.playing) { for (const c of CATS) level[c] *= 0.85; amp *= 0.85; }
+    const total = CATS.reduce((n, c) => n + level[c], 0);
+    const loud = total > 0.002 ? ambientMax * (0.35 + 0.65 * amp) : 0;
+    const still = reduced.matches ? 0 : t;
+
+    // ---------- Hintergrund: Anthrazit-Wabern, darüber die Farben der klingenden Sounds ----------
     const W = amb.width;
     const H = amb.height;
     ac.clearRect(0, 0, W, H);
-    if (total <= 0.002) return;
-    let mr = 0, mg = 0, mb = 0;
-    for (const c of CATS) {
-      const s = level[c] / total;
-      mr += rgb[c][0] * s; mg += rgb[c][1] * s; mb += rgb[c][2] * s;
+    for (let k = 0; k < 3; k++) {
+      const [x, y] = spot(7, k, still, 0.35);
+      const g = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, W * 0.55);
+      g.addColorStop(0, `rgba(${GREY},${0.16 + 0.05 * Math.sin(still * 0.3 + k)})`);
+      g.addColorStop(1, `rgba(${GREY},0)`);
+      ac.fillStyle = g;
+      ac.fillRect(0, 0, W, H);
     }
-    ac.fillStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},0.32)`;
-    ac.fillRect(0, 0, W, H);
-    CATS.forEach((c, i) => {
-      const share = level[c] / total;
-      if (share < 0.03) return;
-      const [r, g, b] = rgb[c];
+    if (loud > 0) {
+      let mr = 0, mg = 0, mb = 0;
+      for (const c of CATS) { const sh = level[c] / total; mr += rgb[c][0] * sh; mg += rgb[c][1] * sh; mb += rgb[c][2] * sh; }
+      ac.fillStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},${0.32 * loud})`;
+      ac.fillRect(0, 0, W, H);
+      CATS.forEach((c, i) => {
+        const share = level[c] / total;
+        if (share < 0.03) return;
+        const [r, g, b] = rgb[c];
+        for (let k = 0; k < 2; k++) {
+          const [x, y] = spot(i, k, still);
+          const rad = W * (0.22 + 0.6 * share);
+          const grd = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, rad);
+          grd.addColorStop(0, `rgba(${r},${g},${b},${Math.min(1, 1.1 * Math.sqrt(share)) * loud})`);
+          grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+          ac.fillStyle = grd;
+          ac.fillRect(0, 0, W, H);
+        }
+      });
+    }
+
+    // ---------- Lichtleiste oben: dieselben Farben, heller und strahlender ----------
+    for (const [c2, n] of [[barC, bar], [glowC, barGlow]]) {
+      const BW = n.width;
+      c2.clearRect(0, 0, BW, 1);
+      c2.globalCompositeOperation = 'lighter';
       for (let k = 0; k < 2; k++) {
-        const ph = i * 1.7 + k * 2.9;
-        const cx = W * (0.5 + 0.42 * Math.sin(t * 0.21 + ph));
-        const cy = H * (0.5 + 0.4 * Math.cos(t * 0.17 + ph * 1.3));
-        const rad = W * (0.22 + 0.6 * share);
-        const grd = ac.createRadialGradient(cx, cy, 0, cx, cy, rad);
-        grd.addColorStop(0, `rgba(${r},${g},${b},${Math.min(1, 1.1 * Math.sqrt(share))})`);
-        grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
-        ac.fillStyle = grd;
-        ac.fillRect(0, 0, W, H);
+        const [x] = spot(7, k, still, 0.35);
+        const g = c2.createRadialGradient(x * BW, 0.5, 0, x * BW, 0.5, BW * 0.45);
+        g.addColorStop(0, `rgba(${GREY},0.35)`);
+        g.addColorStop(1, `rgba(${GREY},0)`);
+        c2.fillStyle = g;
+        c2.fillRect(0, 0, BW, 1);
       }
-    });
+      if (loud > 0) {
+        CATS.forEach((c, i) => {
+          const share = level[c] / total;
+          if (share < 0.03) return;
+          const [r, g, b] = rgb[c];
+          for (let k = 0; k < 2; k++) {
+            const [x] = spot(i, k, still);
+            const grd = c2.createRadialGradient(x * BW, 0.5, 0, x * BW, 0.5, BW * (0.18 + 0.5 * share));
+            grd.addColorStop(0, `rgba(${r},${g},${b},${Math.min(1, (0.6 + amp) * Math.sqrt(share))})`);
+            grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+            c2.fillStyle = grd;
+            c2.fillRect(0, 0, BW, 1);
+          }
+        });
+      }
+      c2.globalCompositeOperation = 'source-over';
+    }
+
+    // ---------- Regal: Licht beim Vorhören, nur in der linken Leiste ----------
+    const pid = engine.preview?.sampleId;
+    const ps = pid && library.get(pid);
+    if (ps) previewCat = CATS.includes(ps.colorCat ?? ps.category) ? (ps.colorCat ?? ps.category) : 'fx';
+    const bands = ps ? engine.outputBands(4) : null;
+    const pv = bands ? Math.min(1, (bands.reduce((x, y) => x + y, 0) / bands.length) * 1.6) : 0;
+    preview += (pv - preview) * (pv > preview ? 0.6 : 0.12);
+    if (shelfEl && previewCat) {
+      const SW = shelfLight.width;
+      const SH = shelfLight.height;
+      shelfC.clearRect(0, 0, SW, SH);
+      if (preview > 0.01) {
+        const [r, g, b] = rgb[previewCat];
+        for (let k = 0; k < 3; k++) {
+          const [x, y] = spot(CATS.indexOf(previewCat), k, still, 1.4);
+          const grd = shelfC.createRadialGradient(x * SW, y * SH, 0, x * SW, y * SH, SW * (0.5 + 0.4 * preview));
+          grd.addColorStop(0, `rgba(${r},${g},${b},${0.75 * preview})`);
+          grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+          shelfC.fillStyle = grd;
+          shelfC.fillRect(0, 0, SW, SH);
+        }
+      } else previewCat = null;
+      // im scrollenden Regal (Handy) mitwandern
+      shelfLight.style.transform = `translateY(${shelfEl.scrollTop}px)`;
+    }
   }
 
   readColors();
-  amb.style.opacity = '0';
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, sparks: sparks.length, levels: { ...level } }; } };
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level } }; } };
 }

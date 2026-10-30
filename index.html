@@ -4,7 +4,7 @@
   /* Ladescreen: steht ganz oben, damit er sofort erscheint – noch bevor das große Stylesheet gelesen ist.
      Darum eigene Farben statt Tokens (Phosphor: Schwarz, Licht in den Farben der Kategorien). */
   .splash {
-    --s-bg: #030304; --s-ink: #F2F2F0; --s-muted: #9898A1; --s-off: #1C1C21; --s-hot: #FF4D4D;
+    --s-bg: #16171A; --s-ink: #F2F2F0; --s-muted: #9898A1; --s-off: #1C1C21; --s-hot: #FF4D4D;
     position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px;
     background: radial-gradient(ellipse 55% 40% at 50% 44%, rgb(120 110 255 / 0.10), transparent 70%), var(--s-bg);
     color: var(--s-ink); font-family: "Funnel Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -117,17 +117,17 @@
     /* Look „Phosphor“ (seit 2.2): Schwarz wie ein ausgeschalteter Bildschirm. Licht gibt es nur, wo Musik klingt.
        Was klingt, leuchtet (Kategoriefarben); was eingestellt ist, ist eine Linie. Aktiv = Weißglut (--amber = Weiß). */
     color-scheme: dark;
-    --bg: #030304;
-    --panel: rgb(10 10 12 / 0.8);
-    --lane: #070709;
-    --lane-alt: #0A0A0D;
+    --bg: #16171A;
+    --panel: rgb(22 23 27 / 0.42);
+    --lane: #131417;
+    --lane-alt: #17181B;
     --ink: #F2F2F0;
     --muted: #9898A1;
-    --line: #222226;
+    --line: #2A2B30;
     --grid-bar: rgb(255 255 255 / 0.07);
     --grid-beat: rgb(255 255 255 / 0.028);
-    --deck: rgb(3 3 4 / 0.82);
-    --deck-2: #141417;
+    --deck: rgb(18 19 22 / 0.5);
+    --deck-2: #222328;
     --deck-ink: #F2F2F0;
     --deck-muted: #9898A1;
     --lcd: transparent;
@@ -137,7 +137,7 @@
     --meter-ok: #F2F2F0;
     --meter-warm: #FFC53D;
     --meter-hot: #FF4D4D;
-    --meter-off: #17171B;
+    --meter-off: #24252A;
     --cat-drums: #FFC53D;
     --cat-bass: #4A8CFF;
     --cat-chords: #2EE5A3;
@@ -165,17 +165,17 @@
     --accent-ink: #030304;
     --key-face: transparent;
     --key-shadow: inset 0 0 0 1px #34343A;
-    --well: #000000;
+    --well: #0E0F12;
     --well-shadow: inset 0 0 0 1px #34343A;
     --dots: none;
-    --clip-body: rgb(7 7 9 / 0.82);
+    --clip-body: rgb(14 15 18 / 0.86);
     --label-ink: #030304;
     --lcd-face: transparent;
     --lcd-shadow: none;
     --lcd-sep: #222226;
     --display-ink: #F2F2F0;
     --lcd-label: #9898A1;
-    --sheet-bg: #09090B;
+    --sheet-bg: #1A1B1F;
     --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -10px 26px rgb(0 0 0 / 0.5);
     --led-off: #2A2A30;
     --knob-hi: transparent;
@@ -1559,10 +1559,14 @@
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-scroll { position: relative; z-index: 1; }
-  .ambient {
-    position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%;
-    pointer-events: none; opacity: 0; transition: opacity 0.6s ease;
-  }
+  .ambient { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
+  /* Lichtleiste ganz oben: dasselbe Licht wie der Hintergrund, hell und strahlend – wirkt auch am Handy */
+  .lightbar { position: fixed; left: 0; top: 0; z-index: 45; width: 100%; height: 2px; pointer-events: none; }
+  .lightbar-glow { position: fixed; left: 0; top: -10px; z-index: 44; width: 100%; height: 26px; pointer-events: none; filter: blur(9px); opacity: 0.9; }
+  /* Regal: Licht beim Vorhören, nur in der linken Leiste */
+  .shelf { isolation: isolate; }
+  .shelf-light { position: absolute; left: 0; top: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; }
+  @media (min-width: 761px) { .shelf, .shelf.sheet { position: relative; background: var(--panel); } }
   .lane { background-color: transparent; }
   .beam { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; mix-blend-mode: var(--glow-blend); }
   .beam[hidden] { display: none; }
@@ -1673,7 +1677,10 @@
 
   /* ================= Look „Phosphor“ (2.2): Schwarz, Licht nur wo Musik klingt, Einstellungen als Linien ================= */
   body { background: var(--bg); }
-  #app { position: relative; z-index: 1; }
+  /* Die App füllt genau den Bildschirm: eine hinein- oder hinausgleitende Schublade macht die Seite nie scrollbar
+     (sonst blitzt kurz ein Scrollbalken auf und alles springt um dessen Breite) */
+  html, body { overflow: hidden; }
+  #app { position: relative; z-index: 1; overflow: clip; }
   .deck { background: var(--deck); box-shadow: 0 1px 0 var(--line); }
   .shelf, .arranger, .insp { background: var(--panel); border-color: var(--line); }
   /* Der Arranger ist durchsichtig: dort scheint das Umgebungslicht voll durch */
@@ -1810,8 +1817,9 @@
   .drop-preview { border-style: dashed; border-width: 1px; background: color-mix(in srgb, var(--cat) 8%, transparent); }
   .clip-handle::after, .clip-trim::after { background: var(--ink); opacity: 0.7; }
   /* Die Marke: weißer Kern mit Schein */
-  .playhead { width: 1px; margin-left: -0.5px; background: var(--beam); box-shadow: none; opacity: 0.75; }
-  .app.playing .playhead { opacity: 1; box-shadow: var(--beam-glow); }
+  /* Leise Linie; hell mit Schein nur dort, wo sie einen Clip trifft (zeichnet glow.js) */
+  .playhead { width: 1px; margin-left: -0.5px; background: color-mix(in srgb, var(--beam) 60%, transparent); box-shadow: none; opacity: 1; }
+  .app.playing .playhead { background: color-mix(in srgb, var(--beam) 26%, transparent); }
   .playhead::before { top: 21px; left: -4px; border-left-width: 4.5px; border-right-width: 4.5px; border-top: 8px solid var(--beam); }
 
   /* Fachleiste: der aktive Reiter trägt oben einen Lichtstrich */
@@ -1823,6 +1831,7 @@
 
   /* Schubladen */
   .dock, .shelf.sheet { background: var(--sheet-bg); }
+  .left-title { grid-column: 1 / -1; margin: 2px 2px 6px; font: 300 22px/1.1 var(--font-display); letter-spacing: -0.02em; color: var(--ink); }
   /* Desktop: die Schublade sitzt im Rahmen des Arrangers – links und rechts bündig abgeschnitten, Schatten nur nach oben */
   @media (min-width: 761px) {
     .dock:not(#export) { margin: 0 1px 1px; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 10px 10px 2px 2px; clip-path: inset(-40px 0 0 0); }
@@ -2019,9 +2028,10 @@
     </div>
   </header>
 
-  <aside class="shelf" aria-label="Sounds" data-left="sounds">
-    <div class="left-tabs" role="tablist" aria-label="Linke Spalte">
-      <button class="ltab" id="ltab-sounds" type="button" role="tab" data-left="sounds" aria-selected="true">Sounds</button>
+  <aside class="shelf" aria-label="Assets" data-left="sounds">
+    <div class="left-tabs" role="tablist" aria-label="Assets">
+      <h2 class="left-title">Assets</h2>
+      <button class="ltab" id="ltab-sounds" type="button" role="tab" data-left="sounds" aria-selected="true">Suchen</button>
       <button class="ltab" id="ltab-create" type="button" role="tab" data-left="create" aria-selected="false">Erstellen</button>
     </div>
     <div class="shelf-sticky" id="shelf-sticky"></div>
