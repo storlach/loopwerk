@@ -1737,6 +1737,48 @@
   @media (min-width: 761px) and (max-width: 1199px) {
     .lcd-more { display: none; }
   }
+
+  /* Deck-Gruppen: Wiedergabe · Aufnahme | Position | Song (Tempo, Tonart) | Pegel … Rückgängig | Projekt + Export.
+     Zwischen Gruppen eine Haarlinie, in der Gruppe nur Abstand */
+  .deck-sep { flex: none; align-self: center; width: 1px; height: 28px; background: var(--line); }
+  .lcd { gap: 0; }
+  .lcd-cell + .lcd-cell { box-shadow: none; }
+  .lcd-cell.lcd-song { box-shadow: inset 1px 0 0 var(--line); margin-left: 4px; padding-left: 12px; }
+  /* Tempo ist einstellbar: dünne Linie unter der Zahl */
+  .lcd-input { box-shadow: inset 0 -1px 0 var(--key-line); border-radius: 0; }
+  .lcd-input:hover { box-shadow: inset 0 -1px 0 var(--muted); }
+  .deck-file { display: flex; align-items: center; gap: 6px; }
+  @media (min-width: 761px) {
+    .deck .group[aria-label="Bearbeiten"], .deck .group[aria-label="Projekt"] { display: none; }
+    /* Aufnahme und Klick als eigene Gruppe neben der Wiedergabe */
+    .deck #rec-btn { margin-left: 10px; }
+    .deck-right { gap: 12px; }
+    /* Pegel steht wie eine Display-Zelle: Beschriftung oben, Balken auf Höhe der Ziffern */
+    .deck .meter-wrap { grid-template-rows: auto 24px; align-items: center; gap: 0; padding: 6px 0 4px; }
+  }
+  /* Bis 1439 px: etwas enger, Tonart steht dann nur im Inspektor (Song) */
+  @media (min-width: 761px) and (max-width: 1439px) {
+    .deck, .deck-right { gap: 10px; }
+    .lcd-key { display: none; }
+    #meter { width: 72px; }
+    .key.project-menu-btn { max-width: 150px; }
+    .deck .meter-wrap { grid-template-rows: auto 21px; }
+  }
+  @media (min-width: 1280px) and (max-width: 1439px) { .key.project-menu-btn { max-width: 170px; } }
+  @media (min-width: 1440px) { #meter { width: 112px; } }
+  /* Tablet: Bildmarke nur als Lichtstriche; wird es noch enger, bricht das Deck um statt die Seite zu verschieben */
+  @media (min-width: 761px) and (max-width: 1099px) {
+    .deck .brand-name { display: none; }
+    .key.project-menu-btn { max-width: 120px; }
+  }
+  @media (min-width: 761px) and (max-width: 939px) {
+    .deck { flex-wrap: wrap; row-gap: 6px; }
+  }
+  @media (max-width: 760px) {
+    .deck .sep-brand, .deck .sep-meter { display: none; }
+    .deck-sep { height: 32px; }
+    .lcd-cell.lcd-song { margin-left: 0; padding-left: 8px; }
+  }
   /* Regal */
   .shelf-search { border-radius: var(--radius-lg); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
   .shelf-sort, .pat-view { padding: 0; border-radius: var(--radius-lg); background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); }
@@ -1921,6 +1963,7 @@
       <span class="brand-name">Loop<b>werk</b></span>
       <span class="brand-tag">Version 2.2</span>
     </div>
+    <span class="deck-sep sep-brand" aria-hidden="true"></span>
 
     <div class="group" role="group" aria-label="Transport">
       <button class="key" id="home-btn" type="button" aria-label="Zum Anfang" title="Zum Anfang (Pos1)">
@@ -1944,15 +1987,18 @@
       </button>
     </div>
 
+    <span class="deck-sep" aria-hidden="true"></span>
+
     <div class="lcd" aria-live="off">
       <div class="lcd-cell"><span class="lcd-label">Takt</span><span class="lcd-value" id="lcd-bar">001</span></div>
       <div class="lcd-cell lcd-more"><span class="lcd-label">Schlag</span><span class="lcd-value" id="lcd-beat">1</span></div>
       <div class="lcd-cell lcd-more"><span class="lcd-label">Zeit</span><span class="lcd-value" id="lcd-time">0:00.0</span></div>
-      <div class="lcd-cell"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
-      <div class="lcd-cell lcd-more" title="Die synthetischen Loops stehen in A-Moll"><span class="lcd-label">Tonart</span><span class="lcd-value">Am</span></div>
+      <div class="lcd-cell lcd-song"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
+      <div class="lcd-cell lcd-more lcd-key" title="Die synthetischen Loops stehen in A-Moll"><span class="lcd-label">Tonart</span><span class="lcd-value">Am</span></div>
     </div>
 
     <div class="group deck-undo" id="deck-undo" role="group" aria-label="Rückgängig"></div>
+    <span class="deck-sep sep-meter" aria-hidden="true"></span>
 
     <div class="meter-wrap">
       <span class="lcd-label">Master</span>
@@ -2002,6 +2048,9 @@
     </div>
 
     <div class="deck-right">
+      <div class="group deck-edit" id="deck-edit" role="group" aria-label="Rückgängig und Wiederholen"></div>
+      <span class="deck-sep" aria-hidden="true"></span>
+      <div class="deck-file" role="group" aria-label="Projekt und Export">
       <div class="menu-wrap">
         <button class="key project-menu-btn" id="project-menu-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Projekt: Name, Öffnen, Speichern, Beispiel, Leeren">
           <span class="project-menu-name" id="project-menu-name">Projekt</span>
@@ -2010,12 +2059,14 @@
         <div class="pop project-menu" id="project-menu" hidden>
           <div class="pop-body" id="project-menu-body"></div>
           <div class="pop-sep"></div>
+          <div class="pop-body" id="project-menu-start"></div>
+          <div class="pop-sep"></div>
           <button class="pop-item" id="tips-reset" type="button">Tipps wieder zeigen</button>
           <p class="pop-about" id="pop-about">Loopwerk 2.0 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
         </div>
       </div>
-      <div class="group deck-edit" id="deck-edit"></div>
       <div class="deck-export" id="deck-export"></div>
+      </div>
     </div>
   </header>
 

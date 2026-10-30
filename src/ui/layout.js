@@ -18,7 +18,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   for (const id of ['zoom-out', 'zoom-in', 'snap-sel']) place($(id), { wide: $('arr-bar-view'), narrow: slot('edit') });
   for (const id of ['project-name', 'open-btn', 'save-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
   place($('export-btn'), { wide: $('deck-export'), narrow: slot('project') });
-  for (const id of ['demo-btn', 'new-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
+  // Neu anfangen (Beispiel, Leeren) im Menü abgesetzt von Datei-Befehlen
+  for (const id of ['demo-btn', 'new-btn']) place($(id), { wide: $('project-menu-start'), narrow: slot('project') });
   place($('tips-reset'), { narrow: slot('project') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
   place($('shelf-search'), { narrow: $('shelf-sticky') });
