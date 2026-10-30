@@ -176,7 +176,7 @@
     --display-ink: #F2F2F0;
     --lcd-label: #9898A1;
     --sheet-bg: #09090B;
-    --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -30px 60px #000;
+    --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -10px 26px rgb(0 0 0 / 0.5);
     --led-off: #2A2A30;
     --knob-hi: transparent;
     --knob-lo: transparent;
@@ -1370,6 +1370,13 @@
     .vkey.black { background: linear-gradient(90deg, var(--key-black) 62%, var(--key-white) 62%); color: var(--key-black-ink); border-bottom-color: #00000022; }
     .vkey.c { border-bottom: 1px solid var(--grid-bar); }
     .vkey.down { background: var(--cat-own); color: #fff; }
+    /* Kein Scrollen nach oben/unten: der Tonbereich passt in die Höhe, ▲/▼ wechselt die Oktave */
+    .pat-roll-wrap { overflow-y: hidden; }
+    .vkey-oct {
+      display: block; width: 100%; box-sizing: border-box; padding: 0; border: 0;
+      background: var(--deck-2); color: var(--ink); font: 500 13px/1 var(--font-mono); cursor: pointer;
+    }
+    .vkey-oct:disabled { color: var(--muted); opacity: 0.4; }
     #pat-live { order: -1; }
     #sing-desc { font-size: 16px; height: 44px; }
     .pat-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); }
@@ -1816,6 +1823,10 @@
 
   /* Schubladen */
   .dock, .shelf.sheet { background: var(--sheet-bg); }
+  /* Desktop: die Schublade sitzt im Rahmen des Arrangers – links und rechts bündig abgeschnitten, Schatten nur nach oben */
+  @media (min-width: 761px) {
+    .dock:not(#export) { margin: 0 1px 1px; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 10px 10px 2px 2px; clip-path: inset(-40px 0 0 0); }
+  }
   .sheet-grip::before { width: 36px; height: 3px; border-radius: 2px; background: #3A3A40; }
   .dock-head h2 { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
   .dbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }

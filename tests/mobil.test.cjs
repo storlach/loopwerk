@@ -252,10 +252,12 @@ const { check, finish } = createChecker();
     check('Piano-Roll: Antippen setzt eine Note', await notes() === n1 + 1);
     await page.touchscreen.tap(wrap.x + 120, wrap.y + 60);
     check('Piano-Roll: nochmal Antippen löscht sie', await notes() === n1);
-    const top0 = await page.evaluate(() => document.getElementById('pat-roll-wrap').scrollTop);
-    await swipe(wrap.x + 150, wrap.y + wrap.height - 20, 0, -150);
-    const top1 = await page.evaluate(() => document.getElementById('pat-roll-wrap').scrollTop);
-    check('Piano-Roll: Wischen blättert durch die Tonhöhen, ohne Noten zu setzen', top1 > top0 + 50 && await notes() === n1, `${top0} → ${top1}`);
+    // Kein Scrollen nach oben/unten: der Tonbereich passt in die Höhe, ▲ wechselt eine Oktave höher
+    const fit = await page.evaluate(() => { const w = document.getElementById('pat-roll-wrap'); return w.scrollHeight <= w.clientHeight + 1; });
+    const hi0 = await page.evaluate(() => Number(document.querySelector('#pat-vkeys .vkey').dataset.pitch));
+    await page.tap('#pat-vkeys .vkey-oct');
+    const hi1 = await page.evaluate(() => Number(document.querySelector('#pat-vkeys .vkey').dataset.pitch));
+    check('Piano-Roll: Klavier passt ohne Scrollen, ▲ wechselt eine Oktave höher', fit && hi1 === Math.min(hi0 + 12, 84) && hi1 > hi0 && await notes() === n1, `${fit} ${hi0} → ${hi1}`);
     await reveal(page, '#pat-rec');
     check('Schritt-Eingabe ist am Handy da (unter „Mehr“, ohne Wischen)', await page.locator('#pat-rec').isVisible() && await page.evaluate(() => { const a = document.querySelector('#pattern .dock-actions'); return a.scrollWidth <= a.clientWidth; }));
     await page.tap('#pat-more-btn');

@@ -15,11 +15,13 @@ import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { place } from './place.js';
 
-// Breite der Tastenspalte links in der Piano-Roll; am Handy breiter (spielbare Tasten)
-const keyW = () => (narrow.matches ? 72 : 46);
-// Am Handy größere Zeilen und Felder, damit Noten mit dem Finger treffbar sind
+// Linke Spalte der Piano-Roll: am Handy die (senkrechte, spielbare) Klaviatur, am Desktop nur Notennamen –
+// dort spielt man auf der waagerechten Klaviatur darunter
+const keyW = () => (narrow.matches ? 72 : 30);
 const narrow = window.matchMedia('(max-width: 760px)');
-const rowH = () => (narrow.matches ? 34 : 14);
+// Am Handy zeigt die Piano-Roll einen Tonbereich, der genau in die Höhe passt (▲/▼ wechselt ihn) – nichts scrollt
+const OCT_BTN = 34;
+const MIN_ROW = 34;
 // Computertastatur → Halbton über dem Grundton (deutsches und englisches Layout: Z und Y)
 const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, z: 8, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
 const isBlack = (m) => [1, 3, 6, 8, 10].includes(m % 12);
@@ -54,6 +56,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   let rec = false;
   let cursor = 0;
   let octave = 60; // C4
+  let viewLo = 60; // Handy: unterster sichtbarer Ton
   let drag = null; // Vorschau beim Ziehen in der Piano-Roll
   let midiTried = false;
 
@@ -252,10 +255,24 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   // ---------- Piano-Roll ----------
 
+  // Sichtbarer Tonbereich der Piano-Roll: lo…hi, Zeilenhöhe, Abstand oben (Platz für ▲ am Handy)
+  function pitchView() {
+    if (!narrow.matches) return { lo: PITCH_LOW, hi: PITCH_HIGH, row: 14, top: 0 };
+    const avail = Math.max(240, rollWrap.clientHeight - 2 * OCT_BTN);
+    const count = clamp(Math.floor(avail / MIN_ROW), 12, 25);
+    const lo = clamp(viewLo, PITCH_LOW, PITCH_HIGH - count + 1);
+    return { lo, hi: lo + count - 1, row: avail / count, top: OCT_BTN };
+  }
+  const rowH = () => pitchView().row;
+  const yOf = (m, v = pitchView()) => v.top + (v.hi - m) * v.row;
+  const pitchAtY = (y, v = pitchView()) => clamp(v.hi - Math.floor((y - v.top) / v.row), v.lo, v.hi);
+
   function rollGeometry() {
     const n = steps();
+    const v = pitchView();
     const cellW = Math.max(narrow.matches ? 28 : 12, Math.floor((rollWrap.clientWidth - keyW() - 2) / n));
-    return { n, cellW, w: keyW() + n * cellW, h: (PITCH_HIGH - PITCH_LOW + 1) * rowH() };
+    const h = narrow.matches ? v.top * 2 + (v.hi - v.lo + 1) * v.row : (v.hi - v.lo + 1) * v.row;
+    return { n, cellW, w: keyW() + n * cellW, h };
   }
 
   function drawRoll(p, notes = p.notes) {
@@ -269,40 +286,44 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     const css = getComputedStyle(canvas);
     const col = (v) => css.getPropertyValue(v).trim();
-    for (let m = PITCH_HIGH; m >= PITCH_LOW; m--) {
-      const y = (PITCH_HIGH - m) * rowH();
+    const vw = pitchView();
+    const rh = vw.row;
+    const y0 = vw.top;
+    const y1 = vw.top + (vw.hi - vw.lo + 1) * rh;
+    c.clearRect(0, 0, w, h);
+    for (let m = vw.hi; m >= vw.lo; m--) {
+      const y = yOf(m, vw);
       c.fillStyle = col(isBlack(m) ? '--lane-alt' : '--lane');
-      c.fillRect(keyW(), y, w - keyW(), rowH());
-      // Wie ein Klavier: weiße Tasten laufen hinter den (kürzeren) schwarzen durch
-      c.fillStyle = col('--key-white');
-      c.fillRect(0, y, keyW() - 1, rowH());
-      if (isBlack(m)) { c.fillStyle = col('--key-black'); c.fillRect(0, y, Math.round(keyW() * 0.62), rowH()); }
+      c.fillRect(keyW(), y, w - keyW(), rh);
       if (m % 12 === 0) {
-        c.fillStyle = col(isBlack(m) ? '--key-black-ink' : '--key-white-ink');
-        c.font = '10px ' + col('--font-mono');
-        c.fillText(noteName(m), 4, y + rowH() - 3);
+        // Desktop: Notennamen statt Tasten (gespielt wird auf der waagerechten Klaviatur)
+        if (!narrow.matches) {
+          c.fillStyle = col('--muted');
+          c.font = '10px ' + col('--font-mono');
+          c.fillText(noteName(m), 4, y + rh - 3);
+        }
         c.fillStyle = col('--grid-bar');
-        c.fillRect(keyW(), y + rowH() - 1, w - keyW(), 1);
+        c.fillRect(keyW(), y + rh - 1, w - keyW(), 1);
       }
     }
     for (let i = 0; i <= n; i++) {
       c.fillStyle = col(i % 16 === 0 ? '--grid-bar' : i % 4 === 0 ? '--grid-beat' : '--line');
       c.globalAlpha = i % 4 === 0 ? 1 : 0.35;
-      c.fillRect(keyW() + i * cellW, 0, 1, h);
+      c.fillRect(keyW() + i * cellW, y0, 1, y1 - y0);
     }
     c.globalAlpha = 1;
     if (rec) {
       c.fillStyle = col('--amber');
       c.globalAlpha = 0.25;
-      c.fillRect(keyW() + cursor * cellW, 0, cellW, h);
+      c.fillRect(keyW() + cursor * cellW, y0, cellW, y1 - y0);
       c.globalAlpha = 1;
     }
     const noteCol = col('--cat-own');
     for (const note of notes) {
+      if (note.pitch < vw.lo || note.pitch > vw.hi) continue;
       const x = keyW() + note.start * STEPS_PER_BEAT * cellW;
-      const y = (PITCH_HIGH - note.pitch) * rowH();
       c.fillStyle = noteCol;
-      c.fillRect(x + 1, y + 1, Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2), rowH() - 2);
+      c.fillRect(x + 1, yOf(note.pitch, vw) + 1, Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2), rh - 2);
     }
   }
 
@@ -314,7 +335,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const { cellW } = rollGeometry();
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const pitch = clamp(PITCH_HIGH - Math.floor((e.clientY - rect.top) / rowH()), PITCH_LOW, PITCH_HIGH);
+    const pitch = pitchAtY(e.clientY - rect.top);
     const p = pat();
     if (x < keyW()) {
       // Tasten am Rand: Ton klingt, solange gedrückt
@@ -379,7 +400,12 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   // Gespielte Tonhöhe in den sichtbaren Bereich der Piano-Roll holen
   function reveal(pitch) {
-    const y = (PITCH_HIGH - pitch) * rowH();
+    if (narrow.matches) {
+      const v = pitchView();
+      if (pitch < v.lo || pitch > v.hi) { viewLo = pitch - (pitch % 12); render(); }
+      return;
+    }
+    const y = yOf(pitch);
     const top = rollWrap.scrollTop;
     const h = rollWrap.clientHeight;
     if (y < top + rowH() || y > top + h - 2 * rowH()) rollWrap.scrollTop = Math.max(0, y - h / 2);
@@ -762,20 +788,35 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   const vkeys = $('pat-vkeys');
   const vkeyEl = (pitch) => vkeys.querySelector(`[data-pitch="${pitch}"]`);
   function renderVkeys() {
-    const key = `${rowH()}`;
+    const v = pitchView();
+    const key = `${v.lo}|${v.hi}|${v.row}`;
     if (vkeys.dataset.key === key) return;
     vkeys.dataset.key = key;
     vkeys.innerHTML = '';
-    vkeys.style.height = (PITCH_HIGH - PITCH_LOW + 1) * rowH() + 'px';
-    rollWrap.style.setProperty('--vk-h', vkeys.style.height);
-    for (let m = PITCH_HIGH; m >= PITCH_LOW; m--) {
+    const h = v.top * 2 + (v.hi - v.lo + 1) * v.row;
+    vkeys.style.height = h + 'px';
+    rollWrap.style.setProperty('--vk-h', h + 'px');
+    const octBtn = (dir) => {
+      const b = el('button', 'vkey-oct', dir > 0 ? '▲' : '▼');
+      b.type = 'button';
+      b.style.height = v.top + 'px';
+      b.setAttribute('aria-label', dir > 0 ? 'Oktave höher' : 'Oktave tiefer');
+      b.disabled = dir > 0 ? v.hi >= PITCH_HIGH : v.lo <= PITCH_LOW;
+      b.addEventListener('click', () => { viewLo = clamp(v.lo + 12 * dir, PITCH_LOW, PITCH_HIGH); octave = clamp(viewLo, PITCH_LOW, PITCH_HIGH - 12); render(); });
+      return b;
+    };
+    vkeys.append(octBtn(1));
+    for (let m = v.hi; m >= v.lo; m--) {
       const k = el('div', `vkey${isBlack(m) ? ' black' : ''}${m % 12 === 0 ? ' c' : ''}`);
       k.dataset.pitch = String(m);
-      k.style.height = rowH() + 'px';
+      k.style.height = v.row + 'px';
       if (m % 12 === 0) k.textContent = noteName(m);
       vkeys.append(k);
     }
+    vkeys.append(octBtn(-1));
   }
+  // Schublade größer oder kleiner: Tonbereich und Zeilen neu einpassen
+  new ResizeObserver(() => { if (!rollWrap.hidden && narrow.matches && pat()?.type === 'synth') render(); }).observe(rollWrap);
   vkeys.addEventListener('pointerdown', (e) => {
     const k = e.target.closest('.vkey');
     if (!k) return;
