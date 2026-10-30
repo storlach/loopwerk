@@ -66,7 +66,7 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.z ?? 0}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}`;
 }
 
 // Stapel: Liegen Clips einer Spur übereinander, klingt der obere. Der untere bleibt unverändert erhalten
@@ -120,6 +120,11 @@ export function audibleSegments(clip, sampleBeats, ranges) {
     }
   }
   return out;
+}
+
+// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange sie entsteht)
+export function sampleFor(library, clip) {
+  return clip.stretch && clip.stretch !== 1 ? library.stretched(clip.sampleId, clip.stretch) : library.get(clip.sampleId);
 }
 
 export const MAX_TRACKS = 16;
@@ -346,6 +351,27 @@ export class Store extends Emitter {
     return this.moveClips(found.map((f) => ({ id: f.clip.id, trackId: f.track.id, startBeat: f.clip.startBeat + (end - start) })), { copy: true });
   }
 
+  // Laufzeit: der Clip spielt factor-fach so lang, ohne die Tonhöhe zu ändern (2 = halbes Tempo).
+  // Länge und Startpunkt im Sample wachsen mit, damit derselbe Inhalt zu hören ist.
+  setClipStretch(clipId, factor) {
+    const found = this.findClip(clipId);
+    if (!found) return;
+    const f = Math.min(4, Math.max(0.25, Math.round(factor * 100) / 100));
+    const old = found.clip.stretch || 1;
+    if (f === old) return;
+    this.dispatch('stretch', () => {
+      const { track, clip } = this.findClip(clipId);
+      const k = f / old;
+      clip.stretch = f === 1 ? undefined : f;
+      clip.offsetBeats = (clip.offsetBeats || 0) * k;
+      clip.fadeInBeats = (clip.fadeInBeats || 0) * k;
+      clip.fadeOutBeats = (clip.fadeOutBeats || 0) * k;
+      clip.lengthBeats = this._fit(clip.startBeat, clip.lengthBeats * k).length;
+      normalizeClip(clip);
+      this._raise(track, clip);
+    });
+  }
+
   deleteClip(clipId) {
     if (!this.findClip(clipId)) return;
     this.dispatch('delete-clip', () => {
@@ -366,7 +392,7 @@ export class Store extends Emitter {
       const { track, clip } = this.findClip(clipId);
       const end = clip.startBeat + clip.lengthBeats;
       const start = Math.max(0, Math.min(startBeat, end - EPS * 10));
-      const sb = this.sampleBeats(clip.sampleId);
+      const sb = this.sampleBeats(clip.sampleId) * (clip.stretch || 1);
       clip.offsetBeats = ((((clip.offsetBeats || 0) + (start - clip.startBeat)) % sb) + sb) % sb;
       clip.startBeat = start;
       clip.lengthBeats = end - start;
@@ -389,7 +415,7 @@ export class Store extends Emitter {
     this.dispatch('split', () => {
       targets.forEach((id, i) => {
         const { track, clip } = this.findClip(id);
-        const sb = this.sampleBeats(clip.sampleId);
+        const sb = this.sampleBeats(clip.sampleId) * (clip.stretch || 1);
         const end = clip.startBeat + clip.lengthBeats;
         const right = normalizeClip({
           ...clip,

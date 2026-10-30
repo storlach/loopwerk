@@ -372,6 +372,10 @@ async function boot() {
   document.getElementById('new-beat-btn').addEventListener('click', () => createPattern(newDrumPattern));
   document.getElementById('new-melody-btn').addEventListener('click', () => createPattern(newSynthPattern));
   library.on(() => { cancelAnimationFrame(redraw); redraw = requestAnimationFrame(() => arranger.render()); });
+  // Clips mit geänderter Laufzeit: gedehnte Fassung im Hintergrund rechnen (auch nach Tempowechsel), dann neu einplanen
+  const ensureStretch = () => library.ensureProject(store.project).then(() => engine.refresh()).catch((err) => ui.flash(`Laufzeit: ${err.message}`));
+  store.on(ensureStretch);
+  library.on(ensureStretch);
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
   const recording = mountRecording({ store, engine, ui, arranger, recorder });

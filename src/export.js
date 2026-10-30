@@ -70,6 +70,7 @@ export async function exportSong(project, library, { format = 'wav', range = 'so
   const [fromBeat, toBeat] = exportRange(project, range);
   if (toBeat <= fromBeat) throw new Error('Im Song liegen noch keine Clips – es gibt nichts zu exportieren.');
   const renderShare = format === 'mp3' ? 0.5 : 0.95;
+  await library.ensureProject?.(project);
   const audio = await renderProject(project, library, {
     fromBeat, toBeat, tailSeconds: tail ? EXPORT_TAIL : 0, limiter: true, compensate: true,
     onProgress: (p) => onProgress?.(p * renderShare),

@@ -62,6 +62,47 @@ const { check, finish } = createChecker();
     await page.mouse.click(lane1.x + 1.5 * ppb, lane1.y + lane1.height / 2);
     check('Klick ins Leere hebt die Mehrfachauswahl auf', await page.evaluate(() => window.loopwerk.ui.selectedIds().length === 0));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v21-auswahl.png') });
+
+    // ---------- Laufzeit: doppelt so lang, gleiche Tonhöhe ----------
+    const run = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const m = await import('./src/model.js');
+      const sr = 44100;
+      // 1 s Ton 440 Hz (2 Schläge bei 120 BPM), dann 1 s Stille: ein One-Shot
+      const b = new AudioBuffer({ numberOfChannels: 2, length: 2 * sr, sampleRate: sr });
+      for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < sr; i++) d[i] = 0.5 * Math.sin(2 * Math.PI * 440 * i / sr); }
+      library.register({ id: 'run-tone', name: 'Ton', category: 'fx', kind: 'oneshot', lengthBeats: 4, bpm: 120, buffer: b });
+      const s = new m.Store(m.createEmptyProject(), { sampleBeats: (id) => library.get(id).lengthBeats });
+      s.project.lengthBars = 4;
+      const id = s.addClip('t1', 'run-tone', 0, 4);
+      s.setClipStretch(id, 2);
+      const clip = s.findClip(id).clip;
+      await library.ensureProject(s.project);
+      const d = (await renderProject(s.project, library, { limiter: false, toBeat: 16 })).getChannelData(0);
+      // hörbare Dauer und Frequenz (Nulldurchgänge in der Mitte des Tons)
+      let last = 0;
+      for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.05) last = i;
+      let zc = 0;
+      const a = Math.round(0.5 * sr);
+      const z = Math.round(1.0 * sr);
+      for (let i = a + 1; i < z; i++) if ((d[i - 1] < 0) !== (d[i] < 0)) zc++;
+      return { len: clip.lengthBeats, stretch: clip.stretch, seconds: Math.round((last / sr) * 100) / 100, hz: Math.round(zc / 2 / ((z - a) / sr)) };
+    });
+    check('Laufzeit ×2: Clip doppelt so lang', run.len === 8 && run.stretch === 2, JSON.stringify(run));
+    check('Laufzeit ×2: der Ton klingt doppelt so lang (≈2 s)', run.seconds > 1.85 && run.seconds < 2.15, JSON.stringify(run));
+    check('Laufzeit ×2: Tonhöhe bleibt (440 Hz)', Math.abs(run.hz - 440) <= 4, JSON.stringify(run));
+    // Bedienung im Inspektor
+    await page.evaluate(() => window.loopwerk.ui.select('c4'));
+    const len0 = await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats);
+    await page.click('#insp-run-up');
+    await page.click('[data-run="2"]');
+    const st = await page.evaluate(() => { const c = window.loopwerk.store.findClip('c4').clip; return { s: c.stretch, len: c.lengthBeats, out: document.getElementById('insp-run-out').textContent }; });
+    check('Inspektor: Laufzeit ×2 macht den Clip doppelt so lang, Anzeige stimmt', st.s === 2 && Math.abs(st.len - Math.min(len0 * 2, 128)) < 1e-6 && /×2/.test(st.out), JSON.stringify({ len0, st }));
+    await page.waitForFunction(() => !!window.loopwerk.library.stretched('chords-pad', 2), null, { timeout: 20000 });
+    check('Gedehnte Fassung wird im Hintergrund gerechnet', true);
+    check('Clip zeigt die Laufzeit im Etikett', /×2/.test(await page.locator('.clip[data-clip-id="c4"] .clip-label').textContent()));
+    await page.click('[data-run="1"]');
+    check('Laufzeit ×1 stellt die Originallänge wieder her', await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats) === len0);
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

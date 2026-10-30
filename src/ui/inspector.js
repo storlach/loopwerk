@@ -11,6 +11,13 @@ import { formatParam } from './mixer.js';
 import { narrow } from './place.js';
 import { place } from './place.js';
 
+// Laufzeit-Stufen für − und +
+const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+export function stepRun(f, dir) {
+  if (dir > 0) return RUN_STEPS.find((x) => x > f + 1e-6) ?? 4;
+  return [...RUN_STEPS].reverse().find((x) => x < f - 1e-6) ?? 0.25;
+}
+
 const fmtBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100).replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`);
 const MASTER = '__master';
 
@@ -53,9 +60,21 @@ export function mountInspector({ root, store, ui, library, tools }) {
   const gain = slider('Lautstärke', 'insp-gain', 0, 1, 0.01);
   const fin = slider('Einblenden', 'insp-fadein', 0, 4, 0.25);
   const fout = slider('Ausblenden', 'insp-fadeout', 0, 4, 0.25);
+  // Laufzeit: der Clip spielt länger oder kürzer, ohne dass sich die Tonhöhe ändert (×2 = halbes Tempo)
+  const run = el('div', 'insp-row insp-run');
+  const runOut = el('output');
+  runOut.id = 'insp-run-out';
+  const runBtns = el('div', 'insp-run-btns');
+  const runBtn = (label, title, fn) => { const b = el('button', 'key', label); b.type = 'button'; b.title = title; b.addEventListener('click', fn); runBtns.append(b); return b; };
+  const setRun = (f) => { const c = selClip(); if (c) store.setClipStretch(c.id, f); };
+  const curRun = () => selClip()?.stretch || 1;
+  runBtn('−', 'Kürzer (schneller)', () => setRun(stepRun(curRun(), -1))).id = 'insp-run-down';
+  for (const [f, label] of [[0.5, '½'], [1, '1'], [2, '2']]) runBtn(label, `Laufzeit ×${String(f).replace('.', ',')}`, () => setRun(f)).dataset.run = String(f);
+  runBtn('+', 'Länger (langsamer, gleiche Tonhöhe)', () => setRun(stepRun(curRun(), 1))).id = 'insp-run-up';
+  run.append(el('span', null, 'Laufzeit'), runOut, runBtns);
   const btns = el('div', 'insp-btns');
   btns.id = 'insp-clip-btns';
-  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, fout.row, btns);
+  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, fout.row, run, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: Number(gain.input.value) }, 'insp-gain-' + c.id); });
@@ -201,6 +220,9 @@ export function mountInspector({ root, store, ui, library, tools }) {
       setR(gain, clipGain(clip), 1, formatDb(clipGain(clip)));
       setR(fin, clip.fadeInBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeInBeats || 0));
       setR(fout, clip.fadeOutBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeOutBeats || 0));
+      const f = clip.stretch || 1;
+      runOut.textContent = `×${String(f).replace('.', ',')}${f === 1 ? '' : f > 1 ? ' · langsamer' : ' · schneller'}`;
+      for (const b of runBtns.querySelectorAll('[data-run]')) b.setAttribute('aria-pressed', String(Number(b.dataset.run) === f));
     }
 
     if (mode !== 'song') {

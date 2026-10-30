@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, EPS } from './model.js';
+import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 
@@ -198,7 +198,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
-      const sample = library.get(clip.sampleId);
+      const sample = sampleFor(library, clip);
       if (!sample?.buffer) continue;
       for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, audible.get(clip.id))) {
         if (from >= end - EPS || to <= fromBeat + EPS) continue;
@@ -427,7 +427,7 @@ export class Engine extends Emitter {
       const node = this.mix.tracks.get(track.id);
       for (const clip of track.clips) {
         if (filter && !filter(clip)) continue;
-        const sample = this.library.get(clip.sampleId);
+        const sample = sampleFor(this.library, clip);
         if (sample?.buffer && node) fn(track, clip, sample, node, audible.get(clip.id));
       }
     }
@@ -490,7 +490,7 @@ export class Engine extends Emitter {
   // Auch die hörbaren Bereiche gehören dazu: wird ein Clip verdeckt oder frei, plant die Engine ihn neu.
   _sig(track, clip) {
     const ranges = this._audible().get(clip.id) ?? [];
-    return clipSignature(track.id, clip) + '|' + (this.library.get(clip.sampleId)?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
+    return clipSignature(track.id, clip) + '|' + (sampleFor(this.library, clip)?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
   }
 
   _signatures() {

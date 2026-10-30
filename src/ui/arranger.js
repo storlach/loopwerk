@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, isAbove, totalBeats, MAX_TRACKS, EPS } from '../model.js';
+import { audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, isAbove, sampleFor, totalBeats, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { makeKnob } from './knob.js';
 
@@ -360,7 +360,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
   }
 
   function makeClip(clip) {
-    const sample = library.get(clip.sampleId);
+    const base = library.get(clip.sampleId);
+    // Zum Zeichnen reicht der Grund-Sound mit gedehnter Länge (die gedehnte Fassung rechnet im Hintergrund)
+    const sample = base && clip.stretch ? { ...base, lengthBeats: base.lengthBeats * clip.stretch } : base;
     const node = el('div', `clip cat-${sample?.colorCat ?? sample?.category ?? 'fx'}`);
     node.dataset.clipId = clip.id;
     node.style.left = clip.startBeat * ppb() + 'px';
@@ -368,6 +370,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
     const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
+    if (clip.stretch) label.append(el('span', 'clip-tag', `×${String(clip.stretch).replace('.', ',')}`));
     const canvas = el('canvas', 'clip-wave');
     const trim = el('div', 'clip-trim');
     trim.title = 'Ziehen zum Kürzen';
@@ -386,7 +389,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Nur Spuren neu zeichnen, deren Clips sich geändert haben: schnelle Eingaben (Tasten, Pads) bleiben flüssig.
   // Während eines Ziehens verändert die Vorschau das DOM direkt – dann zeichnet der nächste Durchlauf alles neu.
   let forceAll = true;
-  const laneKey = (track) => `${ppb()}|${headW()}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}`).join(',')}`;
+  const laneKey = (track) => `${ppb()}|${headW()}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
   function renderLane(r, track) {
     const key = laneKey(track);
     if (!forceAll && r.key === key) return;
@@ -481,7 +484,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const found = store.findClip(node.dataset.clipId);
     if (!found) return;
     const { clip } = found;
-    const sample = library.get(clip.sampleId);
+    const base = library.get(clip.sampleId);
+    const sample = base && clip.stretch ? { ...base, lengthBeats: base.lengthBeats * clip.stretch } : base;
     const canvas = node.querySelector('canvas');
     select(clip.id);
     forceAll = true;
@@ -635,7 +639,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
       preview: (clip, dx, dy, ev) => {
         const end = clip.startBeat + clip.lengthBeats;
         const start = clamp(snap(clip.startBeat + dx / ppb(), ev), 0, end - step(ev));
-        const sb = library.get(clip.sampleId)?.lengthBeats ?? 4;
+        const sb = (library.get(clip.sampleId)?.lengthBeats ?? 4) * (clip.stretch || 1);
         const offsetBeats = ((((clip.offsetBeats || 0) + start - clip.startBeat) % sb) + sb) % sb;
         return { clip: { startBeat: start, lengthBeats: end - start, offsetBeats }, left: start, status: `Anfang: ${formatPos(start, store.project.beatsPerBar)}` };
       },

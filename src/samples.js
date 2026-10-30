@@ -762,6 +762,53 @@ export class Library extends Emitter {
     this.samples = new Map();
     this.bpm = LIBRARY_BPM;
     this.prepared = new Map(); // id → bpm, für das der Puffer vorbereitet ist
+    this.variants = new Map(); // „id@faktor“ → gedehnte Fassung (Clip-Laufzeit)
+    this.pendingVariants = new Map();
+  }
+
+  // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
+  // Gilt nur, solange der Grund-Sound unverändert ist (gleiche rev, z. B. nach Tempowechsel neu).
+  stretched(id, factor) {
+    const base = this.samples.get(id);
+    if (!base || !factor || factor === 1) return base;
+    const v = this.variants.get(`${id}@${factor}`);
+    return v && v.baseRev === base.rev ? v : null;
+  }
+
+  async ensureStretched(id, factor) {
+    const base = this.samples.get(id);
+    if (!base?.buffer || !factor || factor === 1) return base;
+    const ready = this.stretched(id, factor);
+    if (ready) return ready;
+    const key = `${id}@${factor}`;
+    const pendingKey = `${key}#${base.rev}`;
+    if (this.pendingVariants.has(pendingKey)) return this.pendingVariants.get(pendingKey);
+    const job = (async () => {
+      const { runJob } = await import('./dsp/run.js');
+      const chs = Array.from({ length: base.buffer.numberOfChannels }, (_, c) => base.buffer.getChannelData(c));
+      const out = await runJob('stretch', { chs, sampleRate: base.buffer.sampleRate, ratio: factor, loop: base.kind === 'loop' });
+      const buffer = new AudioBuffer({ numberOfChannels: out.length, length: out[0].length, sampleRate: base.buffer.sampleRate });
+      out.forEach((d, c) => buffer.copyToChannel(d, c));
+      const lengthBeats = base.lengthBeats * factor;
+      const v = {
+        id: key, baseId: id, factor, baseRev: base.rev, rev: base.rev * 1000 + Math.round(factor * 100),
+        name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
+        buffer, lengthBeats, peaks: computePeaks(buffer, lengthBeats),
+      };
+      this.variants.set(key, v);
+      this.pendingVariants.delete(pendingKey);
+      this.emit();
+      return v;
+    })();
+    this.pendingVariants.set(pendingKey, job);
+    return job;
+  }
+
+  // Alle gedehnten Fassungen eines Projekts bereitstellen (vor Export und Offline-Rendering)
+  async ensureProject(project) {
+    const jobs = [];
+    for (const t of project.tracks) for (const c of t.clips) if (c.stretch && c.stretch !== 1) jobs.push(this.ensureStretched(c.sampleId, c.stretch));
+    await Promise.all(jobs);
   }
   get(id) { return this.samples.get(id); }
   list() { return [...this.samples.values()]; }

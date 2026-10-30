@@ -4,6 +4,7 @@
 import { clipGain } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
+import { stepRun } from './inspector.js';
 
 import { narrow } from './place.js';
 
@@ -51,6 +52,9 @@ export function mountMobile({ store, ui, tools }) {
   $('cb-dup').addEventListener('click', () => tools.duplicate());
   $('cb-del').addEventListener('click', () => tools.remove());
   levelsBtn.addEventListener('click', () => { showLevels = !showLevels; syncBar(); });
+  // Laufzeit in Stufen (gleiche Tonhöhe)
+  $('lvl-run-down').addEventListener('click', () => { const c = selected(); if (c) store.setClipStretch(c.id, stepRun(c.stretch || 1, -1)); });
+  $('lvl-run-up').addEventListener('click', () => { const c = selected(); if (c) store.setClipStretch(c.id, stepRun(c.stretch || 1, 1)); });
 
   const selected = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gainIn.addEventListener('input', () => {
@@ -99,6 +103,7 @@ export function mountMobile({ store, ui, tools }) {
     $('lvl-gain-out').textContent = formatDb(clipGain(c));
     $('lvl-in-out').textContent = formatBeats(c.fadeInBeats || 0);
     $('lvl-out-out').textContent = formatBeats(c.fadeOutBeats || 0);
+    $('lvl-run-out').textContent = `×${String(c.stretch || 1).replace('.', ',')}`;
   }
 
   // ---------- Tempo ohne Bildschirmtastatur ----------
