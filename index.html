@@ -1685,8 +1685,8 @@
   #app { position: relative; z-index: 1; overflow: clip; }
   .deck { background: var(--deck); box-shadow: 0 1px 0 var(--line); }
   .shelf, .arranger, .insp { background: var(--panel); border-color: var(--line); }
-  /* Der Arranger ist durchsichtig: dort scheint das Umgebungslicht voll durch */
-  .arranger { background: transparent; }
+  /* Timeline-Fläche wie Regal und Inspektor: durchscheinend getönt (Martins Referenz) */
+  .arranger { background: var(--panel); }
 
   /* Bildmarke: Lichtstriche in den Farben der Kategorien, leuchten mit dem Ausgangspegel */
   .brand { gap: 11px; }
@@ -1810,6 +1810,18 @@
     background: color-mix(in srgb, var(--sheet-bg) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
     box-shadow: -10px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
   }
+  /* Master hebt sich ab: breiter, heller Grund, weiße Kante mit Lichtstrich oben, Name in Großbuchstaben */
+  .strip.strip-master {
+    flex-basis: 112px; margin-left: 10px;
+    background: color-mix(in srgb, var(--ink) 9%, color-mix(in srgb, var(--sheet-bg) 90%, transparent));
+    box-shadow: -14px 0 24px -10px #000, inset 0 0 0 1px rgb(255 255 255 / 0.42);
+  }
+  .strip.strip-master::before {
+    content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 2px; border-radius: 1px;
+    background: var(--beam); box-shadow: 0 0 10px var(--beam);
+  }
+  .strip-master .strip-name { font: 600 11px/1.2 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; text-shadow: var(--glow-ink); }
+  .strip-master .strip-value { color: var(--ink); }
   .bar-mark { font: 400 10px/1 var(--font-mono); color: var(--muted); }
   .loop-band { top: 3px; height: 2px; background: var(--ink); box-shadow: 0 0 6px rgb(255 255 255 / 0.5); }
   .loop-band.off { opacity: 0.25; box-shadow: none; }
