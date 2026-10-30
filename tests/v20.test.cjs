@@ -211,6 +211,27 @@ const { check, finish } = createChecker();
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await page.waitForTimeout(150);
     };
+    // Beat-Editor (Pads) öffnet in der Mitte, Melodie-Editor oben; jede Art merkt sich ihre Höhe
+    const marr = await page.evaluate(() => document.querySelector('.arranger').getBoundingClientRect().height);
+    const sheetFrac = () => page.evaluate((h) => document.getElementById('pattern').getBoundingClientRect().height / h, marr);
+    await page.tap('#tab-sounds');
+    await page.waitForTimeout(700);
+    await page.tap('#new-beat-btn');
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
+    await page.waitForTimeout(900);
+    const beatFrac = await sheetFrac();
+    await page.tap('#editor-tab');
+    await page.waitForTimeout(700);
+    await page.tap('#tab-sounds');
+    await page.waitForTimeout(700);
+    await page.tap('#new-melody-btn');
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && document.getElementById('pattern').dataset.type === 'synth');
+    await page.waitForTimeout(900);
+    const melFrac = await sheetFrac();
+    check('Handy: Beat-Editor öffnet in der Mitte, Melodie-Editor oben', Math.abs(beatFrac - 0.5) < 0.03 && Math.abs(melFrac - 1) < 0.03, `${beatFrac.toFixed(2)} / ${melFrac.toFixed(2)}`);
+    await page.tap('#editor-tab');
+    await page.waitForTimeout(700);
+
     // Sounds: die Suche bleibt beim Scrollen oben stehen
     await page.tap('#tab-sounds');
     await page.waitForTimeout(700);

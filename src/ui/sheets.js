@@ -3,7 +3,7 @@
 // Jede Bewegung läuft über eine kritisch gedämpfte Feder: Öffnen, Schließen, Einrasten und Wechseln.
 // Beim Ziehen folgt die Schublade dem Finger 1:1, die Geschwindigkeit beim Loslassen fließt in die Feder,
 // eine laufende Bewegung lässt sich jederzeit greifen. Ein Schubs springt zum nächsten Haltepunkt in Wischrichtung.
-// Jede Schublade merkt sich ihren Haltepunkt; am Handy öffnen Mixer und Editoren oben.
+// Jede Schublade merkt sich ihren Haltepunkt; am Handy öffnen Mixer, Sample- und Melodie-Editor oben, Beat-Editor in der Mitte.
 // Der Arranger bekommt unten so viel Platz, dass die letzten Spuren über das Fach gescrollt werden können.
 
 import { clamp, el, trackPointer } from '../util.js';
@@ -58,12 +58,13 @@ export function mountSheets({ ui, arranger }) {
   const arr = document.querySelector('.arranger');
   const snaps = loadSnaps();
   const mode = () => (narrow.matches ? 'narrow' : 'wide');
-  const keyOf = (s) => s.id || 'sounds';
+  // Beat- und Melodie-Editor merken sich ihre Höhe getrennt: Pads brauchen weniger Platz als die Klaviatur
+  const keyOf = (s) => (s.id === 'pattern' && s.dataset.type ? `pattern-${s.dataset.type}` : s.id || 'sounds');
   const stored = () => { const m = snaps[mode()]; return m && typeof m === 'object' ? m : (snaps[mode()] = {}); };
   const openFrac = (s) => {
     const v = s && stored()[keyOf(s)];
     if (v === TOP || v === MID) return v;
-    return narrow.matches && s && ['pattern', 'editor', 'mixer'].includes(s.id) ? TOP : MID;
+    return narrow.matches && s && ['pattern-synth', 'editor', 'mixer'].includes(keyOf(s)) ? TOP : MID;
   };
 
   const sheets = [];
