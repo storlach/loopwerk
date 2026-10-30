@@ -48,6 +48,25 @@ const { check, finish } = createChecker();
     });
     check('Echte Instrumente: mindestens 12', inst.length >= 12, inst.map((x) => x.id).join(', '));
     check('Echte Instrumente: alle laden und klingen (Spitze 0,3–1,0), CC0 mit Quelle', inst.every((x) => x.ok && x.peak >= 0.3 && x.peak <= 1), JSON.stringify(inst.filter((x) => !(x.ok && x.peak >= 0.3 && x.peak <= 1))));
+    // ---------- Klang-Pakete passen zu den WAV-Dateien (node tools/pack-assets.cjs) ----------
+    {
+      const fs = require('fs');
+      const pathMod = require('path');
+      const root = pathMod.resolve(__dirname, '..');
+      const src = fs.readFileSync(pathMod.join(root, 'src/asset-packs.js'), 'utf8');
+      const PACKS = JSON.parse(src.match(/PACKS = (\[.*?\]);/s)[1]);
+      const PACKED = JSON.parse(src.match(/PACKED = (\{.*?\});/s)[1]);
+      const wavs = [];
+      const walk = (d) => { for (const e of fs.readdirSync(pathMod.join(root, d), { withFileTypes: true })) { const r = `${d}/${e.name}`; if (e.isDirectory()) walk(r); else if (r.endsWith('.wav')) wavs.push(r); } };
+      walk('assets/samples/vcsl');
+      const bad = wavs.filter((w) => {
+        const hit = PACKED[w];
+        if (!hit) return true;
+        const pack = fs.readFileSync(pathMod.join(root, PACKS[hit[0]]));
+        return !pack.subarray(hit[1], hit[1] + hit[2]).equals(fs.readFileSync(pathMod.join(root, w)));
+      });
+      check('Klang-Pakete enthalten jede VCSL-Datei unverändert', bad.length === 0 && wavs.length > 390, `${wavs.length} Dateien, abweichend: ${bad.slice(0, 5).join(', ')}`);
+    }
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

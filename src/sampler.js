@@ -2,6 +2,7 @@
 // playbackRate umgestimmt. Gleiche Signalkette für AudioContext und OfflineAudioContext:
 // BufferSource (Umstimmung, ggf. Schleife) → Gain (Anschlag, Lautstärke, Ende) → Ziel.
 
+import { fetchAsset } from './fetch-asset.js';
 import { SAMPLED_INSTRUMENTS } from './instruments-vcsl.js';
 
 const SR = 44100;
@@ -66,9 +67,7 @@ function onsetOffset(buffer) {
 }
 
 async function loadZone(inst, zone) {
-  const res = await fetch(zoneUrl(inst, zone.file));
-  if (!res.ok) throw new Error(`${zone.file}: ${res.status}`);
-  const ab = await res.arrayBuffer();
+  const ab = await fetchAsset(zoneUrl(inst, zone.file));
   const rate = wavRate(ab);
   const buffer = await decodeCtx().decodeAudioData(ab);
   const out = { midi: zone.midi, buffer, offset: onsetOffset(buffer), loopStart: 0, loopEnd: 0 };

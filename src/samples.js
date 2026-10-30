@@ -5,6 +5,7 @@
 import { mulberry32, Emitter } from './util.js';
 import { CATALOG, PEAK_TARGET } from './catalog.js';
 import { VCSL_CATALOG } from './catalog-vcsl.js';
+import { fetchAsset } from './fetch-asset.js';
 import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { timeStretch } from './dsp/stretch.js';
 
@@ -1640,9 +1641,7 @@ export class Library extends Emitter {
 
 async function loadCatalogEntry(entry) {
   try {
-    const res = await fetch(entry.file);
-    if (!res.ok) throw new Error(res.status);
-    const orig = await decode(await res.arrayBuffer());
+    const orig = await decode(await fetchAsset(entry.file));
     const peak = bufferPeak(orig);
     if (peak > 0) scale(orig, (PEAK_TARGET[entry.category] ?? 0.5) / peak);
     const sample = { ...entry, orig, duration: orig.duration };
