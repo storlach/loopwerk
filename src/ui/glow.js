@@ -128,12 +128,14 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
         hits.push({ trackId: t.id, cat, lv, clip });
       }
     }
-    // schnell hoch, langsam zurück – wie eine Amplitude
-    for (const c of CATS) level[c] += (target[c] - level[c]) * (target[c] > level[c] ? 0.5 : 0.06);
-    const peak = live ? engine.peakLevel() : 0;
-    const db = peak > 0 ? 20 * Math.log10(peak) : -60;
-    const a = Math.min(1, Math.max(0, (db + 36) / 36));
-    amp += (a - amp) * (a > amp ? 0.45 : 0.08);
+    // schnell hoch, langsam zurück – wie eine Amplitude (nach dem Stopp blendet drawRoom sanft aus)
+    if (live) {
+      for (const c of CATS) level[c] += (target[c] - level[c]) * (target[c] > level[c] ? 0.5 : 0.06);
+      const peak = engine.peakLevel();
+      const db = peak > 0 ? 20 * Math.log10(peak) : -60;
+      const a = Math.min(1, Math.max(0, (db + 36) / 36));
+      amp += (a - amp) * (a > amp ? 0.45 : 0.08);
+    }
     for (const h of hits) {
       const g = trackGlow.get(h.trackId) ?? 0;
       trackGlow.set(h.trackId, g + (h.lv - g) * (h.lv > g ? 0.6 : 0.15));
@@ -141,7 +143,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const hitIds = new Set(hits.map((h) => h.trackId));
     for (const [id, g] of trackGlow) if (!hitIds.has(id)) { if (g < 0.003) trackGlow.delete(id); else trackGlow.set(id, g * 0.85); }
 
-    if (!live && amp < 0.01 && !sparks.length && !trackGlow.size) { hide(); return; }
+    // Marke: aus, sobald Kern und Funken verglüht sind (der Hintergrund klingt unabhängig davon aus)
+    if (!live && !sparks.length && !trackGlow.size) { hide(); return; }
     if (!shown) { shown = true; beam.hidden = false; }
 
     // ---------- Marke: Leuchten und Funken ----------
@@ -273,10 +276,11 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   const GREY = [150, 154, 166];
 
   function drawRoom(t) {
-    // Musik ausklingen lassen, auch wenn die Marke schon steht
-    if (!engine.playing) { for (const c of CATS) level[c] *= 0.85; amp *= 0.85; }
+    // Musik hört auf: alle Farbe blendet über gut zwei Sekunden sanft aus (kein Sprung)
+    if (!engine.playing) { for (const c of CATS) level[c] *= 0.955; amp *= 0.955; }
     const total = CATS.reduce((n, c) => n + level[c], 0);
-    const loud = total > 0.002 ? ambientMax * (0.35 + 0.65 * amp) : 0;
+    const presence = Math.min(1, total / 0.12);
+    const loud = total > 0.0005 ? ambientMax * presence * (0.35 + 0.65 * amp) : 0;
     const still = reduced.matches ? 0 : t;
 
     // ---------- Hintergrund: Anthrazit-Wabern, darüber die Farben der klingenden Sounds ----------
@@ -317,14 +321,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       const BW = n.width;
       c2.clearRect(0, 0, BW, 1);
       c2.globalCompositeOperation = 'lighter';
-      for (let k = 0; k < 2; k++) {
-        const [x] = spot(7, k, still, 0.35);
-        const g = c2.createRadialGradient(x * BW, 0.5, 0, x * BW, 0.5, BW * 0.45);
-        g.addColorStop(0, `rgba(${GREY},0.35)`);
-        g.addColorStop(1, `rgba(${GREY},0)`);
-        c2.fillStyle = g;
-        c2.fillRect(0, 0, BW, 1);
-      }
+      // nur bunt, Helligkeit nach dem Ausschlag – ohne Musik bleibt die Leiste dunkel
       if (loud > 0) {
         CATS.forEach((c, i) => {
           const share = level[c] / total;
@@ -333,7 +330,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
           for (let k = 0; k < 2; k++) {
             const [x] = spot(i, k, still);
             const grd = c2.createRadialGradient(x * BW, 0.5, 0, x * BW, 0.5, BW * (0.18 + 0.5 * share));
-            grd.addColorStop(0, `rgba(${r},${g},${b},${Math.min(1, (0.6 + amp) * Math.sqrt(share))})`);
+            grd.addColorStop(0, `rgba(${r},${g},${b},${Math.min(1, (0.15 + 1.1 * amp) * Math.sqrt(share)) * presence})`);
             grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
             c2.fillStyle = grd;
             c2.fillRect(0, 0, BW, 1);
