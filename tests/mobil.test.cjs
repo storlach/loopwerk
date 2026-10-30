@@ -40,6 +40,12 @@ const { check, finish } = createChecker();
     });
     check('Handy: App passt auf den Bildschirm, die Seite scrollt nicht', start.page <= 1, JSON.stringify(start));
     check('Kompaktes Deck (eine Zeile, ≤ 64 px)', start.deck <= 64, `${start.deck} px`);
+    const deckKeys = await page.evaluate(() => ({
+      keys: [...document.querySelectorAll('.deck .key')].filter((b) => b.offsetParent).map((b) => `${b.id}:${Math.round(Math.min(b.offsetWidth, b.offsetHeight))}`),
+      seps: [...document.querySelectorAll('.deck .deck-sep')].filter((n) => n.offsetParent).length,
+    }));
+    check('Handy-Deck: Wiedergabe | Anzeige | Rückgängig, Tasten ≥ 44 px, eine Haarlinie zwischen Transport und Anzeige',
+      deckKeys.keys.join(',').replace(/:\d+/g, '') === 'home-btn,play-btn,loop-btn,undo-btn' && deckKeys.keys.every((k) => +k.split(':')[1] >= 44) && deckKeys.seps === 1, JSON.stringify(deckKeys));
     check('Arranger direkt unter dem Deck und groß', start.arrTop <= 64 && start.arrH >= 500, `oben ${start.arrTop}, Höhe ${start.arrH}`);
     check('Leiste unten am Bildschirmrand', Math.abs(start.tabsBottom - start.h) <= 1, `${start.tabsBottom}/${start.h}`);
     check('Sound-Regal anfangs eingeklappt', start.shelf === 'none', start.shelf);
@@ -332,6 +338,29 @@ const { check, finish } = createChecker();
     check('Desktop: Knöpfe zurück im Deck, dieselbe Fachleiste ohne Sounds/Mehr, Regal sichtbar', desk.back && desk.tabs === 'flex' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
     check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
     check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,metro-btn', desk.order);
+    // Deck-Gruppen: Rückgängig/Wiederholen vor dem Projekt, Projekt-Menü und Export nebeneinander, Haarlinien dazwischen;
+    // auf jeder Desktop-Breite eine Zeile ohne Querverschiebung
+    const groups = await page.evaluate(() => {
+      const right = [...document.querySelector('.deck-right').children].map((n) => n.id || n.className).join(',');
+      const file = [...document.querySelector('.deck-file').querySelectorAll('#project-menu-btn, #export-btn')].map((n) => n.id).join(',');
+      const seps = [...document.querySelectorAll('.deck .deck-sep')].filter((n) => n.offsetParent).length;
+      return { right, file, seps, start: ['demo-btn', 'new-btn'].every((id) => document.getElementById(id).closest('#project-menu-start')) };
+    });
+    check('Desktop: Deck-Gruppen (Rückgängig | Projekt + Export, Beispiel/Leeren im Menü abgesetzt)',
+      groups.right === 'deck-edit,deck-sep,deck-file' && groups.file === 'project-menu-btn,export-btn' && groups.seps === 4 && groups.start, JSON.stringify(groups));
+    for (const w of [1100, 1200, 1280, 1440, 1536, 900]) {
+      await page.setViewportSize({ width: w, height: 820 });
+      await page.waitForTimeout(80);
+      const row = await page.evaluate(() => {
+        const d = document.querySelector('.deck').getBoundingClientRect();
+        const tops = [...document.querySelectorAll('.deck .key, .deck .lcd')].filter((n) => n.offsetParent).map((n) => n.getBoundingClientRect());
+        return { h: Math.round(d.height), oneRow: tops.every((r) => r.top < d.top + 24), over: document.documentElement.scrollWidth - innerWidth };
+      });
+      const ok = row.over <= 0 && (w < 1100 || (row.oneRow && row.h <= 64));
+      check(`Desktop ${w} px: Deck ${w < 1100 ? 'ohne Querverschiebung' : 'in einer Zeile, ohne Querverschiebung'}`, ok, JSON.stringify(row));
+    }
+    await page.setViewportSize({ width: 1400, height: 820 });
+    await page.waitForTimeout(80);
     await page.click('#shelf-cat-synth');
     check('Desktop: mehrere Kategorien können offen sein', await expanded('bass') === 'true' && await expanded('synth') === 'true');
     await page.click('#shelf-cat-synth');
