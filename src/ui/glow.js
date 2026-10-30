@@ -1,4 +1,4 @@
-// Licht aus der Musik: unscharfer Hintergrund im Arranger (Pegel × Farben der klingenden Clips),
+// Licht aus der Musik: unscharfer Hintergrund hinter der ganzen Seite (Pegel × Farben der klingenden Clips),
 // Leuchten und Funken nur direkt an der Abspielmarke. Läuft nur, solange etwas spielt oder ausklingt.
 
 import { anySoloOf, isAbove, trackState, EPS } from '../model.js';
@@ -17,7 +17,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   amb.width = 48;
   amb.height = 30;
   amb.setAttribute('aria-hidden', 'true');
-  root.prepend(amb);
+  document.body.prepend(amb);
   const beam = document.createElement('canvas');
   beam.className = 'beam';
   beam.setAttribute('aria-hidden', 'true');

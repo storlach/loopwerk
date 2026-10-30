@@ -27,7 +27,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - Timing nie mit `setTimeout` planen, immer über `ctx.currentTime` + Vorlauf.
 - Realtime und Offline nutzen dieselbe Signalkette (`buildMix`, `startVoice`).
 - UX wie im Original: alles ist ein Objekt, Drag & Drop, Raster rastet ein, keine Pflichtdialoge, sinnvolle Voreinstellungen. Höchstens zwei Klicks für Grundfunktionen.
-- Look „Werkstück“ (seit 2.0, `docs/specs/v2.0-werkstueck.md`): Farben, Schriften und Bausteine (Tasten, Mulden, Display, LED) nur über die Tokens in `:root`, keine neuen festen Farbwerte. Orange nur für Transport und Aktives. Seit 2.1 nur dunkel, kein Hell-Modus.
+- Look „Phosphor“ (seit 2.2, ADR 004, `docs/specs/v2.2-phosphor.md`): Farben, Schriften und Bausteine nur über die Tokens in `:root`, keine neuen festen Farbwerte. Was klingt, leuchtet (Kategoriefarben); Einstellungen sind Linien; aktiv = Weißglut (`--amber` ist Weiß); Rot nur für Aufnahme/Löschen. Still ist schwarz. Nur dunkel, kein Hell-Modus.
 - Texte in der Oberfläche auf Deutsch, Code-Bezeichner Englisch, Kommentare Deutsch und sparsam.
 - Fremd-Samples nur mit geprüfter Lizenz (bevorzugt CC0); Lizenz in den Metadaten vermerken.
 

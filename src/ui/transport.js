@@ -67,6 +67,7 @@ export function mountTransport({ store, engine, ui, arranger }) {
 
   function sync() {
     play.setAttribute('aria-pressed', String(engine.playing));
+    document.getElementById('app')?.classList.toggle('playing', engine.playing);
     play.setAttribute('aria-label', engine.playing ? 'Stopp' : 'Abspielen');
     play.querySelector('.ico-play').toggleAttribute('hidden', engine.playing);
     play.querySelector('.ico-stop').toggleAttribute('hidden', !engine.playing);

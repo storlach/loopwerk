@@ -2,56 +2,52 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <style id="boot-css">
   /* Ladescreen: steht ganz oben, damit er sofort erscheint – noch bevor das große Stylesheet gelesen ist.
-     Darum eigene Farben statt Tokens (Werkstück: Graphit, Orange, LED). */
+     Darum eigene Farben statt Tokens (Phosphor: Schwarz, Licht in den Farben der Kategorien). */
   .splash {
-    --s-bg: #0F0F0F; --s-ink: #F2EFE9; --s-muted: #A39E94; --s-amber: #FF5B1F; --s-off: #2C2C2C; --s-hot: #FF3B30;
+    --s-bg: #030304; --s-ink: #F2F2F0; --s-muted: #9898A1; --s-off: #1C1C21; --s-hot: #FF4D4D;
     position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px;
-    background:
-      radial-gradient(ellipse 60% 45% at 50% 42%, rgb(255 91 31 / 0.14), transparent 70%),
-      radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px,
-      var(--s-bg);
-    color: var(--s-ink); font-family: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: radial-gradient(ellipse 55% 40% at 50% 44%, rgb(120 110 255 / 0.10), transparent 70%), var(--s-bg);
+    color: var(--s-ink); font-family: "Funnel Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     transition: opacity 0.45s ease, visibility 0.45s;
   }
   .splash.done { opacity: 0; visibility: hidden; pointer-events: none; }
   .splash[hidden] { display: none; }
   .splash-inner { width: min(420px, 100%); display: grid; justify-items: center; gap: 18px; text-align: center; }
-  .splash-bars { display: flex; align-items: flex-end; gap: 6px; height: 64px; }
+  .splash-bars { display: flex; align-items: flex-end; gap: 9px; height: 64px; }
   .splash-bars span {
-    width: 10px; height: 100%;
-    background: repeating-linear-gradient(0deg, var(--s-amber) 0 5px, transparent 5px 8px) bottom / 100% 100%;
-    animation: splash-eq 1.1s ease-in-out infinite;
+    --c: #FFC53D;
+    width: 4px; height: 100%; border-radius: 2px; background: var(--c);
+    box-shadow: 0 0 10px var(--c), 0 0 24px var(--c);
+    transform-origin: bottom; animation: splash-eq 1.1s ease-in-out infinite;
   }
-  .splash-bars span:nth-child(2) { animation-delay: -0.85s; animation-duration: 0.9s; }
-  .splash-bars span:nth-child(3) { animation-delay: -0.3s; animation-duration: 1.3s; }
-  .splash-bars span:nth-child(4) { animation-delay: -0.6s; }
-  .splash-bars span:nth-child(5) { animation-delay: -0.15s; animation-duration: 0.95s; }
-  .splash-bars span:nth-child(6) { animation-delay: -0.7s; animation-duration: 1.2s; }
-  .splash-bars span:nth-child(7) { animation-delay: -0.45s; animation-duration: 1s; }
-  /* Die Höhe wächst in ganzen LED-Stufen von unten: oben abschneiden statt stauchen */
-  @keyframes splash-eq { 0%, 100% { clip-path: inset(80% 0 0 0); } 50% { clip-path: inset(0 0 0 0); } }
+  .splash-bars span:nth-child(2) { --c: #4A8CFF; animation-delay: -0.85s; animation-duration: 0.9s; }
+  .splash-bars span:nth-child(3) { --c: #2EE5A3; animation-delay: -0.3s; animation-duration: 1.3s; }
+  .splash-bars span:nth-child(4) { --c: #B494FF; animation-delay: -0.6s; }
+  .splash-bars span:nth-child(5) { --c: #FF7F45; animation-delay: -0.15s; animation-duration: 0.95s; }
+  .splash-bars span:nth-child(6) { --c: #FF62A5; animation-delay: -0.7s; animation-duration: 1.2s; }
+  .splash-bars span:nth-child(7) { --c: #F2F2F0; animation-delay: -0.45s; animation-duration: 1s; }
+  @keyframes splash-eq { 0%, 100% { transform: scaleY(0.2); } 50% { transform: scaleY(1); } }
   .splash-name {
-    margin: 0; font: 600 clamp(36px, 9vw, 56px)/1 "Martian Mono", ui-monospace, Menlo, monospace; letter-spacing: 0.01em; text-transform: uppercase;
+    margin: 0; font: 300 clamp(40px, 10vw, 60px)/1 "Funnel Display", system-ui, sans-serif; letter-spacing: -0.03em;
     animation: splash-in 0.7s cubic-bezier(.2, .8, .2, 1) both;
   }
-  .splash-name b { color: var(--s-amber); font-weight: 600; }
+  .splash-name b { font-weight: 700; }
   .splash-tag { margin: -8px 0 6px; color: var(--s-muted); font-size: 14px; line-height: 1.3; animation: splash-in 0.7s 0.12s cubic-bezier(.2, .8, .2, 1) both; }
   @keyframes splash-in { from { opacity: 0; transform: translateY(10px); } }
-  .splash-progress { position: relative; width: 100%; height: 8px; background: repeating-linear-gradient(90deg, var(--s-off) 0 4px, transparent 4px 6px); }
+  .splash-progress { position: relative; width: 100%; height: 1px; background: var(--s-off); }
   .splash-fill {
-    position: absolute; inset: 0 auto 0 0; width: 0;
-    background: repeating-linear-gradient(90deg, var(--s-amber) 0 4px, transparent 4px 6px);
-    filter: drop-shadow(0 0 6px rgb(255 91 31 / 0.5)); transition: width 0.25s ease-out;
+    position: absolute; inset: 0 auto 0 0; width: 0; background: var(--s-ink);
+    box-shadow: 0 0 6px rgb(255 255 255 / 0.8), 0 0 18px rgb(255 255 255 / 0.35); transition: width 0.25s ease-out;
   }
-  .splash-status { display: flex; justify-content: space-between; width: 100%; margin: -8px 0 0; font: 500 12px/1.4 "Martian Mono", ui-monospace, Menlo, monospace; color: var(--s-muted); }
+  .splash-status { display: flex; justify-content: space-between; width: 100%; margin: -8px 0 0; font: 400 12px/1.4 "Azeret Mono", ui-monospace, Menlo, monospace; color: var(--s-muted); }
   .splash-pct { color: var(--s-ink); font-variant-numeric: tabular-nums; }
-  .splash-version { margin: 8px 0 0; font: 500 10px/1 "Martian Mono", ui-monospace, Menlo, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: var(--s-muted); border: 1px solid var(--s-off); padding: 4px 7px; }
-  .splash.error .splash-bars span { animation: none; background: var(--s-hot); }
+  .splash-version { margin: 8px 0 0; font: 500 10px/1 "Azeret Mono", ui-monospace, Menlo, monospace; letter-spacing: 0.12em; text-transform: uppercase; color: var(--s-muted); box-shadow: inset 0 0 0 1px var(--s-off); border-radius: 3px; padding: 5px 8px; }
+  .splash.error .splash-bars span { animation: none; --c: var(--s-hot); }
   .splash.error .splash-fill { background: var(--s-hot); }
   .splash.error .splash-step { color: #ff9b8f; }
   @media (prefers-reduced-motion: reduce) {
     .splash-bars span, .splash-name, .splash-tag { animation: none; }
-    .splash-bars span { clip-path: inset(40% 0 0 0); }
+    .splash-bars span { transform: scaleY(0.6); }
   }
 </style>
 <div class="splash" id="boot" role="status" aria-live="polite" aria-label="Loopwerk wird geladen">
@@ -61,7 +57,7 @@
     <p class="splash-tag">I Like To Loop it Loop it</p>
     <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
     <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
-    <p class="splash-version" id="boot-version">Version 2.1</p>
+    <p class="splash-version" id="boot-version">Version 2.2</p>
   </div>
 </div>
 
@@ -69,67 +65,76 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Martian+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Funnel+Sans:wght@300..800&family=Azeret+Mono:wght@200..700&display=swap" media="print" onload="this.media='all'">
 <style>
   :root {
-    /* Look „Werkstück“: ein Musikgerät aus Graphit und Gummi, genau eine Signalfarbe (Orange) für Transport und Aktives.
-       Nur dunkel (seit 2.1); das Display ist schwarz. */
+    /* Look „Phosphor“ (seit 2.2): Schwarz wie ein ausgeschalteter Bildschirm. Licht gibt es nur, wo Musik klingt.
+       Was klingt, leuchtet (Kategoriefarben); was eingestellt ist, ist eine Linie. Aktiv = Weißglut (--amber = Weiß). */
     color-scheme: dark;
-    --bg: #0F0F0F;
-    --panel: #181818;
-    --lane: #121212;
-    --lane-alt: #151515;
-    --ink: #F2EFE9;
-    --muted: #A39E94;
-    --line: #2C2C2C;
-    --grid-bar: #2A2A2A;
-    --grid-beat: #1C1C1C;
-    --deck: #181818;
-    --deck-2: #232323;
-    --deck-ink: #F2EFE9;
-    --deck-muted: #A39E94;
-    --lcd: #050505;
-    --amber: #FF5B1F;
-    --amber-dim: #8F8A80;
+    --bg: #030304;
+    --panel: rgb(10 10 12 / 0.8);
+    --lane: #070709;
+    --lane-alt: #0A0A0D;
+    --ink: #F2F2F0;
+    --muted: #9898A1;
+    --line: #222226;
+    --grid-bar: rgb(255 255 255 / 0.07);
+    --grid-beat: rgb(255 255 255 / 0.028);
+    --deck: rgb(3 3 4 / 0.82);
+    --deck-2: #141417;
+    --deck-ink: #F2F2F0;
+    --deck-muted: #9898A1;
+    --lcd: transparent;
+    --amber: #FFFFFF;
+    --amber-dim: #9898A1;
     --focus: #FFFFFF;
-    --meter-ok: #22C97C;
-    --meter-warm: #FFC21A;
-    --meter-hot: #FF3B30;
-    --meter-off: #262626;
-    --cat-drums: #FFC21A;
-    --cat-bass: #3D7BFF;
-    --cat-chords: #22C97C;
-    --cat-synth: #A99BFF;
-    --cat-fx: #E6E1D6;
-    --cat-own: #FF7AA8;
-    --ambient-max: 0.55; --glow-blend: screen;
-    /* Spuren durchscheinend, damit das Umgebungslicht dahinter wirkt */
-    --lane-a: color-mix(in srgb, var(--lane) 40%, transparent);
-    --lane-alt-a: color-mix(in srgb, var(--lane-alt) 40%, transparent);
-    --font-display: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-    --font-body: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-    --radius: 8px;
+    --meter-ok: #F2F2F0;
+    --meter-warm: #FFC53D;
+    --meter-hot: #FF4D4D;
+    --meter-off: #17171B;
+    --cat-drums: #FFC53D;
+    --cat-bass: #4A8CFF;
+    --cat-chords: #2EE5A3;
+    --cat-synth: #B494FF;
+    --cat-fx: #FF7F45;
+    --cat-own: #FF62A5;
+    --ambient-max: 0.62; --glow-blend: screen;
+    /* Spuren durchsichtig, damit das Umgebungslicht dahinter wirkt */
+    --lane-a: transparent;
+    --lane-alt-a: rgb(255 255 255 / 0.012);
+    --font-display: "Funnel Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: "Funnel Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --radius: 3px;
+    --radius-lg: 14px;
+    /* Licht */
+    --beam: #FFFFFF;
+    --beam-glow: 0 0 3px #fff, 0 0 10px rgb(255 255 255 / 0.55), 0 0 26px rgb(255 255 255 / 0.22);
+    --glow-ink: 0 0 14px rgb(255 255 255 / 0.38);
+    --glow-cat: 0 0 6px var(--cat), 0 0 18px color-mix(in srgb, var(--cat) 45%, transparent);
+    --trace-rest: 0.38;
+    --key-line: #34343A;
+    --danger: #FF6B6B;
     /* Werkstück-Bausteine: Gummitasten, Mulden, Display, LED, Punktraster */
-    --accent-ink: #140600;
-    --key-face: linear-gradient(180deg, #2B2B2B, #222222);
-    --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
-    --well: #0B0B0B;
-    --well-shadow: inset 0 1px 3px #000;
-    --dots: radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px;
-    --clip-body: #1B1B1B;
-    --label-ink: #111111;
-    --lcd-face: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 3px), var(--lcd);
-    --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.06);
-    --lcd-sep: #1D1D1D;
-    --display-ink: #F2EFE9;
-    --lcd-label: #8F8A80;
-    --sheet-bg: #161616;
-    --sheet-shadow: 0 -1px 0 #3A3A3A, 0 -20px 50px rgb(0 0 0 / 0.7);
-    --led-off: #3A3A3A;
-    --knob-hi: #353535;
-    --knob-lo: #1F1F1F;
-    --knob-edge: #000;
+    --accent-ink: #030304;
+    --key-face: transparent;
+    --key-shadow: inset 0 0 0 1px #34343A;
+    --well: #000000;
+    --well-shadow: inset 0 0 0 1px #34343A;
+    --dots: none;
+    --clip-body: rgb(7 7 9 / 0.82);
+    --label-ink: #030304;
+    --lcd-face: transparent;
+    --lcd-shadow: none;
+    --lcd-sep: #222226;
+    --display-ink: #F2F2F0;
+    --lcd-label: #9898A1;
+    --sheet-bg: #09090B;
+    --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -30px 60px #000;
+    --led-off: #2A2A30;
+    --knob-hi: transparent;
+    --knob-lo: transparent;
+    --knob-edge: #3A3A40;
     /* Klaviertasten sehen wie ein Klavier aus */
     --key-white: #fdfdfb; --key-white-ink: #5b6475; --key-black: #1d2330; --key-black-ink: #b9c2d3;
     --track-h: 58px;
@@ -1498,8 +1503,8 @@
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-scroll { position: relative; z-index: 1; }
   .ambient {
-    position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%;
-    pointer-events: none; opacity: 0; transition: opacity 0.4s ease;
+    position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%;
+    pointer-events: none; opacity: 0; transition: opacity 0.6s ease;
   }
   .lane { background-color: transparent; }
   .beam { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; mix-blend-mode: var(--glow-blend); }
@@ -1608,6 +1613,233 @@
   .hint-done { background: var(--amber); color: var(--accent-ink); font: 500 10px/1 var(--font-mono); }
 
   .more-row .pop-item { height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius); background: var(--key-face); box-shadow: var(--key-shadow); color: var(--deck-ink); font: 500 10.5px/1 var(--font-mono); text-transform: uppercase; }
+
+  /* ================= Look „Phosphor“ (2.2): Schwarz, Licht nur wo Musik klingt, Einstellungen als Linien ================= */
+  body { background: var(--bg); }
+  #app { position: relative; z-index: 1; }
+  .deck { background: var(--deck); box-shadow: 0 1px 0 var(--line); }
+  .shelf, .arranger, .insp { background: var(--panel); border-color: var(--line); }
+
+  /* Bildmarke: Lichtstriche in den Farben der Kategorien, leuchten mit dem Ausgangspegel */
+  .brand { gap: 11px; }
+  .brand-name { font: 300 20px/1 var(--font-display); letter-spacing: -0.02em; text-transform: none; }
+  .brand-name b { font-weight: 700; color: var(--ink); }
+  .brand-bars { gap: 3px; height: 22px; }
+  .brand-bars i { width: 2px; border-radius: 1px; background: var(--c, var(--ink)); opacity: 0.55; }
+  .brand-bars i:nth-child(1) { --c: var(--cat-drums); }
+  .brand-bars i:nth-child(2) { --c: var(--cat-bass); }
+  .brand-bars i:nth-child(3) { --c: var(--cat-chords); }
+  .brand-bars i:nth-child(4) { --c: var(--cat-synth); }
+  .brand-bars i:nth-child(5) { --c: var(--cat-own); }
+  .brand-bars.live i { opacity: 1; filter: none; box-shadow: 0 0 6px var(--c); }
+  .brand-tag { font: 500 10px/1 var(--font-mono); letter-spacing: 0.12em; color: var(--muted); border: 0; box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--radius); }
+
+  /* Tasten: Haarlinie, keine Fläche; aktiv = Weißglut */
+  .key, .snap {
+    background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); color: var(--ink);
+    font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .key:hover:not(:disabled) { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent); }
+  .key:active:not(:disabled) { transform: none; background: rgb(255 255 255 / 0.04); }
+  .key[aria-pressed="true"] { color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); text-shadow: var(--glow-ink); }
+  .key[aria-pressed="true"]::before { display: none; }
+  .key[aria-pressed="true"] svg { filter: drop-shadow(0 0 4px rgb(255 255 255 / 0.7)); }
+  .key:disabled { color: #4E4E56; }
+  /* Linse: der einzige Kreis im Deck – Spielen/Stopp */
+  .key.play, .key.play[aria-pressed="true"] {
+    width: 44px; min-width: 44px; height: 44px; padding: 0; border-radius: 50%;
+    background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5);
+  }
+  .app.playing .key.play, .key.play.on { background: var(--beam); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+  .key.play svg { fill: currentColor; }
+  .key.rec svg { fill: var(--meter-hot); }
+  .key.project-menu-btn { text-transform: none; letter-spacing: 0; font: 500 13px/1 var(--font-body); }
+  .deck .group { flex-wrap: nowrap; }
+  #export-btn { background: var(--ink); color: var(--accent-ink); box-shadow: none; font-weight: 600; }
+  #export-btn:hover { background: var(--ink); box-shadow: 0 0 18px rgb(255 255 255 / 0.25); }
+
+  /* Display ohne Kasten: dünne Vektor-Ziffern, getrennt durch Haarlinien */
+  .lcd { background: transparent; box-shadow: none; border-radius: 0; }
+  .lcd-cell + .lcd-cell { box-shadow: inset 1px 0 0 var(--line); }
+  .lcd-label { font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.12em; color: var(--lcd-label); }
+  .lcd-value { font: 200 23px/1.05 var(--font-mono); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; color: var(--display-ink); }
+  .lcd-cell:first-child .lcd-value { color: var(--display-ink); text-shadow: none; }
+  .app.playing .lcd-cell:first-child .lcd-value { font-weight: 300; text-shadow: 0 0 10px rgb(255 255 255 / 0.6), 0 0 26px rgb(255 255 255 / 0.25); }
+  .meter-wrap .lcd-label { color: var(--muted); }
+
+  /* Kleinere Laptops: Deck bleibt eine Zeile – Ziffern etwas kleiner, Loop und Klick nur als Zeichen */
+  @media (min-width: 761px) and (max-width: 1439px) {
+    .lcd-cell { padding: 2px 8px; }
+    .lcd-value { font-size: 20px; }
+    #loop-btn, #metro-btn { font-size: 0; gap: 0; width: 36px; padding: 0; }
+    #meter { width: 96px; }
+    .key.project-menu-btn { max-width: 170px; }
+  }
+  @media (min-width: 761px) and (max-width: 1199px) {
+    .lcd-more { display: none; }
+  }
+  /* Regal */
+  .shelf-search { border-radius: var(--radius-lg); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
+  .shelf-sort, .pat-view { padding: 0; border-radius: var(--radius-lg); background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); }
+  .seg { font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.08em; }
+  .seg:first-of-type, .seg:last-of-type { border-radius: var(--radius-lg); }
+  .seg[aria-pressed="true"] { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); text-shadow: var(--glow-ink); }
+  .chip { border-radius: var(--radius); background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.06em; }
+  .chip[class*="cat-"]::before { width: 6px; height: 6px; border-radius: 50%; box-shadow: 0 0 6px var(--cat); }
+  .chip[aria-pressed="true"], .chip[class*="cat-"][aria-pressed="true"], .chip.genre[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
+  .loop-item.armed { background: rgb(255 255 255 / 0.04); box-shadow: inset 2px 0 0 var(--ink); }
+  .loop-fav.on { color: var(--ink); text-shadow: var(--glow-ink); }
+
+  /* Arranger: Lineal, Spurköpfe */
+  .ruler, .corner { background: var(--deck); }
+  .bar-mark { font: 400 10px/1 var(--font-mono); color: var(--muted); }
+  .loop-band { top: 3px; height: 2px; background: var(--ink); box-shadow: 0 0 6px rgb(255 255 255 / 0.5); }
+  .loop-band.off { opacity: 0.25; box-shadow: none; }
+  .loop-shade { background: rgb(255 255 255 / 0.025); border-color: rgb(255 255 255 / 0.18); }
+  .track-head, .group-head, .add-track { background: var(--deck); }
+  .track-row, .group-row { border-bottom-color: rgb(255 255 255 / 0.05); }
+  .track-name { font: 600 13.5px/1.2 var(--font-body); letter-spacing: -0.005em; }
+  .track-dot { width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; opacity: 0.8; box-shadow: 0 0 6px var(--cat, transparent); }
+  .track-row.silent .track-name { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .track-row.silent .track-dot { opacity: 0.25; box-shadow: none; }
+  .track-row.selected .track-head { box-shadow: inset 2px 0 0 var(--ink); background: color-mix(in srgb, var(--ink) 4%, var(--deck)); }
+  .tbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); color: var(--muted); font: 500 10px/1 var(--font-mono); }
+  .tbtn:hover { color: var(--ink); }
+  /* Stumm: Schraffur und Linie – nicht das hellste Element; Solo: Weißglut */
+  .tbtn-mute[aria-pressed="true"] {
+    color: var(--ink); box-shadow: inset 0 0 0 1px var(--muted);
+    background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.12) 0 1px, transparent 1px 4px);
+  }
+  .tbtn-solo[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 10px rgb(255 255 255 / 0.35); }
+  .tbtn.tbtn-menu { box-shadow: none; }
+  .knob { background: transparent; box-shadow: inset 0 0 0 1px var(--knob-edge); }
+  .knob::after { background: conic-gradient(from 225deg, var(--ink) 0 calc((var(--turn) + 135deg)), transparent 0); }
+  .knob-ind { background: var(--ink); }
+  .group-row, .group-head { background: rgb(255 255 255 / 0.02); }
+  .group-name { font: 600 12px/1.2 var(--font-body); letter-spacing: 0; text-transform: none; }
+  .group-count { font: 400 10px/1 var(--font-mono); }
+  .track-row.in-group .track-head { box-shadow: inset 14px 0 0 -13px #2E2E34; }
+  .group-lane { background: transparent; }
+
+  /* Clips: Lichtschlitz – dunkler Körper, Kante und Name in der Kategoriefarbe, Wellenform als Lichtstriche */
+  .clip { border-radius: var(--radius); background: var(--clip-body); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat) 30%, transparent); }
+  .clip.on-top { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat) 30%, transparent), 0 2px 12px #000; }
+  .clip-label {
+    height: 17px; padding: 0 7px; background: transparent; color: var(--cat);
+    font: 600 11px/18px var(--font-body); letter-spacing: 0.005em; text-transform: none;
+  }
+  .clip-tag { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); font: 500 9px/1 var(--font-mono); }
+  .clip-wave { opacity: 0.6; }
+  .clip.selected .clip-wave { opacity: 0.85; }
+  .track-row.silent .clip { background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 6px), var(--clip-body); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); }
+  .track-row.silent .clip-label { color: var(--muted); }
+  .track-row.silent .lane { opacity: 1; }
+  .track-row.silent .clip-wave { --wave: var(--muted); opacity: 0.35; }
+  /* Auswahl ist Zeichnung: weiße Kante und Schnittmarken an den Ecken */
+  .clip.selected, .clip.selected.on-top { background: rgb(22 22 26 / 0.92); box-shadow: inset 0 0 0 1px var(--ink); }
+  .clip.selected::after {
+    content: ""; position: absolute; inset: -4px; pointer-events: none; z-index: 3;
+    --t: 1.5px; --l: 7px;
+    background:
+      linear-gradient(var(--ink), var(--ink)) 0 0 / var(--l) var(--t), linear-gradient(var(--ink), var(--ink)) 0 0 / var(--t) var(--l),
+      linear-gradient(var(--ink), var(--ink)) 100% 0 / var(--l) var(--t), linear-gradient(var(--ink), var(--ink)) 100% 0 / var(--t) var(--l),
+      linear-gradient(var(--ink), var(--ink)) 0 100% / var(--l) var(--t), linear-gradient(var(--ink), var(--ink)) 0 100% / var(--t) var(--l),
+      linear-gradient(var(--ink), var(--ink)) 100% 100% / var(--l) var(--t), linear-gradient(var(--ink), var(--ink)) 100% 100% / var(--t) var(--l);
+    background-repeat: no-repeat;
+  }
+  .marquee { background: rgb(255 255 255 / 0.035); border: 0; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.4); }
+  .drop-preview { border-style: dashed; border-width: 1px; background: color-mix(in srgb, var(--cat) 8%, transparent); }
+  .clip-handle::after, .clip-trim::after { background: var(--ink); opacity: 0.7; }
+  /* Die Marke: weißer Kern mit Schein */
+  .playhead { width: 1px; margin-left: -0.5px; background: var(--beam); box-shadow: none; opacity: 0.75; }
+  .app.playing .playhead { opacity: 1; box-shadow: var(--beam-glow); }
+  .playhead::before { top: 21px; left: -4px; border-left-width: 4.5px; border-right-width: 4.5px; border-top: 8px solid var(--beam); }
+
+  /* Fachleiste: der aktive Reiter trägt oben einen Lichtstrich */
+  .tabbar { background: var(--deck); box-shadow: inset 0 1px 0 var(--line); }
+  .tab { font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .tab[aria-pressed="true"] { background: var(--sheet-bg); color: var(--ink); box-shadow: none; text-shadow: var(--glow-ink); }
+  .tab[aria-pressed="true"]::after { top: 0; width: 18px; height: 2px; margin-left: -9px; border-radius: 1px; background: var(--beam); box-shadow: 0 0 8px var(--beam); }
+  .tab:disabled { color: #4E4E56; }
+
+  /* Schubladen */
+  .dock, .shelf.sheet { background: var(--sheet-bg); }
+  .sheet-grip::before { width: 36px; height: 3px; border-radius: 2px; background: #3A3A40; }
+  .dock-head h2 { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+  .dbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
+  .dbtn.primary { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
+  .pat-field select, .ed-name, #pat-name, .ed-beats { border-radius: var(--radius); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
+  #pat-live[aria-pressed="true"] { background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent); }
+
+  /* Drumpads: Haarlinie, beim Schlag Licht in der Farbe der Spur */
+  .pat-pad { border-radius: 6px; background: rgb(255 255 255 / 0.015); box-shadow: inset 0 0 0 1px var(--key-line); font: 600 13px/1.1 var(--font-body); }
+  .pat-pad:hover { background: rgb(255 255 255 / 0.03); }
+  .pat-pad::before { left: 14px; right: 14px; height: 2px; opacity: 0.8; box-shadow: 0 0 6px var(--cat); }
+  .pat-pad.hit, .pat-pad.held {
+    background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--cat) 45%, transparent), color-mix(in srgb, var(--cat) 14%, transparent) 70%);
+    color: var(--ink); transform: scale(0.985);
+    box-shadow: inset 0 0 0 1px var(--cat), 0 0 26px -2px color-mix(in srgb, var(--cat) 70%, transparent);
+  }
+  .pat-pad.hit::before, .pat-pad.held::before { background: var(--beam); opacity: 1; }
+  .pat-pad.held.hit { box-shadow: inset 0 0 0 1px var(--beam), 0 0 36px 0 color-mix(in srgb, var(--cat) 85%, transparent); }
+  .pat-pad-key { font: 400 10px/1 var(--font-mono); }
+
+  /* Schrittraster: leer = Haarlinie, gesetzt = Licht */
+  .pat-cell { border-radius: 2px; background: transparent; box-shadow: inset 0 0 0 1px #26262B; }
+  .pat-cell::after { width: 2px; height: 2px; margin: -1px; background: #2E2E34; }
+  .pat-cell.alt { background: rgb(255 255 255 / 0.02); filter: none; }
+  .pat-cell[aria-pressed="true"] { background: var(--cat); box-shadow: 0 0 10px color-mix(in srgb, var(--cat) 60%, transparent); }
+  .pat-cell[aria-pressed="true"]::after { display: none; }
+  .pat-row-label { font: 500 10px/1 var(--font-mono); }
+
+  /* Mixer: Fader als Linie, Pegel als Licht */
+  .strip { background: rgb(255 255 255 / 0.015); border-color: var(--line); border-radius: var(--radius); }
+  .strip-name { font: 600 12.5px/1.2 var(--font-body); }
+  .strip-value { font: 400 10px/1 var(--font-mono); }
+  .strip-fader { accent-color: var(--ink); }
+  .strip-sum { border-radius: var(--radius); font: 500 10px/1.2 var(--font-mono); background: transparent; box-shadow: var(--key-shadow); border: 0; }
+  .strip-sum.on { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); }
+
+  /* Inspektor, Karten, Einblender */
+  .insp-btns .key { background: transparent; box-shadow: var(--key-shadow); font: 500 10px/1 var(--font-mono); }
+  .insp-link { color: var(--ink); font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.08em; }
+  .insp-title { font: 300 26px/1.15 var(--font-display); letter-spacing: -0.03em; }
+  .insp-kind, .create-sec, .more-sec h3 { font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; color: var(--muted); }
+  .ccard { background: transparent; box-shadow: var(--key-shadow); border-radius: 6px; }
+  .ccard:hover { background: rgb(255 255 255 / 0.03); }
+  .ccard-ico { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat) 40%, transparent); }
+  .ccard-ico svg { filter: drop-shadow(0 0 4px var(--cat)); }
+  .hint { background: var(--deck-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--key-line), 0 10px 30px #000; border-radius: var(--radius-lg); }
+  .hint-done { background: var(--ink); color: var(--accent-ink); }
+  .more-row .pop-item { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
+  .fxl-switch[aria-pressed="true"], .toggle[aria-pressed="true"] { background: var(--ink); }
+  input[type="range"] { accent-color: var(--ink); }
+
+  /* Wunsch: Behälter; solange der Agent denkt, läuft ein Licht um das Feld */
+  @property --wish-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+  .wish { gap: 0; padding: 1px; border-radius: var(--radius-lg); background: var(--key-line); box-shadow: none; }
+  .wish > * { background: transparent; }
+  .wish-input { border-radius: 13px 13px 0 0; background: #050507; box-shadow: none; font: 400 15px/1.42 var(--font-body); }
+  .wish-row { padding: 6px 8px; border-radius: 0 0 13px 13px; background: #050507; }
+  .wish-go { border-radius: 999px; background: var(--ink); color: var(--accent-ink); box-shadow: none; font: 600 10px/1 var(--font-mono); }
+  .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, rgb(255 255 255 / 0.25) 70%, #fff 76%, rgb(255 255 255 / 0.25) 80%, var(--key-line) 88%); animation: wish-run 1.6s linear infinite; }
+  .wish.busy .wish-state::after { background: var(--ink); }
+  @keyframes wish-run { to { --wish-a: 360deg; } }
+  .more-wish .wish { padding: 1px; background: var(--key-line); }
+  .more-wish .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, #fff 76%, var(--key-line) 88%); }
+
+  /* Handy: Tippflächen mindestens 44 px, Schrift mindestens 11 px */
+  @media (max-width: 760px) {
+    .tbtn { position: relative; }
+    .tbtn::after { content: ""; position: absolute; inset: -7px -2px; }
+    .tab { font-size: 11px; }
+    .lcd-label, .seg, .chip, .bar-mark, .dbtn, .tbtn, .insp-kind, .create-sec, .more-sec h3, .dock-head h2, .group-count, .pat-row-label { font-size: 11px; }
+    .lcd-value { font-size: 22px; line-height: 1; }
+    .lcd { padding: 2px 3px; }
+    .lcd-input { height: 26px; }
+    .key.play, .key.play[aria-pressed="true"] { width: 46px; min-width: 46px; height: 46px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .wish.busy { animation: none; } }
 </style>
 
 
@@ -1616,7 +1848,7 @@
     <div class="brand">
       <span class="brand-bars" id="brand-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 2.1</span>
+      <span class="brand-tag">Version 2.2</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">

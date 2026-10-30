@@ -158,11 +158,17 @@
 - Neue UI-Richtung F · Phosphor (schwarz, Licht aus der Musik), vom Creative Director mit Auflagen zur Durchsicht freigegeben
 - Spec: `docs/specs/v2.1-griff-und-licht.md`, Tests: `tests/v21.test.cjs`
 
+## ✅ 2.2 – Phosphor
+- Neuer Look „Phosphor“: Schwarz, Licht nur wo Musik klingt, Einstellungen als Linien, Weißglut statt Orange (ADR 004)
+- Wellenform als Lichtstriche, Auswahl mit Schnittmarken, Stumm als Schraffur, Umgebungslicht hinter der ganzen Seite, still ist schwarz
+- Auflagen des Creative Directors: Tippflächen ≥ 44 px, Schrift am Handy ≥ 11 px
+- Spec: `docs/specs/v2.2-phosphor.md`
+
 ## Als Nächstes
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Look
-- Seit 2.0 „Werkstück“ (siehe `docs/ux/richtungen/`), seit 2.1 nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
+- Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
 
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

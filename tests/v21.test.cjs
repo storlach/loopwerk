@@ -230,7 +230,7 @@ const { check, finish } = createChecker();
     // ---------- Nur dunkel ----------
     await page.emulateMedia({ colorScheme: 'light' });
     const dk = await page.evaluate(() => ({ bg: getComputedStyle(document.body).backgroundColor, scheme: getComputedStyle(document.documentElement).colorScheme }));
-    check('Auch bei hellem System bleibt Loopwerk dunkel', dk.bg === 'rgb(15, 15, 15)' && dk.scheme === 'dark', JSON.stringify(dk));
+    check('Auch bei hellem System bleibt Loopwerk dunkel', dk.bg === 'rgb(3, 3, 4)' && dk.scheme === 'dark', JSON.stringify(dk));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

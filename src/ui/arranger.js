@@ -476,21 +476,19 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const pat = sample.patternId && store.project.patterns?.[sample.patternId];
     if (pat?.type === 'synth' && pat.notes?.length) drawNotes(c, clip, pat, w, h);
     else {
-      // Wellenform als LED-Punkte: Spalten aus 3-px-Punkten, leise Stellen bleiben eine gepunktete Mittellinie
+      // Wellenform als Lichtstriche: senkrechte 1-px-Linien im 2-px-Raster, symmetrisch zur Mitte
       const peaks = sample.peaks;
       const perBeat = peaks.length / sample.lengthBeats;
-      const DOT = 3;
-      const PITCH = 4;
-      const rows = Math.max(0, Math.floor((mid - DOT / 2) / PITCH));
-      for (let x = 0; x + DOT <= w; x += PITCH) {
+      const PITCH = 2;
+      for (let x = 0; x < w; x += PITCH) {
         const b0 = off + x / ppb();
         let m = 0;
         const k0 = Math.floor(b0 * perBeat);
         const k1 = Math.max(k0 + 1, Math.ceil((b0 + PITCH / ppb()) * perBeat));
         for (let k = k0; k < k1; k++) m = Math.max(m, peaks[k % peaks.length]);
         const env = clipEnvelope(clip, (x + PITCH / 2) / ppb());
-        const n = Math.min(rows, Math.round(((m / 0.62) * mid * env) / PITCH));
-        for (let k = -n; k <= n; k++) c.fillRect(x, Math.round(mid - DOT / 2 + k * PITCH), DOT, DOT);
+        const a = Math.max(0.5, Math.min(mid - 1, (m / 0.62) * mid * env));
+        c.fillRect(x, Math.round(mid - a), 1, Math.max(1, Math.round(2 * a)));
       }
     }
     // Markierung, wo das Sample von vorn beginnt
