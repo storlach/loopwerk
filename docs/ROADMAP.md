@@ -164,7 +164,15 @@
 - Auflagen des Creative Directors: Tippflächen ≥ 44 px, Schrift am Handy ≥ 11 px
 - Spec: `docs/specs/v2.2-phosphor.md`
 
+## ✅ 2.3 – Große Bibliothek
+- 464 Sounds statt 62: 275 CC0-One-Shots aus der VCSL (Drums, Percussion, Einzeltöne; `src/catalog-vcsl.js`, `tools/vcsl-import.py`) und 125 erzeugte Loops in zwölf Genres (`src/loops-more.js`)
+- Sounds auf Abruf: alle Einträge sofort im Regal, geladen bzw. erzeugt erst beim Anhören oder Einsetzen (`library.ensure`), Start schneller
+- Regal: große Kategorien in Loops / One-Shots / Percussion geteilt, Suche nach Tags
+- Tonart wählbar, Stopp als Pause, Griff an der Abspielmarke, Licht- und Transparenz-Feinschliff
+- Tests: `tests/v22.test.cjs` (Pakete), `tests/more-loops.test.cjs` (alle erzeugten Loops)
+
 ## Als Nächstes
+- Mehr Quellen: freesound.org (in dieser Umgebung gesperrt), weitere VCSL-Instrumente als spielbare Sampler im Melodie-Editor
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Look
