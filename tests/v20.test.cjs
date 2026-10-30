@@ -211,6 +211,21 @@ const { check, finish } = createChecker();
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       await page.waitForTimeout(150);
     };
+    // Sounds: die Suche bleibt beim Scrollen oben stehen
+    await page.tap('#tab-sounds');
+    await page.waitForTimeout(700);
+    const sticky = await page.evaluate(async () => {
+      const shelf = document.querySelector('.shelf');
+      const top0 = document.getElementById('shelf-search').getBoundingClientRect().top;
+      shelf.scrollTop = 600;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const s = document.getElementById('shelf-search').getBoundingClientRect();
+      const hit = document.elementFromPoint(s.left + 20, s.top + s.height / 2);
+      return { scrolled: shelf.scrollTop, top0: Math.round(top0), top1: Math.round(s.top), onTop: hit?.id === 'shelf-search' };
+    });
+    check('Handy: Suchleiste im Regal bleibt beim Scrollen oben stehen', sticky.scrolled > 300 && Math.abs(sticky.top1 - sticky.top0) < 2 && sticky.onTop, JSON.stringify(sticky));
+    await page.tap('#tab-sounds');
+    await page.waitForTimeout(600);
     const mixState = () => page.evaluate(() => ({
       vols: window.loopwerk.store.project.tracks.map((t) => t.volume), pans: window.loopwerk.store.project.tracks.map((t) => t.pan || 0),
       scroll: document.getElementById('mixer-strips').scrollLeft,

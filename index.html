@@ -313,6 +313,7 @@
   .shelf-head { display: grid; gap: 8px; }
   .shelf-title { display: flex; align-items: baseline; justify-content: space-between; }
   .shelf-total { font: 400 11px/1 var(--font-mono); color: var(--muted); }
+  .shelf-sticky:empty { display: none; }
   .shelf-search {
     width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px;
     border: 1px solid var(--line); border-radius: 4px; background: var(--lane);
@@ -1264,6 +1265,9 @@
     .shelf-head { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 12px 8px; }
     .shelf-title { display: none; }
     .shelf-search { grid-column: 1 / -1; order: -2; height: 44px; font-size: 16px; }
+    /* Suche bleibt beim Scrollen oben stehen (unter dem Griff) */
+    .shelf-sticky { position: sticky; top: 18px; z-index: 3; padding: 4px 12px 8px; background: var(--sheet-bg, var(--panel)); box-shadow: 0 1px 0 var(--line); }
+    .shelf-sticky .shelf-search { width: 100%; }
     .chips { grid-column: 1 / -1; order: -1; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
     .shelf-sort { grid-column: 1 / -1; order: -1; }
     .seg { min-height: 36px; padding: 0 14px; font-size: 12px; }
@@ -1682,6 +1686,7 @@
       <button class="ltab" id="ltab-sounds" type="button" role="tab" data-left="sounds" aria-selected="true">Sounds</button>
       <button class="ltab" id="ltab-create" type="button" role="tab" data-left="create" aria-selected="false">Erstellen</button>
     </div>
+    <div class="shelf-sticky" id="shelf-sticky"></div>
     <div class="shelf-head">
       <div class="shelf-title"><h2>Sounds</h2><span class="shelf-total" id="shelf-total"></span></div>
       <button class="shelf-import" id="import-btn" type="button" title="Audiodateien (WAV, MP3, OGG …) als eigene Sounds importieren – oder Dateien direkt auf eine Spur ziehen"><span class="lbl-long">+ Eigene Sounds importieren</span><span class="lbl-short">+ Import</span></button>

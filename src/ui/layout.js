@@ -20,6 +20,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('export-btn'), { wide: $('deck-export'), narrow: slot('project') });
   for (const id of ['demo-btn', 'new-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
   place($('tips-reset'), { narrow: slot('project') });
+  // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
+  place($('shelf-search'), { narrow: $('shelf-sticky') });
   place(document.querySelector('.deck .brand'), { narrow: slot('about') });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
