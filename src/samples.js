@@ -5,6 +5,7 @@
 import { mulberry32, Emitter } from './util.js';
 import { CATALOG, PEAK_TARGET } from './catalog.js';
 import { VCSL_CATALOG } from './catalog-vcsl.js';
+import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { timeStretch } from './dsp/stretch.js';
 
 export const CATEGORIES = [
@@ -25,6 +26,8 @@ export const GENRES = [
   { id: 'pop', label: 'Pop' },
   { id: 'ambient', label: 'Ambient & Film' },
 ];
+// Neue Genres aus dem großen Loop-Paket
+GENRES.push(...MORE_GENRES.filter((g) => !GENRES.some((x) => x.id === g.id)));
 
 export const LIBRARY_BPM = 120;
 export const LIBRARY_KEY = 'Am';
@@ -1654,7 +1657,7 @@ async function loadCatalogEntry(entry) {
 // Synthetische Loops und die Katalog-Sounds, die das Projekt braucht, vor dem Start; die übrigen Katalog-Sounds
 // (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
 // Gesamte Bibliothek: eigene synthetische Loops und freie Katalog-Sounds (CC0)
-const ALL_LOOP_DEFS = [...LOOP_DEFS];
+const ALL_LOOP_DEFS = [...LOOP_DEFS, ...MORE_LOOP_DEFS];
 const ALL_CATALOG = [...CATALOG, ...VCSL_CATALOG];
 
 // Alle Sounds als Einträge sofort im Regal; geladen bzw. erzeugt wird nur, was das Projekt braucht (need) –

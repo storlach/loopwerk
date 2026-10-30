@@ -27,9 +27,12 @@ function check(name, ok, detail = '') {
 
     // 1. Bibliothek
     const lib = await page.evaluate(() => {
-      const list = window.loopwerk.library.list();
+      // Grundausstattung (die großen Pakete laden auf Abruf und haben eigene Tests)
+      const core = new Set(window.loopwerk.library.coreIds);
+      const all = window.loopwerk.library.list();
+      const list = all.filter((s) => core.has(s.id));
       return {
-        count: list.length,
+        count: all.length,
         synth: list.filter((s) => s.origin === 'Loopwerk').length,
         lengthsOk: list.every((s) => s.buffer.length === Math.round(s.lengthBeats * 0.5 * 44100)),
         silent: list.filter((s) => { const d = s.buffer.getChannelData(0); let m = 0; for (const v of d) m = Math.max(m, Math.abs(v)); return m < 0.05; }).map((s) => s.id),
