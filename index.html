@@ -1510,6 +1510,21 @@
   .track-row.in-group .track-head { box-shadow: inset 3px 0 0 var(--line); }
   .track-row.in-group.selected .track-head { box-shadow: inset 3px 0 0 var(--amber); }
   .track-row[hidden], .group-row[hidden] { display: none; }
+  /* Wunsch-Agent */
+  .wish { display: grid; gap: 6px; padding: 8px; border-radius: 8px; background: var(--key-face); box-shadow: var(--key-shadow); }
+  .wish-input {
+    width: 100%; box-sizing: border-box; min-height: 52px; resize: vertical; padding: 8px 10px;
+    border: 0; border-radius: 6px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line);
+    color: var(--ink); font: 400 13px/1.4 var(--font-body); -webkit-user-select: text; user-select: text;
+  }
+  .wish-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .wish-row { display: flex; align-items: center; gap: 8px; }
+  .wish-state { flex: 1; min-width: 0; font: 500 10px/1.3 var(--font-mono); color: var(--muted); letter-spacing: 0.04em; }
+  .wish.busy .wish-state::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--amber); animation: wish-pulse 0.9s ease-in-out infinite; }
+  @keyframes wish-pulse { 50% { opacity: 0.25; } }
+  .more-wish .wish { background: transparent; box-shadow: none; padding: 0; }
+  .wish-go { height: 30px; padding: 0 12px; font: 600 11px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  @media (max-width: 760px) { .wish-input { font-size: 16px; } .wish-go { height: 40px; } }
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-scroll { position: relative; z-index: 1; }
@@ -1757,6 +1772,11 @@
     </div>
     <div class="shelf-list" id="library"></div>
     <div class="create-panel" id="create-panel" role="tabpanel" aria-label="Erstellen">
+      <h3 class="create-sec">Wünschen</h3>
+      <form class="wish" id="wish-form" autocomplete="off">
+        <textarea id="wish-input" class="wish-input" rows="2" maxlength="300" placeholder="z. B. Techno-Beat ab Takt 5, Bass dazu, Pad mit Hall" aria-label="Was soll passieren?"></textarea>
+        <div class="wish-row"><span class="wish-state" id="wish-state" aria-live="polite"></span><button class="key wish-go" id="wish-go" type="submit">Umsetzen</button></div>
+      </form>
       <h3 class="create-sec">Selbst spielen</h3>
       <button class="ccard cat-drums" type="button" data-create="beat"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 12h4v3H1zm5 0h4v3H6zm5 0h4v3h-4z"/></svg></span><span class="ccard-title">Beat bauen</span><span class="ccard-sub">Schlagzeug in Schritten oder auf Pads</span></button>
       <button class="ccard cat-synth" type="button" data-create="melody"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h14v12H1zm2 2v8h1.5V8H6v4h1V8h2v4h1V8h1.5v4H13V4h-1v4h-1V4H9v4H8V4H6v4H5V4z"/></svg></span><span class="ccard-title">Melodie schreiben</span><span class="ccard-sub">Noten setzen oder auf der Klaviatur spielen</span></button>
@@ -1976,6 +1996,7 @@
       <h2>Mehr</h2>
     </div>
     <div class="more-body">
+      <div class="more-sec"><h3>Wünschen</h3><div class="more-wish" data-slot="wish"></div></div>
       <div class="more-sec"><h3>Wiedergabe</h3><div class="more-row" data-slot="play"></div></div>
       <div class="more-sec"><h3>Bearbeiten und Ansicht</h3><div class="more-row" data-slot="edit"></div></div>
       <div class="more-sec"><h3>Projekt</h3><div class="more-row" data-slot="project"></div></div>

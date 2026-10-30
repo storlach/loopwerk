@@ -197,7 +197,32 @@ export class Store extends Emitter {
 
   // Jede Änderung läuft hier durch und landet im Rückgängig-Verlauf.
   // `coalesce` fasst schnelle Folgeänderungen (z. B. Lautstärke-Regler ziehen) zu einem Schritt zusammen.
+  // Mehrere Aktionen als ein Rückgängig-Schritt (z. B. ein Plan des Wunsch-Agenten); bei Fehler bleibt alles beim Alten
+  batch(label, fn) {
+    if (this._batching) return fn();
+    const before = JSON.stringify(this.project);
+    this._batching = true;
+    let out;
+    try {
+      out = fn();
+    } catch (e) {
+      this.project = JSON.parse(before);
+      throw e;
+    } finally {
+      this._batching = false;
+    }
+    if (JSON.stringify(this.project) === before) return out;
+    this.undoStack.push(before);
+    if (this.undoStack.length > 200) this.undoStack.shift();
+    this.redoStack.length = 0;
+    this.lastKey = null;
+    this._autoName();
+    this.emit(this.project, label);
+    return out;
+  }
+
   dispatch(label, mutate, { coalesce } = {}) {
+    if (this._batching) { mutate(this.project); return; }
     const now = performance.now();
     const merge = coalesce && coalesce === this.lastKey && now - this.lastTime < 1500;
     if (!merge) {

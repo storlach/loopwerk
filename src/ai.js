@@ -9,6 +9,7 @@ const PITCH_MIN = 36;
 const PITCH_MAX = 84;
 
 let samplePromise = null;
+let claudeOff = false;
 // Claude im Artifact; null, wenn nicht verfügbar (GitHub Pages, lokal, abgelehnt)
 export function getClaude() {
   if (!samplePromise) {
@@ -18,11 +19,12 @@ export function getClaude() {
   }
   return samplePromise;
 }
+// Neu nachsehen, ob Claude da ist (Tests, nach einer Freigabe)
+export function resetClaude() { samplePromise = null; claudeOff = false; }
 // Fehlercodes, nach denen Claude in dieser Ansicht nicht mehr gefragt wird
 const PERMANENT = ['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'];
-let claudeOff = false;
 
-async function askJson(prompt) {
+export async function askJson(prompt) {
   if (claudeOff) return null;
   const sample = await getClaude();
   if (!sample) return null;

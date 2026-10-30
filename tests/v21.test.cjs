@@ -180,6 +180,53 @@ const { check, finish } = createChecker();
     await page.click('#play-btn');
     await page.waitForTimeout(2500);
     check('Nach dem Stopp klingt das Licht aus und schaltet ab', await page.evaluate(() => !window.loopwerk.glow.state.shown));
+    // ---------- Wunsch-Agent ----------
+    const rules = await page.evaluate(async () => {
+      const { planByRules } = await import('./src/wish.js');
+      const { store, library } = window.loopwerk;
+      const a = planByRules('Bau mir einen Techno-Track', store.project, library);
+      const b = planByRules('Hall auf den Bass', store.project, library);
+      const c = planByRules('ohne Drums ab Takt 9', store.project, library);
+      const d = planByRules('130 bpm und 48 Takte lang', store.project, library);
+      return { a, b, c, d };
+    });
+    check('Regeln: „Techno-Track“ setzt Tempo und baut Fläche, Beat, Bass, Melodie auf', rules.a.actions.some((x) => x.do === 'tempo' && x.bpm === 130) && rules.a.actions.filter((x) => x.do === 'add').length >= 4, JSON.stringify(rules.a));
+    check('Regeln: „Hall auf den Bass“ schaltet Hall auf der Bass-Spur ein, ohne neuen Sound', rules.b.actions.length >= 1 && rules.b.actions.every((x) => x.do === 'effect' && x.effect === 'hall'), JSON.stringify(rules.b));
+    check('Regeln: „ohne Drums ab Takt 9“ entfernt nur ab Takt 9', rules.c.actions.length >= 1 && rules.c.actions.every((x) => x.do === 'remove' && x.fromBar === 9), JSON.stringify(rules.c));
+    check('Regeln: Tempo und Länge aus Zahlen', rules.d.actions.some((x) => x.do === 'tempo' && x.bpm === 130) && rules.d.actions.some((x) => x.do === 'length' && x.bars === 48), JSON.stringify(rules.d));
+    // über das Feld unter „Erstellen“, ohne Claude: Regeln
+    await page.click('#ltab-create');
+    const before2 = await page.evaluate(() => JSON.stringify(window.loopwerk.store.project));
+    const nClips = await page.evaluate(() => window.loopwerk.store.project.tracks.reduce((n, t) => n + t.clips.length, 0));
+    await page.fill('#wish-input', 'Techno-Beat ab Takt 9 bis 12, Pad mit Hall');
+    await page.press('#wish-input', 'Enter');
+    await page.waitForFunction(() => !document.getElementById('wish-form').classList.contains('busy'));
+    const w1 = await page.evaluate(() => {
+      const p = window.loopwerk.store.project;
+      const added = p.tracks.flatMap((t) => t.clips.map((c) => ({ t: t.id, c, cat: window.loopwerk.library.get(c.sampleId)?.category, hall: t.fx?.hall?.on })));
+      return { n: added.length, drums: added.filter((x) => x.cat === 'drums' && x.c.startBeat === 32 && x.c.lengthBeats === 16).length, hall: added.some((x) => x.cat === 'chords' && x.hall), state: document.getElementById('wish-state').textContent, hint: document.getElementById('hint')?.textContent };
+    });
+    check('Wunsch-Feld: Beat in Takt 9–12 eingesetzt, Pad bekommt Hall', w1.n > nClips && w1.drums >= 1 && w1.hall, JSON.stringify(w1));
+    check('Wunsch-Feld meldet, was passiert ist', /Regeln/.test(w1.state) && /Rückgängig/.test(w1.hint || ''), JSON.stringify(w1));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.loopwerk.store.undo());
+    check('Ein Rückgängig nimmt den ganzen Wunsch zurück', await page.evaluate((b) => JSON.stringify(window.loopwerk.store.project) === b, before2));
+    // mit Claude (nachgebildet): Plan wird geprüft, Ungültiges übersprungen
+    const wc = await page.evaluate(async () => {
+      const { runWish } = await import('./src/wish.js');
+      const ai = await import('./src/ai.js');
+      ai.resetClaude();
+      window.claude = { use: async () => ({ json: async (prompt) => { window.__prompt = prompt; return { summary: 'Tempo 99, Bass ab Takt 3, Echo darauf', actions: [
+        { do: 'tempo', bpm: 99 }, { do: 'add', sound: 'bass-sub', track: 'neu', fromBar: 3, toBar: 6 }, { do: 'effect', track: '@bass-sub', effect: 'echo', params: { mix: 0.4, quatsch: 3 } },
+        { do: 'add', sound: 'gibt-es-nicht' }, { do: 'explode' } ] }; } }) };
+      const { store, library } = window.loopwerk;
+      const undo0 = store.undoStack.length;
+      const r = await runWish('mach was mit Bass', { store, library });
+      const t = store.project.tracks.findLast((x) => x.clips.some((c) => c.sampleId === 'bass-sub'));
+      return { by: r.by, done: r.done.length, skipped: r.skipped.length, bpm: store.project.bpm, clip: t?.clips.find((c) => c.sampleId === 'bass-sub'), echo: t?.fx?.echo, steps: store.undoStack.length - undo0, prompt: /bass-sub/.test(window.__prompt) && /Wunsch: „mach was mit Bass“/.test(window.__prompt) };
+    });
+    check('Claude plant: Tempo, Bass auf neuer Spur in Takt 3–6, Echo auf genau dieser Spur', wc.by === 'claude' && wc.bpm === 99 && wc.clip?.startBeat === 8 && wc.clip?.lengthBeats === 16 && wc.echo?.on && wc.echo.mix === 0.4, JSON.stringify(wc));
+    check('Ungültige Bausteine werden übersprungen, alles ist ein Schritt', wc.done === 3 && wc.skipped === 2 && wc.steps === 1 && wc.prompt, JSON.stringify(wc));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);
