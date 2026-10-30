@@ -1775,13 +1775,21 @@
   .pat-pad { border-radius: 6px; background: rgb(255 255 255 / 0.015); box-shadow: inset 0 0 0 1px var(--key-line); font: 600 13px/1.1 var(--font-body); }
   .pat-pad:hover { background: rgb(255 255 255 / 0.03); }
   .pat-pad::before { left: 14px; right: 14px; height: 2px; opacity: 0.8; box-shadow: 0 0 6px var(--cat); }
+  /* Gedrückt: der ganze Pad leuchtet in der Spurfarbe (heller Kern) und strahlt nach außen */
+  .pat-pad { transition: box-shadow 0.18s ease-out, background-color 0.18s ease-out; }
   .pat-pad.hit, .pat-pad.held {
-    background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--cat) 45%, transparent), color-mix(in srgb, var(--cat) 14%, transparent) 70%);
-    color: var(--ink); transform: scale(0.985);
-    box-shadow: inset 0 0 0 1px var(--cat), 0 0 26px -2px color-mix(in srgb, var(--cat) 70%, transparent);
+    z-index: 1; transition: none;
+    background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--cat) 35%, var(--beam)) 0%, var(--cat) 62%, color-mix(in srgb, var(--cat) 82%, var(--bg)) 100%);
+    color: var(--accent-ink); transform: scale(0.985);
+    box-shadow: 0 0 0 1px var(--cat), 0 0 14px 1px var(--cat), 0 0 42px 6px color-mix(in srgb, var(--cat) 55%, transparent);
   }
-  .pat-pad.hit::before, .pat-pad.held::before { background: var(--beam); opacity: 1; }
-  .pat-pad.held.hit { box-shadow: inset 0 0 0 1px var(--beam), 0 0 36px 0 color-mix(in srgb, var(--cat) 85%, transparent); }
+  .pat-pad.hit::before, .pat-pad.held::before { background: var(--beam); opacity: 0.9; box-shadow: 0 0 8px var(--beam); }
+  .pat-pad.hit .pat-pad-key, .pat-pad.held .pat-pad-key { color: var(--accent-ink); }
+  /* Schlag im Wirbel: kurz noch heller und weiter, ohne dass das gehaltene Pad dazwischen ausgeht */
+  .pat-pad.held.hit {
+    background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--cat) 15%, var(--beam)) 0%, var(--cat) 70%, color-mix(in srgb, var(--cat) 88%, var(--bg)) 100%);
+    box-shadow: 0 0 0 1px var(--beam), 0 0 18px 2px var(--cat), 0 0 60px 10px color-mix(in srgb, var(--cat) 65%, transparent);
+  }
   .pat-pad-key { font: 400 10px/1 var(--font-mono); }
 
   /* Schrittraster: leer = Haarlinie, gesetzt = Licht */
