@@ -1573,8 +1573,18 @@
   .arranger > .arr-scroll { position: relative; z-index: 1; }
   .ambient { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
   /* Lichtleiste ganz oben: dasselbe Licht wie der Hintergrund, hell und strahlend – wirkt auch am Handy */
-  .lightbar { position: fixed; left: 0; top: 0; z-index: 45; width: 100%; height: 2px; pointer-events: none; }
-  .lightbar-glow { position: fixed; left: 0; top: -10px; z-index: 44; width: 100%; height: 26px; pointer-events: none; filter: blur(9px); opacity: 0.9; }
+  /* LED-Band in einer Nut: dunkler Kanal mit Kanten, darin einzelne Leuchtpunkte, knapper Schein nur nach unten */
+  .lightbar-well {
+    position: fixed; left: 0; top: 0; z-index: 44; width: 100%; height: 4px; pointer-events: none;
+    background: var(--well);
+    box-shadow: inset 0 1px 1px rgb(0 0 0 / 0.7), inset 0 -1px 0 rgb(255 255 255 / 0.05), 0 1px 0 rgb(0 0 0 / 0.5);
+  }
+  .lightbar {
+    position: fixed; left: 0; top: 1px; z-index: 45; width: 100%; height: 2px; pointer-events: none;
+    -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 3px, rgb(0 0 0 / 0.45) 3px 4px);
+    mask-image: repeating-linear-gradient(90deg, #000 0 3px, rgb(0 0 0 / 0.45) 3px 4px);
+  }
+  .lightbar-glow { position: fixed; left: 0; top: 2px; z-index: 44; width: 100%; height: 7px; pointer-events: none; filter: blur(3px); opacity: 0.35; }
   /* Regal: nur die gewählte Zeile zeigt ihre Wellenform (wie später in der Timeline), beim Vorhören leuchtend */
   .loop-item { position: relative; isolation: isolate; }
   .loop-wave { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; border-radius: inherit; pointer-events: none; }

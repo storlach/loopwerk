@@ -33,7 +33,10 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   barGlow.className = 'lightbar-glow';
   barGlow.width = 96;
   barGlow.height = 1;
-  for (const n of [bar, barGlow]) { n.setAttribute('aria-hidden', 'true'); document.body.append(n); }
+  // Eingelassen wie ein LED-Band: dunkle Nut, darin der Lichtstreifen, nur ein knapper Schein nach unten
+  const barWell = document.createElement('div');
+  barWell.className = 'lightbar-well';
+  for (const n of [barWell, bar, barGlow]) { n.setAttribute('aria-hidden', 'true'); document.body.append(n); }
   // Regal: nur die gewählte Zeile zeigt ihre Wellenform; beim Vorhören leuchtet sie bis zur Stelle, die gerade klingt
   const shelfEl = document.querySelector('.shelf');
   const rowWave = document.createElement('canvas');
@@ -313,7 +316,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       });
     }
 
-    // ---------- Lichtleiste oben: dieselben Farben, heller und strahlender ----------
+    // ---------- Lichtleiste oben: dieselben Farben als LED-Band ----------
     for (const [c2, n] of [[barC, bar], [glowC, barGlow]]) {
       const BW = n.width;
       c2.clearRect(0, 0, BW, 1);
