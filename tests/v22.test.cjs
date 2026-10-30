@@ -30,6 +30,24 @@ const { check, finish } = createChecker();
     await page.fill('#shelf-search', 'conga');
     check('Suche findet Percussion über den Namen', /von/.test(await page.locator('#shelf-total').textContent()) && await page.locator('.loop-item').count() >= 3);
     await page.fill('#shelf-search', '');
+    // ---------- Echte Instrumente (Sampler): jedes lädt, klingt, Lizenz stimmt ----------
+    const inst = await page.evaluate(async () => {
+      const sp = await import('./src/sampler.js');
+      const out = [];
+      for (const i of sp.sampledInstruments()) {
+        const loaded = await sp.loadInstrument(i.id);
+        const mid = i.zones[Math.floor(i.zones.length / 2)].midi;
+        const ctx = new OfflineAudioContext(1, 44100 * 2, 44100);
+        sp.playSampled(ctx, ctx.destination, loaded, mid, 0.01, 0.6, 1);
+        const d = (await ctx.startRendering()).getChannelData(0);
+        let peak = 0;
+        for (const v of d) peak = Math.max(peak, Math.abs(v));
+        out.push({ id: i.id, peak: Math.round(peak * 100) / 100, ok: i.license === 'CC0' && /VCSL/.test(i.origin) && /^https:\/\/github\.com\/sgossner\/VCSL/.test(i.source || '') });
+      }
+      return out;
+    });
+    check('Echte Instrumente: mindestens 12', inst.length >= 12, inst.map((x) => x.id).join(', '));
+    check('Echte Instrumente: alle laden und klingen (Spitze 0,3–1,0), CC0 mit Quelle', inst.every((x) => x.ok && x.peak >= 0.3 && x.peak <= 1), JSON.stringify(inst.filter((x) => !(x.ok && x.peak >= 0.3 && x.peak <= 1))));
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);
