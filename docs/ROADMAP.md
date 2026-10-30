@@ -171,8 +171,15 @@
 - Tonart wählbar, Stopp als Pause, Griff an der Abspielmarke, Licht- und Transparenz-Feinschliff
 - Tests: `tests/v22.test.cjs` (Pakete), `tests/more-loops.test.cjs` (alle erzeugten Loops)
 
+## ✅ 2.4 – Echte Instrumente, Regal-Feinschliff
+- Sampler (`src/sampler.js`): 13 VCSL-Instrumente (`src/instruments-vcsl.js`) und 6 aus Regal-Einzeltönen (`src/instruments-shelf.js`: Folkharfe, Klavier, Marimba, Xylofon, Glockenspiel, Mundharmonika) im Melodie-Editor
+- Klang-Pakete: VCSL-Aufnahmen familienweise in `assets/packs/*.wav` (`tools/pack-assets.cjs`, `src/fetch-asset.js`) – passt ins Artifact-Limit
+- Regal: Vorhören zeigt die Wellenform nur in der gewählten Zeile (leuchtet bis zur Stelle, die klingt); Längenfilter 1T / 2T / 4T / 8T+ / One-Shot
+- Handy und Touch: großer Schubladengriff
+- Tests: `tests/sampler.test.cjs`, `tests/regal.test.cjs`
+
 ## Als Nächstes
-- Mehr Quellen: freesound.org (in dieser Umgebung gesperrt), weitere VCSL-Instrumente als spielbare Sampler im Melodie-Editor
+- Mehr Quellen: freesound.org (in dieser Umgebung gesperrt)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
 ## Look

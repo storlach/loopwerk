@@ -34,19 +34,16 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   barGlow.width = 96;
   barGlow.height = 1;
   for (const n of [bar, barGlow]) { n.setAttribute('aria-hidden', 'true'); document.body.append(n); }
-  // Regal: Licht beim Vorhören, nur innerhalb der linken Leiste
+  // Regal: nur die gewählte Zeile zeigt ihre Wellenform; beim Vorhören leuchtet sie bis zur Stelle, die gerade klingt
   const shelfEl = document.querySelector('.shelf');
-  const shelfLight = document.createElement('canvas');
-  shelfLight.className = 'shelf-light';
-  shelfLight.width = 24;
-  shelfLight.height = 40;
-  shelfLight.setAttribute('aria-hidden', 'true');
-  shelfEl?.prepend(shelfLight);
+  const rowWave = document.createElement('canvas');
+  rowWave.className = 'loop-wave';
+  rowWave.setAttribute('aria-hidden', 'true');
   const ac = amb.getContext('2d');
   const bc = beam.getContext('2d');
   const barC = bar.getContext('2d');
   const glowC = barGlow.getContext('2d');
-  const shelfC = shelfLight.getContext('2d');
+  const rowC = rowWave.getContext('2d');
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   // Farben aus den Tokens (Hell/Dunkel), regelmäßig neu gelesen
@@ -100,7 +97,6 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   }
 
   let preview = 0;
-  let previewCat = null;
   function draw(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
@@ -108,6 +104,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     if (++colorAge > 60) readColors();
     // Raumlicht (Hintergrund, Leiste oben, Regal) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde
     if (frameNo++ % 3 === 0) drawRoom(now / 1000);
+    drawRow();
     if (!live && !shown) return;
 
     const p = store.project;
@@ -340,30 +337,78 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       c2.globalCompositeOperation = 'source-over';
     }
 
-    // ---------- Regal: Licht beim Vorhören, nur in der linken Leiste ----------
-    const pid = engine.preview?.sampleId;
-    const ps = pid && library.get(pid);
-    if (ps) previewCat = CATS.includes(ps.colorCat ?? ps.category) ? (ps.colorCat ?? ps.category) : 'fx';
-    const bands = ps ? engine.outputBands(4) : null;
-    const pv = bands ? Math.min(1, (bands.reduce((x, y) => x + y, 0) / bands.length) * 1.6) : 0;
-    preview += (pv - preview) * (pv > preview ? 0.6 : 0.12);
-    if (shelfEl && previewCat) {
-      const SW = shelfLight.width;
-      const SH = shelfLight.height;
-      shelfC.clearRect(0, 0, SW, SH);
-      if (preview > 0.01) {
-        const [r, g, b] = rgb[previewCat];
-        for (let k = 0; k < 3; k++) {
-          const [x, y] = spot(CATS.indexOf(previewCat), k, still, 1.4);
-          const grd = shelfC.createRadialGradient(x * SW, y * SH, 0, x * SW, y * SH, SW * (0.5 + 0.4 * preview));
-          grd.addColorStop(0, `rgba(${r},${g},${b},${0.75 * preview})`);
-          grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          shelfC.fillStyle = grd;
-          shelfC.fillRect(0, 0, SW, SH);
-        }
-      } else previewCat = null;
-      // im scrollenden Regal (Handy) mitwandern
-      shelfLight.style.transform = `translateY(${shelfEl.scrollTop}px)`;
+  }
+
+  // ---------- Regal: Wellenform in der gewählten Zeile ----------
+  let rowKey = '';
+  function drawRow() {
+    const id = ui.armedSampleId ?? engine.preview?.sampleId;
+    const item = id && shelfEl?.querySelector(`.loop-item[data-sample-id="${CSS.escape(id)}"]`);
+    const s = item && library.get(id);
+    if (!s) {
+      if (rowWave.isConnected) rowWave.remove();
+      preview = 0;
+      rowKey = '';
+      return;
+    }
+    if (rowWave.parentNode !== item) { item.prepend(rowWave); rowKey = ''; }
+    const pv = engine.preview?.sampleId === id ? engine.preview : null;
+    const bands = pv ? engine.outputBands(4) : null;
+    const lv = bands ? Math.min(1, (bands.reduce((x, y) => x + y, 0) / bands.length) * 1.6) : 0;
+    preview += (lv - preview) * (lv > preview ? 0.6 : 0.12);
+    const prog = pv?.when != null && engine.ctx ? Math.max(0, Math.min(1, (engine.ctx.currentTime - pv.when) / pv.duration)) : -1;
+    const w = item.clientWidth;
+    const h = item.clientHeight;
+    // Ruhig und unverändert: nicht neu zeichnen
+    const key = `${id}|${w}|${h}|${!!s.peaks}|${colorAge === 0 ? 'c' : ''}`;
+    if (prog < 0 && preview < 0.005 && key === rowKey) return;
+    rowKey = key;
+    const dpr = window.devicePixelRatio || 1;
+    if (rowWave.width !== Math.round(w * dpr) || rowWave.height !== Math.round(h * dpr)) {
+      rowWave.width = Math.round(w * dpr);
+      rowWave.height = Math.round(h * dpr);
+    }
+    const c = rowC;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    const cat = CATS.includes(s.colorCat ?? s.category) ? (s.colorCat ?? s.category) : 'fx';
+    const [r, g, b] = rgb[cat] || [136, 136, 136];
+    const mid = h / 2;
+    const px = prog >= 0 ? prog * w : -1;
+    // Schein hinter der Stelle, die gerade klingt – stärker, je lauter
+    if (px >= 0 && preview > 0.01) {
+      const grd = c.createRadialGradient(px, mid, 0, px, mid, Math.max(40, w * 0.45));
+      grd.addColorStop(0, `rgba(${r},${g},${b},${0.38 * preview})`);
+      grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      c.fillStyle = grd;
+      c.fillRect(0, 0, w, h);
+    }
+    const peaks = s.peaks;
+    if (!peaks) {
+      c.fillStyle = `rgba(${r},${g},${b},0.35)`;
+      for (let x = 0; x < w; x += 6) c.fillRect(x, Math.round(mid), 3, 1);
+      return;
+    }
+    // Lichtstriche wie in der Timeline: gespielt hell und leuchtend, der Rest gedämpft
+    const PITCH = 2;
+    const n = peaks.length;
+    for (let x = 0; x < w; x += PITCH) {
+      const k0 = Math.floor((x / w) * n);
+      const k1 = Math.max(k0 + 1, Math.ceil(((x + PITCH) / w) * n));
+      let m = 0;
+      for (let k = k0; k < k1 && k < n; k++) m = Math.max(m, peaks[k]);
+      const a = Math.max(0.5, Math.min(mid - 2, (m / 0.62) * (mid - 2)));
+      const played = px >= 0 && x <= px;
+      const near = px >= 0 ? Math.max(0, 1 - Math.abs(x - px) / 60) : 0;
+      c.fillStyle = `rgba(${r},${g},${b},${played ? 0.55 + 0.45 * Math.max(near, preview) : 0.28})`;
+      c.fillRect(x, Math.round(mid - a), 1, Math.max(1, Math.round(2 * a)));
+    }
+    if (px >= 0) {
+      c.fillStyle = `rgba(${r},${g},${b},0.9)`;
+      c.shadowColor = `rgba(${r},${g},${b},0.9)`;
+      c.shadowBlur = 8;
+      c.fillRect(Math.round(px), 2, 1, h - 4);
+      c.shadowBlur = 0;
     }
   }
 

@@ -4,6 +4,7 @@
 
 import { fetchAsset } from './fetch-asset.js';
 import { SAMPLED_INSTRUMENTS } from './instruments-vcsl.js';
+import { SHELF_INSTRUMENTS } from './instruments-shelf.js';
 
 const SR = 44100;
 const BASE = 'assets/samples/vcsl/inst/';
@@ -12,7 +13,7 @@ const END_TAU = 0.008; // weiches Ende nicht gehaltener Klänge nach Notenende +
 const HOLD_MAX = 12; // Sicherung für gehaltene Schleifen ohne Notenende
 
 const registry = new Map();
-for (const inst of SAMPLED_INSTRUMENTS) registry.set(inst.id, inst);
+for (const inst of [...SAMPLED_INSTRUMENTS, ...SHELF_INSTRUMENTS]) registry.set(inst.id, inst);
 const pending = new Map(); // id → Promise des Ladens
 const ready = new Map(); // id → geladenes Instrument (synchron abfragbar)
 

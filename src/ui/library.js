@@ -6,6 +6,13 @@ import { el, trackPointer } from '../util.js';
 const FAV_KEY = 'loopwerk.favs';
 const OPEN_KEY = 'loopwerk.shelfOpen';
 const SORT_KEY = 'loopwerk.shelfSort';
+const LEN_KEY = 'loopwerk.shelfLen';
+// Längen-Filter: Loops nach Takten, Einzelklänge als One-Shot
+const lenBucket = (s) => {
+  if (s.kind !== 'loop') return 'shot';
+  const bars = s.lengthBeats / 4;
+  return bars <= 1 ? '1' : bars <= 2 ? '2' : bars <= 4 ? '4' : '8';
+};
 // Auf schmalen Bildschirmen ist immer nur eine Kategorie offen (Akkordeon)
 const narrow = window.matchMedia('(max-width: 760px)');
 
@@ -85,6 +92,16 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       render();
     });
   }
+  let len = 'all';
+  try { len = localStorage.getItem(LEN_KEY) || 'all'; } catch { /* Standard */ }
+  const lenBtns = [...document.querySelectorAll('.shelf-len .seg')];
+  for (const b of lenBtns) {
+    b.addEventListener('click', () => {
+      len = len === b.dataset.len ? 'all' : b.dataset.len;
+      try { localStorage.setItem(LEN_KEY, len); } catch { /* egal */ }
+      render();
+    });
+  }
   buildChips();
   search.addEventListener('input', render);
 
@@ -142,12 +159,13 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       ...(s.tags || []), s.kind === 'loop' ? 'loop' : 'one-shot oneshot', s.origin]
       .filter(Boolean).join(' ').toLowerCase();
     const inFilter = (s) => filter === 'all' || (filter === 'fav' ? favs.has(s.id) : !!groups.find((g) => g.id === filter)?.has(s));
-    const match = (s) => (!q || words(s).includes(q)) && inFilter(s);
+    const match = (s) => (!q || words(s).includes(q)) && inFilter(s) && (len === 'all' || lenBucket(s) === len);
     const shown = all.filter(match);
     root.innerHTML = '';
     items.clear();
     for (const chip of chipsEl.children) chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter));
     for (const b of sortBtns) b.setAttribute('aria-pressed', String(b.dataset.sort === sort));
+    for (const b of lenBtns) b.setAttribute('aria-pressed', String(b.dataset.len === len));
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {
@@ -162,7 +180,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (cat.rank) samples.sort((a, b) => cat.rank(a) - cat.rank(b));
       if (!samples.length) continue;
       // Bei Suche oder Filter sind alle Treffer-Gruppen offen, sonst gilt der gemerkte Zustand
-      const forced = !!q || filter !== 'all';
+      const forced = !!q || filter !== 'all' || len !== 'all';
       const expanded = forced || open.has(cat.id);
       const group = el('section', `shelf-group ${cat.cls}`);
       const h = el('h3', 'shelf-cat-wrap');
@@ -275,6 +293,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     const q = search.value.trim().toLowerCase();
     if (q && !s.name.toLowerCase().includes(q)) search.value = '';
     if (filter !== 'all' && filter !== group.id && !(filter === 'fav' && favs.has(s.id))) filter = 'all';
+    if (len !== 'all' && lenBucket(s) !== len) len = 'all';
     if (narrow.matches) open.clear();
     open.add(group.id);
     saveOpen(open);

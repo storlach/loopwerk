@@ -572,7 +572,7 @@ export class Engine extends Emitter {
     g.gain.value = 0.8;
     src.connect(g).connect(this.mix.master);
     src.start(when);
-    const preview = { sampleId, src, g };
+    const preview = { sampleId, src, g, when, duration: sample.buffer.duration };
     src.onended = () => { if (this.preview === preview) { this.preview = null; this.emit('preview'); } };
     this.preview = preview;
     this.emit('preview');
