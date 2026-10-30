@@ -13,8 +13,8 @@ const KEY = 'loopwerk.sheetH';
 const MID = 0.5;
 const TOP = 1;
 const FLICK = 0.35; // px/ms: ab hier zählt die Bewegung als Schubs
-const HIDE = -56; // zu: Oberkante samt Schatten unter dem Rand
-const GONE = -36; // ab hier ist nichts mehr zu sehen
+const HIDE = -84; // zu: Oberkante samt Schatten unter dem Rand
+const GONE = -64; // ab hier ist nichts mehr zu sehen (auch kein Schatten)
 const RUBBER = 72; // Gummiband über oben: höchstens so viele px
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 // Federkonstante (rad/s): 18 ≈ iOS-Sheet (Antwortzeit 0,35 s), reduzierte Bewegung kürzer, aber sichtbar
@@ -52,7 +52,6 @@ export function springStep(x, v, w, dt) {
 
 // Gummiband: folgt anfangs 1:1, bleibt dann zurück (nie mehr als RUBBER)
 const rubber = (d) => (d * RUBBER) / (d + RUBBER);
-const rubberSlope = (d) => (RUBBER / (d + RUBBER)) ** 2;
 
 export function mountSheets({ ui, arranger }) {
   const app = document.getElementById('app');
@@ -77,15 +76,19 @@ export function mountSheets({ ui, arranger }) {
   };
   const current = () => sheets.find((s) => shown(s) && !s.classList.contains('leaving') && getComputedStyle(s).display !== 'none') ?? null;
 
-  // Zustand je Schublade: p = sichtbare Höhe über dem Arranger-Rand (px), v = Geschwindigkeit (px/s, nach oben positiv),
+  // Zustand je Schublade: p = Höhe über dem Arranger-Rand (px; über oben wird sie als Gummiband gezeigt),
+  // v = Geschwindigkeit (px/s, nach oben positiv),
   // base = Layout-Höhe während der Bewegung: wird die Schublade kleiner, wird nur verschoben (transform, kein Layout);
   // nur beim Wachsen rechnet der Inhalt mit, im Gummiband in beide Richtungen. In Ruhe passt die Höhe wieder genau.
   const state = new Map();
   const S = (s) => state.get(s);
   const full = () => arr.getBoundingClientRect().height;
-  const restP = (s, h) => (autoHeight(s) ? s.offsetHeight : openFrac(s) * h);
-  // Höhe so, wie sie in --sheet-h steht (ohne Rahmen)
-  const cssH = (s) => (autoHeight(s) ? s.offsetHeight : parseFloat(getComputedStyle(s).height) || 0);
+  // p und Layout-Höhe zählen mit Rahmen (wie zu sehen), --sheet-h ohne (bd = Rahmen oben + unten)
+  const restP = (s, h) => (autoHeight(s) ? s.offsetHeight : openFrac(s) * h + S(s).bd);
+  const measure = (s, m) => {
+    m.bd = autoHeight(s) ? 0 : s.offsetHeight - (parseFloat(getComputedStyle(s).height) || 0);
+    return s.offsetHeight;
+  };
   let lastAb = null; // Arranger-Unterkante beim letzten Bild
 
   // Platz im Arranger = Höhe der offenen Schublade; nur in Ruhe messen, nicht pro Frame
@@ -101,22 +104,28 @@ export function mountSheets({ ui, arranger }) {
   const busy = () => sheets.some((s) => S(s).mode !== 'rest');
   const ro = new ResizeObserver(() => {
     if (busy()) return;
-    for (const s of sheets) { const m = S(s); if (m.open) m.p = m.target = cssH(s); }
+    for (const s of sheets) { const m = S(s); if (m.open) m.p = m.target = measure(s, m); }
     lastAb = arr.getBoundingClientRect().bottom;
     syncPad();
   });
 
   // Zeichnen: nur transform, außer die Schublade wird größer als ihre eingefrorene Höhe
   function apply(s, m, h) {
-    m.base = Math.max(m.base, Math.min(m.p, h));
-    if (autoHeight(s)) {
-      s.style.transform = `translate3d(0, ${Math.max(0, m.H - m.p)}px, 0)`;
-      return;
+    let ty;
+    if (autoHeight(s)) ty = Math.max(0, m.H - m.p);
+    else {
+      const hT = h + m.bd;
+      const p = m.p > hT ? hT + rubber(m.p - hT) : m.p;
+      m.base = Math.max(m.base, Math.min(p, hT));
+      const lay = Math.max(p, m.base, 0);
+      if (!(Math.abs(lay - m.lay) <= 0.01)) { m.lay = lay; s.style.setProperty('--sheet-h', `${lay - m.bd}px`); }
+      s.style.maxHeight = lay > hT + 0.5 ? 'none' : '';
+      ty = lay - p;
     }
-    const lay = Math.max(m.p, m.base, 0);
-    if (!(Math.abs(lay - m.lay) <= 0.01)) { m.lay = lay; s.style.setProperty('--sheet-h', `${lay}px`); }
-    s.style.maxHeight = lay > h + 0.5 ? 'none' : '';
-    s.style.transform = `translate3d(0, ${lay - m.p}px, 0)`;
+    s.style.transform = `translate3d(0, ${ty}px, 0)`;
+    // Desktop: was unter den Arranger-Rand rutscht, blitzt sonst unter der Fachleiste hervor (Schatten bleibt).
+    // Am Handy deckt die Leiste bis zum Rand ab, dort spart das Malen.
+    s.style.clipPath = ty > 0.5 && !narrow.matches ? `inset(-80px -80px ${ty}px -80px)` : '';
   }
 
   function toRest(s, m) {
@@ -131,6 +140,7 @@ export function mountSheets({ ui, arranger }) {
       s.style.maxHeight = '';
     }
     s.style.transform = '';
+    s.style.clipPath = '';
     lastAb = arr.getBoundingClientRect().bottom;
     syncPad();
     reveal();
@@ -141,6 +151,7 @@ export function mountSheets({ ui, arranger }) {
     delete s.dataset.motion;
     s.classList.remove('entering', 'leaving', 'dragging');
     s.style.transform = '';
+    s.style.clipPath = '';
     s.style.maxHeight = '';
     s.style.zIndex = '';
     s.style.removeProperty('--sheet-h');
@@ -186,7 +197,8 @@ export function mountSheets({ ui, arranger }) {
       m.v = v;
       // Reduzierte Bewegung: nicht über das Ziel hinaus
       if (reduced.matches && Math.sign(x) !== Math.sign(x0)) { m.p = m.target; m.v = 0; }
-      const settled = Math.abs(m.p - m.target) < 0.25 && Math.abs(m.v) < 15;
+      // In Ruhe, sobald nichts mehr zu sehen ist; bei reduzierter Bewegung ohne langen Ausklang
+      const settled = reduced.matches ? Math.abs(m.p - m.target) < 1.5 && Math.abs(m.v) < 60 : Math.abs(m.p - m.target) < 0.25 && Math.abs(m.v) < 15;
       if (!m.open) {
         // Liegt sie unter der neuen, verschwindet sie erst, wenn die neue sie ganz bedeckt
         const covered = m.cover && S(m.cover).p >= m.p - 0.5;
@@ -222,6 +234,7 @@ export function mountSheets({ ui, arranger }) {
     m.cover = null;
     m.drag = null;
     if (autoHeight(s)) m.H = s.offsetHeight;
+    else if (m.p <= GONE) { s.style.setProperty('--sheet-h', `${openFrac(s) * 100}%`); measure(s, m); }
     m.target = restP(s, h);
     if (m.p <= GONE) {
       // Von zu: Layout gleich in Zielhöhe, die Bewegung ist reines Verschieben
@@ -275,7 +288,7 @@ export function mountSheets({ ui, arranger }) {
     sheets.push(sheet);
     const isOpen = shown(sheet);
     was.set(sheet, isOpen);
-    state.set(sheet, { mode: 'rest', open: isOpen, p: HIDE, v: 0, base: 0, lay: NaN, target: HIDE, cover: null, drag: null, ab: null, H: 0, fresh: 0 });
+    state.set(sheet, { mode: 'rest', open: isOpen, p: HIDE, v: 0, base: 0, lay: NaN, target: HIDE, cover: null, drag: null, ab: null, H: 0, fresh: 0, bd: 0 });
     const grip = el('div', 'sheet-grip');
     grip.title = 'Ziehen oder schubsen: Mitte, oben – nach unten wischen schließt';
     sheet.prepend(grip);
@@ -292,7 +305,7 @@ export function mountSheets({ ui, arranger }) {
       const h = full();
       if (m.mode === 'rest') {
         // Aus der Ruhe: aktuelle Lage übernehmen
-        m.p = cssH(sheet);
+        m.p = measure(sheet, m);
         m.base = m.p;
         m.lay = NaN;
       }
@@ -306,7 +319,6 @@ export function mountSheets({ ui, arranger }) {
       const p0 = m.p;
       const y0 = e.clientY;
       const t0 = e.timeStamp;
-      let raw = p0;
       // Geschwindigkeit aus den letzten ~100 ms Bewegung; ruht der Finger vor dem Loslassen, klingt sie ab
       let trail = [{ y: y0, t: e.timeStamp }];
       const velocity = (tUp) => {
@@ -321,9 +333,8 @@ export function mountSheets({ ui, arranger }) {
         if (trail.length > 12) trail.shift();
       };
       const place = (ev) => {
-        raw = p0 - (ev.clientY - y0);
-        if (autoHeight(sheet)) m.p = Math.min(raw, m.H);
-        else m.p = raw > h ? h + rubber(raw - h) : raw;
+        m.p = p0 - (ev.clientY - y0);
+        if (autoHeight(sheet)) m.p = Math.min(m.p, m.H);
         apply(sheet, m, h);
       };
       sheet.classList.add('dragging');
@@ -344,8 +355,8 @@ export function mountSheets({ ui, arranger }) {
         // Kurze, schnelle Geste zählt als Schubs, auch wenn die letzten Millisekunden ruhig waren
         const quick = ev.timeStamp - t0 < 250 && Math.abs(dy) > 16;
         const v = quick ? Math.sign(dy) * Math.max(FLICK * 2, Math.abs(vel)) : vel;
-        // Die echte Geschwindigkeit geht in die Feder (im Gummiband gedämpft)
-        m.v = clamp(-vel * 1000 * (raw > h ? rubberSlope(raw - h) : 1), -8000, 8000);
+        // Die echte Geschwindigkeit geht in die Feder
+        m.v = clamp(-vel * 1000, -8000, 8000);
         // Erst nach dem Ende der Berührung schließen: verschwindet das Element mitten im Touch-Ablauf,
         // erkennt der Browser den nächsten Tipp nicht als Klick
         const shut = () => { close(sheet, null); setTimeout(() => ui.setDock(null), 0); };
@@ -358,7 +369,7 @@ export function mountSheets({ ui, arranger }) {
         if (target === 0) { shut(); return; }
         stored()[keyOf(sheet)] = target;
         try { localStorage.setItem(KEY, JSON.stringify(snaps)); } catch { /* egal */ }
-        m.target = target * h;
+        m.target = target * h + m.bd;
         setPad(Math.max(pad, m.target));
         spring(sheet, m);
       }, () => {
@@ -389,7 +400,6 @@ export function mountSheets({ ui, arranger }) {
   // In Ruhe: offen in gemerkter Höhe oder ganz weg, ohne Reste von Bewegung
   function settleAll() {
     if (raf) { cancelAnimationFrame(raf); raf = 0; }
-    const h = full();
     for (const s of sheets) {
       const m = S(s);
       const isOpen = shown(s);
@@ -397,7 +407,8 @@ export function mountSheets({ ui, arranger }) {
       toHidden(s, m);
       if (isOpen) {
         m.open = true;
-        m.p = m.target = restP(s, h);
+        s.style.setProperty('--sheet-h', `${openFrac(s) * 100}%`);
+        m.p = m.target = measure(s, m);
         m.base = m.p;
         toRest(s, m);
       }

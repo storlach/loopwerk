@@ -4,6 +4,62 @@
 const path = require('path');
 const { openApp, createChecker, clickR, selectR, createCard, reveal } = require('./harness.cjs');
 
+// Bewegung pro Bild aufzeichnen: gemessen kurz vor dem Malen (ResizeObserver läuft nach allen rAF-Rückrufen)
+const startFrames = (page, sels) => page.evaluate((sels) => {
+  const arr = document.querySelector('.arranger');
+  const probe = document.body.appendChild(document.createElement('div'));
+  probe.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+  const rows = [];
+  let ft = 0, flip = 0, raf = 0;
+  const ro = new ResizeObserver(() => {
+    const row = { t: ft, ab: arr.getBoundingClientRect().bottom };
+    for (const s of sels) {
+      const n = document.querySelector(s);
+      if (!n || getComputedStyle(n).display === 'none') continue;
+      const r = n.getBoundingClientRect();
+      row[s] = { top: r.top, vis: row.ab - r.top, z: Number(getComputedStyle(n).zIndex) || 0, drag: n.classList.contains('dragging') };
+    }
+    rows.push(row);
+  });
+  ro.observe(probe);
+  const loop = (t) => { ft = t; flip ^= 1; probe.style.width = `${1 + flip}px`; raf = requestAnimationFrame(loop); };
+  raf = requestAnimationFrame(loop);
+  window.__frames = () => { cancelAnimationFrame(raf); ro.disconnect(); probe.remove(); return rows; };
+}, sels);
+const stopFrames = (page) => page.evaluate(() => window.__frames());
+// Kennzahlen einer Bewegung: Tempo je 16,7 ms (ausgelassene Bilder zählen nicht als Sprung), ohne Finger
+function motion(rows, sel) {
+  const pts = rows.filter((r) => r[sel]).map((r) => ({ t: r.t, top: r[sel].top, vis: r[sel].vis, z: r[sel].z, drag: r[sel].drag }));
+  let peak = 0, jerk = 0, prev = null, moving = 0, t0 = null, t1 = null;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    if (b.t <= a.t) continue;
+    const sp = ((b.top - a.top) / (b.t - a.t)) * 16.7;
+    if (Math.abs(b.top - a.top) > 0.5) { moving++; t0 ??= a.t; t1 = b.t; }
+    // Tempoänderung nur zwischen regelmäßigen Bildern: ausgelassene Bilder (Last) sind kein Ruck der Schublade
+    const even = b.t - a.t <= 25;
+    if (!a.drag && !b.drag) { peak = Math.max(peak, Math.abs(sp)); if (prev != null && even) jerk = Math.max(jerk, Math.abs(sp - prev)); }
+    prev = a.drag || b.drag || !even ? null : sp;
+  }
+  const r = (v) => Math.round(v * 10) / 10;
+  return { n: pts.length, first: pts[0], last: pts[pts.length - 1], pts, moving, ms: t1 != null ? Math.round(t1 - t0) : 0, peak: r(peak), jerk: r(jerk) };
+}
+// Zeiger-Gesten mit festen Zeitstempeln: Geschwindigkeit hängt nicht von der Last der Testmaschine ab
+async function gesture(cdp, kind, x, y, dys, stepMs = 16, holdMs = 0) {
+  const t0 = Date.now() / 1000;
+  let t = t0;
+  const send = (type, yy) => (kind === 'touch'
+    ? cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y: yy }], timestamp: t })
+    : cdp.send('Input.dispatchMouseEvent', { type, x, y: yy, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1, timestamp: t }));
+  await send(kind === 'touch' ? 'touchStart' : 'mousePressed', y);
+  let last = y;
+  for (const dy of dys) { t += stepMs / 1000; last = y + dy; await send(kind === 'touch' ? 'touchMove' : 'mouseMoved', last); }
+  t += (stepMs + holdMs) / 1000;
+  await send(kind === 'touch' ? 'touchEnd' : 'mouseReleased', last);
+}
+const ramp = (dy, steps) => Array.from({ length: steps }, (_, i) => (dy * (i + 1)) / steps);
+const rest = (page) => page.waitForFunction(() => !document.querySelector('.sheet[data-motion], .sheet.leaving'), null, { timeout: 3000 });
+
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
 const { check, finish } = createChecker();
@@ -75,65 +131,110 @@ const { check, finish } = createChecker();
     await page.keyboard.press('Control+z');
 
     // ---------- Schubladen ----------
-    // Ziehen am Griff mit der Maus: wait = Pause je Schritt (langsam ziehen) oder 0 (Schubs)
-    const mdrag = async (sel, dy, steps, wait) => {
-      const g = await rect(`${sel} > .sheet-grip`);
-      await page.mouse.move(g.x + g.w / 2, g.y + 8);
-      await page.mouse.down();
-      for (let i = 1; i <= steps; i++) { await page.mouse.move(g.x + g.w / 2, g.y + 8 + (dy * i) / steps); if (wait) await page.waitForTimeout(wait); }
-      if (wait) await page.waitForTimeout(120);
-      await page.mouse.up();
-    };
+    let cdp = await page.context().newCDPSession(page);
+    const gripAt = async (sel) => { const g = await rect(`${sel} > .sheet-grip`); return { x: g.x + g.w / 2, y: g.y + 9 }; };
+    // Ziehen am Griff mit der Maus: langsam (am Ende ruhig halten) oder als Schubs (kurz und schnell)
+    const mdrag = async (sel, dy, steps, slow) => { const g = await gripAt(sel); await gesture(cdp, 'mouse', g.x, g.y, ramp(dy, steps), 16, slow ? 160 : 0); };
+    const visH = async (sel) => { const r = await rect(sel); return (await rect('.arranger')).b - r.y; };
+    await startFrames(page, ['#mixer']);
     await page.click('#mixer-btn');
     await page.waitForTimeout(40);
     const entering = await page.evaluate(() => document.getElementById('mixer').classList.contains('entering'));
     check('Schublade fährt animiert herein', entering);
-    await page.waitForTimeout(550);
+    await rest(page);
+    const fOpen = motion(await stopFrames(page), '#mixer');
     const dk = await rect('#mixer');
     const ar = await rect('.arranger');
     check('Mixer liegt als Schublade über dem Arranger', Math.abs(dk.b - ar.b) < 2 && dk.h < ar.h && Math.abs(ar.h - arr0.h) < 1, JSON.stringify({ dk, ar }));
     check('Schublade öffnet in der Mitte (50 %)', Math.abs(dk.h / ar.h - 0.5) < 0.02, `${dk.h} / ${ar.h}`);
+    check('Öffnen: startet unter dem Rand und gleitet ohne Sprung herein (Feder, ≤ 62 px je Bild, Tempo ändert sich ≤ 55 px)',
+      fOpen.first.vis <= 1 && fOpen.moving >= 6 && fOpen.ms >= 250 && fOpen.peak <= 62 && fOpen.jerk <= 55, JSON.stringify({ first: fOpen.first, moving: fOpen.moving, ms: fOpen.ms, peak: fOpen.peak, jerk: fOpen.jerk }));
     const shadow = await page.evaluate(() => getComputedStyle(document.getElementById('mixer')).boxShadow);
     check('Schublade hat Griff und Schatten', shadow !== 'none' && await page.locator('#mixer > .sheet-grip').isVisible(), shadow);
     const pad1 = await page.evaluate(() => getComputedStyle(document.querySelector('.arr-grid')).paddingBottom);
     check('Arranger lässt unten Platz zum Scrollen', parseFloat(pad1) >= dk.h - 2, pad1);
     // Langsam nach oben ziehen: rastet am nächsten Haltepunkt (oben, 100 %) ein, animiert
-    await mdrag('#mixer', -ar.h * 0.25, 10, 16);
-    await page.waitForTimeout(600);
+    await startFrames(page, ['#mixer']);
+    await mdrag('#mixer', -ar.h * 0.3, 10, true);
+    await rest(page);
+    const fUp = motion(await stopFrames(page), '#mixer');
     const dk2 = await rect('#mixer');
     check('Aufziehen rastet oben ein (100 %)', Math.abs(dk2.h / ar.h - 1) < 0.02, `${dk.h} → ${dk2.h} / ${ar.h}`);
+    const followed = fUp.pts.filter((p) => p.drag).every((p, i, a) => i === 0 || p.vis >= a[i - 1].vis - 0.5);
+    check('Beim Ziehen folgt die Schublade dem Zeiger, danach gleitet sie weich ein', followed && fUp.jerk <= 30, JSON.stringify({ jerk: fUp.jerk, peak: fUp.peak }));
     check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide.mixer === 1));
     // Kurzer Schubs nach unten: eine Stufe tiefer (Mitte), nicht zu
-    await mdrag('#mixer', 40, 2, 0);
+    await mdrag('#mixer', 40, 2, false);
     await page.waitForTimeout(80);
-    const moving = await rect('#mixer');
-    await page.waitForTimeout(500);
+    const moving = await visH('#mixer');
+    await rest(page);
     const dk3 = await rect('#mixer');
     check('Schubs nach unten rastet in der Mitte ein', Math.abs(dk3.h / ar.h - 0.5) < 0.02 && await page.evaluate(() => window.loopwerk.ui.dock === 'mixer'), `${dk3.h} / ${ar.h}`);
-    check('Einrasten ist animiert (Zwischenhöhe)', moving.h < dk2.h - 5 && moving.h > dk3.h + 5, `${dk2.h} → ${moving.h} → ${dk3.h}`);
+    check('Einrasten ist animiert (Zwischenhöhe)', moving < dk2.h - 5 && moving > dk3.h + 5, `${dk2.h} → ${moving} → ${dk3.h}`);
     // Kurzer Schubs nach oben: eine Stufe höher
-    await mdrag('#mixer', -40, 2, 0);
-    await page.waitForTimeout(550);
+    await mdrag('#mixer', -40, 2, false);
+    await rest(page);
     check('Schubs nach oben rastet oben ein', Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02);
-    // Langsam fast ganz herunter ziehen: zu
-    await mdrag('#mixer', ar.h * 0.85, 10, 16);
+    // Unterbrechen: Schubs nach unten, nach 100 ms am Griff greifen – keine Sprünge, folgt 1:1
+    await mdrag('#mixer', 40, 2, false);
+    const grab = await page.evaluate(() => new Promise((res) => setTimeout(() => requestAnimationFrame(() => {
+      const s = document.getElementById('mixer');
+      const g = s.querySelector('.sheet-grip').getBoundingClientRect();
+      const ev = (type, y, n = window) => n.dispatchEvent(new PointerEvent(type, { clientX: g.x + 30, clientY: y, button: 0, buttons: 1, pointerId: 9, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true }));
+      const before = s.getBoundingClientRect().top;
+      ev('pointerdown', g.y + 9, s.querySelector('.sheet-grip'));
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const held = s.getBoundingClientRect().top;
+        ev('pointermove', g.y + 9 - 30);
+        requestAnimationFrame(() => {
+          const moved = s.getBoundingClientRect().top;
+          setTimeout(() => { ev('pointerup', g.y + 9 - 30); res({ before, held, moved, wasMoving: before > 80 }); }, 200);
+        });
+      }));
+    }), 100)));
+    check('Laufende Bewegung lässt sich greifen: kein Sprung, folgt dem Zeiger 1:1', grab.wasMoving && Math.abs(grab.held - grab.before) < 1 && Math.abs(grab.moved - (grab.before - 30)) < 1, JSON.stringify(grab));
+    await rest(page);
+    await mdrag('#mixer', -40, 2, false);
+    await rest(page);
+    // Gummiband: über oben hinaus ziehen dehnt nur wenig, danach zurück auf 100 %
+    await startFrames(page, ['#mixer']);
+    await mdrag('#mixer', -300, 15, true);
+    await rest(page);
+    const fRub = motion(await stopFrames(page), '#mixer');
+    const over = Math.max(...fRub.pts.map((p) => p.vis)) - ar.h;
+    check('Gummiband über oben: dehnt sich wenig (10–75 px) und federt zurück', over > 10 && over <= 75 && Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02, `${Math.round(over)} px`);
+    // Langsam fast ganz herunter ziehen: zu – und zwar sichtbar hinausgleitend (Klassenwechsel mitschreiben, unabhängig von der Last)
+    await page.evaluate(() => {
+      const m = document.getElementById('mixer');
+      window.__leave = [];
+      window.__mo = new MutationObserver(() => window.__leave.push({ t: performance.now(), leaving: m.classList.contains('leaving'), shown: getComputedStyle(m).display !== 'none' }));
+      window.__mo.observe(m, { attributes: true, attributeFilter: ['class'] });
+    });
+    await startFrames(page, ['#mixer']);
+    await mdrag('#mixer', ar.h * 0.85, 10, true);
     await page.waitForTimeout(60);
     check('Nach unten ziehen schließt die Schublade', await page.evaluate(() => window.loopwerk.ui.dock === null));
-    const leaving = await page.evaluate(() => { const m = document.getElementById('mixer'); return m.classList.contains('leaving') && getComputedStyle(m).display !== 'none'; });
-    check('Schließen ist animiert (verschwindet nicht sofort)', leaving);
-    await page.waitForTimeout(450);
+    await rest(page);
+    const fShut = motion(await stopFrames(page), '#mixer');
+    const lv = await page.evaluate(() => { window.__mo.disconnect(); const a = window.__leave.find((x) => x.leaving && x.shown); const b = a && window.__leave.find((x) => x.t > a.t && !x.leaving); return a && b ? { ms: Math.round(b.t - a.t) } : null; });
+    const afterRelease = fShut.pts.filter((p, i) => i > 0 && !p.drag && p.top > fShut.pts[i - 1].top + 0.5).length;
+    check('Schließen ist animiert (verschwindet nicht sofort)', lv && lv.ms >= 100 && afterRelease >= 2, JSON.stringify({ lv, afterRelease }));
     check('Nach der Animation ist die Schublade weg', await page.evaluate(() => getComputedStyle(document.getElementById('mixer')).display === 'none'));
     // Mit dem Knopf öffnen und schließen: ebenfalls animiert, öffnet am gemerkten Haltepunkt
     await page.click('#mixer-btn');
-    await page.waitForTimeout(550);
+    await rest(page);
     check('Öffnet am gemerkten Haltepunkt', Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02);
+    await startFrames(page, ['#mixer']);
     await page.click('#mixer-btn');
     await page.waitForTimeout(40);
     check('Schließen per Knopf ist animiert', await page.evaluate(() => document.getElementById('mixer').classList.contains('leaving')));
-    await page.waitForTimeout(450);
+    await rest(page);
+    const fClose = motion(await stopFrames(page), '#mixer');
+    check('Schließen per Knopf: gleitet ganz hinaus, ohne Sprung', fClose.moving >= 5 && fClose.last.vis <= -30 && fClose.jerk <= 60, JSON.stringify({ moving: fClose.moving, last: fClose.last, peak: fClose.peak, jerk: fClose.jerk }));
     await page.click('#mixer-btn');
     await page.keyboard.press('Escape');
     check('Esc schließt das Fach', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    await rest(page);
 
     // Mixer → Inspektor
     await page.click('#mixer-btn');
@@ -297,36 +398,50 @@ const { check, finish } = createChecker();
     // ---------- Handy: Schubladen und Klaviertasten ----------
     app = await openApp({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 2 });
     page = app.page;
-    const cdp = await page.context().newCDPSession(page);
-    const drag = async (x, y, dy, steps = 8, wait = 16) => {
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-      for (let i = 1; i <= steps; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + (dy * i) / steps }] }); await page.waitForTimeout(wait); }
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      await page.waitForTimeout(200);
-    };
+    cdp = await page.context().newCDPSession(page);
+    // Wischen mit festen Zeitstempeln (16 ms je Schritt): ein Schubs bleibt ein Schubs, auch wenn die Maschine ausgelastet ist
+    const swipe = async (sel, dy, steps) => { const g = await rect(`${sel} > .sheet-grip`); await gesture(cdp, 'touch', g.x + g.w / 2, g.y + 9, ramp(dy, steps), 16); };
     const arrM = await rect('.arranger');
     await page.tap('#tab-sounds');
-    await page.waitForTimeout(550);
+    await rest(page);
     const sh = await rect('.shelf');
     const arrM2 = await rect('.arranger');
     check('Handy: Regal liegt als Schublade über den Spuren (Arranger bleibt gleich groß)', Math.abs(sh.b - arrM2.b) < 2 && Math.abs(arrM2.h - arrM.h) < 1 && sh.h < arrM.h, JSON.stringify({ sh, arrM, arrM2 }));
     check('Handy: Regal öffnet in der Mitte', Math.abs(sh.h / arrM2.h - 0.5) < 0.02, `${sh.h} / ${arrM2.h}`);
     // Schubs nach oben: rastet oben (100 %) ein
-    const gM = await rect('.shelf > .sheet-grip');
-    await drag(gM.x + gM.w / 2, gM.y + 8, -60, 3, 10);
-    await page.waitForTimeout(400);
+    await swipe('.shelf', -60, 3);
+    await rest(page);
     const sh2 = await rect('.shelf');
     check('Handy: Schubs nach oben rastet oben ein (100 %)', Math.abs(sh2.h / arrM2.h - 1) < 0.02, `${sh.h} → ${sh2.h}`);
     // Kurzer Schubs nach unten: zurück zur Mitte
-    let gs = await rect('.shelf > .sheet-grip');
-    await drag(gs.x + gs.w / 2, gs.y + 8, 50, 3, 10);
-    await page.waitForTimeout(400);
+    await swipe('.shelf', 50, 3);
+    await rest(page);
     check('Handy: Schubs nach unten rastet in der Mitte ein', Math.abs((await rect('.shelf')).h / arrM2.h - 0.5) < 0.02 && await page.evaluate(() => window.loopwerk.ui.dock === 'sounds'));
-    // Weiter Wisch nach unten: zu, animiert
-    gs = await rect('.shelf > .sheet-grip');
-    await drag(gs.x + gs.w / 2, gs.y + 8, 300, 3, 10);
+    // Weiter Wisch nach unten: zu, und zwar mit dem Schwung des Fingers (kein Stocken beim Loslassen)
+    await startFrames(page, ['.shelf']);
+    await swipe('.shelf', 300, 3);
+    await page.waitForTimeout(100);
     check('Handy: nach unten wischen schließt', await page.evaluate(() => window.loopwerk.ui.dock === null));
-    await page.waitForTimeout(400);
+    await rest(page);
+    const fWipe = motion(await stopFrames(page), '.shelf');
+    const iRel = fWipe.pts.findIndex((p, i) => i > 0 && fWipe.pts[i - 1].drag && !p.drag);
+    const relStep = iRel > 0 ? fWipe.pts[iRel].top - fWipe.pts[iRel - 1].top : 0;
+    check('Handy: Wegwischen fährt mit Schwung weiter (erstes Bild nach dem Loslassen ≥ 20 px)', relStep >= 20, `${Math.round(relStep)} px`);
+    // Wechsel Sounds → Mixer: der Mixer fährt über das Regal, das Regal bleibt liegen, bis es bedeckt ist
+    await page.tap('#tab-sounds');
+    await rest(page);
+    await startFrames(page, ['.shelf', '#mixer']);
+    await page.tap('#mixer-btn');
+    await rest(page);
+    const swRows = await stopFrames(page);
+    const fShelf = motion(swRows, '.shelf');
+    const fMix = motion(swRows, '#mixer');
+    const both = swRows.filter((r) => r['.shelf'] && r['#mixer']);
+    check('Handy: Wechsel Sounds → Mixer: Mixer fährt von unten über das Regal, Regal springt nicht',
+      fMix.first.vis <= 1 && fMix.moving >= 6 && both.length > 3 && both.every((r) => r['#mixer'].z > r['.shelf'].z) && fShelf.pts.every((p) => Math.abs(p.top - fShelf.first.top) <= 1),
+      JSON.stringify({ mixFirst: fMix.first, moving: fMix.moving, both: both.length, shelfTops: [fShelf.first?.top, fShelf.last?.top] }));
+    await page.tap('#mixer-btn');
+    await rest(page);
     // Drumpad am Handy: Antippen = ein Schlag
     await page.evaluate(() => {
       window.__starts = 0;
