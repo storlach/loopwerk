@@ -6,6 +6,7 @@ import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
 import { formatDb } from './arranger.js';
 import { narrow } from './place.js';
+import { makeKnob, relativeDrag } from './knob.js';
 
 const MASTER = '__master';
 const SHORT = { drive: 'Zerr', filter: 'Filter', eq: 'EQ', comp: 'Komp', pump: 'Pump', echo: 'Echo', hall: 'Hall' };
@@ -17,56 +18,6 @@ export const formatParam = (p, v) => {
   if (p.unit === '%') return `${Math.round(v * 100)} %`;
   return String(v);
 };
-
-// Ziehen ändert einen Regler relativ – kein Sprung an die Antippstelle. Am Handy zählt nur senkrechtes Ziehen;
-// waagrechtes Wischen bleibt dem Browser (touch-action: pan-x) und scrollt die Kanäle.
-function relativeDrag(handle, input, { span, touchOnly = false }) {
-  handle.addEventListener('pointerdown', (e) => {
-    if (touchOnly && e.pointerType !== 'touch') return; // Maus am Fader: wie gewohnt
-    if (e.button !== 0) return;
-    const min = Number(input.min);
-    const max = Number(input.max);
-    const y0 = e.clientY;
-    const v0 = Number(input.value);
-    let active = false;
-    const move = (ev) => {
-      if (ev.pointerId !== e.pointerId) return;
-      const dy = ev.clientY - y0;
-      if (!active && Math.abs(dy) < 4) return;
-      active = true;
-      const v = clamp(v0 - (dy / span()) * (max - min), min, max);
-      input.value = String(v);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    const end = (ev) => {
-      if (ev.pointerId !== e.pointerId) return;
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', end);
-      window.removeEventListener('pointercancel', end);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-  });
-}
-
-// Drehregler für das Panorama: senkrecht ziehen, Doppelklick = Mitte. Das Eingabefeld bleibt für Tastatur und Vorleser.
-function makeKnob(input) {
-  const knob = el('div', 'knob');
-  knob.setAttribute('aria-hidden', 'true');
-  knob.append(el('span', 'knob-ind'));
-  const update = () => {
-    const t = (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
-    knob.style.setProperty('--turn', `${Math.round(-135 + t * 270)}deg`);
-    knob.classList.toggle('center', Math.abs(Number(input.value)) < 0.01);
-  };
-  input.addEventListener('input', update);
-  relativeDrag(knob, input, { span: () => 140 });
-  knob.addEventListener('dblclick', () => input.dispatchEvent(new MouseEvent('dblclick')));
-  const wrap = el('div', 'strip-pan-wrap');
-  wrap.append(knob);
-  return { wrap, update };
-}
 
 export function mountMixer({ root, store, engine, ui }) {
   const stripsEl = root.querySelector('#mixer-strips');
@@ -114,7 +65,7 @@ export function mountMixer({ root, store, engine, ui }) {
       pan.addEventListener('input', () => store.setTrack(id, { pan: Number(pan.value) }, 'pan-' + id));
       pan.addEventListener('dblclick', () => store.setTrack(id, { pan: 0 }));
     }
-    const knob = pan ? makeKnob(pan) : null;
+    const knob = pan ? makeKnob(pan, { wrapClass: 'strip-pan-wrap', center: true }) : null;
     const faderRow = el('div', 'strip-fader-row');
     const fader = document.createElement('input');
     fader.type = 'range';
@@ -148,7 +99,7 @@ export function mountMixer({ root, store, engine, ui }) {
       ms.append(mute, solo);
     }
     strip.append(name, sum, fxBtns);
-    if (pan) { knob.wrap.prepend(pan); strip.append(knob.wrap); }
+    if (pan) strip.append(knob.wrap);
     strip.append(faderRow, value, ms);
     const s = { strip, name, sum, fxMap, pan, knob, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);

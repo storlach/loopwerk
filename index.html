@@ -1286,7 +1286,7 @@
     .tbtn.tbtn-del { display: none; }
     .tbtn.tbtn-menu { width: 34px; font-size: 18px; }
     .track-menu-item { padding: 12px 14px; font-size: 15px; }
-    .track-vol { display: none; }
+    .track-vol, .track-vol-wrap { display: none; }
     .add-row { height: 52px; }
     .app.armed-mode .lane { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 50%, transparent); }
 
@@ -1443,7 +1443,23 @@
   /* Arranger: Lineal, Spurköpfe, Clips mit Etikett */
   .ruler, .corner { background: var(--panel); }
   .bar-mark { font: 500 9.5px/1 var(--font-mono); color: var(--muted); }
-  .loop-band { background: var(--amber); }
+  .loop-band { top: 0; height: 3px; border-radius: 0; background: var(--amber); }
+  .loop-band.off { opacity: 0.3; }
+  /* Spuren: Punktraster wie eine Lochplatte, Clips liegen darüber */
+  .lane::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background: var(--dots); }
+  .track-dot { flex: none; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; background: var(--cat, var(--line)); }
+  .track-btns { gap: 6px; }
+  .track-vol-wrap { position: relative; display: flex; margin-left: 6px; padding: 3px; }
+  .track-vol-wrap .track-vol { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+  .track-vol-wrap:focus-within .knob { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .track-vol-wrap .knob { width: 26px; height: 26px; }
+  .track-vol-wrap .knob-ind { top: 3px; height: 8px; transform-origin: 50% 10px; }
+  @media (max-width: 760px) { .track-vol-wrap { display: none; } }
+  .clip-label { display: flex; align-items: center; gap: 6px; }
+  .clip-tag {
+    margin-left: auto; flex: none; padding: 2px 4px; border-radius: 2px;
+    background: var(--label-ink); color: var(--cat); font: 600 8px/1 var(--font-mono); letter-spacing: 0.04em;
+  }
   .track-head { background: var(--panel); }
   .track-name { font: 600 13px/1.2 var(--font-body); }
   .tbtn {

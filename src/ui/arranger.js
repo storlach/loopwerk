@@ -3,6 +3,7 @@
 
 import { audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, isAbove, totalBeats, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
+import { makeKnob } from './knob.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 const narrow = window.matchMedia('(max-width: 760px)');
@@ -64,11 +65,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const top = el('div', 'track-top');
     const name = el('div', 'track-name');
     name.title = 'Doppelklick zum Umbenennen';
+    // Farbpunkt: Kategorie des ersten Clips der Spur
+    const dot = el('span', 'track-dot');
     const menuBtn = el('button', 'tbtn tbtn-menu', '⋯');
     menuBtn.type = 'button';
     menuBtn.title = 'Spur: duplizieren, verschieben, umbenennen, löschen';
     menuBtn.setAttribute('aria-haspopup', 'menu');
-    top.append(name, menuBtn);
+    top.append(dot, name, menuBtn);
     const btns = el('div', 'track-btns');
     const mute = el('button', 'tbtn tbtn-mute', 'M');
     mute.type = 'button';
@@ -83,7 +86,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
     vol.step = '0.01';
     vol.className = 'track-vol';
     vol.id = `vol-${track.id}`;
-    btns.append(mute, solo, vol);
+    // Lautstärke als Drehregler (Doppelklick = Grundwert)
+    const volKnob = makeKnob(vol, { wrapClass: 'track-vol-wrap' });
+    vol.addEventListener('dblclick', () => store.setTrack(track.id, { volume: 0.8 }));
+    btns.append(mute, solo, volKnob.wrap);
     head.append(top, btns);
     const lane = el('div', 'lane');
     lane.dataset.trackId = track.id;
@@ -100,9 +106,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
     head.addEventListener('pointerdown', (e) => startTrackDrag(e, track.id));
 
     // Klick auf den Spurkopf zeigt die Spur im Inspektor (Lautstärke, Panorama, Effekte)
-    head.addEventListener('click', (e) => { if (!e.target.closest('button, input')) ui.selectTrack?.(track.id); });
+    head.addEventListener('click', (e) => { if (!e.target.closest('button, input, .knob')) ui.selectTrack?.(track.id); });
 
-    const r = { row, head, name, top, menuBtn, mute, solo, vol, lane };
+    const r = { row, head, name, dot, top, menuBtn, mute, solo, vol, volKnob, lane };
     rows.set(track.id, r);
     return r;
   }
@@ -151,6 +157,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       r.vol.setAttribute('aria-label', `Lautstärke ${t.name}`);
       r.menuBtn.setAttribute('aria-label', `Menü für Spur ${t.name}`);
       if (document.activeElement !== r.vol) r.vol.value = String(t.volume);
+      r.volKnob.update();
+      const first = t.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
+      const fs = first && library.get(first.sampleId);
+      r.dot.className = `track-dot${fs ? ` cat-${fs.colorCat ?? fs.category}` : ''}`;
       r.row.classList.toggle('silent', t.mute || (anySolo && !t.solo));
       r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === t.id);
     });
@@ -224,7 +234,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Spurkopf ziehen: verschiebt die Spur, mit Alt/Strg wird sie kopiert. (Finger nutzen das Menü.)
   const dropLine = el('div', 'track-drop-line');
   function startTrackDrag(e, trackId) {
-    if (e.button !== 0 || e.pointerType === 'touch' || e.target.closest('button, input')) return;
+    if (e.button !== 0 || e.pointerType === 'touch' || e.target.closest('button, input, .knob')) return;
     const r = rows.get(trackId);
     const sy = e.clientY;
     let to = null;
@@ -258,6 +268,25 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // ---------- Clips ----------
 
   // Wellenform, skaliert mit der Hüllkurve; darüber die Hüllkurve als Linie.
+  // Melodie-Pattern: die Noten als kleine Balken (wie eine Mini-Piano-Roll), über die Clip-Länge wiederholt
+  function drawNotes(c, clip, pat, w, h) {
+    const len = pat.bars * 4;
+    const pitches = pat.notes.map((n) => n.pitch);
+    const lo = Math.min(...pitches);
+    const span = Math.max(1, Math.max(...pitches) - lo);
+    const pad = 4;
+    const off = clip.offsetBeats || 0;
+    for (let rep = Math.floor(off / len) * len - off; rep < clip.lengthBeats; rep += len) {
+      for (const n of pat.notes) {
+        const x0 = (rep + n.start) * ppb();
+        const x1 = (rep + n.start + n.len) * ppb();
+        if (x1 <= 0 || x0 >= w) continue;
+        const y = Math.round(pad + (1 - (n.pitch - lo) / span) * (h - 2 * pad - 3));
+        c.fillRect(Math.max(0, x0) + 1, y, Math.max(2, Math.min(w, x1) - Math.max(0, x0) - 2), 3);
+      }
+    }
+  }
+
   function drawWave(canvas, clip, sample) {
     const w = Math.max(1, Math.round(clip.lengthBeats * ppb()));
     const h = canvas.clientHeight || 30;
@@ -271,19 +300,27 @@ export function mountArranger({ root, store, engine, library, ui }) {
     c.clearRect(0, 0, w, h);
     const color = getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888';
     c.fillStyle = color;
-    const peaks = sample.peaks;
-    const perBeat = peaks.length / sample.lengthBeats;
     const mid = h / 2;
     const off = clip.offsetBeats || 0;
-    for (let x = 0; x < w; x++) {
-      const b0 = off + x / ppb();
-      let m = 0;
-      const k0 = Math.floor(b0 * perBeat);
-      const k1 = Math.max(k0 + 1, Math.ceil((b0 + 1 / ppb()) * perBeat));
-      for (let k = k0; k < k1; k++) m = Math.max(m, peaks[k % peaks.length]);
-      const env = clipEnvelope(clip, (x + 0.5) / ppb());
-      const a = Math.max(0.5, Math.min(mid, (m / 0.62) * mid * env));
-      c.fillRect(x, mid - a, 1, a * 2);
+    const pat = sample.patternId && store.project.patterns?.[sample.patternId];
+    if (pat?.type === 'synth' && pat.notes?.length) drawNotes(c, clip, pat, w, h);
+    else {
+      // Wellenform als LED-Punkte: Spalten aus 3-px-Punkten, leise Stellen bleiben eine gepunktete Mittellinie
+      const peaks = sample.peaks;
+      const perBeat = peaks.length / sample.lengthBeats;
+      const DOT = 3;
+      const PITCH = 4;
+      const rows = Math.max(0, Math.floor((mid - DOT / 2) / PITCH));
+      for (let x = 0; x + DOT <= w; x += PITCH) {
+        const b0 = off + x / ppb();
+        let m = 0;
+        const k0 = Math.floor(b0 * perBeat);
+        const k1 = Math.max(k0 + 1, Math.ceil((b0 + PITCH / ppb()) * perBeat));
+        for (let k = k0; k < k1; k++) m = Math.max(m, peaks[k % peaks.length]);
+        const env = clipEnvelope(clip, (x + PITCH / 2) / ppb());
+        const n = Math.min(rows, Math.round(((m / 0.62) * mid * env) / PITCH));
+        for (let k = -n; k <= n; k++) c.fillRect(x, Math.round(mid - DOT / 2 + k * PITCH), DOT, DOT);
+      }
     }
     // Markierung, wo das Sample von vorn beginnt
     c.globalAlpha = 0.55;
@@ -330,6 +367,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     node.style.width = clip.lengthBeats * ppb() + 'px';
     node.classList.toggle('selected', ui.selectedClipId === clip.id);
     const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
+    if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
     const canvas = el('canvas', 'clip-wave');
     const trim = el('div', 'clip-trim');
     trim.title = 'Ziehen zum Kürzen';

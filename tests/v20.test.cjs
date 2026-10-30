@@ -88,6 +88,30 @@ const { check, finish } = createChecker();
     check('Werkstück dunkel: Graphit-Grund, orange Start-Taste, schwarzes Display', look.bg === 'rgb(15, 15, 15)' && look.play === 'rgb(255, 91, 31)' && look.lcd === 'rgb(5, 5, 5)', JSON.stringify(look));
     check('Werkstück: Archivo für Text, Martian Mono für Anzeigen, Drums gelb', /Archivo/.test(look.body) && /Martian Mono/.test(look.mono) && look.drums.toUpperCase() === '#FFC21A', JSON.stringify(look));
     check('Werkstück: Clips tragen ein farbiges Etikett mit dunkler Schrift', look.label !== 'rgba(0, 0, 0, 0)' && look.labelInk === 'rgb(17, 17, 17)', JSON.stringify(look));
+    // Clips und Spurköpfe wie im Entwurf: LED-Wellenform, Pattern-Schild, Farbpunkt, Lautstärke-Drehregler
+    const heads = await page.evaluate(() => {
+      const row = document.querySelector('.track-row');
+      return { dot: getComputedStyle(row.querySelector('.track-dot')).backgroundColor, knob: !!row.querySelector('.track-vol-wrap .knob'), slider: getComputedStyle(row.querySelector('.track-vol')).opacity };
+    });
+    check('Spurkopf: Farbpunkt der Kategorie und Lautstärke als Drehregler', heads.dot === 'rgb(255, 194, 26)' && heads.knob && heads.slider === '0', JSON.stringify(heads));
+    const vol0 = await page.evaluate(() => window.loopwerk.store.track('t1').volume);
+    const tk = await page.locator('.track-row:first-child .track-vol-wrap .knob').boundingBox();
+    await page.mouse.move(tk.x + tk.width / 2, tk.y + tk.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(tk.x + tk.width / 2, tk.y + tk.height / 2 + 40, { steps: 5 });
+    await page.mouse.up();
+    check('Spur-Drehregler nach unten ziehen macht leiser', await page.evaluate(() => window.loopwerk.store.track('t1').volume) < vol0 - 0.1);
+    await page.keyboard.press('Control+z');
+    const dots = await page.evaluate(() => {
+      // LED-Wellenform: in einer Spalte wechseln Punkt und Lücke (keine durchgehende Fläche)
+      const cv = document.querySelector('.clip[data-clip-id="c4"] .clip-wave');
+      const g = cv.getContext('2d');
+      const col = g.getImageData(Math.round(cv.width * 0.3), 0, 1, cv.height).data;
+      let changes = 0;
+      for (let y = 1; y < cv.height; y++) if ((col[y * 4 + 3] > 0) !== (col[(y - 1) * 4 + 3] > 0)) changes++;
+      return changes;
+    });
+    check('Wellenform als LED-Punkte (Punkt, Lücke, Punkt …)', dots >= 4, String(dots));
     await page.emulateMedia({ colorScheme: 'light' });
 
     // ---------- Überlappen im Arranger: Drag & Drop zerstört nichts ----------
