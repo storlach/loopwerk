@@ -153,6 +153,33 @@ const { check, finish } = createChecker();
     check('Gruppe auflösen entfernt Kopf und Zugehörigkeit', await page.evaluate(() => !document.querySelector('.group-row') && !window.loopwerk.store.project.tracks.some((t) => t.groupId) && !(window.loopwerk.store.project.groups || []).length));
     await page.keyboard.press('Control+z');
     check('Rückgängig stellt die Gruppe wieder her', await page.evaluate(() => !!document.querySelector('.group-row') && window.loopwerk.store.project.tracks.filter((t) => t.groupId).length === 2));
+    // ---------- Licht aus der Musik ----------
+    await page.evaluate(() => { const s = window.loopwerk.store; s.project.tracks.forEach((t) => { if (t.groupId) delete t.groupId; }); s.project.groups = []; });
+    check('Ohne Wiedergabe kein Licht', await page.evaluate(() => !window.loopwerk.glow.state.shown && document.querySelector('.beam').hidden));
+    // Nur die Drums klingen: alles gelb, sonst nichts
+    await page.evaluate(() => { const s = window.loopwerk.store; s.setTrack('t1', { solo: true }); window.loopwerk.engine.setPosition(16); });
+    await page.click('#play-btn');
+    await page.waitForTimeout(1800);
+    let gl = await page.evaluate(() => window.loopwerk.glow.state);
+    const others = Object.entries(gl.levels).filter(([c]) => c !== 'drums').reduce((n, [, v]) => n + v, 0);
+    check('Nur Drums klingen: Licht nur in der Drum-Farbe', gl.shown && gl.levels.drums > 0.02 && others < 0.002, JSON.stringify(gl));
+    check('Umgebungslicht folgt der Lautstärke', gl.amp > 0.2 && parseFloat(await page.locator('.ambient').evaluate((n) => n.style.opacity)) > 0.05, JSON.stringify(gl));
+    check('Funken fliegen an der Marke', gl.sparks > 0, JSON.stringify(gl));
+    const beamPos = await page.evaluate(() => {
+      const b = document.querySelector('.beam').getBoundingClientRect();
+      const p = document.querySelector('.playhead').getBoundingClientRect();
+      return { d: Math.abs(b.left + 150 - p.left - p.width / 2) };
+    });
+    check('Leuchten sitzt direkt an der Marke', beamPos.d < 12, JSON.stringify(beamPos));
+    check('Licht kostet wenig Rechenzeit (< 4 ms je Bild)', gl.cost < 4, gl.cost.toFixed(2) + ' ms');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v21-licht.png') });
+    await page.evaluate(() => window.loopwerk.store.setTrack('t1', { solo: false }));
+    await page.waitForTimeout(900);
+    gl = await page.evaluate(() => window.loopwerk.glow.state);
+    check('Kommen andere Spuren dazu, mischen sich ihre Farben ein', Object.entries(gl.levels).filter(([c, v]) => c !== 'drums' && v > 0.01).length >= 1, JSON.stringify(gl.levels));
+    await page.click('#play-btn');
+    await page.waitForTimeout(2500);
+    check('Nach dem Stopp klingt das Licht aus und schaltet ab', await page.evaluate(() => !window.loopwerk.glow.state.shown));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

@@ -7,7 +7,7 @@ import { makeKnob } from './knob.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 const narrow = window.matchMedia('(max-width: 760px)');
-const headW = () => (narrow.matches ? 124 : 176);
+export const headW = () => (narrow.matches ? 124 : 176);
 const WAVE_TOP = 17; // Abstand der Wellenform vom Clip-Oberrand (Platz für den Namen)
 
 export const formatDb = (g) => (g <= 0.0001 ? '−∞ dB' : `${(20 * Math.log10(g)).toFixed(1).replace('.', ',').replace('-', '−')} dB`);

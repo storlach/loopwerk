@@ -16,6 +16,7 @@ import { mountCreate } from './ui/create.js';
 import { mountSheets } from './ui/sheets.js';
 import { mountTips } from './ui/tips.js';
 import { mountBrandMeter } from './ui/brand-meter.js';
+import { mountGlow } from './ui/glow.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
@@ -381,6 +382,7 @@ async function boot() {
   const recording = mountRecording({ store, engine, ui, arranger, recorder });
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine);
+  const glow = mountGlow({ engine, store, library, ui });
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
@@ -472,7 +474,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, ready: true };
 }
 
 boot().catch((err) => {

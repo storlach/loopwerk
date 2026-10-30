@@ -101,6 +101,10 @@
     --cat-synth: #7C6AF0;
     --cat-fx: #8A8478;
     --cat-own: #E2508A;
+    --ambient-max: 0.32; --glow-blend: multiply;
+    /* Spuren durchscheinend, damit das Umgebungslicht dahinter wirkt */
+    --lane-a: color-mix(in srgb, var(--lane) 40%, transparent);
+    --lane-alt-a: color-mix(in srgb, var(--lane-alt) 40%, transparent);
     --font-display: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
     --font-body: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
     --font-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -135,7 +139,7 @@
       --line: #2C2C2C; --grid-bar: #2A2A2A; --grid-beat: #1C1C1C; --deck: #181818; --deck-2: #232323;
       --deck-ink: #F2EFE9; --deck-muted: #A39E94; --lcd: #050505; --amber: #FF5B1F; --amber-dim: #8F8A80;
       --focus: #FFFFFF; --meter-ok: #22C97C; --meter-warm: #FFC21A; --meter-hot: #FF3B30; --meter-off: #262626;
-      --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8;
+      --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8; --ambient-max: 0.55; --glow-blend: screen;
       --key-face: linear-gradient(180deg, #2B2B2B, #222222);
       --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
       --well: #0B0B0B; --well-shadow: inset 0 1px 3px #000;
@@ -151,7 +155,7 @@
     --line: #2C2C2C; --grid-bar: #2A2A2A; --grid-beat: #1C1C1C; --deck: #181818; --deck-2: #232323;
     --deck-ink: #F2EFE9; --deck-muted: #A39E94; --lcd: #050505; --amber: #FF5B1F; --amber-dim: #8F8A80;
     --focus: #FFFFFF; --meter-ok: #22C97C; --meter-warm: #FFC21A; --meter-hot: #FF3B30; --meter-off: #262626;
-    --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8;
+    --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8; --ambient-max: 0.55; --glow-blend: screen;
     --key-face: linear-gradient(180deg, #2B2B2B, #222222);
     --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
     --well: #0B0B0B; --well-shadow: inset 0 1px 3px #000;
@@ -546,7 +550,7 @@
     background-image:
       repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
       repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb)),
-      repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
+      repeating-linear-gradient(to right, var(--lane-a) 0 calc(var(--bar) * 4), var(--lane-alt-a) calc(var(--bar) * 4) calc(var(--bar) * 8));
     touch-action: pan-x pan-y;
     isolation: isolate;
   }
@@ -555,12 +559,12 @@
       repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
       repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb)),
       repeating-linear-gradient(to right, color-mix(in srgb, var(--grid-beat) 45%, transparent) 0 1px, transparent 1px calc(var(--ppb) / 4)),
-      repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
+      repeating-linear-gradient(to right, var(--lane-a) 0 calc(var(--bar) * 4), var(--lane-alt-a) calc(var(--bar) * 4) calc(var(--bar) * 8));
   }
   .arr-grid.coarse .lane {
     background-image:
       repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
-      repeating-linear-gradient(to right, var(--lane) 0 calc(var(--bar) * 4), var(--lane-alt) calc(var(--bar) * 4) calc(var(--bar) * 8));
+      repeating-linear-gradient(to right, var(--lane-a) 0 calc(var(--bar) * 4), var(--lane-alt-a) calc(var(--bar) * 4) calc(var(--bar) * 8));
   }
   .arr-grid.fine .ruler {
     background-image:
@@ -1506,6 +1510,16 @@
   .track-row.in-group .track-head { box-shadow: inset 3px 0 0 var(--line); }
   .track-row.in-group.selected .track-head { box-shadow: inset 3px 0 0 var(--amber); }
   .track-row[hidden], .group-row[hidden] { display: none; }
+  /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
+  .arranger { position: relative; isolation: isolate; }
+  .arranger > .arr-scroll { position: relative; z-index: 1; }
+  .ambient {
+    position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%;
+    pointer-events: none; opacity: 0; transition: opacity 0.4s ease;
+  }
+  .lane { background-color: transparent; }
+  .beam { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; mix-blend-mode: var(--glow-blend); }
+  .beam[hidden] { display: none; }
   @media (max-width: 760px) {
     .group-name { letter-spacing: 0.02em; }
     .group-count { display: none; }
