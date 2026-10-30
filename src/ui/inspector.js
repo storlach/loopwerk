@@ -10,6 +10,7 @@ import { formatDb } from './arranger.js';
 import { formatParam } from './mixer.js';
 import { narrow } from './place.js';
 import { place } from './place.js';
+import { bindKeySelect } from './key-select.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -179,7 +180,13 @@ export function mountInspector({ root, store, ui, library, tools }) {
   tminus.addEventListener('click', () => store.setBpm(clamp(store.project.bpm - 1, MIN_BPM, MAX_BPM)));
   tplus.addEventListener('click', () => store.setBpm(clamp(store.project.bpm + 1, MIN_BPM, MAX_BPM)));
   tempoRow.append(tminus, tval, tplus);
-  const keyNote = el('p', 'insp-note', 'Tonart: A-Moll – die mitgelieferten Loops stehen in A-Moll.');
+  // Tonart des Songs: die mitgelieferten Loops werden umgestimmt, Melodien wandern mit
+  const keyNote = el('label', 'insp-row insp-key');
+  const keySel = document.createElement('select');
+  keySel.className = 'key-sel';
+  keySel.id = 'insp-key';
+  keyNote.append(el('span', null, 'Tonart'), keySel);
+  bindKeySelect(keySel, store);
   const lenRow = el('label', 'insp-row');
   const lenOut = el('output');
   const lenIn = document.createElement('input');

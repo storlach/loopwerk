@@ -83,6 +83,7 @@
 <link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
+<link rel="modulepreload" href="src/ui/key-select.js">
 <link rel="modulepreload" href="src/ui/create.js">
 <link rel="modulepreload" href="src/ui/sheets.js">
 <link rel="modulepreload" href="src/ui/tips.js">
@@ -1873,6 +1874,14 @@
 
   /* Schubladen */
   .dock, .shelf.sheet { background: var(--sheet-bg); }
+  /* Tonart-Auswahl: sieht in der Anzeige aus wie eine Ziffer, mit dünner Linie darunter (einstellbar) */
+  select.key-sel { appearance: none; -webkit-appearance: none; border: 0; border-radius: 0; background: transparent; color: var(--display-ink); cursor: pointer; padding: 0; }
+  .lcd .key-sel { box-shadow: inset 0 -1px 0 var(--key-line); }
+  .key-sel option { background: var(--sheet-bg); color: var(--ink); font: 400 14px/1.4 var(--font-body); }
+  .insp-key .key-sel, .tempo-key .key-sel { font: 300 20px/1.2 var(--font-mono); box-shadow: inset 0 -1px 0 var(--key-line); padding: 2px 4px; }
+  .tempo-key { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; font: 500 11px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  /* Aufklappfelder decken, damit nichts dahinter durchscheint */
+  .pop { background: var(--sheet-bg); }
   .left-title { grid-column: 1 / -1; margin: 2px 2px 6px; font: 300 22px/1.1 var(--font-display); letter-spacing: -0.02em; color: var(--ink); }
   /* Desktop: die Schublade sitzt im Rahmen des Arrangers – links und rechts bündig abgeschnitten, Schatten nur nach oben */
   @media (min-width: 761px) {
@@ -2011,7 +2020,7 @@
       <div class="lcd-cell lcd-more"><span class="lcd-label">Schlag</span><span class="lcd-value" id="lcd-beat">1</span></div>
       <div class="lcd-cell lcd-more"><span class="lcd-label">Zeit</span><span class="lcd-value" id="lcd-time">0:00.0</span></div>
       <div class="lcd-cell lcd-song"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
-      <div class="lcd-cell lcd-more lcd-key" title="Die synthetischen Loops stehen in A-Moll"><span class="lcd-label">Tonart</span><span class="lcd-value">Am</span></div>
+      <div class="lcd-cell lcd-more lcd-key" title="Tonart des Songs – die mitgelieferten Loops werden umgestimmt"><label class="lcd-label" for="key-sel">Tonart</label><select class="lcd-value key-sel" id="key-sel" data-key-select></select></div>
     </div>
 
     <div class="group deck-undo" id="deck-undo" role="group" aria-label="Rückgängig"></div>
@@ -2328,6 +2337,7 @@
       </div>
       <input class="tempo-slider" id="tempo-slider" type="range" min="60" max="200" step="1" aria-label="Tempo in BPM">
       <div class="tempo-presets" id="tempo-presets" role="group" aria-label="Schnellwahl"></div>
+      <label class="tempo-key">Tonart <select class="key-sel" id="key-sel-phone" data-key-select></select></label>
       <p class="tempo-note" id="tempo-note">Die Sounds passen sich kurz nach dem Einstellen an.</p>
     </div>
   </section>

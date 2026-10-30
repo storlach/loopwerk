@@ -3,6 +3,7 @@
 
 import { EFFECTS } from './effects.js';
 import { askJson } from './ai.js';
+import { keyOf } from './model.js';
 
 const CATS = ['drums', 'bass', 'chords', 'synth', 'fx'];
 const CAT_WORDS = {
@@ -258,7 +259,7 @@ function describe(project, library) {
 
 export async function planWish(text, project, library) {
   const d = describe(project, library);
-  const prompt = `Du bist der Assistent in Loopwerk, einem Loop-Music-Maker. Setze den Wunsch der Person mit den Bausteinen unten um. Wähle passende Sounds, achte auf Tonart (A-Moll) und Aufbau, und übertreibe nicht.
+  const prompt = `Du bist der Assistent in Loopwerk, einem Loop-Music-Maker. Setze den Wunsch der Person mit den Bausteinen unten um. Wähle passende Sounds, achte auf die Tonart (Song in ${keyOf(project)}; die synthetischen Loops sind bereits darauf umgestimmt) und Aufbau, und übertreibe nicht.
 
 Wunsch: „${text}“
 

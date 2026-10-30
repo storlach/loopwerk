@@ -18,6 +18,7 @@ import { mountTips } from './ui/tips.js';
 import { mountBrandMeter } from './ui/brand-meter.js';
 import { mountGlow } from './ui/glow.js';
 import { mountWish } from './ui/wish.js';
+import { mountKeySelects } from './ui/key-select.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
@@ -423,6 +424,7 @@ async function boot() {
     },
   });
   const wish = mountWish({ store, library, ui });
+  mountKeySelects(store);
   mountMobile({ store, ui, tools });
   const sheets = mountSheets({ ui, arranger });
   const tips = mountTips({ ui, store });

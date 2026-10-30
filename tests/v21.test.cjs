@@ -231,6 +231,30 @@ const { check, finish } = createChecker();
     await page.emulateMedia({ colorScheme: 'light' });
     const dk = await page.evaluate(() => ({ bg: getComputedStyle(document.body).backgroundColor, scheme: getComputedStyle(document.documentElement).colorScheme }));
     check('Auch bei hellem System bleibt Loopwerk dunkel', dk.bg === 'rgb(22, 23, 26)' && dk.scheme === 'dark', JSON.stringify(dk));
+    // ---------- Vorladen: jedes Programm-Modul steht als modulepreload im HTML ----------
+    const { moduleList } = require('../tools/module-list.cjs');
+    const pre = await page.evaluate(() => [...document.querySelectorAll('link[rel="modulepreload"]')].map((l) => l.getAttribute('href')));
+    const missing = moduleList().filter((m) => !pre.includes(m));
+    check('Alle Module werden vorgeladen (node tools/module-list.cjs)', missing.length === 0, missing.join(', '));
+    // ---------- Tonart ----------
+    const keyRes = await page.evaluate(async () => {
+      const { store, library, tempo } = window.loopwerk;
+      const before = library.get('bass-prog').rev;
+      const pid = Object.keys(store.project.patterns || {}).find((k) => store.project.patterns[k].type === 'synth');
+      const p0 = pid ? store.project.patterns[pid].notes.map((n) => n.pitch) : [];
+      store.setKey('Cm');
+      await tempo.apply();
+      const after = library.get('bass-prog');
+      const p1 = pid ? store.project.patterns[pid].notes.map((n) => n.pitch) : [];
+      const sel = document.getElementById('insp-key')?.value;
+      const r = { semis: library.semis, rerendered: after.rev !== before, drumsSame: library.prepared.get('drums-four') === library.bpm, shifted: p0.every((m, i) => p1[i] - m === 3 || p1[i] - m === -9), sel };
+      store.undo();
+      await tempo.apply();
+      r.back = library.semis === 0 && window.loopwerk.store.project.key !== 'Cm';
+      return r;
+    });
+    check('Tonart Cm: Synth-Loops werden umgestimmt (+3 Halbtöne), Drums nicht', keyRes.semis === 3 && keyRes.rerendered && keyRes.drumsSame, JSON.stringify(keyRes));
+    check('Tonart: Melodien wandern mit, Auswahl zeigt Cm, Rückgängig stellt A-Moll wieder her', keyRes.shifted && keyRes.sel === 'Cm' && keyRes.back, JSON.stringify(keyRes));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);
