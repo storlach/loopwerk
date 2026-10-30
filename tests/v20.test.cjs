@@ -34,6 +34,29 @@ const { check, finish } = createChecker();
     const inSplash = await page.evaluate(() => !!document.querySelector('#boot #brand-bars'));
     check('Im Ladescreen bleibt die Animation (keine Pegelanzeige)', !inSplash);
 
+    // ---------- Pad halten: leuchtet durchgehend, aus erst beim Loslassen ----------
+    await page.evaluate(() => document.getElementById('ltab-create').click());
+    await page.click('[data-create="beat"]');
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
+    await page.click('#pat-view [data-view="pads"]');
+    await page.waitForTimeout(500);
+    const pb = await page.locator('#pat-pads .pat-pad[data-row="kick"]').boundingBox();
+    await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
+    await page.mouse.down();
+    const lit = await page.evaluate(() => new Promise((res) => {
+      const pad = document.querySelector('#pat-pads .pat-pad[data-row="kick"]');
+      const out = [];
+      const t0 = performance.now();
+      const f = () => { out.push(/radial-gradient/.test(getComputedStyle(pad).backgroundImage)); if (performance.now() - t0 < 1100) requestAnimationFrame(f); else res(out); };
+      requestAnimationFrame(f);
+    }));
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+    const after = await page.evaluate(() => getComputedStyle(document.querySelector('#pat-pads .pat-pad[data-row="kick"]')).backgroundImage);
+    check('Pad halten: leuchtet in jedem Bild, auch während des Wirbels', lit.length > 20 && lit.every(Boolean), `${lit.filter(Boolean).length}/${lit.length}`);
+    check('Pad loslassen: Licht geht aus', !/radial-gradient/.test(after), after.slice(0, 60));
+    await page.evaluate(() => { window.loopwerk.ui.setDock(null); document.getElementById('ltab-sounds').click(); });
+
     // ---------- Überlappungen: Klang ----------
     const ov = await page.evaluate(async () => {
       const { library, renderProject } = window.loopwerk;

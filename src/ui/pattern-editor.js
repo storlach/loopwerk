@@ -638,8 +638,11 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       }
     }
   }
+  // Gehaltene Pads leuchten durchgehend – auch zwischen den Schlägen eines Wirbels; aus erst beim Loslassen
+  const padEl = (rowId) => padsEl.querySelector(`[data-row="${rowId}"]`);
   async function padDown(rowId) {
     if (held.has(rowId)) return;
+    padEl(rowId)?.classList.add('held');
     // Sofort als gedrückt merken: ein schnelles Loslassen während des Startens beendet den Halt sicher
     const h = { from: null, next: null };
     held.set(rowId, h);
@@ -649,8 +652,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     h.from = ctx.currentTime;
     if (!rollTimer) rollTimer = setInterval(rollTick, 20);
   }
-  function padUp(rowId) { held.delete(rowId); }
-  function padsUpAll() { held.clear(); }
+  function padUp(rowId) { held.delete(rowId); padEl(rowId)?.classList.remove('held'); }
+  function padsUpAll() { held.clear(); for (const p of padsEl.querySelectorAll('.pat-pad.held')) p.classList.remove('held'); }
   window.addEventListener('blur', padsUpAll);
 
   // Auf pointerdown reagieren (nicht click): kürzeste Verzögerung beim Trommeln
