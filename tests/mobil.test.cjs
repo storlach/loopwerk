@@ -308,7 +308,7 @@ const { check, finish } = createChecker();
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.waitForTimeout(100);
     const dark = await page.evaluate(() => ({ tabs: getComputedStyle(document.getElementById('tabbar')).backgroundColor, hint: getComputedStyle(document.getElementById('hint')).backgroundColor }));
-    check('Dunkel: Leiste und Einblender nutzen die Tokens (Phosphor: Anthrazit, durchscheinend)', dark.tabs === 'rgba(18, 19, 22, 0.5)' && dark.hint === 'rgb(34, 35, 40)', JSON.stringify(dark));
+    check('Dunkel: Leiste und Einblender nutzen die Tokens (Phosphor: Anthrazit, durchscheinend)', dark.tabs === 'rgba(18, 19, 22, 0.62)' && dark.hint === 'rgb(34, 35, 40)', JSON.stringify(dark));
     if (SHOTS) {
       await page.tap('#tab-sounds');
       await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-dunkel.png') });

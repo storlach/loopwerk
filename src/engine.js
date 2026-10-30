@@ -325,6 +325,15 @@ export class Engine extends Emitter {
     this.emit('state');
   }
 
+  // Pause: anhalten und an derselben Stelle stehen bleiben (Start spielt dort weiter)
+  pause() {
+    if (!this.playing) return;
+    const beat = this.heardBeat();
+    this._halt();
+    this.positionBeat = beat;
+    this.emit('state');
+  }
+
   setPosition(beat) {
     if (this.playing) this.play(beat);
     else { this.positionBeat = beat; this.emit('state'); }

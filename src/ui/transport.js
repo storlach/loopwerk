@@ -23,7 +23,7 @@ export function mountTransport({ store, engine, ui, arranger }) {
   });
   bpmInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') bpmInput.blur(); });
 
-  play.addEventListener('click', () => (engine.playing ? engine.stop() : engine.play()));
+  play.addEventListener('click', () => (engine.playing ? engine.pause() : engine.play()));
   $('home-btn').addEventListener('click', () => engine.setPosition(0));
   loopBtn.addEventListener('click', () => store.setLoop({ on: !store.project.loop.on }));
   metro.addEventListener('click', () => { engine.metronome = !engine.metronome; sync(); });
@@ -68,7 +68,7 @@ export function mountTransport({ store, engine, ui, arranger }) {
   function sync() {
     play.setAttribute('aria-pressed', String(engine.playing));
     document.getElementById('app')?.classList.toggle('playing', engine.playing);
-    play.setAttribute('aria-label', engine.playing ? 'Stopp' : 'Abspielen');
+    play.setAttribute('aria-label', engine.playing ? 'Pause' : 'Abspielen');
     play.querySelector('.ico-play').toggleAttribute('hidden', engine.playing);
     play.querySelector('.ico-stop').toggleAttribute('hidden', !engine.playing);
     loopBtn.setAttribute('aria-pressed', String(store.project.loop.on));

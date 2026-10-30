@@ -255,6 +255,25 @@ const { check, finish } = createChecker();
     });
     check('Tonart Cm: Synth-Loops werden umgestimmt (+3 Halbtöne), Drums nicht', keyRes.semis === 3 && keyRes.rerendered && keyRes.drumsSame, JSON.stringify(keyRes));
     check('Tonart: Melodien wandern mit, Auswahl zeigt Cm, Rückgängig stellt A-Moll wieder her', keyRes.shifted && keyRes.sel === 'Cm' && keyRes.back, JSON.stringify(keyRes));
+    // ---------- Pause und Griff der Marke ----------
+    const pz = await page.evaluate(async () => {
+      const { engine } = window.loopwerk;
+      engine.setPosition(8);
+      await engine.play();
+      await new Promise((r) => setTimeout(r, 900));
+      document.getElementById('play-btn').click();
+      const at = engine.heardBeat();
+      return { at, playing: engine.playing, label: document.getElementById('play-btn').getAttribute('aria-label') };
+    });
+    check('Pause hält an der Stelle an (nicht zurück zum Start)', !pz.playing && pz.at > 8.5 && pz.label === 'Abspielen', JSON.stringify(pz));
+    const grip = await page.locator('.ph-grip').boundingBox();
+    const ppb2 = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 + 6 * ppb2, grip.y + grip.height / 2, { steps: 6 });
+    await page.mouse.up();
+    const after2 = await page.evaluate(() => window.loopwerk.engine.heardBeat());
+    check('Griff der Marke ziehen setzt die Position (rastet ein)', Math.abs(after2 - Math.round(pz.at + 6)) <= 1 && Number.isInteger(after2), String(after2));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

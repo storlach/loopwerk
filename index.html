@@ -127,7 +127,8 @@
     --line: #2A2B30;
     --grid-bar: rgb(255 255 255 / 0.07);
     --grid-beat: rgb(255 255 255 / 0.028);
-    --deck: rgb(18 19 22 / 0.5);
+    --deck: rgb(18 19 22 / 0.62);
+    --head-bg: rgb(16 17 20 / 0.9); /* Spurköpfe fast deckend, wie Martins Referenz */
     --deck-2: #222328;
     --deck-ink: #F2F2F0;
     --deck-muted: #9898A1;
@@ -145,7 +146,7 @@
     --cat-synth: #B494FF;
     --cat-fx: #FF7F45;
     --cat-own: #FF62A5;
-    --ambient-max: 0.8; --glow-blend: screen;
+    --ambient-max: 0.64; --glow-blend: screen;
     /* Spuren durchsichtig, damit das Umgebungslicht dahinter wirkt */
     --lane-a: transparent;
     --lane-alt-a: rgb(255 255 255 / 0.012);
@@ -1567,7 +1568,7 @@
   /* Regal: Licht beim Vorhören, nur in der linken Leiste */
   .shelf { isolation: isolate; }
   .shelf-light { position: absolute; left: 0; top: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; }
-  @media (min-width: 761px) { .shelf, .shelf.sheet { position: relative; background: var(--panel); } }
+  @media (min-width: 761px) { aside.shelf, aside.shelf.sheet { position: relative; background: var(--panel); } }
   .lane { background-color: transparent; }
   .beam { position: absolute; left: 0; top: 0; z-index: 1; pointer-events: none; mix-blend-mode: var(--glow-blend); }
   .beam[hidden] { display: none; }
@@ -1805,7 +1806,7 @@
   .loop-band { top: 3px; height: 2px; background: var(--ink); box-shadow: 0 0 6px rgb(255 255 255 / 0.5); }
   .loop-band.off { opacity: 0.25; box-shadow: none; }
   .loop-shade { background: rgb(255 255 255 / 0.025); border-color: rgb(255 255 255 / 0.18); }
-  .track-head, .group-head, .add-track { background: var(--deck); }
+  .track-head, .group-head, .add-track { background: var(--head-bg); }
   .track-row, .group-row { border-bottom-color: rgb(255 255 255 / 0.05); }
   .track-name { font: 600 13.5px/1.2 var(--font-body); letter-spacing: -0.005em; }
   .track-dot { width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; opacity: 0.8; box-shadow: 0 0 6px var(--cat, transparent); }
@@ -1863,7 +1864,17 @@
   /* Leise Linie; hell mit Schein nur dort, wo sie einen Clip trifft (zeichnet glow.js) */
   .playhead { width: 1px; margin-left: -0.5px; background: color-mix(in srgb, var(--beam) 60%, transparent); box-shadow: none; opacity: 1; }
   .app.playing .playhead { background: color-mix(in srgb, var(--beam) 26%, transparent); }
-  .playhead::before { top: 21px; left: -4px; border-left-width: 4.5px; border-right-width: 4.5px; border-top: 8px solid var(--beam); }
+  .playhead::before { display: none; }
+  /* Griff der Marke im Lineal: Kappe mit Kerbe, groß genug zum Greifen; Tippfläche größer als sichtbar */
+  .ph-grip {
+    position: absolute; left: -7px; bottom: 2px; z-index: 3; width: 14px; height: 20px; box-sizing: border-box;
+    border-radius: 4px 4px 7px 7px; background: var(--beam); cursor: ew-resize; touch-action: none;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), 0 0 10px rgb(255 255 255 / 0.35);
+  }
+  .ph-grip::before { content: ""; position: absolute; left: 50%; top: 5px; width: 2px; height: 8px; margin-left: -1px; border-radius: 1px; background: var(--accent-ink); opacity: 0.55; }
+  .ph-grip::after { content: ""; position: absolute; inset: -8px -12px -6px; }
+  .ph-grip:hover, .ph-grip.dragging { box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35), var(--beam-glow); }
+  @media (max-width: 760px) { .ph-grip { width: 18px; left: -9px; height: 24px; } .ph-grip::after { inset: -10px -14px -8px; } }
 
   /* Fachleiste: der aktive Reiter trägt oben einen Lichtstrich */
   .tabbar { background: var(--deck); box-shadow: inset 0 1px 0 var(--line); }
@@ -1995,9 +2006,9 @@
       <button class="key" id="home-btn" type="button" aria-label="Zum Anfang" title="Zum Anfang (Pos1)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg>
       </button>
-      <button class="key play" id="play-btn" type="button" aria-label="Abspielen" title="Start/Stopp (Leertaste)">
+      <button class="key play" id="play-btn" type="button" aria-label="Abspielen" title="Abspielen/Pause (Leertaste)">
         <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg>
-        <svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M3 3h10v10H3z"/></svg>
+        <svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg>
       </button>
       <button class="key" id="loop-btn" type="button" title="Loop-Bereich wiederholen">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 5h7V3l3 3-3 3V7H4v3H2V7a2 2 0 012-2zm8 6H5v2l-3-3 3-3v2h7V6h2v3a2 2 0 01-2 2z"/></svg>
@@ -2411,7 +2422,7 @@
       <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false">? Tastenkürzel</button>
       <div class="pop keys-pop" id="keys-pop" hidden>
         <dl class="keys-list">
-          <dt>Leertaste</dt><dd>Start / Stopp</dd>
+          <dt>Leertaste</dt><dd>Abspielen / Pause</dd>
           <dt>Pos1</dt><dd>Zum Anfang</dd>
           <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
           <dt>Strg+Z / Strg+Umschalt+Z</dt><dd>Rückgängig / Wiederholen</dd>

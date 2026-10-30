@@ -450,7 +450,7 @@ async function boot() {
     const key = e.key.toLowerCase();
     if (e.code === 'Space') {
       e.preventDefault();
-      if (!e.repeat) (engine.playing ? engine.stop() : engine.play());
+      if (!e.repeat) (engine.playing ? engine.pause() : engine.play());
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && ui.selectedClipId) {
       e.preventDefault();
       tools.remove();

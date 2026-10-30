@@ -123,7 +123,8 @@ function check(name, ok, detail = '') {
     if (SHOTS) await page.screenshot({ path: path.join(process.env.SHOT_DIR || '.', 'desktop-light.png') });
     await page.keyboard.press('Space');
     const stopped = await page.evaluate(() => ({ playing: window.loopwerk.engine.playing, pos: window.loopwerk.engine.positionBeat }));
-    check('Leertaste stoppt und springt zur Startposition', !stopped.playing && stopped.pos === 0);
+    check('Leertaste pausiert an der aktuellen Stelle', !stopped.playing && stopped.pos > 1, `Schlag ${stopped.pos.toFixed(2)}`);
+    await page.click('#home-btn');
 
     // 7. Loop-Sprung: Loop Takt 1–2, Start bei 0, nach ~4,3 s muss die Position wieder im Loop liegen
     await page.evaluate(() => window.loopwerk.store.setLoop({ on: true, startBeat: 0, endBeat: 8 }));

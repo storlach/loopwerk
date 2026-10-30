@@ -40,6 +40,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
   addRow.append(addBtn);
   const loopShade = el('div', 'loop-shade');
   const playhead = el('div', 'playhead');
+  // Griff der Abspielmarke im Lineal: ziehen setzt die Wiedergabeposition
+  const phGrip = el('div', 'ph-grip');
+  phGrip.setAttribute('role', 'slider');
+  phGrip.setAttribute('aria-label', 'Wiedergabeposition');
+  phGrip.tabIndex = -1;
+  ruler.append(phGrip);
   grid.append(rulerRow, rowsEl, addRow, loopShade, playhead);
   root.append(grid);
 
@@ -626,9 +632,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
     setPlayhead(engine.heardBeat());
   }
 
+  let gripDrag = null; // während des Ziehens bestimmt der Griff die Position
   function setPlayhead(beat) {
+    if (gripDrag != null) beat = gripDrag;
     const x = headW() + beat * ppb();
     playhead.style.transform = `translateX(${x}px)`;
+    phGrip.style.transform = `translateX(${beat * ppb()}px)`;
     if (engine.playing) {
       const view = root.clientWidth;
       if (x > root.scrollLeft + view - 40 || x < root.scrollLeft + headW()) root.scrollLeft = x - headW() - 24;
@@ -841,6 +850,27 @@ export function mountArranger({ root, store, engine, library, ui }) {
     });
   }
 
+  // Marke am Griff ziehen: rastet im Raster ein (Umschalt: frei); beim Spielen geht es beim Loslassen dort weiter
+  function startGrip(e) {
+    e.preventDefault();
+    const total = totalBeats(store.project);
+    const rect = ruler.getBoundingClientRect();
+    const at = (ev) => clamp(snap((ev.clientX - rect.left) / ppb(), ev), 0, total);
+    phGrip.classList.add('dragging');
+    gripDrag = engine.heardBeat();
+    trackPointer(e, (ev) => {
+      gripDrag = at(ev);
+      setPlayhead(gripDrag);
+      if (!engine.playing) engine.setPosition(gripDrag);
+    }, () => {
+      const b = gripDrag;
+      gripDrag = null;
+      phGrip.classList.remove('dragging');
+      engine.setPosition(b);
+      setPlayhead(b);
+    }, () => { gripDrag = null; phGrip.classList.remove('dragging'); });
+  }
+
   function startRuler(e) {
     const p = store.project;
     const total = totalBeats(p);
@@ -918,6 +948,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
       else startMove(e, clip);
       return;
     }
+    if (t.closest('.ph-grip')) { startGrip(e); return; }
     if (t.closest('.ruler')) { startRuler(e); return; }
     const lane = t.closest('.lane');
     if (!lane) return;
