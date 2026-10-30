@@ -4,7 +4,7 @@
 
 import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
-  noteName, resizeDrumRows, previewNote, previewDrum, startNote,
+  noteName, resizeDrumRows, previewNote, previewDrum, startNote, sampledPresets, allPresets, presetInfo, preparePreset,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
@@ -72,6 +72,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   // (A springt z. B. zum Kit „Akustik“), statt dass sie Pads oder Klaviatur spielen
   root.addEventListener('change', (e) => { if (e.target.tagName === 'SELECT') e.target.blur(); });
   for (const p of SYNTH_PRESETS) { const o = el('option', null, p.label); o.value = p.id; presetSel.append(o); }
+  const real = sampledPresets();
+  if (real.length) {
+    const group = el('optgroup');
+    group.label = 'Echte Instrumente (CC0)';
+    for (const p of real) { const o = el('option', null, p.label); o.value = p.id; group.append(o); }
+    presetSel.append(group);
+  }
 
   const pat = () => (id ? store.project.patterns?.[id] : null);
   const steps = () => pat().bars * 4 * STEPS_PER_BEAT;
@@ -89,6 +96,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     ui.setDock('pattern');
     render();
     if (pat()?.type === 'synth') {
+      preparePreset(pat().preset);
       setupMidi();
       requestAnimationFrame(() => reveal(octave + 7));
     }
@@ -112,7 +120,10 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (const t of store.project.tracks) for (const c of t.clips) if (c.sampleId === sid && c.lengthBeats < bars * 4) store.resizeClip(c.id, bars * 4);
   }
   kitSel.addEventListener('change', () => update((p) => { p.kit = kitSel.value; }));
-  presetSel.addEventListener('change', () => update((p) => { p.preset = presetSel.value; }));
+  presetSel.addEventListener('change', () => {
+    preparePreset(presetSel.value); // echtes Instrument: Laden beginnt sofort, nicht erst beim Rendern
+    update((p) => { p.preset = presetSel.value; });
+  });
   recBtn.addEventListener('click', () => { rec = !rec; render(); });
   liveBtn.addEventListener('click', () => (looper.running ? looper.stop() : looper.start()));
   for (const b of viewBtns) b.addEventListener('click', () => { view = b.dataset.view; render(); });
@@ -886,13 +897,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const prev = singStatus.textContent;
     say(`${prev ? prev + ' ' : ''}Baue den Klang …`);
     try {
-      const res = await designSound(desc, SYNTH_PRESETS);
+      const res = await designSound(desc, allPresets());
       const sid = patternSampleId(id);
       const trackIds = store.project.tracks.filter((t) => t.clips.some((c) => c.sampleId === sid)).map((t) => t.id);
       const fxOn = Object.entries(res.fx).filter(([, f]) => f.on).map(([k]) => FX_NAMES[k]);
       if (!res.preset && !fxOn.length) { say(`${prev ? prev + ' ' : ''}Zu „${desc}“ fällt mir nichts ein – nenne ein Instrument (Flöte, Klavier, Streicher …) oder eine Eigenschaft (warm, verzerrt, Hall).`); return; }
       store.applySound(id, { preset: res.preset, name: res.name, fx: res.fx }, trackIds);
-      const label = SYNTH_PRESETS.find((x) => x.id === (res.preset || pat().preset))?.label;
+      const label = presetInfo(res.preset || pat().preset)?.label;
       say(`${prev ? prev + ' ' : ''}Klang: ${label}${fxOn.length ? ` mit ${fxOn.join(', ')}` : ''}${trackIds.length ? '' : ' (Effekte wirken, sobald das Pattern auf einer Spur liegt)'}${res.source === 'claude' ? ' – von Claude eingestellt.' : ' – nach Stichworten eingestellt.'}`);
     } finally {
       btn.disabled = false;

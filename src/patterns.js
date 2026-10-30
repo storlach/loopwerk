@@ -1,7 +1,7 @@
 // Hält die gerenderten Pattern-Sounds („pat-…“) synchron zu project.patterns:
 // neue Patterns registrieren, geänderte neu rendern, entfernte austragen. Die Engine plant geänderte Clips neu.
 
-import { renderPattern, SYNTH_PRESETS } from './instruments.js';
+import { renderPattern, presetInfo } from './instruments.js';
 
 export const patternSampleId = (id) => 'pat-' + id;
 
@@ -35,9 +35,9 @@ export class Patterns {
         category: 'own',
         beats: p.bars * 4,
         origin: 'Pattern',
-        instrument: p.type === 'drums' ? 'Beat' : SYNTH_PRESETS.find((x) => x.id === p.preset)?.label,
+        instrument: p.type === 'drums' ? 'Beat' : presetInfo(p.preset)?.label,
         // Farbe im Arranger: Beats wie Drums, Melodien wie ihr Klang (Bass, Akkorde, Synth)
-        colorCat: p.type === 'drums' ? 'drums' : SYNTH_PRESETS.find((x) => x.id === p.preset)?.category ?? 'synth',
+        colorCat: p.type === 'drums' ? 'drums' : presetInfo(p.preset)?.category ?? 'synth',
       };
       let s = lib.get(sid);
       if (!s) {

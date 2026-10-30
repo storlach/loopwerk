@@ -173,9 +173,19 @@ const PRESET_WORDS = [
   [/pluck|zupf|harfe|harp|gitarre|guitar/i, 'pluck'],
   [/lead|synth|säge|saw/i, 'lead'],
 ];
-export function soundFromWords(text) {
+// Echtes Instrument, wenn die Beschreibung es beim Namen nennt („Harfe“, „Flügel“ ⊂ „Konzertflügel“)
+function realInstrument(t, presets) {
+  const words = t.split(/[^\p{L}]+/u).filter((w) => w.length >= 4);
+  return presets.find((p) => {
+    if (!p.sampled) return false;
+    const name = `${p.label} ${p.id}`.toLowerCase();
+    return words.some((w) => name.includes(w)) || name.split(/[^\p{L}]+/u).some((w) => w.length >= 4 && t.includes(w));
+  })?.id ?? null;
+}
+
+export function soundFromWords(text, presets = []) {
   const t = text.toLowerCase();
-  const preset = PRESET_WORDS.find(([re]) => re.test(t))?.[1] ?? null;
+  const preset = realInstrument(t, presets) ?? PRESET_WORDS.find(([re]) => re.test(t))?.[1] ?? null;
   const fx = {};
   const has = (re) => re.test(t);
   if (has(/verzerr|dreckig|kaputt|crunch|distort|dirty|fuzz|übersteuer|rau/)) fx.drive = { on: true, type: has(/fuzz/) ? 'fuzz' : has(/hart|hard|brutal/) ? 'hard' : 'soft', drive: has(/stark|sehr|brutal|heavy/) ? 0.8 : 0.5 };
@@ -216,7 +226,7 @@ export async function designSound(description, presets) {
   const prompt = [
     'Du bist Sounddesigner in einem einfachen Musikprogramm. Baue aus einer Beschreibung einen Klang.',
     `Beschreibung: „${description.slice(0, 400)}“`,
-    `Wähle genau einen Grundklang (preset): ${presets.map((p) => `${p.id} = ${p.label}`).join(', ')}.`,
+    `Wähle genau einen Grundklang (preset): ${presets.map((p) => `${p.id} = ${p.label}${p.sampled ? ' (echte Aufnahme)' : ''}`).join(', ')}.`,
     'Schalte passende Effekte ein (nur die nötigen) und setze ihre Regler. Verfügbare Effekte und Bereiche:',
     fxDoc,
     'Gib dem Klang einen kurzen deutschen Namen (höchstens 24 Zeichen).',
@@ -226,6 +236,6 @@ export async function designSound(description, presets) {
   if (raw && presets.some((p) => p.id === raw.preset)) {
     return { preset: raw.preset, name: typeof raw.name === 'string' ? raw.name.slice(0, 24) : null, fx: cleanFx(raw.fx), source: 'claude' };
   }
-  const words = soundFromWords(description);
+  const words = soundFromWords(description, presets);
   return { preset: words.preset, name: null, fx: cleanFx(words.fx), source: 'regeln' };
 }

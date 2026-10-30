@@ -2,6 +2,9 @@
 // So laufen sie durch dieselbe Engine wie jeder andere Clip (Fades, Effekte, Export, Rückgängig).
 
 import { createKit } from './samples.js';
+import {
+  sampledInstruments, isSampled, getInstrument, loadInstrument, loadedInstrument, playSampled, fallbackPreset, releaseTail,
+} from './sampler.js';
 
 export const STEPS_PER_BEAT = 4; // 16tel-Raster
 
@@ -44,6 +47,29 @@ export const SYNTH_PRESETS = [
   { id: 'acid', label: 'Acid-Bass', category: 'bass' },
   { id: 'pad', label: 'Fläche', category: 'chords' },
 ];
+
+// Echte Instrumente (Sampler, src/sampler.js) als weitere Klänge; Kennung = Instrument-id.
+// Farbe im Arranger nach Familie: Bass, Tasten/Streicher/Flächen wie Akkorde, sonst Synth.
+function colorCat(inst) {
+  const t = `${inst.id} ${inst.category}`;
+  if (/bass/i.test(t)) return 'bass';
+  if (/key|tast|piano|klavier|fl[üu]gel|orgel|organ|string|streich|pad|chord/i.test(t)) return 'chords';
+  return 'synth';
+}
+const synthIds = new Set(SYNTH_PRESETS.map((p) => p.id));
+export function sampledPresets() {
+  return sampledInstruments().filter((i) => !synthIds.has(i.id))
+    .map((i) => ({ id: i.id, label: i.label, category: colorCat(i), sampled: true }));
+}
+export const allPresets = () => [...SYNTH_PRESETS, ...sampledPresets()];
+export const presetInfo = (id) => SYNTH_PRESETS.find((p) => p.id === id) ?? sampledPresets().find((p) => p.id === id);
+const sampled = (preset) => !synthIds.has(preset) && isSampled(preset);
+
+// Instrument im Hintergrund laden (Auswahl im Editor, Öffnen einer Melodie); Fehler nur melden
+export function preparePreset(preset) {
+  if (!sampled(preset)) return null;
+  return loadInstrument(preset).catch((err) => { console.warn(`Instrument ${preset}: ${err.message}`); return null; });
+}
 
 // Wie ein Klang eine Note spielt (b = Schlag, len = Länge in Schlägen, v = Stärke)
 const PLAY = {
@@ -118,7 +144,11 @@ export async function renderPattern(pattern, bpm, library) {
   const spb = 60 / bpm;
   const beats = pattern.bars * 4;
   const frames = Math.round(beats * spb * SR);
-  const ctx = new OfflineAudioContext(2, frames + TAIL * SR, SR);
+  // Echtes Instrument: vor dem Rendern laden; klappt das nicht, spielt der passende Synth-Klang
+  const inst = pattern.type === 'synth' && sampled(pattern.preset) && pattern.notes?.length
+    ? await preparePreset(pattern.preset) : null;
+  const tail = inst ? Math.max(TAIL, releaseTail(inst.inst)) : TAIL;
+  const ctx = new OfflineAudioContext(2, frames + Math.ceil(tail * SR), SR);
   const bus = ctx.createGain();
   bus.gain.value = pattern.type === 'drums' ? 0.85 : 0.9;
   bus.connect(ctx.destination);
@@ -146,10 +176,12 @@ export async function renderPattern(pattern, bpm, library) {
       });
     }
   } else {
+    const preset = sampled(pattern.preset) ? fallbackPreset(getInstrument(pattern.preset)) : pattern.preset;
     for (const n of pattern.notes || []) {
       if (n.start >= beats) continue;
       const len = Math.max(0.05, Math.min(n.len, beats - n.start));
-      playNote(kit, pattern.preset, n.pitch, n.start, len, n.vel ?? 1, spb);
+      if (inst) playSampled(ctx, bus, inst, n.pitch, n.start * spb, len * spb, n.vel ?? 1);
+      else playNote(kit, preset, n.pitch, n.start, len, n.vel ?? 1, spb);
     }
   }
 
@@ -173,22 +205,39 @@ function previewKit(ctx, dest) {
     const out = ctx.createGain();
     out.gain.value = 0.8;
     out.connect(dest);
-    entry = { kit: createKit(ctx, out, 1) }; // spb = 1: Schlag = Sekunde
+    entry = { kit: createKit(ctx, out, 1), out }; // spb = 1: Schlag = Sekunde
     previewKits.set(ctx, entry);
   }
-  return entry.kit;
+  return entry;
+}
+
+// Echtes Instrument fürs Vorhören: geladen → Sampler; sonst Laden anstoßen und den Synth-Ersatz nennen
+function liveSampler(preset) {
+  if (!sampled(preset)) return { preset };
+  const loaded = loadedInstrument(preset);
+  if (loaded) return { loaded };
+  preparePreset(preset);
+  return { preset: fallbackPreset(getInstrument(preset)) };
 }
 
 export function previewNote(ctx, dest, preset, pitch) {
-  const k = previewKit(ctx, dest);
+  const { kit, out } = previewKit(ctx, dest);
   const t = ctx.currentTime + 0.01;
-  playNote(k, preset, pitch, t, preset === 'pad' || preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
+  const s = liveSampler(preset);
+  if (s.loaded) { playSampled(ctx, out, s.loaded, pitch, t, 0.4, 1); return; }
+  playNote(kit, s.preset, pitch, t, s.preset === 'pad' || s.preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
 }
 
 // Gehaltener Ton (Klaviatur, Tasten, Finger): klingt bis stop(), höchstens 12 s. Eigener Ausgang je Ton,
 // damit sich ein einzelner Ton weich beenden lässt.
 const HOLD_MAX = 12;
 export function startNote(ctx, dest, preset, pitch) {
+  const s = liveSampler(preset);
+  if (s.loaded) {
+    const voice = playSampled(ctx, previewKit(ctx, dest).out, s.loaded, pitch, ctx.currentTime + 0.005, null, 1);
+    return { stop: () => voice.release(ctx.currentTime) };
+  }
+  preset = s.preset;
   const g = ctx.createGain();
   g.connect(dest);
   g.gain.value = 0.8;
@@ -220,7 +269,7 @@ export function previewDrum(ctx, dest, kitId, rowId, library, when) {
     src.start(when ?? 0);
     return;
   }
-  const k = previewKit(ctx, dest);
+  const k = previewKit(ctx, dest).kit;
   const t = when ?? ctx.currentTime + 0.01;
   (SYNTH_DRUMS[kitId] || SYNTH_DRUMS.elektro)[rowId]?.(k, t, 1);
 }
