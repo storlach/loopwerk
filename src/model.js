@@ -174,6 +174,16 @@ export function totalBeats(project) {
   return project.lengthBars * project.beatsPerBar;
 }
 
+// Songtonarten: die mitgelieferten Loops stehen in A-Moll; jede Moll-Tonart (mit paralleler Dur) ist wählbar.
+export const KEYS = ['Cm', 'C♯m', 'Dm', 'E♭m', 'Em', 'Fm', 'F♯m', 'Gm', 'G♯m', 'Am', 'B♭m', 'Hm'];
+export const KEY_MAJOR = ['E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'H', 'C', 'D♭', 'D'];
+export const keyOf = (project) => (KEYS.includes(project?.key) ? project.key : 'Am');
+// Halbtöne von A-Moll aus, kürzester Weg (−6 … +5), damit Bässe nicht zu weit wandern
+export function keySemis(key) {
+  const d = (KEYS.indexOf(key) - 9 + 12) % 12;
+  return d > 5 ? d - 12 : d;
+}
+
 export function isValidProject(p) {
   return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips));
 }
@@ -693,6 +703,24 @@ export class Store extends Emitter {
       p.master.fx = withFx(p.master.fx);
       Object.assign(p.master.fx[fxId], patch);
     }, { coalesce });
+  }
+
+  // Tonart wechseln: Melodie-Patterns wandern mit (ein Rückgängig-Schritt); Loops rendert die Bibliothek neu
+  setKey(key) {
+    if (!KEYS.includes(key) || key === keyOf(this.project)) return;
+    const delta = keySemis(key) - keySemis(keyOf(this.project));
+    this.dispatch('key', (p) => {
+      p.key = key;
+      for (const pat of Object.values(p.patterns || {})) {
+        if (pat.type !== 'synth') continue;
+        for (const n of pat.notes || []) {
+          let m = n.pitch + delta;
+          while (m > 84) m -= 12;
+          while (m < 36) m += 12;
+          n.pitch = m;
+        }
+      }
+    });
   }
 
   setBpm(bpm) {

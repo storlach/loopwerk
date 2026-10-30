@@ -10,6 +10,18 @@ export function mountWish({ store, library, ui }) {
   const go = $('wish-go');
   if (!form) return null;
   let busy = false;
+  // Auf/Zu: groß zum Formulieren, klein, damit Platz bleibt (wird im Browser gemerkt)
+  const toggle = $('wish-toggle');
+  const setOpen = (open) => {
+    form.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Wunsch-Feld verkleinern' : 'Wunsch-Feld vergrößern');
+    try { localStorage.setItem('loopwerk.wishOpen', open ? '1' : ''); } catch { /* ohne Speicher egal */ }
+  };
+  let startOpen = false;
+  try { startOpen = localStorage.getItem('loopwerk.wishOpen') === '1'; } catch { /* Voreinstellung */ }
+  setOpen(startOpen);
+  toggle.addEventListener('click', () => { setOpen(!form.classList.contains('open')); input.focus(); });
 
   async function submit() {
     const text = input.value.trim();

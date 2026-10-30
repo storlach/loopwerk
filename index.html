@@ -1899,8 +1899,16 @@
   @property --wish-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
   .wish { gap: 0; padding: 1px; border-radius: var(--radius-lg); background: var(--key-line); box-shadow: none; }
   .wish > * { background: transparent; }
-  .wish-input { border-radius: 13px 13px 0 0; background: #050507; box-shadow: none; font: 400 15px/1.42 var(--font-body); }
-  .wish-row { padding: 6px 8px; border-radius: 0 0 13px 13px; background: #050507; }
+  .wish-input { border-radius: 13px 13px 0 0; background: var(--well); box-shadow: none; font: 400 15px/1.42 var(--font-body); resize: none; height: 66px; transition: height 0.22s cubic-bezier(.2, .8, .2, 1); }
+  .wish.open .wish-input { height: 168px; }
+  .wish-row { padding: 6px 8px; border-radius: 0 0 13px 13px; background: var(--well); }
+  /* Auf/Zu: Pfeil zeigt, ob das Feld groß ist; dreht sich beim Aufklappen */
+  .wish-toggle { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer; }
+  .wish-toggle svg { width: 14px; height: 14px; fill: currentColor; transition: transform 0.22s ease; }
+  .wish.open .wish-toggle svg { transform: rotate(180deg); }
+  .wish-toggle:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent); }
+  @media (max-width: 760px) { .wish-toggle { width: 44px; height: 40px; } }
+  @media (prefers-reduced-motion: reduce) { .wish-input, .wish-toggle svg { transition: none; } }
   .wish-go { border-radius: 999px; background: var(--ink); color: var(--accent-ink); box-shadow: none; font: 600 10px/1 var(--font-mono); }
   .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, rgb(255 255 255 / 0.25) 70%, #fff 76%, rgb(255 255 255 / 0.25) 80%, var(--key-line) 88%); animation: wish-run 1.6s linear infinite; }
   .wish.busy .wish-state::after { background: var(--ink); }
@@ -2057,7 +2065,7 @@
       <h3 class="create-sec">Wünschen</h3>
       <form class="wish" id="wish-form" autocomplete="off">
         <textarea id="wish-input" class="wish-input" rows="2" maxlength="300" placeholder="z. B. Techno-Beat ab Takt 5, Bass dazu, Pad mit Hall" aria-label="Was soll passieren?"></textarea>
-        <div class="wish-row"><span class="wish-state" id="wish-state" aria-live="polite"></span><button class="key wish-go" id="wish-go" type="submit">Umsetzen</button></div>
+        <div class="wish-row"><button class="wish-toggle" id="wish-toggle" type="button" aria-expanded="false" aria-controls="wish-input" title="Feld größer oder kleiner"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4z"/></svg></button><span class="wish-state" id="wish-state" aria-live="polite"></span><button class="key wish-go" id="wish-go" type="submit">Umsetzen</button></div>
       </form>
       <h3 class="create-sec">Selbst spielen</h3>
       <button class="ccard cat-drums" type="button" data-create="beat"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 12h4v3H1zm5 0h4v3H6zm5 0h4v3h-4z"/></svg></span><span class="ccard-title">Beat bauen</span><span class="ccard-sub">Schlagzeug in Schritten oder auf Pads</span></button>

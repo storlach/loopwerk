@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, isValidProject, DEFAULT_TRACK_NAME } from './model.js';
+import { Store, createDemoProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME } from './model.js';
 import { Engine, renderProject } from './engine.js';
 import { Emitter } from './util.js';
 import { encodeWav } from './wav.js';
@@ -168,26 +168,34 @@ function mountClipTools({ store, engine, ui, arranger }) {
   return tools;
 }
 
-// Tempo ändern: Sounds neu vorbereiten, Wiedergabe an derselben Stelle fortsetzen.
+// Tempo oder Tonart ändern: Sounds neu vorbereiten, Wiedergabe an derselben Stelle fortsetzen.
 function mountTempo({ store, engine, library, ui, arranger }) {
   let running = null;
+  const keyOff = () => library.semis !== keySemis(keyOf(store.project));
   async function apply() {
     if (running) return running;
     running = (async () => {
-      while (library.bpm !== store.project.bpm) {
+      while (library.bpm !== store.project.bpm || keyOff()) {
         const wasPlaying = engine.playing;
         const pos = engine.heardBeat();
         if (wasPlaying) engine.stop();
-        ui.flash(`Tempo ${store.project.bpm} BPM – Sounds werden angepasst …`);
-        await library.setTempo(store.project.bpm);
+        if (library.bpm !== store.project.bpm) {
+          ui.flash(`Tempo ${store.project.bpm} BPM – Sounds werden angepasst …`);
+          await library.setTempo(store.project.bpm);
+          ui.flash(`Tempo ${store.project.bpm} BPM.`);
+        } else {
+          const key = keyOf(store.project);
+          ui.flash(`Tonart ${key} – Loops werden umgestimmt …`);
+          await library.setKey(keySemis(key));
+          ui.flash(`Tonart ${key}.`);
+        }
         arranger.render();
         if (wasPlaying) engine.play(pos);
-        ui.flash(`Tempo ${store.project.bpm} BPM.`);
       }
     })();
     try { await running; } finally { running = null; }
   }
-  store.on(() => { if (library.bpm !== store.project.bpm) apply(); });
+  store.on(() => { if (library.bpm !== store.project.bpm || keyOff()) apply(); });
   return { apply, get busy() { return !!running; } };
 }
 
@@ -298,6 +306,7 @@ async function boot() {
   const need = new Set((isValidProject(saved) ? saved : createDemoProject()).tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
   const library = await buildLibrary({
     need,
+    semis: keySemis(keyOf(isValidProject(saved) ? saved : null)),
     bpm: isValidProject(saved) ? saved.bpm : 120,
     onProgress: (done, total) => splash.set(0.05 + 0.75 * (done / total), `Sounds werden geladen – ${done} von ${total}`),
   });
@@ -391,7 +400,7 @@ async function boot() {
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
-  if (library.bpm !== store.project.bpm) { splash.set(0.95, 'Sounds werden ans Tempo angepasst …'); await tempo.apply(); }
+  if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
   const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools });
   const layout = mountLayout({

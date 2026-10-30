@@ -50,7 +50,9 @@ function noiseFor(ctx) {
 }
 
 // Klangbausteine. Alle Zeiten werden in Schlägen übergeben.
-export function createKit(ctx, out, spb) {
+// semis: Halbtöne, um die alle Töne verschoben werden (Tonartwechsel des Songs)
+export function createKit(ctx, out, spb, semis = 0) {
+  const tf = (m) => mtof(m + semis);
   const noise = noiseFor(ctx);
   const T = (beat) => beat * spb;
 
@@ -165,7 +167,7 @@ export function createKit(ctx, out, spb) {
     bass(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
-      const o = osc('sawtooth', mtof(midi));
+      const o = osc('sawtooth', tf(midi));
       const lp = biquad('lowpass', 220, 7);
       lp.frequency.setValueAtTime(220, t);
       lp.frequency.linearRampToValueAtTime(1500, t + 0.008);
@@ -177,7 +179,7 @@ export function createKit(ctx, out, spb) {
     sub(beat, midi, lenBeats) {
       const t = T(beat);
       const d = T(lenBeats);
-      const o = osc('sine', mtof(midi));
+      const o = osc('sine', tf(midi));
       o.connect(holdGain(t, d, 0.9, 0.01, 0.08));
       o.start(t);
       o.stop(t + d + 0.1);
@@ -189,7 +191,7 @@ export function createKit(ctx, out, spb) {
       lp.connect(holdGain(t, d, 0.3, 0.35, 0.6));
       for (const m of midis) {
         for (const det of [-9, 9]) {
-          const o = osc('sawtooth', mtof(m));
+          const o = osc('sawtooth', tf(m));
           o.detune.value = det;
           o.connect(lp);
           o.start(t);
@@ -199,7 +201,7 @@ export function createKit(ctx, out, spb) {
     },
     pluck(beat, midi, vel = 1, decay = 0.22) {
       const t = T(beat);
-      const o = osc('square', mtof(midi));
+      const o = osc('square', tf(midi));
       const lp = biquad('lowpass', 4200, 3);
       lp.frequency.setValueAtTime(4200, t);
       lp.frequency.exponentialRampToValueAtTime(500, t + decay);
@@ -213,8 +215,8 @@ export function createKit(ctx, out, spb) {
     lead(beat, midi, lenBeats) {
       const t = T(beat);
       const d = T(lenBeats);
-      const o1 = osc('sawtooth', mtof(midi));
-      const o2 = osc('square', mtof(midi));
+      const o1 = osc('sawtooth', tf(midi));
+      const o2 = osc('square', tf(midi));
       o2.detune.value = 5;
       const lfo = osc('sine', 5.5);
       const depth = ctx.createGain();
@@ -272,7 +274,7 @@ export function createKit(ctx, out, spb) {
     piano(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = Math.max(T(lenBeats), 0.25);
-      const f = mtof(midi);
+      const f = tf(midi);
       const car = osc('sine', f);
       const mod = osc('sine', f);
       const idx = ctx.createGain();
@@ -294,7 +296,7 @@ export function createKit(ctx, out, spb) {
       const d = T(lenBeats);
       const g = holdGain(t, d, 0.22 * vel, 0.006, 0.06);
       for (const [h, a] of [[1, 1], [2, 0.7], [3, 0.45], [4, 0.3], [6, 0.18]]) {
-        const o = osc('sine', mtof(midi) * h);
+        const o = osc('sine', tf(midi) * h);
         const og = ctx.createGain();
         og.gain.value = a / 2.6;
         o.connect(og).connect(g);
@@ -305,7 +307,7 @@ export function createKit(ctx, out, spb) {
     flute(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
-      const f = mtof(midi);
+      const f = tf(midi);
       const g = holdGain(t, d, 0.35 * vel, 0.06, 0.08);
       const o = osc('sine', f);
       const o2 = osc('sine', f * 2);
@@ -327,7 +329,7 @@ export function createKit(ctx, out, spb) {
     },
     bell(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
-      const f = mtof(midi);
+      const f = tf(midi);
       const car = osc('sine', f);
       const mod = osc('sine', f * 3.5);
       const idx = ctx.createGain();
@@ -343,7 +345,7 @@ export function createKit(ctx, out, spb) {
       const lp = biquad('lowpass', 2400, 0.7);
       lp.connect(holdGain(t, d, 0.2 * vel, 0.18, 0.45));
       for (const det of [-12, 0, 11]) {
-        const o = osc('sawtooth', mtof(midi));
+        const o = osc('sawtooth', tf(midi));
         o.detune.value = det;
         o.connect(lp);
         o.start(t);
@@ -353,7 +355,7 @@ export function createKit(ctx, out, spb) {
     brass(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
-      const o = osc('sawtooth', mtof(midi));
+      const o = osc('sawtooth', tf(midi));
       const lp = biquad('lowpass', 500, 1.5);
       lp.frequency.setValueAtTime(500, t);
       lp.frequency.linearRampToValueAtTime(2800 * vel, t + 0.07);
@@ -418,7 +420,7 @@ export function createKit(ctx, out, spb) {
       g.connect(out);
       const lp = biquad('lowpass', 150, 1.2);
       lp.connect(g);
-      const o = osc('sine', mtof(midi));
+      const o = osc('sine', tf(midi));
       o.connect(shaper(3)).connect(lp);
       o.start(t);
       o.stop(t + d + 0.02);
@@ -430,8 +432,8 @@ export function createKit(ctx, out, spb) {
     acid(beat, midi, lenBeats, { accent = false, slideFrom = null, cutoff = 420, env = 2200, res = 14 } = {}) {
       const t = T(beat);
       const d = T(lenBeats);
-      const o = osc('sawtooth', mtof(slideFrom ?? midi));
-      if (slideFrom != null) o.frequency.exponentialRampToValueAtTime(mtof(midi), t + 0.06);
+      const o = osc('sawtooth', tf(slideFrom ?? midi));
+      if (slideFrom != null) o.frequency.exponentialRampToValueAtTime(tf(midi), t + 0.06);
       const lp = biquad('lowpass', cutoff, res);
       lp.frequency.setValueAtTime(cutoff + env * (accent ? 1.7 : 1), t);
       lp.frequency.exponentialRampToValueAtTime(cutoff, t + (accent ? 0.2 : 0.13));
@@ -460,7 +462,7 @@ export function createKit(ctx, out, spb) {
       dlp.connect(out);
       for (const m of midis) {
         for (const det of [-8, 8]) {
-          const o = osc('sawtooth', mtof(m));
+          const o = osc('sawtooth', tf(m));
           o.detune.value = det;
           o.connect(lp);
           o.start(t);
@@ -700,14 +702,14 @@ export function bufferPeak(buffer) {
   return peak;
 }
 
-async function renderLoop(def, bpm) {
+async function renderLoop(def, bpm, semis = 0) {
   const spb = 60 / bpm;
   const beats = def.bars * 4;
   const loopFrames = Math.round(beats * spb * SAMPLE_RATE);
   const ctx = new OfflineAudioContext(2, loopFrames + TAIL_SECONDS * SAMPLE_RATE, SAMPLE_RATE);
   const bus = ctx.createGain();
   bus.connect(ctx.destination);
-  def.render(createKit(ctx, bus, spb));
+  def.render(createKit(ctx, bus, spb, def.category === 'drums' || def.category === 'fx' ? 0 : semis));
   const rendered = await ctx.startRendering();
 
   const buffer = new AudioBuffer({ numberOfChannels: 2, length: loopFrames, sampleRate: SAMPLE_RATE });
@@ -765,6 +767,7 @@ export class Library extends Emitter {
     this.variants = new Map(); // „id@faktor“ → gedehnte Fassung (Clip-Laufzeit)
     this.pendingVariants = new Map();
     this.catalogReady = Promise.resolve();
+    this.semis = 0; // Tonart des Songs relativ zu A-Moll (die synthetischen Loops werden darin gerendert)
   }
 
   // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
@@ -832,9 +835,11 @@ export class Library extends Emitter {
   }
 
   async _prepare(s, bpm) {
-    if (this.prepared.get(s.id) === bpm && s.buffer) return;
+    // Tonale synthetische Loops hängen auch von der Tonart ab
+    const tag = s.def && s.key ? `${bpm}|${this.semis}` : bpm;
+    if (this.prepared.get(s.id) === tag && s.buffer) return;
     let r;
-    if (s.def) r = await renderLoop(s.def, bpm);
+    if (s.def) r = await renderLoop(s.def, bpm, this.semis);
     else if (s.make) r = await s.make(bpm);
     else if (s.kind === 'loop' && s.orig) r = { buffer: stretchLoop(s.orig, s.beats, bpm), lengthBeats: s.beats };
     else if (s.orig) r = padOneShot(s.orig, bpm);
@@ -843,7 +848,18 @@ export class Library extends Emitter {
     s.lengthBeats = r.lengthBeats;
     s.peaks = computePeaks(s.buffer, s.lengthBeats);
     s.rev = (s.rev ?? 0) + 1;
-    this.prepared.set(s.id, bpm);
+    this.prepared.set(s.id, tag);
+  }
+
+  // Tonart wechseln: nur die tonalen synthetischen Loops werden neu gerendert
+  async setKey(semis) {
+    this.semis = semis;
+    for (const s of this.samples.values()) {
+      if (!(s.def && s.key)) continue;
+      await this._prepare(s, this.bpm);
+      if (this.semis !== semis) return;
+    }
+    this.emit();
   }
 
   async setTempo(bpm) {
@@ -880,9 +896,10 @@ async function loadCatalogEntry(entry) {
 
 // Synthetische Loops und die Katalog-Sounds, die das Projekt braucht, vor dem Start; die übrigen Katalog-Sounds
 // (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
-export async function buildLibrary({ bpm = LIBRARY_BPM, onProgress, need = null } = {}) {
+export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, need = null } = {}) {
   const lib = new Library();
   lib.bpm = bpm;
+  lib.semis = semis;
   const order = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];
   // Reihenfolge: synthetisch, dann Katalog, dann alles Übrige (eigene Sounds, Patterns) wie gehabt
   const reorder = () => {
