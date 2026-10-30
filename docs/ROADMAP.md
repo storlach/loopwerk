@@ -148,6 +148,15 @@
 - Neue Rollen im Team: UI-Designer, Motion-Designer, Creative Director
 - Spec: `docs/specs/v2.0-werkstueck.md`, Tests: `tests/v20.test.cjs`
 
+## ✅ 2.1 – Mehr Griff, mehr Licht
+- Mehrfachauswahl mit dem Cursor: Rahmen aufziehen, Umschalt-Klick, Strg+A; zusammen verschieben, kopieren, löschen
+- Laufzeit eines Clips: doppelt so lang = halbes Tempo, gleiche Tonhöhe (WSOLA im Worker)
+- Spurgruppen als Akkordeon: einklappen mit Übersicht, Gruppe stumm/solo, umbenennen, auflösen
+- Licht aus der Musik: Umgebungslicht folgt Pegel und Farben der klingenden Clips, Leuchten und Funken nur an der Abspielmarke
+- Wunsch-Agent: ein Satz → Plan (Claude im Artifact, sonst Regeln) → ein Rückgängig-Schritt
+- Neue UI-Richtung F · Phosphor (schwarz, Licht aus der Musik), vom Creative Director mit Auflagen zur Durchsicht freigegeben
+- Spec: `docs/specs/v2.1-griff-und-licht.md`, Tests: `tests/v21.test.cjs`
+
 ## Als Nächstes
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
