@@ -311,6 +311,7 @@ const { check, finish } = createChecker();
     // Zustand wird gemerkt
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     check('Offene Kategorie bleibt nach Neuladen erhalten', await expanded('bass') === 'true' && await expanded('drums') === 'false');
 
     // ---------- Desktop bleibt, wie er war ----------

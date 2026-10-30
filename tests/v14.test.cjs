@@ -60,6 +60,7 @@ const { check, finish } = createChecker();
     await page.selectOption('#snap-sel', '0.5');
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready);
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     await page.evaluate(() => { const { library } = window.loopwerk; const sr = 44100; const b = new AudioBuffer({ numberOfChannels: 2, length: 2 * sr, sampleRate: sr }); b.getChannelData(0)[0] = 1; library.register({ id: 'test-click', name: 'Klick', category: 'fx', lengthBeats: 4, bpm: 120, buffer: b }); });
     check('Raster wird gemerkt', await page.evaluate(() => window.loopwerk.ui.snapBeats === 0.5 && document.getElementById('snap-sel').value === '0.5'));
 
@@ -265,6 +266,7 @@ const { check, finish } = createChecker();
     await page.keyboard.press('Escape');
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready);
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     check('Ordnung nach Genre wird gemerkt', await page.evaluate(() => document.querySelector('.shelf-sort [data-sort="genre"]').getAttribute('aria-pressed') === 'true'));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-genre.png') });
     await page.click('.shelf-sort [data-sort="cat"]');

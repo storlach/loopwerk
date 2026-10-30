@@ -764,6 +764,7 @@ export class Library extends Emitter {
     this.prepared = new Map(); // id → bpm, für das der Puffer vorbereitet ist
     this.variants = new Map(); // „id@faktor“ → gedehnte Fassung (Clip-Laufzeit)
     this.pendingVariants = new Map();
+    this.catalogReady = Promise.resolve();
   }
 
   // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
@@ -877,11 +878,24 @@ async function loadCatalogEntry(entry) {
   }
 }
 
-export async function buildLibrary({ bpm = LIBRARY_BPM, onProgress } = {}) {
+// Synthetische Loops und die Katalog-Sounds, die das Projekt braucht, vor dem Start; die übrigen Katalog-Sounds
+// (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
+export async function buildLibrary({ bpm = LIBRARY_BPM, onProgress, need = null } = {}) {
   const lib = new Library();
   lib.bpm = bpm;
+  const order = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];
+  // Reihenfolge: synthetisch, dann Katalog, dann alles Übrige (eigene Sounds, Patterns) wie gehabt
+  const reorder = () => {
+    const known = new Set(order);
+    lib.samples = new Map([
+      ...order.filter((id) => lib.samples.has(id)).map((id) => [id, lib.samples.get(id)]),
+      ...[...lib.samples].filter(([id]) => !known.has(id)),
+    ]);
+  };
+  const first = need ? CATALOG.filter((e) => need.has(e.id)) : CATALOG;
+  const rest = CATALOG.filter((e) => !first.includes(e));
   let done = 0;
-  const total = LOOP_DEFS.length + CATALOG.length;
+  const total = LOOP_DEFS.length + first.length;
   const tick = () => onProgress?.(++done, total);
   const synth = LOOP_DEFS.map(async (def) => {
     const s = {
@@ -893,14 +907,26 @@ export async function buildLibrary({ bpm = LIBRARY_BPM, onProgress } = {}) {
     tick();
     return s;
   });
-  const real = CATALOG.map(async (entry) => {
+  const real = first.map(async (entry) => {
     const s = await loadCatalogEntry(entry);
     if (s) await lib.add(s);
     tick();
   });
   await Promise.all([...synth, ...real]);
-  // Reihenfolge stabil halten: erst synthetisch, dann Katalog
-  const order = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];
-  lib.samples = new Map(order.filter((id) => lib.samples.has(id)).map((id) => [id, lib.samples.get(id)]));
+  reorder();
+  // Rest im Hintergrund, drei Dateien gleichzeitig; jeder fertige Sound erscheint sofort im Regal
+  lib.catalogReady = (async () => {
+    const queue = [...rest];
+    const worker = async () => {
+      for (let e = queue.shift(); e; e = queue.shift()) {
+        const s = await loadCatalogEntry(e);
+        if (!s) continue;
+        lib.samples.set(s.id, s);
+        reorder();
+        await lib.add(s);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+  })();
   return lib;
 }

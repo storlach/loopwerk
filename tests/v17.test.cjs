@@ -30,6 +30,7 @@ const { check, finish } = createChecker();
   });
   check('Splash mit Logo und Fortschrittsbalken erscheint sofort', early.visible && early.logo && early.bar, JSON.stringify(early));
   await sp.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 60000 });
+  await sp.evaluate(() => window.loopwerk.library.catalogReady);
   const pcts = seen.map((v) => parseInt(v, 10)).filter((v) => !Number.isNaN(v));
   const rising = pcts.every((v, i) => i === 0 || v >= pcts[i - 1]);
   const steps = [...new Set(seen.map((v) => v.split('|')[1].replace(/\d+ von \d+/, 'N von M')))];

@@ -121,7 +121,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
     // ---------- Hintergrund: höchstens 30 Bilder pro Sekunde ----------
     if (frameNo++ % 2 === 0) drawAmbient(now / 1000, total);
-    amb.style.opacity = String(total > 0.002 ? ambientMax * amp : 0);
+    // Grundlicht, sobald etwas klingt; darüber pumpt es mit der Lautstärke
+    amb.style.opacity = String(total > 0.002 ? ambientMax * (0.35 + 0.65 * amp) : 0);
 
     // ---------- Marke: Leuchten und Funken ----------
     const ppb = ui.pxPerBeat;
@@ -205,7 +206,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       const s = level[c] / total;
       mr += rgb[c][0] * s; mg += rgb[c][1] * s; mb += rgb[c][2] * s;
     }
-    ac.fillStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},0.18)`;
+    ac.fillStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},0.32)`;
     ac.fillRect(0, 0, W, H);
     CATS.forEach((c, i) => {
       const share = level[c] / total;

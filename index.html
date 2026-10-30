@@ -56,11 +56,57 @@
     <h1 class="splash-name">Loop<b>werk</b></h1>
     <p class="splash-tag">I Like To Loop it Loop it</p>
     <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
-    <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
+    <p class="splash-status"><span class="splash-step" id="boot-step">Lädt Programm …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
     <p class="splash-version" id="boot-version">Version 2.2</p>
   </div>
 </div>
 
+<!-- Alle Programm-Module gleich parallel laden (sonst lädt am Handy jede Import-Ebene nacheinander). Liste: node tools/module-list.cjs -->
+<link rel="modulepreload" href="src/main.js">
+<link rel="modulepreload" href="src/samples.js">
+<link rel="modulepreload" href="src/util.js">
+<link rel="modulepreload" href="src/catalog.js">
+<link rel="modulepreload" href="src/dsp/stretch.js">
+<link rel="modulepreload" href="src/model.js">
+<link rel="modulepreload" href="src/effects.js">
+<link rel="modulepreload" href="src/engine.js">
+<link rel="modulepreload" href="src/wav.js">
+<link rel="modulepreload" href="src/ui/library.js">
+<link rel="modulepreload" href="src/ui/arranger.js">
+<link rel="modulepreload" href="src/ui/knob.js">
+<link rel="modulepreload" href="src/ui/transport.js">
+<link rel="modulepreload" href="src/ui/project-io.js">
+<link rel="modulepreload" href="src/ui/save-file.js">
+<link rel="modulepreload" href="src/zip.js">
+<link rel="modulepreload" href="src/ui/splash.js">
+<link rel="modulepreload" href="src/ui/layout.js">
+<link rel="modulepreload" href="src/ui/place.js">
+<link rel="modulepreload" href="src/ui/inspector.js">
+<link rel="modulepreload" href="src/ui/mixer.js">
+<link rel="modulepreload" href="src/ui/create.js">
+<link rel="modulepreload" href="src/ui/sheets.js">
+<link rel="modulepreload" href="src/ui/tips.js">
+<link rel="modulepreload" href="src/ui/brand-meter.js">
+<link rel="modulepreload" href="src/ui/glow.js">
+<link rel="modulepreload" href="src/ui/wish.js">
+<link rel="modulepreload" href="src/wish.js">
+<link rel="modulepreload" href="src/ai.js">
+<link rel="modulepreload" href="src/dsp/pitch.js">
+<link rel="modulepreload" href="src/dsp/fft.js">
+<link rel="modulepreload" href="src/ui/editor.js">
+<link rel="modulepreload" href="src/dsp/edit.js">
+<link rel="modulepreload" href="src/dsp/run.js">
+<link rel="modulepreload" href="src/dsp/separate.js">
+<link rel="modulepreload" href="src/dsp/autotune.js">
+<link rel="modulepreload" href="src/own-sounds.js">
+<link rel="modulepreload" href="src/ui/export-dock.js">
+<link rel="modulepreload" href="src/export.js">
+<link rel="modulepreload" href="src/ui/pattern-editor.js">
+<link rel="modulepreload" href="src/instruments.js">
+<link rel="modulepreload" href="src/patterns.js">
+<link rel="modulepreload" href="src/recorder.js">
+<link rel="modulepreload" href="src/ui/mobile.js">
+<link rel="modulepreload" href="src/ui/link-import.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,7 +144,7 @@
     --cat-synth: #B494FF;
     --cat-fx: #FF7F45;
     --cat-own: #FF62A5;
-    --ambient-max: 0.62; --glow-blend: screen;
+    --ambient-max: 0.8; --glow-blend: screen;
     /* Spuren durchsichtig, damit das Umgebungslicht dahinter wirkt */
     --lane-a: transparent;
     --lane-alt-a: rgb(255 255 255 / 0.012);
@@ -1154,6 +1200,10 @@
       padding: 6px max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px));
     }
     .deck .meter-wrap, .deck .spacer, .deck .group[aria-label="Clip"], .deck .group:empty, .lcd-more { display: none; }
+    /* Schon beim Laden (bevor die Knöpfe ins Fach „Mehr“ wandern): nichts darf die Seite breiter machen –
+       sonst zoomt das Handy heraus und der Ladescreen liegt außerhalb des Bildes */
+    .deck .group[aria-label="Projekt"], .deck .group[aria-label="Bearbeiten"], .deck #rec-btn, .deck #metro-btn { display: none; }
+    .deck { overflow-x: clip; }
     .deck .group { flex-wrap: nowrap; }
     .key { min-width: 44px; height: 44px; }
     .key.play { min-width: 56px; height: 44px; }
@@ -1619,6 +1669,8 @@
   #app { position: relative; z-index: 1; }
   .deck { background: var(--deck); box-shadow: 0 1px 0 var(--line); }
   .shelf, .arranger, .insp { background: var(--panel); border-color: var(--line); }
+  /* Der Arranger ist durchsichtig: dort scheint das Umgebungslicht voll durch */
+  .arranger { background: transparent; }
 
   /* Bildmarke: Lichtstriche in den Farben der Kategorien, leuchten mit dem Ausgangspegel */
   .brand { gap: 11px; }

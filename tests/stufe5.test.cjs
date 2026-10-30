@@ -137,6 +137,7 @@ const tmp = (name) => path.join(os.tmpdir(), name);
     // Eigene Sounds bleiben nach Neuladen erhalten (IndexedDB)
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     const afterReload = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'own').map((s) => s.name).sort());
     check('Eigene Sounds bleiben nach Neuladen erhalten', afterReload.includes('Gesang kurz') && afterReload.includes('Mein Gesang'), JSON.stringify(afterReload));
 

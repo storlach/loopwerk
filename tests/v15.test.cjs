@@ -313,6 +313,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     // ---------- Mit Claude (nachgebildet) ----------
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready);
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     await page.evaluate(async () => {
       const mm = await import('./src/model.js');
       window.loopwerk.store.replace(mm.createEmptyProject());

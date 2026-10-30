@@ -23,6 +23,7 @@ function check(name, ok, detail = '') {
   try {
     await page.goto(url);
     await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 15000 });
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
 
     // 1. Bibliothek
     const lib = await page.evaluate(() => {
@@ -141,6 +142,7 @@ function check(name, ok, detail = '') {
       const phone = await browser.newPage({ viewport: { width: 400, height: 860 }, deviceScaleFactor: 2 });
       await phone.goto(url);
       await phone.waitForFunction(() => window.loopwerk?.ready);
+      await phone.evaluate(() => window.loopwerk.library.catalogReady);
       await phone.screenshot({ path: path.join(dir, 'phone-light.png'), fullPage: true });
       const overflow = await phone.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       check('Handy: keine horizontale Seitenverschiebung', overflow <= 0, `${overflow}px`);

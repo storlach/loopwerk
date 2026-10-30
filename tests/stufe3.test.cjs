@@ -133,6 +133,7 @@ const { check, finish } = createChecker();
     check('Stern markiert einen Favoriten', favRows === 1, `${favRows} Favorit(en)`);
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     await page.click('#shelf-chips .chip[data-filter="fav"]');
     const favAfter = await page.locator('#library .loop-item').count();
     const bpmAfter = await page.evaluate(() => [window.loopwerk.store.project.bpm, window.loopwerk.library.bpm]);

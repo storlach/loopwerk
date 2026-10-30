@@ -294,7 +294,10 @@ async function boot() {
   splash.set(0.03, 'Starte …');
   const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
   // Sounds machen den Großteil der Ladezeit aus: 5–80 %
+  // Nur die Katalog-Sounds, die das Projekt benutzt, vor dem Start laden – der Rest kommt im Hintergrund
+  const need = new Set((isValidProject(saved) ? saved : createDemoProject()).tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
   const library = await buildLibrary({
+    need,
     bpm: isValidProject(saved) ? saved.bpm : 120,
     onProgress: (done, total) => splash.set(0.05 + 0.75 * (done / total), `Sounds werden geladen – ${done} von ${total}`),
   });

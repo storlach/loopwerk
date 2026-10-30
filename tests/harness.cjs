@@ -12,6 +12,8 @@ async function openApp({ viewport = { width: 1400, height: 820 }, args = [], has
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(url);
   await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 15000 });
+  // Katalog-Sounds lädt die App im Hintergrund nach; Tests sollen mit vollständiger Bibliothek starten
+  await page.evaluate(() => window.loopwerk.library.catalogReady);
   await page.evaluate(registerTestSamples);
   return {
     page, browser, url, errors,
