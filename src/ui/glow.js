@@ -7,7 +7,8 @@ import { headW } from './arranger.js';
 
 const CATS = ['drums', 'bass', 'chords', 'synth', 'fx', 'own'];
 const BEHIND = 150; // px hinter der Marke: Platz für Funken
-const AHEAD = 40;
+const AHEAD = 110; // vor der Marke: Platz für das Leuchten der Wellenform
+const WAVE_GLOW = 90; // px vor und hinter der Marke, in denen die Wellenform aufleuchtet
 const MAX_SPARKS = 70;
 
 export function mountGlow({ engine, store, library, ui, root = document.querySelector('.arranger') }) {
@@ -124,7 +125,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
         const cat = CATS.includes(s?.colorCat ?? s?.category) ? (s.colorCat ?? s.category) : 'fx';
         const lv = engine.trackPeak(t.id);
         target[cat] += lv;
-        hits.push({ trackId: t.id, cat, lv });
+        hits.push({ trackId: t.id, cat, lv, clip });
       }
     }
     // schnell hoch, langsam zurück – wie eine Amplitude
@@ -169,6 +170,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       const lane = grid.querySelector(`.lane[data-track-id="${t.id}"]`);
       if (!lane?.offsetParent) continue;
       const hit = hits.find((hh) => hh.trackId === t.id);
+      // Kein Clip mehr unter der Marke: dort bleibt die Linie leise
+      if (!hit) continue;
       const cat = hit?.cat ?? 'fx';
       const [r, gg, b] = rgb[cat] || [136, 136, 136];
       const y0 = lane.offsetTop - top;
@@ -188,6 +191,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       bc.fillStyle = grd;
       bc.fillRect(-30, -30, 60, 60);
       bc.restore();
+      // Wellenform vor und hinter der Marke leuchtet in der Clip-Farbe, zur Marke hin am hellsten
+      if (hit?.clip) glowWave(hit.clip, lane, r, gg, b, I, dpr);
       // heller Kern mit Schein: nur wo die Marke einen Clip trifft (sonst bleibt die Linie leise)
       bc.save();
       bc.globalCompositeOperation = 'source-over';
@@ -217,6 +222,50 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       bc.fillRect(Math.round(sx), Math.round(s.y), s.size, s.size);
     }
     bc.globalCompositeOperation = 'source-over';
+  }
+
+  // Ausschnitt der Wellenform um die Marke: maskiert (Mitte hell, Ränder weich) und mit Schein aufaddiert
+  const off = document.createElement('canvas');
+  const oc = off.getContext('2d');
+  function glowWave(clip, lane, r, g, b, I, dpr) {
+    const wave = lane.querySelector(`.clip[data-clip-id="${clip.id}"] .clip-wave`);
+    if (!wave || !wave.width) return;
+    const wr = wave.getBoundingClientRect();
+    const br = beam.getBoundingClientRect();
+    if (!wr.width || !br.width) return;
+    const L = Math.max(0, br.left + BEHIND - WAVE_GLOW - wr.left);
+    const Rr = Math.min(wr.width, br.left + BEHIND + WAVE_GLOW - wr.left);
+    if (Rr <= L) return;
+    const sw = Rr - L;
+    const sx = wave.width / wr.width;
+    off.width = Math.max(1, Math.round(sw * dpr));
+    off.height = Math.max(1, Math.round(wr.height * dpr));
+    oc.setTransform(1, 0, 0, 1, 0, 0);
+    oc.globalCompositeOperation = 'source-over';
+    oc.clearRect(0, 0, off.width, off.height);
+    oc.drawImage(wave, L * sx, 0, sw * sx, wave.height, 0, 0, off.width, off.height);
+    // nur die Striche behalten, nach außen ausblenden
+    const cx = (br.left + BEHIND - wr.left - L) * dpr;
+    const mask = oc.createLinearGradient(cx - WAVE_GLOW * dpr, 0, cx + WAVE_GLOW * dpr, 0);
+    mask.addColorStop(0, 'rgba(0,0,0,0)');
+    mask.addColorStop(0.5, 'rgba(0,0,0,1)');
+    mask.addColorStop(1, 'rgba(0,0,0,0)');
+    oc.globalCompositeOperation = 'destination-in';
+    oc.fillStyle = mask;
+    oc.fillRect(0, 0, off.width, off.height);
+    const dx = wr.left + L - br.left;
+    const dy = wr.top - br.top;
+    bc.save();
+    bc.globalCompositeOperation = 'lighter';
+    bc.shadowColor = `rgba(${r},${g},${b},0.9)`;
+    bc.shadowBlur = 8;
+    bc.globalAlpha = 0.55 + 0.45 * I;
+    bc.drawImage(off, dx, dy, sw, wr.height);
+    // zweimal aufaddiert: die Striche glühen fast weiß
+    bc.shadowBlur = 0;
+    bc.globalAlpha = 0.5 * I;
+    bc.drawImage(off, dx, dy, sw, wr.height);
+    bc.restore();
   }
 
   // Wo jede Farbe gerade „steht“ (0…1 quer über den Raum), langsam wandernd

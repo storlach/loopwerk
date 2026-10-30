@@ -1801,7 +1801,15 @@
   .loop-fav.on { color: var(--ink); text-shadow: var(--glow-ink); }
 
   /* Arranger: Lineal, Spurköpfe */
-  .ruler, .corner { background: var(--deck); }
+  /* Taktleiste klebt oben über den Spuren: leicht durchscheinend mit Weichzeichner, damit Clips darunter nicht stören */
+  .ruler, .corner { background: color-mix(in srgb, var(--sheet-bg) 62%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  /* Master im Mixer: fast deckend mit Weichzeichner – die Spuren scrollen darunter durch */
+  .mixer-strips { padding-right: 0; }
+  .strip.strip-master {
+    position: sticky; right: 0; z-index: 2; margin-right: 0;
+    background: color-mix(in srgb, var(--sheet-bg) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    box-shadow: -10px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
+  }
   .bar-mark { font: 400 10px/1 var(--font-mono); color: var(--muted); }
   .loop-band { top: 3px; height: 2px; background: var(--ink); box-shadow: 0 0 6px rgb(255 255 255 / 0.5); }
   .loop-band.off { opacity: 0.25; box-shadow: none; }
