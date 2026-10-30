@@ -4,61 +4,96 @@
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Martian+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
 <style>
   :root {
-    /* Layout: Werkbank – Transport-Deck oben, Sound-Regal links, Arranger als Taktraster rechts */
-    --bg: #E2E6EC;
-    --panel: #F5F7FA;
-    --lane: #EEF1F5;
-    --lane-alt: #E7EBF1;
-    --ink: #172031;
-    --muted: #586377;
-    --line: #CAD1DC;
-    --grid-bar: #B6BFCD;
-    --grid-beat: #DCE1E8;
-    --deck: #1D2532;
-    --deck-2: #283243;
-    --deck-ink: #E6EBF2;
-    --deck-muted: #8F9AAD;
-    --lcd: #1A1409;
-    --amber: #F0A01C;
-    --amber-dim: #5E4313;
-    --focus: #3B74F0;
-    --meter-ok: #3BB273;
-    --meter-warm: #E6B422;
-    --meter-hot: #E5483A;
-    --meter-off: #2F3A4C;
-    --cat-drums: #D9502F;
-    --cat-bass: #2770CF;
-    --cat-chords: #158F74;
-    --cat-synth: #8250D4;
-    --cat-fx: #A57B00;
-    --cat-own: #C2407A;
-    --font-display: "Chakra Petch", "Bahnschrift", "Segoe UI", sans-serif;
-    --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-    --radius: 6px;
+    /* Look „Werkstück“: ein Musikgerät aus Graphit und Gummi, genau eine Signalfarbe (Orange) für Transport und Aktives.
+       Hell ist das „silberne Gehäuse“, dunkel (Hauptmodus) das Graphit-Gehäuse; das Display bleibt immer schwarz. */
+    --bg: #E9E7E2;
+    --panel: #F5F4F0;
+    --lane: #EFEDE8;
+    --lane-alt: #E8E6E0;
+    --ink: #141414;
+    --muted: #5F5B54;
+    --line: #D3D0C8;
+    --grid-bar: #C4C0B7;
+    --grid-beat: #DFDCD5;
+    --deck: #F5F4F0;
+    --deck-2: #E4E2DC;
+    --deck-ink: #141414;
+    --deck-muted: #5F5B54;
+    --lcd: #070707;
+    --amber: #C2410C;
+    --amber-dim: #8F8A80;
+    --focus: #141414;
+    --meter-ok: #1FA968;
+    --meter-warm: #E0A800;
+    --meter-hot: #E5372C;
+    --meter-off: #D3D0C8;
+    --cat-drums: #E0A800;
+    --cat-bass: #2F6BEF;
+    --cat-chords: #17A866;
+    --cat-synth: #7C6AF0;
+    --cat-fx: #8A8478;
+    --cat-own: #E2508A;
+    --font-display: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --font-body: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --radius: 8px;
+    /* Werkstück-Bausteine: Gummitasten, Mulden, Display, LED, Punktraster */
+    --accent-ink: #140600;
+    --key-face: linear-gradient(180deg, #FFFFFF, #ECEAE4);
+    --key-shadow: inset 0 1px 0 #FFFFFF, inset 0 -2px 0 rgb(0 0 0 / 0.12), 0 1px 0 rgb(0 0 0 / 0.16), 0 0 0 1px rgb(0 0 0 / 0.07);
+    --well: #E2E0DA;
+    --well-shadow: inset 0 1px 3px rgb(0 0 0 / 0.18);
+    --dots: radial-gradient(circle, rgb(0 0 0 / 0.06) 1px, transparent 1.3px) 0 0 / 12px 12px;
+    --clip-body: #FBFAF7;
+    --label-ink: #111111;
+    --lcd-face: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 3px), var(--lcd);
+    --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.5);
+    --lcd-sep: #1D1D1D;
+    --display-ink: #F2EFE9;
+    --lcd-label: #8F8A80;
+    --sheet-bg: #F7F6F3;
+    --sheet-shadow: 0 -1px 0 rgb(0 0 0 / 0.08), 0 -18px 44px rgb(0 0 0 / 0.18);
+    --led-off: #C9C5BC;
+    --knob-hi: #FFFFFF;
+    --knob-lo: #DEDBD4;
+    --knob-edge: rgb(0 0 0 / 0.25);
     /* Klaviertasten sehen in hell und dunkel wie ein Klavier aus */
     --key-white: #fdfdfb; --key-white-ink: #5b6475; --key-black: #1d2330; --key-black-ink: #b9c2d3;
     --track-h: 58px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0F141B; --panel: #171E28; --lane: #151B24; --lane-alt: #19202B; --ink: #E3E8F0; --muted: #8C97A9;
-      --line: #2A3444; --grid-bar: #354053; --grid-beat: #212937; --deck: #0B0F15; --deck-2: #1A212C;
-      --deck-ink: #E3E8F0; --deck-muted: #7F8A9C; --lcd: #140F06; --amber: #F4A92A; --amber-dim: #4F3810;
-      --focus: #6F9BFF; --meter-off: #232C3A;
-      --cat-drums: #F06A4A; --cat-bass: #5797F2; --cat-chords: #33BC98; --cat-synth: #A57CF2; --cat-fx: #D3A82A; --cat-own: #E86A9E;
+      --bg: #0F0F0F; --panel: #181818; --lane: #121212; --lane-alt: #151515; --ink: #F2EFE9; --muted: #A39E94;
+      --line: #2C2C2C; --grid-bar: #2A2A2A; --grid-beat: #1C1C1C; --deck: #181818; --deck-2: #232323;
+      --deck-ink: #F2EFE9; --deck-muted: #A39E94; --lcd: #050505; --amber: #FF5B1F; --amber-dim: #8F8A80;
+      --focus: #FFFFFF; --meter-ok: #22C97C; --meter-warm: #FFC21A; --meter-hot: #FF3B30; --meter-off: #262626;
+      --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8;
+      --key-face: linear-gradient(180deg, #2B2B2B, #222222);
+      --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
+      --well: #0B0B0B; --well-shadow: inset 0 1px 3px #000;
+      --dots: radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px;
+      --clip-body: #1B1B1B; --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.06);
+      --sheet-bg: #161616; --sheet-shadow: 0 -1px 0 #3A3A3A, 0 -20px 50px rgb(0 0 0 / 0.7);
+      --led-off: #3A3A3A; --knob-hi: #353535; --knob-lo: #1F1F1F; --knob-edge: #000;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0F141B; --panel: #171E28; --lane: #151B24; --lane-alt: #19202B; --ink: #E3E8F0; --muted: #8C97A9;
-    --line: #2A3444; --grid-bar: #354053; --grid-beat: #212937; --deck: #0B0F15; --deck-2: #1A212C;
-    --deck-ink: #E3E8F0; --deck-muted: #7F8A9C; --lcd: #140F06; --amber: #F4A92A; --amber-dim: #4F3810;
-    --focus: #6F9BFF; --meter-off: #232C3A;
-    --cat-drums: #F06A4A; --cat-bass: #5797F2; --cat-chords: #33BC98; --cat-synth: #A57CF2; --cat-fx: #D3A82A; --cat-own: #E86A9E;
+    --bg: #0F0F0F; --panel: #181818; --lane: #121212; --lane-alt: #151515; --ink: #F2EFE9; --muted: #A39E94;
+    --line: #2C2C2C; --grid-bar: #2A2A2A; --grid-beat: #1C1C1C; --deck: #181818; --deck-2: #232323;
+    --deck-ink: #F2EFE9; --deck-muted: #A39E94; --lcd: #050505; --amber: #FF5B1F; --amber-dim: #8F8A80;
+    --focus: #FFFFFF; --meter-ok: #22C97C; --meter-warm: #FFC21A; --meter-hot: #FF3B30; --meter-off: #262626;
+    --cat-drums: #FFC21A; --cat-bass: #3D7BFF; --cat-chords: #22C97C; --cat-synth: #A99BFF; --cat-fx: #E6E1D6; --cat-own: #FF7AA8;
+    --key-face: linear-gradient(180deg, #2B2B2B, #222222);
+    --key-shadow: inset 0 1px 0 rgb(255 255 255 / 0.07), inset 0 -2px 0 rgb(0 0 0 / 0.45), 0 1px 0 rgb(0 0 0 / 0.6);
+    --well: #0B0B0B; --well-shadow: inset 0 1px 3px #000;
+    --dots: radial-gradient(circle, rgb(255 255 255 / 0.05) 1px, transparent 1.3px) 0 0 / 12px 12px;
+    --clip-body: #1B1B1B; --lcd-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000, 0 1px 0 rgb(255 255 255 / 0.06);
+    --sheet-bg: #161616; --sheet-shadow: 0 -1px 0 #3A3A3A, 0 -20px 50px rgb(0 0 0 / 0.7);
+    --led-off: #3A3A3A; --knob-hi: #353535; --knob-lo: #1F1F1F; --knob-edge: #000;
     color-scheme: dark;
   }
 
@@ -763,6 +798,23 @@
   @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
   @media (prefers-reduced-motion: reduce) { .hint { animation: none; } }
 
+  /* ---------- Aus dem Netz holen: Link oder Ton aus einem anderen Tab ---------- */
+  .pop.link-pop {
+    position: fixed; top: calc(var(--deck-bottom, 70px) + 6px); left: 50%; right: auto; transform: translateX(-50%);
+    width: min(460px, calc(100vw - 24px)); box-sizing: border-box; padding: 14px; gap: 10px; z-index: 90;
+  }
+  .link-label { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .link-row { display: flex; gap: 8px; }
+  .link-input {
+    flex: 1; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--lane); color: var(--ink); font-size: 14px; -webkit-user-select: text; user-select: text;
+  }
+  .link-note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+  @media (max-width: 760px) { .pop.link-pop { top: max(8px, env(safe-area-inset-top, 0px)); } }
+  .link-note:empty { display: none; }
+  .link-capture { justify-self: start; }
+  .link-pop:not([data-mode="streaming"]) .link-capture:not([aria-pressed="true"]) { opacity: 0.8; }
+
   /* ---------- Fachleiste: dieselben Reiter auf jedem Bildschirm, jeder öffnet die Schublade direkt darüber ---------- */
   .tabbar { position: relative; z-index: 30; background: var(--deck); }
   .tab {
@@ -860,20 +912,14 @@
   }
   .sheet-grip::before { content: ""; width: 44px; height: 5px; border-radius: 999px; background: var(--line); }
   .sheet-grip:hover::before, .sheet.dragging .sheet-grip::before { background: var(--muted); }
-  /* Einrasten, Hinein- und Hinausgleiten: weich auslaufend, auf der Grafikkarte */
-  .sheet { transition: height 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.42s cubic-bezier(0.22, 1, 0.36, 1); will-change: transform, height; }
-  .sheet.dragging { transition: none !important; }
-  .sheet.entering { animation: sheet-in 0.46s cubic-bezier(0.22, 1, 0.36, 1); }
-  .sheet.leaving { animation: sheet-out 0.32s cubic-bezier(0.5, 0, 0.75, 0) forwards; pointer-events: none; }
+  /* Bewegung (Feder, folgt dem Finger, auch bei reduzierter Bewegung) steuert sheets.js – hier keine Übergänge */
+  .sheet { will-change: transform; }
+  .sheet.leaving { pointer-events: none; }
+  /* Höhe gilt nur der Schublade selbst: Ändern pro Bild rechnet nicht den ganzen Inhalt neu */
+  @property --sheet-h { syntax: "*"; inherits: false; }
   /* Beim Hinausgleiten bleibt die Schublade sichtbar, obwohl sie schon „zu“ ist */
   .dock.sheet.leaving[hidden] { display: grid !important; }
   .more-panel.sheet.leaving[hidden] { display: flex !important; }
-  @keyframes sheet-in { from { transform: translateY(100%); } }
-  @keyframes sheet-out { from { transform: var(--leave-from, translateY(0)); } to { transform: translateY(110%); } }
-  @media (prefers-reduced-motion: reduce) {
-    .sheet { transition-duration: 0.12s; }
-    .sheet.entering, .sheet.leaving { animation-duration: 0.12s; }
-  }
   .more-panel .sheet-grip::before { background: var(--deck-2); }
 
   /* ---------- Aufklappfelder (Menüs, Export, Tastenkürzel) ---------- */
@@ -1211,7 +1257,7 @@
     .ed-name, #pat-name, .track-name-input, .ed-beats { font-size: 16px; }
 
     /* Sound-Regal im Fach: Suche und Kategorien oben, das ganze Fach scrollt */
-    .shelf-head { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 10px 12px 8px; }
+    .shelf-head { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 12px 8px; }
     .shelf-title { display: none; }
     .shelf-search { grid-column: 1 / -1; order: -2; height: 44px; font-size: 16px; }
     .chips { grid-column: 1 / -1; order: -1; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
@@ -1332,6 +1378,187 @@
     .loop-item.previewing .loop-play { animation: none; }
     .clip-grip { transition: none; }
   }
+
+  /* ================= Look „Werkstück“: Gummitasten, Display, LED-Punkte, Etiketten – Layout bleibt ================= */
+  body { background: var(--dots), var(--bg); }
+  .deck { background: var(--deck); box-shadow: inset 0 0 0 1px var(--line); }
+  .shelf, .arranger, .insp { background: var(--panel); border-color: var(--line); }
+
+  /* Logo: Amplituden-Balken als LED-Säulen */
+  .brand-name { display: inline-flex; align-items: center; font: 600 15px/1 var(--font-display); letter-spacing: 0.02em; }
+  .brand-name::before {
+    content: ""; width: 26px; height: 20px; flex: none; margin-right: 10px;
+    background:
+      repeating-linear-gradient(0deg, var(--amber) 0 2px, transparent 2px 3px) 0 100% / 4px 9px no-repeat,
+      repeating-linear-gradient(0deg, var(--amber) 0 2px, transparent 2px 3px) 5px 100% / 4px 15px no-repeat,
+      repeating-linear-gradient(0deg, var(--amber) 0 2px, transparent 2px 3px) 10px 100% / 4px 20px no-repeat,
+      repeating-linear-gradient(0deg, var(--amber) 0 2px, transparent 2px 3px) 15px 100% / 4px 12px no-repeat,
+      repeating-linear-gradient(0deg, var(--amber) 0 2px, transparent 2px 3px) 20px 100% / 4px 6px no-repeat;
+  }
+
+  /* Tasten: Gummi auf Gehäuse */
+  .key, .snap {
+    border: 0; border-radius: var(--radius); background: var(--key-face); box-shadow: var(--key-shadow); color: var(--deck-ink);
+    font: 500 10.5px/1 var(--font-mono); letter-spacing: 0.04em;
+  }
+  .key:hover { filter: none; background: var(--key-face); color: var(--ink); }
+  .key:active:not(:disabled) { transform: translateY(1px); }
+  .key[aria-pressed="true"] { color: var(--amber); box-shadow: var(--key-shadow); }
+  /* LED oben rechts – verändert die Breite der Taste nicht */
+  .key { position: relative; }
+  .key[aria-pressed="true"]::before { content: ""; position: absolute; top: 5px; right: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  #export-btn[aria-pressed="true"]::before { display: none; }
+  .key.play, .key.play[aria-pressed="true"] {
+    background: var(--amber); color: var(--accent-ink);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -2px 0 rgb(0 0 0 / 0.25), 0 0 22px -4px var(--amber);
+  }
+  .key.play::before { display: none; }
+  .key.rec svg { fill: var(--meter-hot); }
+
+  /* Display */
+  .lcd { background: var(--lcd-face); box-shadow: var(--lcd-shadow); border-radius: 6px; }
+  .lcd-cell + .lcd-cell { border-left: 0; box-shadow: inset 1px 0 0 var(--lcd-sep); }
+  .lcd-label { font: 500 8.5px/1.3 var(--font-mono); letter-spacing: 0.1em; color: var(--lcd-label); }
+  .lcd-value { font: 500 18px/1.15 var(--font-mono); letter-spacing: -0.02em; color: var(--display-ink); text-shadow: none; }
+  .lcd-cell:first-child .lcd-value { color: var(--amber); text-shadow: 0 0 10px color-mix(in srgb, var(--amber) 55%, transparent); }
+  .lcd-input:focus-visible { outline-color: var(--amber); }
+  .meter-wrap .lcd-label { color: var(--deck-muted); }
+
+  /* Regal */
+  .shelf-search { border: 0; border-radius: 6px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); font-size: 13px; }
+  .seg { border: 0; background: transparent; color: var(--muted); font: 500 9.5px/1.3 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; }
+  .seg:first-of-type, .seg:last-of-type { border-radius: 5px; }
+  .shelf-sort, .pat-view { padding: 3px; border-radius: 8px; background: var(--well); box-shadow: var(--well-shadow); }
+  .seg[aria-pressed="true"] { background: var(--key-face); box-shadow: var(--key-shadow); color: var(--ink); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 4px;
+    background: var(--deck-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink);
+    font: 500 9.5px/1.3 var(--font-mono); letter-spacing: 0.02em;
+  }
+  .chip[class*="cat-"]::before { content: ""; width: 6px; height: 6px; border-radius: 1px; background: var(--cat); }
+  .chip[aria-pressed="true"], .chip[class*="cat-"][aria-pressed="true"], .chip.genre[aria-pressed="true"] { background: var(--ink); color: var(--panel); box-shadow: none; }
+  .chip[class*="cat-"][aria-pressed="true"]::before { display: none; }
+  .loop-item.armed { background: var(--deck-2); box-shadow: inset 3px 0 0 var(--amber); border-color: transparent; }
+  .loop-fav.on { color: var(--amber); }
+
+  /* Arranger: Lineal, Spurköpfe, Clips mit Etikett */
+  .ruler, .corner { background: var(--panel); }
+  .bar-mark { font: 500 9.5px/1 var(--font-mono); color: var(--muted); }
+  .loop-band { background: var(--amber); }
+  .track-head { background: var(--panel); }
+  .track-name { font: 600 13px/1.2 var(--font-body); }
+  .tbtn {
+    border: 0; border-radius: 5px; background: var(--key-face); box-shadow: var(--key-shadow);
+    color: var(--muted); font: 600 9px/1 var(--font-mono);
+  }
+  .tbtn-mute[aria-pressed="true"] { background: var(--meter-warm); color: var(--label-ink); box-shadow: none; }
+  .tbtn-solo[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); box-shadow: none; }
+  .track-row.selected .track-head { box-shadow: inset 3px 0 0 var(--amber); background: var(--deck-2); }
+  .track-vol { accent-color: var(--amber); }
+  .clip {
+    border: 0; border-radius: 4px; background: var(--clip-body);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat) 45%, var(--clip-body));
+  }
+  .clip-label {
+    top: 0; left: 0; right: 0; height: 17px; padding: 0 6px; box-sizing: border-box;
+    background: var(--cat); color: var(--label-ink);
+    font: 600 9.5px/17px var(--font-mono); letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .clip.on-top { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat) 45%, var(--clip-body)), 0 2px 10px rgb(0 0 0 / 0.35); }
+  .clip.selected, .clip.selected.on-top { box-shadow: 0 0 0 2px var(--ink), 0 6px 16px rgb(0 0 0 / 0.4); }
+  .clip-handle::after, .clip-trim::after { background: var(--ink); opacity: 0.5; }
+  .playhead { background: var(--amber); box-shadow: 0 0 12px color-mix(in srgb, var(--amber) 45%, transparent); }
+  .playhead::before { border-top-color: var(--amber); }
+
+  /* Fachleiste: Reiter als Tasten, der aktive gehört zur Schublade und trägt eine LED */
+  .tabbar { background: var(--panel); box-shadow: inset 0 1px 0 var(--line); }
+  .tab { position: relative; color: var(--muted); font: 500 10px/1 var(--font-mono); letter-spacing: 0.05em; }
+  .tab:hover:not(:disabled) { color: var(--ink); }
+  .tab[aria-pressed="true"] { color: var(--ink); background: var(--sheet-bg); box-shadow: inset 1px 0 0 var(--line), inset -1px 0 0 var(--line); }
+  .tab[aria-pressed="true"]::after {
+    content: ""; position: absolute; left: 50%; top: 6px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%;
+    background: var(--amber); box-shadow: 0 0 8px var(--amber);
+  }
+  .tab-keys { color: var(--muted); font: 500 9.5px/1 var(--font-mono); letter-spacing: 0.03em; text-transform: uppercase; }
+
+  /* Schubladen und Knöpfe darin */
+  .dock, .shelf.sheet { background: var(--sheet-bg); border-color: var(--line); }
+  .dock { box-shadow: var(--sheet-shadow); }
+  .sheet-grip::before { width: 28px; height: 4px; border-radius: 1px; background: repeating-linear-gradient(90deg, var(--muted) 0 2px, transparent 2px 4px); }
+  .dock-head h2 { font: 600 11px/1.2 var(--font-mono); letter-spacing: 0.06em; }
+  .dbtn {
+    border: 0; border-radius: 7px; background: var(--key-face); box-shadow: var(--key-shadow); color: var(--ink);
+    font: 500 9.5px/1 var(--font-mono); letter-spacing: 0.03em; text-transform: uppercase;
+  }
+  .dbtn.primary { background: var(--amber); color: var(--accent-ink); }
+  .pat-field select, .ed-name, #pat-name, .ed-beats {
+    border: 0; border-radius: 6px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink);
+  }
+  #pat-live[aria-pressed="true"] { background: var(--meter-hot); color: var(--display-ink); }
+
+  /* Drumpads: Gummi, der beim Schlag orange aufleuchtet */
+  .pat-pad {
+    position: relative; border: 0; border-radius: 10px; color: var(--ink);
+    background: var(--key-face); box-shadow: var(--key-shadow), 0 0 0 1px rgb(0 0 0 / 0.25);
+    font: 600 12.5px/1.1 var(--font-body);
+  }
+  .pat-pad::before { content: ""; position: absolute; left: 12px; right: 12px; top: 0; height: 2px; border-radius: 0 0 2px 2px; background: var(--cat); opacity: 0.55; }
+  .pat-pad:hover { background: var(--key-face); }
+  .pat-pad.hit {
+    background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--amber) 70%, white) 0%, var(--amber) 55%, color-mix(in srgb, var(--amber) 85%, black) 100%);
+    color: var(--accent-ink); transform: translateY(1px) scale(0.985);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 0 30px -2px color-mix(in srgb, var(--amber) 75%, transparent);
+  }
+  .pat-pad.hit::before { background: var(--accent-ink); opacity: 0.4; }
+  .pat-pad-key { font: 500 9px/1 var(--font-mono); }
+
+  /* Schrittraster: LED-Tasten */
+  .pat-cell {
+    position: relative; border: 0; border-radius: 4px; background: var(--key-face);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05), inset 0 -2px 0 rgb(0 0 0 / 0.35);
+  }
+  .pat-cell::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--led-off); }
+  .pat-cell.alt { background: var(--key-face); filter: brightness(0.93); }
+  .pat-cell.bar { border-left: 0; margin-left: 3px; }
+  .pat-cell[aria-pressed="true"] { background: var(--cat); filter: none; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), 0 0 12px -2px color-mix(in srgb, var(--cat) 60%, transparent); }
+  .pat-cell[aria-pressed="true"]::after { background: rgb(0 0 0 / 0.55); }
+  .pat-row-label { font: 500 9.5px/1 var(--font-mono); color: var(--muted); }
+
+  /* Mixer: Kanalzüge als Module, Drehregler mit Skala */
+  .strip { background: var(--clip-body); border-color: var(--line); border-radius: var(--radius); }
+  .strip-name { font: 600 12px/1.2 var(--font-body); }
+  .strip-value { font: 500 10px/1 var(--font-mono); }
+  .strip-fader { accent-color: var(--amber); }
+  .strip-sum { border-radius: 5px; font: 500 9px/1.2 var(--font-mono); text-transform: uppercase; }
+  .strip-sum.on { background: var(--deck-2); border-color: var(--amber); color: var(--ink); }
+  .knob {
+    border: 0; background: radial-gradient(circle at 50% 40%, var(--knob-hi), var(--knob-lo) 70%);
+    box-shadow: 0 0 0 1px var(--knob-edge), 0 3px 6px rgb(0 0 0 / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  }
+  .knob::after {
+    content: ""; position: absolute; inset: -5px; border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from 225deg, var(--amber) 0 calc((var(--turn) + 135deg)), transparent 0);
+    -webkit-mask: radial-gradient(circle, transparent 60%, #000 61% 66%, transparent 67%);
+    mask: radial-gradient(circle, transparent 60%, #000 61% 66%, transparent 67%);
+  }
+  .knob.center::after { display: none; }
+  .knob-ind { background: var(--ink); z-index: 1; }
+
+  /* Inspektor, Karten, Einblender, Tipps */
+  .insp-btns .key { background: var(--key-face); box-shadow: var(--key-shadow); border: 0; font: 500 10px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.03em; }
+  .insp-link { color: var(--amber); font: 500 9.5px/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: 0.02em; }
+  .ccard { border: 0; background: var(--key-face); box-shadow: var(--key-shadow); }
+  .hint { background: var(--deck-2); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgb(0 0 0 / 0.4); }
+  .hint-done { background: var(--amber); color: var(--accent-ink); font: 500 10px/1 var(--font-mono); }
+
+  /* Ladescreen: LED-Säulen und LED-Fortschritt */
+  .splash { background: var(--dots), var(--bg); }
+  .splash-bars span { background: repeating-linear-gradient(0deg, var(--amber) 0 5px, transparent 5px 8px); border-radius: 0; box-shadow: none; }
+  .splash-name { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.01em; }
+  .splash-progress { border-radius: 0; background: repeating-linear-gradient(90deg, var(--led-off) 0 4px, transparent 4px 6px); }
+  .splash-fill { border-radius: 0; background: repeating-linear-gradient(90deg, var(--amber) 0 4px, transparent 4px 6px); box-shadow: 0 0 10px color-mix(in srgb, var(--amber) 40%, transparent); }
+  .splash-fill::after { display: none; }
+  .more-row .pop-item { height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius); background: var(--key-face); box-shadow: var(--key-shadow); color: var(--deck-ink); font: 500 10.5px/1 var(--font-mono); text-transform: uppercase; }
 </style>
 
 <div class="splash" id="boot" role="status" aria-live="polite" aria-label="Loopwerk wird geladen">
@@ -1341,7 +1568,7 @@
     <p class="splash-tag">I Like To Loop it Loop it</p>
     <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
     <p class="splash-status"><span class="splash-step" id="boot-step">Starte …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
-    <p class="splash-version" id="boot-version">Version 1.9</p>
+    <p class="splash-version" id="boot-version">Version 2.0</p>
   </div>
 </div>
 
@@ -1349,7 +1576,7 @@
   <header class="deck">
     <div class="brand">
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 1.9</span>
+      <span class="brand-tag">Version 2.0</span>
     </div>
 
     <div class="group" role="group" aria-label="Transport">
@@ -1441,7 +1668,7 @@
           <div class="pop-body" id="project-menu-body"></div>
           <div class="pop-sep"></div>
           <button class="pop-item" id="tips-reset" type="button">Tipps wieder zeigen</button>
-          <p class="pop-about" id="pop-about">Loopwerk 1.9 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
+          <p class="pop-about" id="pop-about">Loopwerk 2.0 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
         </div>
       </div>
       <div class="group deck-edit" id="deck-edit"></div>
@@ -1459,7 +1686,8 @@
       <button class="shelf-import" id="import-btn" type="button" title="Audiodateien (WAV, MP3, OGG …) als eigene Sounds importieren – oder Dateien direkt auf eine Spur ziehen"><span class="lbl-long">+ Eigene Sounds importieren</span><span class="lbl-short">+ Import</span></button>
       <input type="file" id="import-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" multiple hidden>
       <div class="shelf-make">
-        <button class="shelf-import" id="new-beat-btn" type="button" title="Neuen Beat im Stepsequencer bauen">+ Beat bauen</button>
+        <button class="shelf-import" type="button" data-link-open title="Sound über einen Link holen oder Ton aus einem anderen Tab aufnehmen">+ Link</button>
+        <button class="shelf-import" id="new-beat-btn" type="button" title="Neuen Beat im Stepsequencer bauen"><span class="lbl-long">+ Beat bauen</span><span class="lbl-short">+ Beat</span></button>
         <button class="shelf-import" id="new-melody-btn" type="button" title="Neue Melodie in der Piano-Roll schreiben">+ Melodie</button>
       </div>
       <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
@@ -1479,6 +1707,7 @@
       <h3 class="create-sec">Aufnehmen und holen</h3>
       <button class="ccard cat-fx" type="button" data-create="record"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/></svg></span><span class="ccard-title">Audio aufnehmen</span><span class="ccard-sub">Stimme oder Instrument als Sound auf eine Spur</span></button>
       <button class="ccard cat-bass" type="button" data-create="import"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M7 1h2v8l3-3 1.4 1.4L8 12.8 2.6 7.4 4 6l3 3zM2 13h12v2H2z"/></svg></span><span class="ccard-title">Datei importieren</span><span class="ccard-sub">WAV, MP3, OGG … – oder direkt auf eine Spur ziehen</span></button>
+      <button class="ccard cat-chords" type="button" data-create="link"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6.6 9.4a3 3 0 004.2 0l2.8-2.8a3 3 0 00-4.2-4.2L8.2 3.6l1.1 1.1 1.2-1.2a1.5 1.5 0 012.1 2.1l-2.8 2.8a1.5 1.5 0 01-2.1 0zm2.8-2.8a3 3 0 00-4.2 0L2.4 9.4a3 3 0 004.2 4.2l1.2-1.2-1.1-1.1-1.2 1.2a1.5 1.5 0 01-2.1-2.1l2.8-2.8a1.5 1.5 0 012.1 0z"/></svg></span><span class="ccard-title">Aus dem Netz holen</span><span class="ccard-sub">Link zu einer Audiodatei – oder Ton aus einem anderen Tab aufnehmen</span></button>
     </div>
     <p class="shelf-credit">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
   </aside>
@@ -1637,8 +1866,8 @@
       </div>
     </div>
     <div class="pat-body">
-      <div class="pat-pages cat-own" id="pat-pages" role="group" aria-label="Takthälfte" hidden></div>
-      <div class="pat-drums cat-own" id="pat-drums"></div>
+      <div class="pat-pages cat-drums" id="pat-pages" role="group" aria-label="Takthälfte" hidden></div>
+      <div class="pat-drums cat-drums" id="pat-drums"></div>
       <div class="pat-sing" id="pat-sing" hidden>
         <p class="pat-sing-intro">Sing, summ oder pfeif eine Melodie – Loopwerk erkennt die Töne und spielt sie mit dem Klang, den du oben wählst. Oder nimm eine Aufnahme oder einen ganzen Song.</p>
         <div class="pat-sing-row">
@@ -1656,7 +1885,7 @@
         </div>
         <p class="pat-sing-status" id="sing-status" role="status"></p>
       </div>
-      <div class="pat-pads cat-own" id="pat-pads" hidden></div>
+      <div class="pat-pads cat-drums" id="pat-pads" hidden></div>
       <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><div class="pat-vkeys" id="pat-vkeys" role="group" aria-label="Klaviertasten"></div><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
       <div class="pat-keys" id="pat-keys" hidden>
         <button type="button" class="dbtn pat-oct" id="pat-oct-down" aria-label="Oktave tiefer">◀</button>
@@ -1696,6 +1925,16 @@
       <div class="more-sec more-row" data-slot="about"></div>
     </div>
   </section>
+
+  <div class="pop link-pop" id="link-pop" role="dialog" aria-label="Aus dem Netz holen" hidden>
+    <label class="link-label" for="link-input">Link zu einer Audiodatei</label>
+    <div class="link-row">
+      <input class="link-input" id="link-input" type="url" inputmode="url" placeholder="https://…/sound.mp3" autocomplete="off" spellcheck="false">
+      <button class="dbtn primary" id="link-go" type="button">Holen</button>
+    </div>
+    <p class="link-note" id="link-note" role="status"></p>
+    <button class="dbtn link-capture" id="tab-capture" type="button" aria-pressed="false">● Ton aus einem Tab aufnehmen</button>
+  </div>
 
   <div class="clipbar" id="clipbar" role="toolbar" aria-label="Ausgewählter Clip" hidden>
     <div class="clip-levels" id="clip-levels" hidden>

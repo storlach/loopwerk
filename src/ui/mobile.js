@@ -167,7 +167,7 @@ export function mountMobile({ store, ui, tools }) {
     if (!narrow.matches || !isText(e.target)) return;
     clearTimeout(kbdTimer);
     app.classList.add('kbd');
-    app.dataset.kbdIn = e.target.closest('.arranger') ? 'arr' : 'dock';
+    app.dataset.kbdIn = e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : 'dock';
     fitViewport();
     requestAnimationFrame(() => e.target.scrollIntoView({ block: 'nearest' }));
   });

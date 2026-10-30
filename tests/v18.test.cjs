@@ -39,7 +39,9 @@ const { check, finish } = createChecker();
     const ex = await rect('#export');
     const arr1 = await rect('.arranger');
     check('Export öffnet als Klappfeld unter dem Knopf, Arranger unverändert', ex && ex.y < deck.b + 20 && ex.r > 1300 && arr1.h === arr0.h, JSON.stringify({ ex, arr0: arr0.h, arr1: arr1.h }));
-    await page.mouse.click(700, 500);
+    // Daneben klicken: in die leere Spur 8 (ein Clip würde ausgewählt)
+    const empty = await rect('.lane[data-track-id="t8"]');
+    await page.mouse.click(empty.x + 20, empty.y + empty.h / 2);
     check('Klick daneben schließt das Export-Feld', await page.evaluate(() => window.loopwerk.ui.dock === null));
 
     // ---------- Inspektor ----------

@@ -24,6 +24,7 @@ import { Patterns, patternSampleId } from './patterns.js';
 import { newDrumPattern, newSynthPattern } from './instruments.js';
 import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
+import { mountLinkImport } from './ui/link-import.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
@@ -355,6 +356,7 @@ async function boot() {
   const recorder = new Recorder({ engine, store, own });
   const recording = mountRecording({ store, engine, ui, arranger, recorder });
   const importer = mountImport({ store, ui, arranger, own, shelf });
+  const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
@@ -377,6 +379,7 @@ async function boot() {
       sing: async (t) => { await createPattern(newSynthPattern, t); patternEditor.openSing(); },
       record: (t) => recording.start(t),
       import: (t) => importer.pick(t),
+      link: (t) => linkImport.open(t),
     },
   });
   mountMobile({ store, ui, tools });
@@ -440,7 +443,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, ready: true };
 }
 
 boot().catch((err) => {

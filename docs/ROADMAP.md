@@ -139,12 +139,20 @@
 - Drei UI-Richtungen für den neuen Look: `docs/ux/richtungen/` (Nachtglas, Werkstück, Sticker)
 - Spec: `docs/specs/v1.9-aus-einem-guss.md`, Tests: `tests/v19.test.cjs`
 
+## ✅ 2.0 – Werkstück
+- Neuer Look „Werkstück“: Graphit und Gummi, eine Signalfarbe, Display, LED-Logo, Etiketten-Clips, Drehregler; dunkel als Hauptmodus, hell als silbernes Gehäuse
+- Überlappen ohne Verlust: der obere Clip klingt, der untere bleibt ganz erhalten
+- Mixer am Handy: wischen ohne Regler zu verstellen, Fader relativ, Panorama als Drehregler
+- Aus dem Netz holen: Links zu Audiodateien, Einfügen mit Strg+V; YouTube über „Ton aus einem Tab aufnehmen“ (Computer, Chrome/Edge)
+- Schubladen: Bewegung vom Motion-Designer überarbeitet
+- Neue Rollen im Team: UI-Designer, Motion-Designer, Creative Director
+- Spec: `docs/specs/v2.0-werkstueck.md`, Tests: `tests/v20.test.cjs`
+
 ## Als Nächstes
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
 
-## Danach: neuer Look
-- Das jetzige Aussehen gilt als Wireframe. Wenn die Bedienung steht, bekommt Loopwerk einen eigenen visuellen Stil.
-- Vorbereitung: Farben, Schriften und Abstände nur über die Tokens in `:root` (index.html) setzen und keine neuen festen Farbwerte einführen. Dann lässt sich der Look an einer Stelle tauschen.
+## Look
+- Seit 2.0 „Werkstück“ (siehe `docs/ux/richtungen/`). Farben, Schriften und Bausteine nur über die Tokens in `:root`.
 
 ## Später
 - Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins

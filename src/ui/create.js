@@ -3,8 +3,8 @@
 
 import { el, trackPointer } from '../util.js';
 
-const LABELS = { beat: 'Beat', melody: 'Melodie', sing: 'Einsingen', record: 'Aufnahme', import: 'Import' };
-const CATS = { beat: 'drums', melody: 'synth', sing: 'own', record: 'fx', import: 'bass' };
+const LABELS = { beat: 'Beat', melody: 'Melodie', sing: 'Einsingen', record: 'Aufnahme', import: 'Import', link: 'Link' };
+const CATS = { beat: 'drums', melody: 'synth', sing: 'own', record: 'fx', import: 'bass', link: 'chords' };
 
 // actions: { beat(target), melody(target), sing(target), record(target), import(target) } – target = { trackId, startBeat } oder null
 export function mountCreate({ root, arranger, actions }) {

@@ -1,8 +1,9 @@
 // Schubladen: Fächer (Mixer, Editoren, am Handy auch Sounds und „Mehr“) liegen über den Spuren.
 // Drei Haltepunkte: zu (unter dem Rand), Mitte (50 %) und oben (ganze Arranger-Höhe).
-// Öffnen, Schließen und Einrasten sind immer animiert. Ein Schubs am Griff springt zum nächsten Haltepunkt
-// in Wischrichtung, langsames Ziehen rastet am nächstgelegenen ein. Jede Schublade merkt sich ihren Haltepunkt;
-// am Handy öffnen Mixer und Editoren oben, damit Fader, Klavier und Raster Platz haben.
+// Jede Bewegung läuft über eine kritisch gedämpfte Feder: Öffnen, Schließen, Einrasten und Wechseln.
+// Beim Ziehen folgt die Schublade dem Finger 1:1, die Geschwindigkeit beim Loslassen fließt in die Feder,
+// eine laufende Bewegung lässt sich jederzeit greifen. Ein Schubs springt zum nächsten Haltepunkt in Wischrichtung.
+// Jede Schublade merkt sich ihren Haltepunkt; am Handy öffnen Mixer und Editoren oben.
 // Der Arranger bekommt unten so viel Platz, dass die letzten Spuren über das Fach gescrollt werden können.
 
 import { clamp, el, trackPointer } from '../util.js';
@@ -12,6 +13,12 @@ const KEY = 'loopwerk.sheetH';
 const MID = 0.5;
 const TOP = 1;
 const FLICK = 0.35; // px/ms: ab hier zählt die Bewegung als Schubs
+const HIDE = -56; // zu: Oberkante samt Schatten unter dem Rand
+const GONE = -36; // ab hier ist nichts mehr zu sehen
+const RUBBER = 72; // Gummiband über oben: höchstens so viele px
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+// Federkonstante (rad/s): 18 ≈ iOS-Sheet (Antwortzeit 0,35 s), reduzierte Bewegung kürzer, aber sichtbar
+const omega = () => (reduced.matches ? 26 : 18);
 
 function loadSnaps() {
   try {
@@ -35,13 +42,17 @@ export function snapTarget(f, v) {
   return points.slice(1).reduce((a, b) => (Math.abs(b - f) < Math.abs(a - f) ? b : a));
 }
 
-function afterTransition(node, fn) {
-  let done = false;
-  const finish = () => { if (done) return; done = true; node.removeEventListener('transitionend', onEnd); fn(); };
-  const onEnd = (e) => { if (e.target === node) finish(); };
-  node.addEventListener('transitionend', onEnd);
-  setTimeout(finish, 520);
+// Kritisch gedämpfte Feder, exakt gelöst: x = Abstand zum Ziel, v = Geschwindigkeit (px/s)
+export function springStep(x, v, w, dt) {
+  const e = Math.exp(-w * dt);
+  const c = v + w * x;
+  const xn = (x + c * dt) * e;
+  return [xn, (c - w * (x + c * dt)) * e];
 }
+
+// Gummiband: folgt anfangs 1:1, bleibt dann zurück (nie mehr als RUBBER)
+const rubber = (d) => (d * RUBBER) / (d + RUBBER);
+const rubberSlope = (d) => (RUBBER / (d + RUBBER)) ** 2;
 
 export function mountSheets({ ui, arranger }) {
   const app = document.getElementById('app');
@@ -55,8 +66,6 @@ export function mountSheets({ ui, arranger }) {
     if (v === TOP || v === MID) return v;
     return narrow.matches && s && ['pattern', 'editor', 'mixer'].includes(s.id) ? TOP : MID;
   };
-  const setFrac = (f) => app.style.setProperty('--sheet-h', `${f * 100}%`);
-  setFrac(MID);
 
   const sheets = [];
   // „Mehr“ und Tempo am Handy sind so hoch wie ihr Inhalt: dort verschiebt Ziehen nur
@@ -68,61 +77,205 @@ export function mountSheets({ ui, arranger }) {
   };
   const current = () => sheets.find((s) => shown(s) && !s.classList.contains('leaving') && getComputedStyle(s).display !== 'none') ?? null;
 
-  // Platz im Arranger = Höhe der offenen Schublade
-  const ro = new ResizeObserver(() => syncPad());
+  // Zustand je Schublade: p = sichtbare Höhe über dem Arranger-Rand (px), v = Geschwindigkeit (px/s, nach oben positiv),
+  // base = Layout-Höhe während der Bewegung: wird die Schublade kleiner, wird nur verschoben (transform, kein Layout);
+  // nur beim Wachsen rechnet der Inhalt mit, im Gummiband in beide Richtungen. In Ruhe passt die Höhe wieder genau.
+  const state = new Map();
+  const S = (s) => state.get(s);
+  const full = () => arr.getBoundingClientRect().height;
+  const restP = (s, h) => (autoHeight(s) ? s.offsetHeight : openFrac(s) * h);
+  // Höhe so, wie sie in --sheet-h steht (ohne Rahmen)
+  const cssH = (s) => (autoHeight(s) ? s.offsetHeight : parseFloat(getComputedStyle(s).height) || 0);
+  let lastAb = null; // Arranger-Unterkante beim letzten Bild
+
+  // Platz im Arranger = Höhe der offenen Schublade; nur in Ruhe messen, nicht pro Frame
+  let pad = -1;
+  const setPad = (px) => {
+    const v = Math.max(0, Math.round(px));
+    if (v !== pad) { pad = v; app.style.setProperty('--sheet-pad', `${v}px`); }
+  };
   function syncPad() {
     const s = current();
-    app.style.setProperty('--sheet-pad', s ? `${Math.round(s.getBoundingClientRect().height)}px` : '0px');
+    setPad(s ? s.getBoundingClientRect().height : 0);
+  }
+  const busy = () => sheets.some((s) => S(s).mode !== 'rest');
+  const ro = new ResizeObserver(() => {
+    if (busy()) return;
+    for (const s of sheets) { const m = S(s); if (m.open) m.p = m.target = cssH(s); }
+    lastAb = arr.getBoundingClientRect().bottom;
+    syncPad();
+  });
+
+  // Zeichnen: nur transform, außer die Schublade wird größer als ihre eingefrorene Höhe
+  function apply(s, m, h) {
+    m.base = Math.max(m.base, Math.min(m.p, h));
+    if (autoHeight(s)) {
+      s.style.transform = `translate3d(0, ${Math.max(0, m.H - m.p)}px, 0)`;
+      return;
+    }
+    const lay = Math.max(m.p, m.base, 0);
+    if (!(Math.abs(lay - m.lay) <= 0.01)) { m.lay = lay; s.style.setProperty('--sheet-h', `${lay}px`); }
+    s.style.maxHeight = lay > h + 0.5 ? 'none' : '';
+    s.style.transform = `translate3d(0, ${lay - m.p}px, 0)`;
   }
 
-  const pending = new Map();
-  function play(s, cls, done) {
-    pending.get(s)?.(); // laufende Animation (z. B. Hinausfahren) ablösen
-    s.classList.remove('entering', 'leaving');
-    void s.offsetWidth; // Animation neu starten
-    s.classList.add(cls);
-    const stop = () => { s.removeEventListener('animationend', end); pending.delete(s); };
-    const end = (e) => {
-      if (e.target !== s) return;
-      stop();
-      s.classList.remove(cls);
-      done?.();
-    };
-    s.addEventListener('animationend', end);
-    pending.set(s, stop);
+  function toRest(s, m) {
+    m.mode = 'rest';
+    m.v = 0;
+    delete s.dataset.motion;
+    s.classList.remove('entering');
+    if (!autoHeight(s)) {
+      m.base = m.p;
+      m.lay = NaN;
+      s.style.setProperty('--sheet-h', `${openFrac(s) * 100}%`);
+      s.style.maxHeight = '';
+    }
+    s.style.transform = '';
+    lastAb = arr.getBoundingClientRect().bottom;
+    syncPad();
+    reveal();
   }
 
-  // Ein- und Ausfahren, sobald ein Fach auf- oder zugeht – egal ob per Knopf, Taste oder Wischen
+  function toHidden(s, m) {
+    Object.assign(m, { mode: 'rest', open: false, p: HIDE, v: 0, cover: null, lay: NaN });
+    delete s.dataset.motion;
+    s.classList.remove('entering', 'leaving', 'dragging');
+    s.style.transform = '';
+    s.style.maxHeight = '';
+    s.style.zIndex = '';
+    s.style.removeProperty('--sheet-h');
+    if (!busy()) syncPad();
+  }
+
+  // Ein Feder-Takt für alle bewegten Schubladen: erst messen, dann schreiben (kein Layout-Hin-und-Her)
+  let raf = 0;
+  let last = 0;
+  function kick() {
+    if (raf) return;
+    last = 0;
+    raf = requestAnimationFrame(frame);
+  }
+  function frame(now) {
+    raf = 0;
+    // Erstes Bild nach dem Anstoßen (z. B. Loslassen): ein Bild weiter rechnen, damit nichts stockt
+    const dt = last ? clamp((now - last) / 1000, 0, 0.1) : 1 / 60;
+    last = now;
+    const moving = sheets.filter((s) => S(s).mode === 'spring');
+    if (!moving.length) return;
+    const ar = arr.getBoundingClientRect();
+    const h = ar.height;
+    const w = omega();
+    lastAb = ar.bottom;
+    for (const s of moving) {
+      const m = S(s);
+      // Rutscht der Arranger-Rand (z. B. Clip-Leiste am Handy), bleibt die Schublade, wo sie zu sehen ist
+      if (m.ab != null && m.p > GONE) m.p += ar.bottom - m.ab;
+      m.ab = ar.bottom;
+      if (autoHeight(s)) m.H = s.offsetHeight;
+      if (m.open) m.target = restP(s, h);
+      else if (m.cover && !S(m.cover).open) { m.cover = null; m.target = HIDE; }
+    }
+    for (const s of moving) {
+      const m = S(s);
+      // Frisch geöffnet: das erste Bild zeichnet den Inhalt (teuer) noch unsichtbar, dann geht es los
+      if (m.fresh === 2) { m.fresh = 1; apply(s, m, h); continue; }
+      const x0 = m.p - m.target;
+      const [x, v] = springStep(x0, m.v, w, m.fresh ? 1 / 60 : dt);
+      m.fresh = 0;
+      m.p = m.target + x;
+      m.v = v;
+      // Reduzierte Bewegung: nicht über das Ziel hinaus
+      if (reduced.matches && Math.sign(x) !== Math.sign(x0)) { m.p = m.target; m.v = 0; }
+      const settled = Math.abs(m.p - m.target) < 0.25 && Math.abs(m.v) < 15;
+      if (!m.open) {
+        // Liegt sie unter der neuen, verschwindet sie erst, wenn die neue sie ganz bedeckt
+        const covered = m.cover && S(m.cover).p >= m.p - 0.5;
+        if ((settled && !m.cover) || covered || m.p <= GONE) { toHidden(s, m); continue; }
+      } else if (settled) {
+        m.p = m.target;
+        apply(s, m, h);
+        toRest(s, m);
+        continue;
+      }
+      apply(s, m, h);
+      // Beim Hochfahren schiebt die Kante den ausgewählten Clip mit nach oben
+      if (m.open && m.v > 0 && m.target < h - 1 && s === current()) pushClip(ar.bottom - m.p);
+    }
+    if (moving.some((s) => S(s).mode === 'spring')) raf = requestAnimationFrame(frame);
+  }
+
+  function spring(s, m) {
+    m.mode = 'spring';
+    s.dataset.motion = 'spring';
+    m.ab = arr.getBoundingClientRect().bottom;
+    kick();
+  }
+
+  function open(s) {
+    const m = S(s);
+    s.classList.remove('leaving', 'dragging');
+    s.classList.add('entering');
+    for (const o of sheets) if (o !== s) o.style.zIndex = '';
+    s.style.zIndex = '21'; // die neue Schublade fährt über die alte
+    const h = full();
+    m.open = true;
+    m.cover = null;
+    m.drag = null;
+    if (autoHeight(s)) m.H = s.offsetHeight;
+    m.target = restP(s, h);
+    if (m.p <= GONE) {
+      // Von zu: Layout gleich in Zielhöhe, die Bewegung ist reines Verschieben
+      Object.assign(m, { p: HIDE, v: 0, base: m.target, lay: NaN, fresh: 2 });
+    }
+    apply(s, m, h); // noch vor dem ersten Bild an den Startpunkt
+    setPad(Math.max(pad, m.target));
+    spring(s, m);
+  }
+
+  function close(s, cover) {
+    const m = S(s);
+    if (!m.open) return;
+    m.open = false;
+    m.drag = null; // ein laufendes Ziehen endet hier
+    s.classList.remove('entering', 'dragging');
+    s.classList.add('leaving');
+    if (m.p <= GONE) { toHidden(s, m); return; }
+    if (!autoHeight(s)) m.base = Math.max(m.p, m.base); // Layout einfrieren, ab jetzt nur verschieben
+    else m.H = s.offsetHeight;
+    // Aus der Ruhe: ist der Arranger-Rand gerade gerutscht (Clip-Leiste am Handy), bleibt die Oberkante stehen
+    const ab = arr.getBoundingClientRect().bottom;
+    if (m.mode === 'rest' && lastAb != null) m.p += ab - lastAb;
+    // Kommt eine andere Schublade, die diese ganz verdeckt: liegen lassen, bis sie bedeckt ist
+    m.cover = cover ?? null;
+    const coverTarget = cover ? S(cover).target : -Infinity;
+    m.target = coverTarget >= m.p - 1 ? m.p : HIDE;
+    spring(s, m);
+  }
+
+  // Ein- und Ausfahren, sobald ein Fach auf- oder zugeht – egal ob per Reiter, Taste oder Wischen
   const was = new Map();
   function watch() {
+    const opened = [];
+    const closed = [];
     for (const s of sheets) {
       const now = shown(s);
       if (now === (was.get(s) ?? false)) continue;
       was.set(s, now);
-      if (now) {
-        s.style.transform = '';
-        s.style.removeProperty('--leave-from');
-        if (!sheets.some((o) => o !== s && o.classList.contains('dragging'))) setFrac(openFrac(s));
-        play(s, 'entering', () => { syncPad(); reveal(); });
-      } else {
-        // Weggewischt: von der aktuellen Lage aus weiterfahren
-        s.style.setProperty('--leave-from', s.style.transform || 'translateY(0)');
-        play(s, 'leaving', () => {
-          s.style.transform = '';
-          s.style.removeProperty('--leave-from');
-          syncPad();
-        });
-      }
+      (now ? opened : closed).push(s);
     }
-    syncPad();
-    requestAnimationFrame(reveal);
+    for (const s of opened) open(s);
+    const cover = opened[opened.length - 1] ?? null;
+    for (const s of closed) close(s, cover);
+    if (!opened.length && !closed.length) requestAnimationFrame(reveal);
   }
 
   function attach(sheet) {
     if (sheet.querySelector(':scope > .sheet-grip')) return;
     sheet.classList.add('sheet');
     sheets.push(sheet);
-    was.set(sheet, shown(sheet));
+    const isOpen = shown(sheet);
+    was.set(sheet, isOpen);
+    state.set(sheet, { mode: 'rest', open: isOpen, p: HIDE, v: 0, base: 0, lay: NaN, target: HIDE, cover: null, drag: null, ab: null, H: 0, fresh: 0 });
     const grip = el('div', 'sheet-grip');
     grip.title = 'Ziehen oder schubsen: Mitte, oben – nach unten wischen schließt';
     sheet.prepend(grip);
@@ -133,54 +286,87 @@ export function mountSheets({ ui, arranger }) {
       if (e.button !== 0) return;
       // Auf Knöpfen und Feldern im Kopf nicht ziehen
       if (e.target.closest('button, input, select, label, a') && !e.target.closest('.sheet-grip')) return;
+      const m = S(sheet);
+      if (!m.open) return;
       e.preventDefault();
-      const max = arr.getBoundingClientRect().height;
-      const h0 = sheet.getBoundingClientRect().height;
+      const h = full();
+      if (m.mode === 'rest') {
+        // Aus der Ruhe: aktuelle Lage übernehmen
+        m.p = cssH(sheet);
+        m.base = m.p;
+        m.lay = NaN;
+      }
+      if (autoHeight(sheet)) m.H = sheet.offsetHeight;
+      // Eine laufende Bewegung wird gegriffen, wo sie gerade ist
+      m.mode = 'drag';
+      m.v = 0;
+      sheet.dataset.motion = 'drag';
+      const token = {};
+      m.drag = token;
+      const p0 = m.p;
       const y0 = e.clientY;
       const t0 = e.timeStamp;
-      // Geschwindigkeit aus den letzten ~80 ms
+      let raw = p0;
+      // Geschwindigkeit aus den letzten ~100 ms Bewegung; ruht der Finger vor dem Loslassen, klingt sie ab
       let trail = [{ y: y0, t: e.timeStamp }];
-      const velocity = () => {
-        const a = trail[0], b = trail[trail.length - 1];
-        return b.t > a.t ? (b.y - a.y) / (b.t - a.t) : 0;
+      const velocity = (tUp) => {
+        const b = trail[trail.length - 1];
+        const a = trail.find((p) => b.t - p.t <= 100);
+        const v = b.t > a.t ? (b.y - a.y) / (b.t - a.t) : 0;
+        return v * clamp(1 - (tUp - b.t - 40) / 80, 0, 1);
       };
       const track = (ev) => {
+        if (ev.clientY === trail[trail.length - 1].y) return;
         trail.push({ y: ev.clientY, t: ev.timeStamp });
-        trail = trail.filter((p) => ev.timeStamp - p.t <= 80);
+        if (trail.length > 12) trail.shift();
+      };
+      const place = (ev) => {
+        raw = p0 - (ev.clientY - y0);
+        if (autoHeight(sheet)) m.p = Math.min(raw, m.H);
+        else m.p = raw > h ? h + rubber(raw - h) : raw;
+        apply(sheet, m, h);
       };
       sheet.classList.add('dragging');
       trackPointer(e, (ev) => {
+        if (m.drag !== token) return;
         track(ev);
-        const dy = ev.clientY - y0;
-        if (autoHeight(sheet)) sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
-        else app.style.setProperty('--sheet-h', `${clamp(h0 - dy, 0, max)}px`);
+        place(ev);
       }, (ev) => {
+        if (m.drag !== token) return;
+        m.drag = null;
         track(ev);
+        place(ev);
+        sheet.classList.remove('dragging');
         const dy = ev.clientY - y0;
         // Nach einer Wischbewegung keinen Klick dort auslösen, wo der Finger endet (z. B. auf „Sounds“)
         if (Math.abs(dy) > 8) swallowClick();
+        const vel = Math.abs(dy) > 12 ? velocity(ev.timeStamp) : 0;
         // Kurze, schnelle Geste zählt als Schubs, auch wenn die letzten Millisekunden ruhig waren
         const quick = ev.timeStamp - t0 < 250 && Math.abs(dy) > 16;
-        const v = quick ? Math.sign(dy) * Math.max(FLICK * 2, Math.abs(velocity())) : Math.abs(dy) > 12 ? velocity() : 0;
-        sheet.classList.remove('dragging');
+        const v = quick ? Math.sign(dy) * Math.max(FLICK * 2, Math.abs(vel)) : vel;
+        // Die echte Geschwindigkeit geht in die Feder (im Gummiband gedämpft)
+        m.v = clamp(-vel * 1000 * (raw > h ? rubberSlope(raw - h) : 1), -8000, 8000);
         // Erst nach dem Ende der Berührung schließen: verschwindet das Element mitten im Touch-Ablauf,
         // erkennt der Browser den nächsten Tipp nicht als Klick
-        const close = () => setTimeout(() => ui.setDock(null), 0);
+        const shut = () => { close(sheet, null); setTimeout(() => ui.setDock(null), 0); };
         if (autoHeight(sheet)) {
-          if (v > FLICK || dy > h0 * 0.3) close();
-          else sheet.style.transform = '';
+          if (v > FLICK || dy > m.H * 0.3) shut();
+          else { m.target = m.H; spring(sheet, m); }
           return;
         }
-        const target = snapTarget(clamp(h0 - dy, 0, max) / max, v);
-        if (target === 0) { close(); return; }
+        const target = snapTarget(clamp(m.p, 0, h) / h, v);
+        if (target === 0) { shut(); return; }
         stored()[keyOf(sheet)] = target;
         try { localStorage.setItem(KEY, JSON.stringify(snaps)); } catch { /* egal */ }
-        setFrac(target);
-        afterTransition(sheet, () => { syncPad(); reveal(); });
+        m.target = target * h;
+        setPad(Math.max(pad, m.target));
+        spring(sheet, m);
       }, () => {
+        if (m.drag !== token) return;
+        m.drag = null;
         sheet.classList.remove('dragging');
-        sheet.style.transform = '';
-        setFrac(openFrac(sheet));
+        m.target = restP(sheet, h);
+        spring(sheet, m);
       });
     };
     grip.addEventListener('pointerdown', startDrag);
@@ -191,21 +377,40 @@ export function mountSheets({ ui, arranger }) {
   }
 
   // Den ausgewählten Clip über der Schublade sichtbar halten
+  function pushClip(limitTop) {
+    if (ui.selectedClipId) arranger.revealClip?.(ui.selectedClipId, limitTop);
+  }
   function reveal() {
     const s = current();
-    if (!s || !ui.selectedClipId) return;
-    arranger.revealClip?.(ui.selectedClipId, s.getBoundingClientRect().top);
+    if (!s || S(s).mode !== 'rest') return;
+    pushClip(s.getBoundingClientRect().top);
   }
 
+  // In Ruhe: offen in gemerkter Höhe oder ganz weg, ohne Reste von Bewegung
+  function settleAll() {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    const h = full();
+    for (const s of sheets) {
+      const m = S(s);
+      const isOpen = shown(s);
+      was.set(s, isOpen);
+      toHidden(s, m);
+      if (isOpen) {
+        m.open = true;
+        m.p = m.target = restP(s, h);
+        m.base = m.p;
+        toRest(s, m);
+      }
+    }
+    requestAnimationFrame(syncPad);
+  }
+
+  ro.observe(arr);
   for (const n of document.querySelectorAll('.dock')) attach(n);
   attach(document.querySelector('.shelf'));
+  settleAll();
 
   ui.on(() => queueMicrotask(watch));
-  narrow.addEventListener('change', () => {
-    const open = current();
-    if (open) setFrac(openFrac(open));
-    for (const s of sheets) { was.set(s, shown(s)); pending.get(s)?.(); s.classList.remove('entering', 'leaving'); }
-    requestAnimationFrame(syncPad);
-  });
+  narrow.addEventListener('change', settleAll);
   return { syncPad, reveal, snapTarget };
 }

@@ -53,6 +53,21 @@ const { check, finish } = createChecker();
     check('Oberen Clip löschen: der untere klingt dort wieder', JSON.stringify(r(ov.freed)) === '[1,1,1]', JSON.stringify(ov.freed));
     check('Zuletzt abgelegter Clip liegt oben', JSON.stringify(r(ov.raised)) === '[1,1,1]', JSON.stringify(ov.raised));
 
+    // ---------- Look „Werkstück“ ----------
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const look = await page.evaluate(() => {
+      const cs = (sel) => getComputedStyle(document.querySelector(sel));
+      return {
+        bg: cs('body').backgroundColor, play: cs('#play-btn').backgroundColor, lcd: cs('.lcd').backgroundColor,
+        body: cs('body').fontFamily, mono: cs('.lcd-value').fontFamily, drums: getComputedStyle(document.documentElement).getPropertyValue('--cat-drums').trim(),
+        label: cs('.clip-label').backgroundColor, labelInk: cs('.clip-label').color,
+      };
+    });
+    check('Werkstück dunkel: Graphit-Grund, orange Start-Taste, schwarzes Display', look.bg === 'rgb(15, 15, 15)' && look.play === 'rgb(255, 91, 31)' && look.lcd === 'rgb(5, 5, 5)', JSON.stringify(look));
+    check('Werkstück: Archivo für Text, Martian Mono für Anzeigen, Drums gelb', /Archivo/.test(look.body) && /Martian Mono/.test(look.mono) && look.drums.toUpperCase() === '#FFC21A', JSON.stringify(look));
+    check('Werkstück: Clips tragen ein farbiges Etikett mit dunkler Schrift', look.label !== 'rgba(0, 0, 0, 0)' && look.labelInk === 'rgb(17, 17, 17)', JSON.stringify(look));
+    await page.emulateMedia({ colorScheme: 'light' });
+
     // ---------- Überlappen im Arranger: Drag & Drop zerstört nichts ----------
     await page.evaluate(() => {
       const { store } = window.loopwerk;
@@ -70,6 +85,50 @@ const { check, finish } = createChecker();
     const drum = stack.find((s) => s.id !== 'x1');
     check('Arranger: der neue Clip liegt sichtbar oben, der untere ist als verdeckt markiert', Number(drum.z) > Number(pad.z) && drum.top && pad.covered, JSON.stringify(stack));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v20-ueberlappen.png') });
+
+    // ---------- Aus dem Netz holen ----------
+    // Ein Link auf eine Audiodatei (hier vom eigenen Testserver) wird geholt und als eigener Sound angelegt
+    const wavUrl = await page.evaluate(async () => {
+      const { encodeWav } = window.loopwerk;
+      const b = new AudioBuffer({ numberOfChannels: 1, length: 22050, sampleRate: 44100 });
+      b.getChannelData(0).fill(0.2);
+      return URL.createObjectURL(encodeWav(b));
+    });
+    await page.evaluate(() => document.getElementById('ltab-create').click());
+    await page.click('[data-create="link"]');
+    check('Karte „Aus dem Netz holen“ öffnet das Link-Feld', await page.locator('#link-input').isVisible());
+    await page.fill('#link-input', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    await page.press('#link-input', 'Enter');
+    const yt = await page.locator('#link-note').textContent();
+    check('YouTube-Link: ehrliche Erklärung und Tab-Aufnahme als Weg', /YouTube/.test(yt) && /Tab/.test(yt), yt);
+    await page.fill('#link-input', 'kein link');
+    await page.press('#link-input', 'Enter');
+    check('Kein Link: verständlicher Hinweis', /kein Link/.test(await page.locator('#link-note').textContent()));
+    const ownBefore = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'own').length);
+    // blob:-Links zählen nicht als http(s) – für den Test den Abruf direkt auslösen
+    const ok = await page.evaluate(async (u) => {
+      const real = window.fetch;
+      window.fetch = (url, o) => real(u, o);
+      try { return await window.loopwerk.linkImport.fetchLink('https://example.org/sounds/Testton.wav'); } finally { window.fetch = real; }
+    }, wavUrl);
+    const ownAfter = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'own').map((s) => s.name));
+    check('Link auf eine Audiodatei: wird importiert und heißt wie die Datei', ok && ownAfter.length === ownBefore + 1 && ownAfter.includes('Testton'), JSON.stringify(ownAfter));
+    const failed = await page.evaluate(async () => {
+      const real = window.fetch;
+      window.fetch = () => Promise.reject(new TypeError('Failed to fetch'));
+      try { await window.loopwerk.linkImport.fetchLink('https://example.org/x.mp3'); return document.getElementById('link-note').textContent; } finally { window.fetch = real; }
+    });
+    check('Server sperrt den Abruf: Hinweis zum Herunterladen und Ziehen', /herunter/.test(failed), failed);
+    await page.keyboard.press('Escape');
+    // Link mit Strg+V irgendwo einfügen startet den Import
+    const pasted = await page.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', 'https://youtu.be/abc');
+      document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      return { open: !document.getElementById('link-pop').hidden, value: document.getElementById('link-input').value };
+    });
+    check('Link einfügen (Strg+V) öffnet das Feld und prüft den Link', pasted.open && pasted.value === 'https://youtu.be/abc', JSON.stringify(pasted));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v20-link.png') });
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 

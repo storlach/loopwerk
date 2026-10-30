@@ -172,3 +172,66 @@ export async function startMicCapture(engine, { beatsPerBar = 4 } = {}) {
     },
   };
 }
+
+// Ton aus einem anderen Tab (oder Fenster) aufnehmen – z. B. ein Video, das sich nicht herunterladen lässt.
+// Geht in Chrome und Edge am Computer: im Teilen-Dialog einen Tab wählen und „Tab-Audio teilen“ anhaken.
+// Stille am Anfang und Ende wird abgeschnitten.
+export async function startTabCapture(engine) {
+  if (!navigator.mediaDevices?.getDisplayMedia || !window.AudioWorkletNode) {
+    throw new RecorderError('unavailable', 'Ton aus einem Tab aufnehmen geht hier nicht – am Computer in Chrome oder Edge klappt es.');
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      systemAudio: 'include', selfBrowserSurface: 'exclude', preferCurrentTab: false,
+    });
+  } catch {
+    throw new RecorderError('denied', 'Kein Tab freigegeben.');
+  }
+  if (!stream.getAudioTracks().length) {
+    stream.getTracks().forEach((t) => t.stop());
+    throw new RecorderError('noaudio', 'Kein Ton freigegeben – wähle einen Tab und hake „Tab-Audio teilen“ an.');
+  }
+  stream.getVideoTracks().forEach((t) => t.stop()); // nur der Ton zählt
+  await engine._ensure();
+  const ctx = engine.ctx;
+  if (!micWorklet.has(ctx)) {
+    await ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
+    micWorklet.add(ctx);
+  }
+  const chunks = [];
+  let doneFn = null;
+  const source = ctx.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(ctx, 'loopwerk-recorder', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
+  const sink = ctx.createGain();
+  sink.gain.value = 0;
+  source.connect(node).connect(sink).connect(ctx.destination);
+  node.port.onmessage = (e) => { if (e.data.done) doneFn?.(); else chunks.push(e.data); };
+  let ended = null;
+  const endedPromise = new Promise((resolve) => { ended = resolve; });
+  stream.getAudioTracks()[0].addEventListener('ended', () => ended());
+  return {
+    ended: endedPromise,
+    async stop() {
+      await new Promise((resolve) => { doneFn = resolve; node.port.postMessage('stop'); setTimeout(resolve, 500); });
+      source.disconnect();
+      node.disconnect();
+      stream.getTracks().forEach((t) => t.stop());
+      const total = chunks.reduce((n, c) => n + c.l.length, 0);
+      const l = new Float32Array(total);
+      const r = new Float32Array(total);
+      let o = 0;
+      for (const c of chunks) { l.set(c.l, o); r.set(c.r, o); o += c.l.length; }
+      // Stille an den Rändern weg (unter etwa −50 dB)
+      const loud = (i) => Math.abs(l[i]) > 0.003 || Math.abs(r[i]) > 0.003;
+      let a = 0;
+      while (a < total && !loud(a)) a++;
+      let b = total;
+      while (b > a && !loud(b - 1)) b--;
+      if (b - a < ctx.sampleRate * 0.3) throw new RecorderError('empty', 'Im Tab lief kein Ton – starte die Wiedergabe dort und nimm noch einmal auf.');
+      return { chs: [l.slice(a, b), r.slice(a, b)], sampleRate: ctx.sampleRate };
+    },
+  };
+}
