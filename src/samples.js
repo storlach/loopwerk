@@ -4,6 +4,7 @@
 
 import { mulberry32, Emitter } from './util.js';
 import { CATALOG, PEAK_TARGET } from './catalog.js';
+import { VCSL_CATALOG } from './catalog-vcsl.js';
 import { timeStretch } from './dsp/stretch.js';
 
 export const CATEGORIES = [
@@ -941,7 +942,7 @@ async function loadCatalogEntry(entry) {
 // (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
 // Gesamte Bibliothek: eigene synthetische Loops und freie Katalog-Sounds (CC0)
 const ALL_LOOP_DEFS = [...LOOP_DEFS];
-const ALL_CATALOG = [...CATALOG];
+const ALL_CATALOG = [...CATALOG, ...VCSL_CATALOG];
 
 // Alle Sounds als Einträge sofort im Regal; geladen bzw. erzeugt wird nur, was das Projekt braucht (need) –
 // der Rest beim ersten Anhören oder Einsetzen (library.ensure).
@@ -957,7 +958,7 @@ export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, n
     });
   }
   for (const entry of ALL_CATALOG) {
-    lib.stub({ ...entry }, async (s) => {
+    lib.stub({ ...entry, key: entry.key === 'keine' ? null : entry.key ?? null }, async (s) => {
       const loaded = await loadCatalogEntry(entry);
       if (!loaded) throw new Error('nicht geladen');
       Object.assign(s, { orig: loaded.orig, duration: loaded.duration, bpm: loaded.bpm ?? s.bpm });

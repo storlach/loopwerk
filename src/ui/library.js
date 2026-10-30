@@ -138,7 +138,8 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   function render() {
     const q = search.value.trim().toLowerCase();
     const all = library.list();
-    const words = (s) => [s.name, CATEGORIES.find((c) => c.id === s.category)?.label, ...(s.genres || []).map((g) => GENRES.find((x) => x.id === g)?.label)]
+    const words = (s) => [s.name, CATEGORIES.find((c) => c.id === s.category)?.label, ...(s.genres || []).map((g) => GENRES.find((x) => x.id === g)?.label),
+      ...(s.tags || []), s.kind === 'loop' ? 'loop' : 'one-shot oneshot', s.origin]
       .filter(Boolean).join(' ').toLowerCase();
     const inFilter = (s) => filter === 'all' || (filter === 'fav' ? favs.has(s.id) : !!groups.find((g) => g.id === filter)?.has(s));
     const match = (s) => (!q || words(s).includes(q)) && inFilter(s);
@@ -177,7 +178,17 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       const list = el('div', 'shelf-items');
       list.id = `shelf-items-${cat.id}`;
       list.hidden = !expanded;
+      // Große Gruppen in Abschnitte teilen: Loops, One-Shots, Percussion
+      const section = (s) => (s.kind === 'loop' ? 'Loops' : s.tags?.includes('percussion') ? 'Percussion' : 'One-Shots');
+      const order = { Loops: 0, 'One-Shots': 1, Percussion: 2 };
+      const split = sort === 'cat' && samples.length > 24 && new Set(samples.map(section)).size > 1;
+      if (split) samples.sort((a, b) => order[section(a)] - order[section(b)]);
+      let lastSection = null;
       for (const s of samples) {
+        if (split && section(s) !== lastSection) {
+          lastSection = section(s);
+          list.append(el('div', 'shelf-sub', `${lastSection} · ${samples.filter((x) => section(x) === lastSection).length}`));
+        }
         const { row, star } = makeItem(s);
         if (!items.has(s.id)) items.set(s.id, []);
         items.get(s.id).push(row);
