@@ -1944,7 +1944,9 @@
   .shelf-len .shelf-sort-label { margin-right: 2px; }
   /* Handy und Touch: großer Griff, gut zu sehen und mit dem Daumen zu fassen */
   @media (max-width: 760px), (pointer: coarse) {
-    .sheet-grip { height: 34px; }
+    /* sichtbar 24 px, zum Fassen 40 px: der Rand ragt unsichtbar in den Inhalt, ohne ihm Platz zu nehmen */
+    .sheet-grip { height: 24px; position: relative; z-index: 4; }
+    .sheet-grip::after { content: ""; position: absolute; inset: -4px 0 -12px; }
     .sheet-grip::before { width: 64px; height: 5px; border-radius: 3px; background: var(--muted); }
     .sheet-grip:active::before, .sheet.dragging .sheet-grip::before { background: var(--ink); }
   }

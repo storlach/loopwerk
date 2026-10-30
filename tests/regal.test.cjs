@@ -88,9 +88,11 @@ const DIR = process.env.SHOT_DIR || '/tmp';
       const g = document.querySelector('.dock:not([hidden]) > .sheet-grip');
       const r = g?.getBoundingClientRect();
       const b = g && getComputedStyle(g, '::before');
-      return { h: r?.height, bar: b && parseFloat(b.width) };
+      // Fassbereich: was ein Finger knapp unter dem Griff trifft, gehört noch zum Griff
+      const hit = r && document.elementFromPoint(r.left + r.width / 2, r.bottom + 10)?.closest('.sheet-grip') === g;
+      return { h: r?.height, bar: b && parseFloat(b.width), hit };
     });
-    check('Handy: Schubladengriff groß (≥ 32 px hoch, Strich ≥ 56 px)', grip.h >= 32 && grip.bar >= 56, JSON.stringify(grip));
+    check('Handy: Schubladengriff groß (Strich ≥ 56 px, Fassbereich reicht unter den Griff)', grip.h >= 24 && grip.bar >= 56 && grip.hit, JSON.stringify(grip));
     if (SHOTS) await page.screenshot({ path: `${DIR}/regal-griff-handy.png` });
     await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
     await page.waitForTimeout(600);
