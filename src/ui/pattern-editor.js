@@ -509,7 +509,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       const cs = ctx.createBufferSource();
       cs.buffer = click;
       cs.loop = true;
-      cs.connect(ctx.destination);
+      cs.connect(engine.out ?? ctx.destination);
       cs.start(this.t0 - bar);
       this.click = cs;
       this.srcs = [];

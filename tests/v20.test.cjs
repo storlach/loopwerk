@@ -12,6 +12,28 @@ const { check, finish } = createChecker();
   let app = await openApp({ viewport: { width: 1536, height: 960 } });
   let { page } = app;
   try {
+    // ---------- Ladescreen ganz oben, Bildmarke zeigt den echten Pegel ----------
+    const order = await page.evaluate(() => {
+      const boot = document.getElementById('boot');
+      const big = [...document.querySelectorAll('style')].sort((a, b) => b.textContent.length - a.textContent.length)[0];
+      return { bootFirst: !!(boot.compareDocumentPosition(big) & Node.DOCUMENT_POSITION_FOLLOWING), bootCss: !!document.getElementById('boot-css') };
+    });
+    check('Ladescreen steht samt eigenem Stil vor dem großen Stylesheet (erscheint sofort)', order.bootFirst && order.bootCss, JSON.stringify(order));
+    const bars = () => page.evaluate(() => [...document.querySelectorAll('#brand-bars i')].map((i) => i.getBoundingClientRect().height));
+    const idle = await bars();
+    check('Bildmarke ohne Ton: Grundform des Logos', idle.length === 5 && idle[2] === Math.max(...idle) && idle[4] === Math.min(...idle), JSON.stringify(idle));
+    await page.click('#play-btn');
+    await page.waitForTimeout(2600);
+    const samples = [];
+    for (let k = 0; k < 6; k++) { samples.push(JSON.stringify(await bars())); await page.waitForTimeout(90); }
+    const live = await page.evaluate(() => document.getElementById('brand-bars').classList.contains('live'));
+    check('Bildmarke beim Abspielen: Balken folgen dem echten Ausgangspegel', live && new Set(samples).size > 1, samples.join(' '));
+    await page.click('#play-btn');
+    await page.waitForTimeout(1500);
+    check('Nach dem Stopp kehrt das Logo in die Grundform zurück', JSON.stringify(await bars()) === JSON.stringify(idle), JSON.stringify(await bars()));
+    const inSplash = await page.evaluate(() => !!document.querySelector('#boot #brand-bars'));
+    check('Im Ladescreen bleibt die Animation (keine Pegelanzeige)', !inSplash);
+
     // ---------- Überlappungen: Klang ----------
     const ov = await page.evaluate(async () => {
       const { library, renderProject } = window.loopwerk;

@@ -145,7 +145,7 @@ export async function startMicCapture(engine, { beatsPerBar = 4 } = {}) {
   const clickSrc = ctx.createBufferSource();
   clickSrc.buffer = click;
   clickSrc.loop = true;
-  clickSrc.connect(ctx.destination);
+  clickSrc.connect(engine.out ?? ctx.destination);
   const t0 = ctx.currentTime + 0.1 + bar;
   clickSrc.start(t0 - bar);
   const inputLatency = stream.getAudioTracks()[0]?.getSettings?.().latency || 0;

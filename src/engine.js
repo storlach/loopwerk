@@ -88,7 +88,7 @@ export async function limiterLatency(sampleRate) {
 }
 
 // grid: Kontextzeit, zu der Schlag 0 des Songs läge – Bezug für taktsynchrone Effekte (Filter-LFO, Pumpen)
-export function buildMix(ctx, project, { limiter = true, grid = 0 } = {}) {
+export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.destination } = {}) {
   const post = ctx.createGain();
   let output = post;
   if (limiter) {
@@ -96,7 +96,7 @@ export function buildMix(ctx, project, { limiter = true, grid = 0 } = {}) {
     post.connect(comp);
     output = comp;
   }
-  output.connect(ctx.destination);
+  output.connect(dest);
   const masterStrip = createStrip(ctx, post, { pan: false });
   const mix = { master: masterStrip.input, masterStrip, output, tracks: new Map(), grid };
   syncMix(ctx, project, mix, 60 / project.bpm, false);
@@ -266,7 +266,16 @@ export class Engine extends Emitter {
   async _ensure() {
     if (!this.ctx) {
       this.ctx = new AudioContext({ latencyHint: 'interactive' });
-      this.mix = buildMix(this.ctx, this.project, { limiter: true });
+      // Gemeinsamer Ausgang für alles Hörbare (Song, Vorhören, Pads, Klick) – dort misst die Bildmarke den Pegel
+      this.out = this.ctx.createGain();
+      this.out.connect(this.ctx.destination);
+      this.outAnalyser = this.ctx.createAnalyser();
+      this.outAnalyser.fftSize = 2048;
+      this.outAnalyser.smoothingTimeConstant = 0.55;
+      this.outAnalyser.minDecibels = -78;
+      this.outAnalyser.maxDecibels = -18;
+      this.out.connect(this.outAnalyser);
+      this.mix = buildMix(this.ctx, this.project, { limiter: true, dest: this.out });
       // Pegelmesser je Kanal für den Mixer
       this.meters = new Map();
       const tapStrip = (id, strip) => {
@@ -471,7 +480,7 @@ export class Engine extends Emitter {
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(0.18, t + 0.001);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
-      o.connect(g).connect(this.ctx.destination);
+      o.connect(g).connect(this.out);
       o.start(t);
       o.stop(t + 0.05);
     }
@@ -608,6 +617,24 @@ export class Engine extends Emitter {
       for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
       return p;
     });
+  }
+
+  // Pegel des gesamten Ausgangs in n Frequenzbändern (60 Hz … 12 kHz, logarithmisch), je 0…1; null ohne Ton-Kontext
+  outputBands(n) {
+    if (!this.outAnalyser || this.ctx.state !== 'running') return null;
+    const a = this.outAnalyser;
+    if (!this._fft) this._fft = new Uint8Array(a.frequencyBinCount);
+    a.getByteFrequencyData(this._fft);
+    const hz = this.ctx.sampleRate / 2 / this._fft.length;
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const lo = Math.max(1, Math.floor((60 * 200 ** (k / n)) / hz));
+      const hi = Math.max(lo + 1, Math.ceil((60 * 200 ** ((k + 1) / n)) / hz));
+      let m = 0;
+      for (let i = lo; i < hi && i < this._fft.length; i++) if (this._fft[i] > m) m = this._fft[i];
+      out.push(m / 255);
+    }
+    return out;
   }
 
   peakLevel() {

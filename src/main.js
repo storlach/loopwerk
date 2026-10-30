@@ -15,6 +15,7 @@ import { mountInspector } from './ui/inspector.js';
 import { mountCreate } from './ui/create.js';
 import { mountSheets } from './ui/sheets.js';
 import { mountTips } from './ui/tips.js';
+import { mountBrandMeter } from './ui/brand-meter.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
@@ -356,6 +357,7 @@ async function boot() {
   const recorder = new Recorder({ engine, store, own });
   const recording = mountRecording({ store, engine, ui, arranger, recorder });
   const importer = mountImport({ store, ui, arranger, own, shelf });
+  mountBrandMeter(engine);
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
