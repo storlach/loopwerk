@@ -304,6 +304,48 @@ export class Store extends Emitter {
     });
   }
 
+  // Mehrere Clips gemeinsam verschieben oder kopieren (ein Rückgängig-Schritt). moves: [{ id, trackId, startBeat }]
+  moveClips(moves, { copy = false } = {}) {
+    const ids = moves.map(() => (copy ? this.newId() : null));
+    this.dispatch(copy ? 'copy-clips' : 'move-clips', () => {
+      const placed = [];
+      moves.forEach((m, i) => {
+        const found = this.findClip(m.id);
+        if (!found) return;
+        const { track, clip } = found;
+        const { start, length } = this._fit(m.startBeat, clip.lengthBeats);
+        let moved;
+        if (copy) moved = { ...clip, id: ids[i], startBeat: start, lengthBeats: length };
+        else {
+          track.clips = track.clips.filter((c) => c !== clip);
+          moved = Object.assign(clip, { startBeat: start, lengthBeats: length });
+        }
+        normalizeClip(moved);
+        const target = this.track(m.trackId);
+        target.clips.push(moved);
+        placed.push([target, moved]);
+      });
+      for (const [t, c] of placed) this._raise(t, c);
+    });
+    return copy ? ids : moves.map((m) => m.id);
+  }
+
+  deleteClips(ids) {
+    const set = new Set(ids.filter((id) => this.findClip(id)));
+    if (!set.size) return;
+    this.dispatch('delete-clips', (p) => { for (const t of p.tracks) t.clips = t.clips.filter((c) => !set.has(c.id)); });
+  }
+
+  // Mehrere Clips als Block direkt hinter sich kopieren; Abstände untereinander bleiben
+  duplicateClips(ids) {
+    const found = ids.map((id) => this.findClip(id)).filter(Boolean);
+    if (!found.length) return [];
+    const start = Math.min(...found.map((f) => f.clip.startBeat));
+    const end = Math.max(...found.map((f) => f.clip.startBeat + f.clip.lengthBeats));
+    if (end >= totalBeats(this.project) - EPS) return [];
+    return this.moveClips(found.map((f) => ({ id: f.clip.id, trackId: f.track.id, startBeat: f.clip.startBeat + (end - start) })), { copy: true });
+  }
+
   deleteClip(clipId) {
     if (!this.findClip(clipId)) return;
     this.dispatch('delete-clip', () => {

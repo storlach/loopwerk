@@ -60,7 +60,13 @@ const { check, finish } = createChecker();
       window.__starts = 0;
       window.__flashes = 0;
       const pad = document.querySelector('#pat-pads [data-row="kick"]');
-      new MutationObserver(() => { if (pad.classList.contains('hit')) window.__flashes++; }).observe(pad, { attributes: true, attributeFilter: ['class'] });
+      // Zählt jedes neue Aufleuchten („hit“ kommt dazu), nicht jede andere Klassenänderung (z. B. „held“)
+      const hasHit = (c) => /(^|\s)hit(\s|$)/.test(c || '');
+      new MutationObserver((records) => {
+        // Zustandsfolge aus den alten Werten plus dem jetzigen: jeder Wechsel „ohne hit“ → „mit hit“ zählt
+        const states = [...records.map((r) => r.oldValue), pad.className];
+        for (let i = 1; i < states.length; i++) if (hasHit(states[i]) && !hasHit(states[i - 1])) window.__flashes++;
+      }).observe(pad, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
     });
     for (let i = 0; i < 10; i++) { await page.keyboard.press('a'); await page.waitForTimeout(20); }
     await page.waitForTimeout(300);

@@ -54,8 +54,11 @@ function createUi() {
     flashText: null,
     dock: null,
     setDock(name) { if (ui.dock !== name) { ui.dock = name; ui.emit(); } },
+    // Mehrfachauswahl: multi enthält alle ausgewählten Clips (ab zwei); selectedClipId ist der zuletzt gewählte
+    multi: [],
     select(id) {
-      if (ui.selectedClipId === id && (!id || !ui.selectedTrackId)) return;
+      if (ui.selectedClipId === id && !ui.multi.length && (!id || !ui.selectedTrackId)) return;
+      ui.multi = [];
       ui.selectedClipId = id;
       if (id) ui.selectedTrackId = null;
       ui.emit();
@@ -65,8 +68,17 @@ function createUi() {
       if (ui.selectedTrackId === id && !ui.selectedClipId) return;
       ui.selectedTrackId = id;
       ui.selectedClipId = null;
+      ui.multi = [];
       ui.emit();
     },
+    selectMany(ids) {
+      const list = [...new Set(ids)];
+      ui.multi = list.length > 1 ? list : [];
+      ui.selectedClipId = list.length ? list[list.length - 1] : null;
+      if (list.length) ui.selectedTrackId = null;
+      ui.emit();
+    },
+    selectedIds() { return ui.multi.length ? ui.multi.slice() : ui.selectedClipId ? [ui.selectedClipId] : []; },
     arm(id) { if (ui.armedSampleId !== id) { ui.armedSampleId = id; ui.emit(); } },
     // Laufende Anzeige beim Ziehen (z. B. „Fade-In: 1,5 Schläge“)
     status(text) { if (ui.statusText !== text) { ui.statusText = text; ui.emit(); } },
@@ -124,13 +136,20 @@ function mountClipTools({ store, engine, ui, arranger }) {
       ui.flash(created.length === 1 ? 'Clip geteilt.' : `${created.length} Clips geteilt.`);
     },
     duplicate() {
+      const ids = ui.selectedIds();
+      if (ids.length > 1) {
+        const made = store.duplicateClips(ids);
+        if (made.length) ui.selectMany(made); else ui.flash('Hinter den Clips ist kein Platz mehr im Song.');
+        return;
+      }
       if (!ui.selectedClipId) return;
       const id = store.duplicateClip(ui.selectedClipId);
       if (id) arranger.select(id); else ui.flash('Hinter diesem Clip ist kein Platz mehr im Song.');
     },
     remove() {
-      if (!ui.selectedClipId) return;
-      store.deleteClip(ui.selectedClipId);
+      const ids = ui.selectedIds();
+      if (!ids.length) return;
+      if (ids.length > 1) store.deleteClips(ids); else store.deleteClip(ids[0]);
       ui.select(null);
     },
     edit() {
@@ -429,6 +448,10 @@ async function boot() {
     } else if (mod && key === 'd') {
       e.preventDefault();
       tools.duplicate();
+    } else if (mod && key === 'a') {
+      // Alle Clips auswählen
+      e.preventDefault();
+      ui.selectMany(store.project.tracks.flatMap((t) => t.clips.map((c) => c.id)));
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();

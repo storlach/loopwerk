@@ -587,6 +587,8 @@
   .clip.selected.on-top { box-shadow: 0 0 0 2px var(--ink), 0 2px 10px #0004; }
   .clip.dragging { opacity: 0.85; cursor: grabbing; z-index: 999; box-shadow: 0 6px 16px #0003; }
   .clip.copying { outline: 2px dashed var(--ink); outline-offset: 1px; }
+  /* Rahmen für die Mehrfachauswahl */
+  .marquee { position: absolute; z-index: 40; pointer-events: none; border: 1px solid var(--amber); background: color-mix(in srgb, var(--amber) 10%, transparent); border-radius: 2px; }
   .clip-label {
     position: absolute; top: 3px; left: 6px; right: 12px;
     font-size: 11px; font-weight: 600; line-height: 1.1;
@@ -1992,7 +1994,10 @@
           <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
           <dt>Strg+Z / Strg+Umschalt+Z</dt><dd>Rückgängig / Wiederholen</dd>
           <dt>T</dt><dd>Clip an der Abspielmarke teilen</dd>
-          <dt>Strg+D</dt><dd>Clip duplizieren</dd>
+          <dt>Rahmen ziehen</dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
+          <dt>Umschalt+Klick</dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>
+          <dt>Strg+A</dt><dd>Alle Clips auswählen</dd>
+          <dt>Strg+D</dt><dd>Clip(s) duplizieren</dd>
           <dt>Entf</dt><dd>Clip löschen</dd>
           <dt>Alt+Ziehen</dt><dd>Clip oder Spur kopieren</dd>
           <dt>Umschalt+Ziehen</dt><dd>Ohne Raster ziehen</dd>

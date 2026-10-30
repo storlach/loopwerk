@@ -365,7 +365,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     node.dataset.clipId = clip.id;
     node.style.left = clip.startBeat * ppb() + 'px';
     node.style.width = clip.lengthBeats * ppb() + 'px';
-    node.classList.toggle('selected', ui.selectedClipId === clip.id);
+    node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
     const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
     const canvas = el('canvas', 'clip-wave');
@@ -448,7 +448,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     for (const t of p.tracks) renderLane(rows.get(t.id), t);
     forceAll = false;
     if (ui.selectedClipId && !store.findClip(ui.selectedClipId)) ui.select(null);
-    for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', n.dataset.clipId === ui.selectedClipId);
+    else if (ui.multi.length && ui.multi.some((id) => !store.findClip(id))) ui.selectMany(ui.multi.filter((id) => store.findClip(id)));
+    markSelection();
     showLoop(p.loop.startBeat, p.loop.endBeat, p.loop.on);
     setPlayhead(engine.heardBeat());
   }
@@ -466,9 +467,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   const laneAt = (x, y) => document.elementFromPoint(x, y)?.closest('.lane');
 
+  function markSelection() {
+    const ids = new Set(ui.selectedIds());
+    for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', ids.has(n.dataset.clipId));
+  }
   function select(clipId) {
     ui.select(clipId);
-    for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', n.dataset.clipId === clipId);
+    markSelection();
   }
 
   // Gemeinsamer Rahmen für alle Griff-Bewegungen: Vorschau beim Ziehen, eine Store-Aktion beim Loslassen.
@@ -498,12 +503,95 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }, () => { node.classList.remove('editing'); ui.status(null); render(true); });
   }
 
-  function startMove(e, node) {
+  // Mehrere ausgewählte Clips zusammen verschieben (Alt/Strg: kopieren); Abstände und Spurabstände bleiben
+  function startGroupMove(e, node, toggle = null) {
+    const p = store.project;
+    const total = totalBeats(p);
+    const order = p.tracks.map((t) => t.id);
+    const items = ui.selectedIds().map((id) => {
+      const f = store.findClip(id);
+      return f && { clip: f.clip, ti: order.indexOf(f.track.id), node: root.querySelector(`.clip[data-clip-id="${id}"]`) };
+    }).filter((x) => x && x.node);
+    const lead = items.find((x) => x.node === node) ?? items[0];
+    const minStart = Math.min(...items.map((x) => x.clip.startBeat));
+    const maxEnd = Math.max(...items.map((x) => x.clip.startBeat + x.clip.lengthBeats));
+    const minTi = Math.min(...items.map((x) => x.ti));
+    const maxTi = Math.max(...items.map((x) => x.ti));
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let moved = false;
+    let db = 0;
+    let dt = 0;
+    forceAll = true;
+    trackPointer(e, (ev) => {
+      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      moved = true;
+      const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
+      const want = snap(lead.clip.startBeat + (ev.clientX - sx) / ppb(), ev) - lead.clip.startBeat;
+      db = clamp(want, -minStart, total - maxEnd);
+      const lane = laneAt(ev.clientX, ev.clientY);
+      if (lane) dt = clamp(order.indexOf(lane.dataset.trackId) - lead.ti, -minTi, order.length - 1 - maxTi);
+      for (const x of items) {
+        x.node.classList.add('dragging');
+        x.node.classList.toggle('copying', copy);
+        x.node.style.left = (x.clip.startBeat + db) * ppb() + 'px';
+        const target = rows.get(order[x.ti + dt])?.lane;
+        if (target && target !== x.node.parentElement) target.append(x.node);
+      }
+      ui.status(`${items.length} Clips · ${formatPos(lead.clip.startBeat + db, p.beatsPerBar)}`);
+    }, (ev) => {
+      for (const x of items) x.node.classList.remove('dragging', 'copying');
+      ui.status(null);
+      if (!moved) { toggle?.(); return; }
+      const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
+      if (!copy && !db && !dt) { render(true); return; }
+      const ids = store.moveClips(items.map((x) => ({ id: x.clip.id, trackId: order[x.ti + dt], startBeat: x.clip.startBeat + db })), { copy });
+      ui.selectMany(ids);
+      render(true);
+    }, () => { ui.status(null); render(true); });
+  }
+
+  // Rahmen aufziehen (Maus, freie Fläche): alle berührten Clips auswählen; Umschalt fügt hinzu
+  const marquee = el('div', 'marquee');
+  function startMarquee(e, lane) {
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const keep = e.shiftKey ? ui.selectedIds() : [];
+    let active = false;
+    let hits = [];
+    trackPointer(e, (ev) => {
+      if (!active && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+      if (!active) { active = true; grid.append(marquee); }
+      const g = grid.getBoundingClientRect();
+      const x0 = Math.min(sx, ev.clientX);
+      const x1 = Math.max(sx, ev.clientX);
+      const y0 = Math.min(sy, ev.clientY);
+      const y1 = Math.max(sy, ev.clientY);
+      Object.assign(marquee.style, { left: `${x0 - g.left}px`, top: `${y0 - g.top}px`, width: `${x1 - x0}px`, height: `${y1 - y0}px` });
+      hits = [...root.querySelectorAll('.clip')].filter((n) => {
+        const r = n.getBoundingClientRect();
+        return r.right > x0 && r.left < x1 && r.bottom > y0 && r.top < y1;
+      }).map((n) => n.dataset.clipId);
+      const show = new Set([...keep, ...hits]);
+      for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', show.has(n.dataset.clipId));
+      ui.status(hits.length ? `${show.size} ${show.size === 1 ? 'Clip' : 'Clips'} ausgewählt` : null);
+    }, (ev) => {
+      marquee.remove();
+      ui.status(null);
+      if (!active) { laneClick(ev, lane); return; }
+      ui.selectMany([...keep, ...hits]);
+      markSelection();
+    }, () => { marquee.remove(); ui.status(null); markSelection(); });
+  }
+
+  // toggle: Umschalt-Klick ohne Bewegung ändert nur die Auswahl
+  function startMove(e, node, { toggle = null } = {}) {
+    if (ui.multi.length > 1 && ui.multi.includes(node.dataset.clipId)) { startGroupMove(e, node, toggle); return; }
     const found = store.findClip(node.dataset.clipId);
     if (!found) return;
     const { clip, track } = found;
     const total = totalBeats(store.project);
-    select(clip.id);
+    if (!toggle) select(clip.id);
     const sx = e.clientX;
     const sy = e.clientY;
     let moved = false;
@@ -522,7 +610,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }, (ev) => {
       node.classList.remove('dragging', 'copying');
       ui.status(null);
-      if (!moved) return;
+      if (!moved) { toggle?.(); return; }
       const targetId = node.parentElement.dataset.trackId;
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
       if (!copy && targetId === track.id && newStart === clip.startBeat) { render(true); return; }
@@ -637,6 +725,18 @@ export function mountArranger({ root, store, engine, library, ui }) {
         trackPointer(e, () => {}, () => select(clip.dataset.clipId));
         return;
       }
+      if (e.shiftKey && e.pointerType === 'mouse' && !t.closest('.clip-grip, .clip-trim, .clip-handle')) {
+        // Umschalt-Klick: Clip zur Auswahl hinzufügen oder herausnehmen; Umschalt-Ziehen verschiebt frei (ohne Raster)
+        const cid = clip.dataset.clipId;
+        startMove(e, clip, {
+          toggle: () => {
+            const ids = ui.selectedIds();
+            ui.selectMany(ids.includes(cid) ? ids.filter((x) => x !== cid) : [...ids, cid]);
+            markSelection();
+          },
+        });
+        return;
+      }
       if (t.closest('.clip-fade-in')) startFade(e, clip, 'in');
       else if (t.closest('.clip-fade-out')) startFade(e, clip, 'out');
       else if (t.closest('.clip-vol')) startVol(e, clip);
@@ -647,7 +747,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }
     if (t.closest('.ruler')) { startRuler(e); return; }
     const lane = t.closest('.lane');
-    if (lane) laneClick(e, lane);
+    if (!lane) return;
+    // Maus auf freier Fläche: Rahmen aufziehen (ein Klick ohne Ziehen bleibt ein Klick)
+    if (e.pointerType === 'mouse' && !ui.armedSampleId && !scissors) { e.preventDefault(); startMarquee(e, lane); return; }
+    laneClick(e, lane);
   });
 
   // ---------- Ablegen aus dem Sound-Regal ----------
@@ -758,6 +861,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   render(true);
   ui.on(() => {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
+    markSelection();
   });
   return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, nudge, armScissors, cancelScissors, revealClip, get scissors() { return !!scissors; } };
 }
