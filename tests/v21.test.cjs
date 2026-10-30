@@ -274,6 +274,23 @@ const { check, finish } = createChecker();
     await page.mouse.up();
     const after2 = await page.evaluate(() => window.loopwerk.engine.heardBeat());
     check('Griff der Marke ziehen setzt die Position (rastet ein)', Math.abs(after2 - Math.round(pz.at + 6)) <= 1 && Number.isInteger(after2), String(after2));
+    // ---------- Sounds auf Abruf ----------
+    await page.reload();
+    await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    const lazy = await page.evaluate(async () => {
+      const { library, engine } = window.loopwerk;
+      const all = library.list();
+      const loaded = all.filter((s) => !s.lazy).length;
+      const target = all.find((s) => s.lazy && s.file);
+      const id = target?.id;
+      await engine.previewSample(id);
+      const after = library.get(id);
+      engine.stopPreview?.();
+      return { total: all.length, loaded, id, nowLoaded: !after.lazy && !!after.buffer, previewing: engine.preview?.sampleId === id || !after.lazy };
+    });
+    check('Start lädt nur, was das Projekt braucht; alle Sounds stehen trotzdem im Regal', lazy.total > 50 && lazy.loaded < lazy.total / 2, JSON.stringify(lazy));
+    check('Anhören lädt einen Sound auf Abruf', lazy.nowLoaded && lazy.previewing, JSON.stringify(lazy));
+    await page.evaluate(() => window.loopwerk.library.catalogReady);
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

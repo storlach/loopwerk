@@ -557,8 +557,9 @@ export class Engine extends Emitter {
   async previewSample(sampleId) {
     await this._ensure();
     this.stopPreview();
-    const sample = this.library.get(sampleId);
-    if (!sample) return;
+    // Sound auf Abruf: beim ersten Anhören laden bzw. erzeugen
+    const sample = await this.library.ensure?.(sampleId) ?? this.library.get(sampleId);
+    if (!sample?.buffer) return;
     let when = this.ctx.currentTime + 0.02;
     if (this.playing) {
       // Im laufenden Song startet die Vorschau auf der nächsten Taktgrenze.

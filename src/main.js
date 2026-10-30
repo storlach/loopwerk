@@ -388,7 +388,8 @@ async function boot() {
   document.getElementById('new-melody-btn').addEventListener('click', () => createPattern(newSynthPattern));
   library.on(() => { cancelAnimationFrame(redraw); redraw = requestAnimationFrame(() => arranger.render()); });
   // Clips mit geänderter Laufzeit: gedehnte Fassung im Hintergrund rechnen (auch nach Tempowechsel), dann neu einplanen
-  const ensureStretch = () => library.ensureProject(store.project).then(() => engine.refresh()).catch((err) => ui.flash(`Laufzeit: ${err.message}`));
+  // Sounds des Projekts laden bzw. erzeugen (auf Abruf) und gedehnte Fassungen bereitstellen
+  const ensureStretch = () => library.ensureProject(store.project).then(() => engine.refresh()).catch((err) => ui.flash(`Sounds: ${err.message}`));
   store.on(ensureStretch);
   library.on(ensureStretch);
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));

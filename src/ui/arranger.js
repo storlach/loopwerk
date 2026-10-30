@@ -481,7 +481,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const off = clip.offsetBeats || 0;
     const pat = sample.patternId && store.project.patterns?.[sample.patternId];
     if (pat?.type === 'synth' && pat.notes?.length) drawNotes(c, clip, pat, w, h);
-    else {
+    else if (!sample.peaks) {
+      // Sound wird noch geladen: gestrichelte Mittellinie, die Wellenform folgt gleich
+      for (let x = 0; x < w; x += 6) c.fillRect(x, Math.round(mid), 3, 1);
+    } else {
       // Wellenform als Lichtstriche: senkrechte 1-px-Linien im 2-px-Raster, symmetrisch zur Mitte
       const peaks = sample.peaks;
       const perBeat = peaks.length / sample.lengthBeats;

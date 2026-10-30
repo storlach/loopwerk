@@ -766,8 +766,9 @@ export class Library extends Emitter {
     this.prepared = new Map(); // id → bpm, für das der Puffer vorbereitet ist
     this.variants = new Map(); // „id@faktor“ → gedehnte Fassung (Clip-Laufzeit)
     this.pendingVariants = new Map();
-    this.catalogReady = Promise.resolve();
+    this.coreIds = []; // Grundausstattung (Tests warten darauf über catalogReady)
     this.semis = 0; // Tonart des Songs relativ zu A-Moll (die synthetischen Loops werden darin gerendert)
+    this.pending = new Map(); // id → laufendes Laden auf Abruf
   }
 
   // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
@@ -810,6 +811,7 @@ export class Library extends Emitter {
 
   // Alle gedehnten Fassungen eines Projekts bereitstellen (vor Export und Offline-Rendering)
   async ensureProject(project) {
+    await this.ensureMany(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
     const jobs = [];
     for (const t of project.tracks) for (const c of t.clips) if (c.stretch && c.stretch !== 1) jobs.push(this.ensureStretched(c.sampleId, c.stretch));
     await Promise.all(jobs);
@@ -834,9 +836,49 @@ export class Library extends Emitter {
     return sample;
   }
 
+  // Sound auf Abruf: steht sofort mit Name und Länge im Regal, der Klang wird erst beim ersten Gebrauch
+  // geladen (Katalog-Datei) bzw. erzeugt (synthetischer Loop) – so bleibt der Start schnell, egal wie groß die Bibliothek ist
+  stub(sample, load = null) {
+    sample.lazy = true;
+    sample._load = load;
+    sample.lengthBeats ??= sample.beats ?? 4;
+    this.samples.set(sample.id, sample);
+    return sample;
+  }
+
+  async ensure(id) {
+    const s = this.samples.get(id);
+    if (!s || !s.lazy) return s;
+    if (!this.pending.has(id)) {
+      this.pending.set(id, (async () => {
+        try {
+          if (s._load) await s._load(s);
+          await this._prepare(s, this.bpm);
+          // Tempo oder Tonart haben sich währenddessen geändert: gleich passend nachziehen
+          if (this.prepared.get(id) !== this._tag(s, this.bpm)) await this._prepare(s, this.bpm);
+          s.lazy = false;
+          this.emit();
+        } finally {
+          this.pending.delete(id);
+        }
+      })());
+    }
+    await this.pending.get(id);
+    return s;
+  }
+
+  // Grundausstattung vollständig laden (Tests); die App selbst lädt auf Abruf
+  get catalogReady() { return this.ensureMany(this.coreIds); }
+
+  ensureMany(ids) {
+    return Promise.all([...new Set(ids)].map((id) => this.ensure(id).catch((err) => console.warn(`Sound ${id}: ${err.message}`))));
+  }
+
+  // Tonale synthetische Loops hängen auch von der Tonart ab
+  _tag(s, bpm) { return s.def && s.key ? `${bpm}|${this.semis}` : bpm; }
+
   async _prepare(s, bpm) {
-    // Tonale synthetische Loops hängen auch von der Tonart ab
-    const tag = s.def && s.key ? `${bpm}|${this.semis}` : bpm;
+    const tag = this._tag(s, bpm);
     if (this.prepared.get(s.id) === tag && s.buffer) return;
     let r;
     if (s.def) r = await renderLoop(s.def, bpm, this.semis);
@@ -855,7 +897,7 @@ export class Library extends Emitter {
   async setKey(semis) {
     this.semis = semis;
     for (const s of this.samples.values()) {
-      if (!(s.def && s.key)) continue;
+      if (!(s.def && s.key) || s.lazy) continue;
       await this._prepare(s, this.bpm);
       if (this.semis !== semis) return;
     }
@@ -865,6 +907,7 @@ export class Library extends Emitter {
   async setTempo(bpm) {
     this.bpm = bpm;
     for (const s of this.samples.values()) {
+      if (s.lazy) continue; // wird beim ersten Gebrauch im passenden Tempo erzeugt
       await this._prepare(s, bpm);
       if (this.bpm !== bpm) return; // inzwischen neues Tempo angefordert
     }
@@ -896,54 +939,34 @@ async function loadCatalogEntry(entry) {
 
 // Synthetische Loops und die Katalog-Sounds, die das Projekt braucht, vor dem Start; die übrigen Katalog-Sounds
 // (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
+// Gesamte Bibliothek: eigene synthetische Loops und freie Katalog-Sounds (CC0)
+const ALL_LOOP_DEFS = [...LOOP_DEFS];
+const ALL_CATALOG = [...CATALOG];
+
+// Alle Sounds als Einträge sofort im Regal; geladen bzw. erzeugt wird nur, was das Projekt braucht (need) –
+// der Rest beim ersten Anhören oder Einsetzen (library.ensure).
 export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, need = null } = {}) {
   const lib = new Library();
   lib.bpm = bpm;
   lib.semis = semis;
-  const order = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];
-  // Reihenfolge: synthetisch, dann Katalog, dann alles Übrige (eigene Sounds, Patterns) wie gehabt
-  const reorder = () => {
-    const known = new Set(order);
-    lib.samples = new Map([
-      ...order.filter((id) => lib.samples.has(id)).map((id) => [id, lib.samples.get(id)]),
-      ...[...lib.samples].filter(([id]) => !known.has(id)),
-    ]);
-  };
-  const first = need ? CATALOG.filter((e) => need.has(e.id)) : CATALOG;
-  const rest = CATALOG.filter((e) => !first.includes(e));
-  let done = 0;
-  const total = LOOP_DEFS.length + first.length;
-  const tick = () => onProgress?.(++done, total);
-  const synth = LOOP_DEFS.map(async (def) => {
-    const s = {
+  for (const def of ALL_LOOP_DEFS) {
+    lib.stub({
       id: def.id, name: def.name, category: def.category, kind: def.oneShot ? 'oneshot' : 'loop',
       beats: def.bars * 4, bpm: null, key: def.category === 'drums' || def.category === 'fx' ? null : LIBRARY_KEY,
       oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', genres: def.genres || [], def,
-    };
-    await lib.add(s);
-    tick();
-    return s;
-  });
-  const real = first.map(async (entry) => {
-    const s = await loadCatalogEntry(entry);
-    if (s) await lib.add(s);
-    tick();
-  });
-  await Promise.all([...synth, ...real]);
-  reorder();
-  // Rest im Hintergrund, drei Dateien gleichzeitig; jeder fertige Sound erscheint sofort im Regal
-  lib.catalogReady = (async () => {
-    const queue = [...rest];
-    const worker = async () => {
-      for (let e = queue.shift(); e; e = queue.shift()) {
-        const s = await loadCatalogEntry(e);
-        if (!s) continue;
-        lib.samples.set(s.id, s);
-        reorder();
-        await lib.add(s);
-      }
-    };
-    await Promise.all([worker(), worker(), worker()]);
-  })();
+    });
+  }
+  for (const entry of ALL_CATALOG) {
+    lib.stub({ ...entry }, async (s) => {
+      const loaded = await loadCatalogEntry(entry);
+      if (!loaded) throw new Error('nicht geladen');
+      Object.assign(s, { orig: loaded.orig, duration: loaded.duration, bpm: loaded.bpm ?? s.bpm });
+    });
+  }
+  lib.coreIds = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];
+  const first = need ? [...need].filter((id) => lib.samples.has(id)) : [];
+  let done = 0;
+  await Promise.all(first.map((id) => lib.ensure(id).catch(() => {}).then(() => onProgress?.(++done, first.length))));
+  if (!first.length) onProgress?.(1, 1);
   return lib;
 }
