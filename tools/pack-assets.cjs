@@ -1,7 +1,8 @@
 // Fasst die VCSL-Aufnahmen zu Klang-Paketen zusammen: zusammengehörige WAV-Dateien (eine Familie wie „kick“,
 // „conga“ oder ein ganzes Instrument) hintereinander in eine Datei. Die App lädt ein Paket einmal und schneidet
 // die WAV-Datei heraus (src/fetch-asset.js). Weniger Dateien = weniger Anfragen und passt ins Artifact-Limit.
-// Aufruf: node tools/pack-assets.cjs   (schreibt assets/packs/*.pack und src/asset-packs.js)
+// Endung .wav, weil das Artifact nur bekannte Medientypen ausliefert; der Anfang ist ohnehin die erste WAV-Datei.
+// Aufruf: node tools/pack-assets.cjs   (schreibt assets/packs/*.wav und src/asset-packs.js)
 const fs = require('fs');
 const path = require('path');
 
@@ -41,7 +42,7 @@ const packs = [];
 const packed = {};
 for (const [fam, list] of [...groups].sort()) {
   const bufs = list.map((f) => fs.readFileSync(path.join(ROOT, f)));
-  const name = `${OUT}/vcsl-${fam}.pack`;
+  const name = `${OUT}/vcsl-${fam}.wav`;
   const i = packs.length;
   packs.push(name);
   let off = 0;
