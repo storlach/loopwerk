@@ -3,7 +3,7 @@
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
 import { EFFECTS, withFx } from '../effects.js';
-import { clipGain, MIN_BPM, MAX_BPM } from '../model.js';
+import { clipGain, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
 import { formatCurve, formatDb } from './arranger.js';
@@ -11,6 +11,7 @@ import { formatParam } from './mixer.js';
 import { narrow } from './place.js';
 import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
+import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -86,21 +87,13 @@ export function mountInspector({ root, store, ui, library, tools }) {
   Object.assign(stIn, { type: 'number', id: 'insp-stempo', min: '20', max: '400', step: '0.1', inputMode: 'decimal', placeholder: '–' });
   stIn.setAttribute('aria-label', 'Tempo des Sounds (BPM)');
   const selSample = () => { const c = selClip(); return c ? library.get(c.sampleId) : null; };
-  const soundBpm = (smp) => (smp?.kind === 'loop' && smp.beats && smp.orig ? (smp.beats * 60) / smp.orig.duration : null);
-  const setSoundBpm = (bpm) => {
-    const smp = selSample();
-    if (!smp?.orig || !(bpm > 0)) return;
-    store.setSampleTempo(smp.id, Math.max(0.25, (bpm * smp.orig.duration) / 60));
-  };
+  const setSoundBpm = (bpm) => setSoundBpmOf(store, selSample(), bpm);
   stIn.addEventListener('change', () => setSoundBpm(Number(String(stIn.value).replace(',', '.'))));
   stIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') stIn.blur(); });
   const stBtn = (label, title, fn) => { const b = el('button', 'key', label); b.type = 'button'; b.title = title; b.addEventListener('click', fn); stBtns.append(b); return b; };
   stBtn('÷2', 'Halbes Tempo (Aufnahme zählt doppelt so viele Schläge)', () => { const v = soundBpm(selSample()); if (v) setSoundBpm(v / 2); }).id = 'insp-stempo-half';
   stBtn('×2', 'Doppeltes Tempo', () => { const v = soundBpm(selSample()); if (v) setSoundBpm(v * 2); }).id = 'insp-stempo-double';
-  const stSong = stBtn('Als Song-Tempo', 'Song-Tempo auf das Tempo dieses Sounds setzen', () => {
-    const v = soundBpm(selSample());
-    if (v) store.setBpm(clamp(Math.round(v * 10) / 10, MIN_BPM, MAX_BPM));
-  });
+  const stSong = stBtn('Als Song-Tempo', 'Song-Tempo auf das Tempo dieses Sounds setzen', () => useAsSongTempo(store, selSample()));
   stSong.id = 'insp-stempo-song';
   stSong.classList.add('wide');
   const stReset = stBtn('Wie geliefert', 'Eigenes Tempo für diesen Sound entfernen', () => { const smp = selSample(); if (smp) store.setSampleTempo(smp.id, null); });
@@ -225,6 +218,23 @@ export function mountInspector({ root, store, ui, library, tools }) {
   keySel.id = 'insp-key';
   keyNote.append(el('span', null, 'Tonart'), keySel);
   bindKeySelect(keySel, store);
+  // Tonartwechsel ab einem Takt (gesetzt in der Tonart-Zeile unter dem Lineal): Liste, × entfernt den Wechsel
+  const keyChg = el('div', 'insp-keychg');
+  keyChg.id = 'insp-keychg';
+  function renderKeyChanges() {
+    const list = keyChangesOf(store.project);
+    keyChg.hidden = !list.length;
+    keyChg.replaceChildren(...(list.length ? [el('span', 'insp-keychg-label', 'Tonartwechsel')] : []), ...list.map((c) => {
+      const row = el('div', 'insp-keychg-row');
+      const rm = el('button', 'insp-keychg-rm', '×');
+      rm.type = 'button';
+      rm.title = `Wechsel ab Takt ${c.bar} entfernen`;
+      rm.setAttribute('aria-label', `Tonartwechsel ab Takt ${c.bar} entfernen`);
+      rm.addEventListener('click', () => store.clearKeyAt(c.bar));
+      row.append(el('span', null, `ab Takt ${c.bar}`), el('output', null, c.key), rm);
+      return row;
+    }));
+  }
   const lenRow = el('label', 'insp-row');
   const lenOut = el('output');
   const lenIn = document.createElement('input');
@@ -233,7 +243,7 @@ export function mountInspector({ root, store, ui, library, tools }) {
   lenIn.addEventListener('input', () => { lenOut.textContent = `${lenIn.value} Takte`; });
   lenRow.append(el('span', null, 'Länge'), lenOut, lenIn);
   const masterSub = el('p', 'insp-sub', 'Master');
-  songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, lenRow, masterSub);
+  songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, masterSub);
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
 
@@ -273,12 +283,11 @@ export function mountInspector({ root, store, ui, library, tools }) {
       runOut.textContent = `×${String(f).replace('.', ',')}${f === 1 ? '' : f > 1 ? ' · langsamer' : ' · schneller'}`;
       for (const b of runBtns.querySelectorAll('[data-run]')) b.setAttribute('aria-pressed', String(Number(b.dataset.run) === f));
       // Sound-Tempo: nur Aufnahmen; erzeugte Loops und Patterns folgen ohnehin dem Song
-      const own = !!(s?.orig && !s.def && !s.make);
+      const own = hasOwnTempo(s);
       stIn.hidden = !own;
       stBtns.hidden = !own;
       const sb = own ? soundBpm(s) : null;
       const fixed = store.project.sampleTempo?.[s?.id] != null;
-      const fmtBpm = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
       stOut.textContent = !s ? '' : !own ? (s.def || s.make ? 'folgt dem Song' : '–') : sb ? `${fmtBpm(sb)} BPM · ${fmtBeats(s.beats)}` : 'Einzelklang · Tempo eingeben';
       if (document.activeElement !== stIn) stIn.value = sb ? String(Math.round(sb * 10) / 10) : '';
       for (const b of [stBtns.querySelector('#insp-stempo-half'), stBtns.querySelector('#insp-stempo-double'), stSong]) b.disabled = !sb;
@@ -303,6 +312,7 @@ export function mountInspector({ root, store, ui, library, tools }) {
     } else {
       trackId = MASTER;
       songName.textContent = store.project.name || 'Song';
+      renderKeyChanges();
       tval.textContent = String(store.project.bpm);
       if (document.activeElement !== lenIn) lenIn.value = String(store.project.lengthBars);
       lenOut.textContent = `${store.project.lengthBars} Takte`;

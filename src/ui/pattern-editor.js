@@ -125,6 +125,13 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (const t of store.project.tracks) for (const c of t.clips) if (c.sampleId === sid && c.lengthBeats < bars * 4) store.resizeClip(c.id, bars * 4);
   }
   kitSel.addEventListener('change', () => update((p) => { p.kit = kitSel.value; }));
+  // Handy: Knopf statt Auswahlfeld – ein Tipp wechselt zur nächsten Stufe
+  const glideBtn = $('pat-glide-btn');
+  glideBtn.addEventListener('click', () => {
+    const i = GLIDE_OPTIONS.findIndex((g) => String(g.value) === glideSel.value);
+    glideSel.value = String(GLIDE_OPTIONS[(i + 1) % GLIDE_OPTIONS.length].value);
+    glideSel.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   glideSel.addEventListener('change', () => update((p) => {
     const v = Number(glideSel.value);
     if (v > 0) p.glide = v; else delete p.glide;
@@ -1132,6 +1139,10 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     // Zwischenwerte (0–1, z. B. aus einer Projektdatei) zeigt die Wahl als nächstliegende Stufe
     const gv = glideOf(p);
     glideSel.value = String(GLIDE_OPTIONS.reduce((a, b) => (Math.abs(b.value - gv) < Math.abs(a.value - gv) ? b : a)).value);
+    const gl = GLIDE_OPTIONS.find((g) => String(g.value) === glideSel.value);
+    glideBtn.textContent = `∿ ${gl?.label ?? 'Aus'}`;
+    glideBtn.setAttribute('aria-label', `Gleiten: ${gl?.label ?? 'Aus'}`);
+    glideBtn.setAttribute('aria-pressed', String(!!gl?.value));
     drumsEl.hidden = !drums || pads;
     padsEl.hidden = !pads;
     $('pat-pages').hidden = !drums || pads || !narrow.matches;

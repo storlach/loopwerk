@@ -489,7 +489,7 @@ async function boot() {
   });
   const wish = mountWish({ store, library, ui });
   mountKeySelects(store);
-  mountMobile({ store, ui, tools });
+  mountMobile({ store, ui, tools, library });
   const sheets = mountSheets({ ui, arranger });
   const tips = mountTips({ ui, store });
 

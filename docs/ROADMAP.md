@@ -204,11 +204,11 @@
 - E-Gitarren: eigene Gitarren-Simulation (`src/dsp/guitar.js`: Saite, Amp, Box, Effekte), 26 Loops + 9 One-Shots (`src/loops-guitar.js`), Presets „E-Gitarre clean/verzerrt“, echte Gitarren von Karoryfer (CC0, `src/catalog-guitar.js`)
 - Clip-Fades mit Bézier-Kurve (`fadeInCurve`/`fadeOutCurve`, Griff mitten auf der Linie, Inspektor „Kurve“); Melodien mit Gleiten (Aus/Kurz/Lang)
 - Sound-Tempo im Inspektor; Clip-Editor und Beat-/Melodie-Editor spielen im Loop, klingender Schritt leuchtet; Tonhöhe/Autotune sofort hören
+- Lücken geschlossen: Clip-Leiste am Tablet über der Zoom-Leiste, Gruppenköpfe wachsen mit, Sound-Tempo am Handy (Pegel), Tonartwechsel im Inspektor, Gleiten am Handy als Knopf (`tests/luecken.test.cjs`)
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
 ## Als Nächstes
 - Aus dem Markt-Scout: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
-- Kleine Lücken: Clip-Leiste am Tablet verdeckt die untere Zoom-Leiste; aufgeklappte Gruppenköpfe wachsen nicht mit der Spurhöhe; Sound-Tempo am Handy; Tonartwechsel im Inspektor „Song“ auflisten
 
 ## Look
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.

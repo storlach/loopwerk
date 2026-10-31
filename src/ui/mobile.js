@@ -5,6 +5,7 @@ import { clipGain } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
 import { stepRun } from './inspector.js';
+import { hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
 
 import { narrow, touch } from './place.js';
 
@@ -15,7 +16,7 @@ const TEMPO_PRESETS = [80, 90, 100, 120, 128, 140];
 
 const formatBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100).replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`);
 
-export function mountMobile({ store, ui, tools }) {
+export function mountMobile({ store, ui, tools, library }) {
   const $ = (id) => document.getElementById(id);
   const app = $('app');
   const more = $('more');
@@ -57,6 +58,14 @@ export function mountMobile({ store, ui, tools }) {
   $('lvl-run-up').addEventListener('click', () => { const c = selected(); if (c) store.setClipStretch(c.id, stepRun(c.stretch || 1, 1)); });
 
   const selected = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
+  // Tempo des Sounds (wie im Inspektor am Desktop)
+  const tempoIn = $('lvl-tempo');
+  const selSound = () => { const c = selected(); return c ? library.get(c.sampleId) : null; };
+  $('lvl-tempo-half').addEventListener('click', () => { const s = selSound(); const v = soundBpm(s); if (v) setSoundBpm(store, s, v / 2); });
+  $('lvl-tempo-double').addEventListener('click', () => { const s = selSound(); const v = soundBpm(s); if (v) setSoundBpm(store, s, v * 2); });
+  $('lvl-tempo-song').addEventListener('click', () => useAsSongTempo(store, selSound()));
+  tempoIn.addEventListener('change', () => setSoundBpm(store, selSound(), Number(String(tempoIn.value).replace(',', '.'))));
+  tempoIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') tempoIn.blur(); });
   gainIn.addEventListener('input', () => {
     const c = selected();
     if (c) store.setClip(c.id, { gain: Number(gainIn.value) }, 'lvl-gain-' + c.id);
@@ -113,6 +122,11 @@ export function mountMobile({ store, ui, tools }) {
     $('lvl-in-out').textContent = formatBeats(c.fadeInBeats || 0);
     $('lvl-out-out').textContent = formatBeats(c.fadeOutBeats || 0);
     $('lvl-run-out').textContent = `×${String(c.stretch || 1).replace('.', ',')}`;
+    const snd = library.get(c.sampleId);
+    const sb = soundBpm(snd);
+    $('lvl-tempo-row').hidden = !hasOwnTempo(snd);
+    if (document.activeElement !== tempoIn) tempoIn.value = sb ? String(Math.round(sb * 10) / 10) : '';
+    for (const id of ['lvl-tempo-half', 'lvl-tempo-double', 'lvl-tempo-song']) $(id).disabled = !sb;
   }
 
   // ---------- Tempo ohne Bildschirmtastatur ----------
@@ -181,7 +195,7 @@ export function mountMobile({ store, ui, tools }) {
     if (!narrow.matches || !isText(e.target)) return;
     clearTimeout(kbdTimer);
     app.classList.add('kbd');
-    app.dataset.kbdIn = e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : 'dock';
+    app.dataset.kbdIn = e.target.closest('.clipbar') ? 'clip' : e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : 'dock';
     fitViewport();
     requestAnimationFrame(() => e.target.scrollIntoView({ block: 'nearest' }));
   });

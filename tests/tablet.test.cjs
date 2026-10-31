@@ -18,9 +18,6 @@ const EXCEPTIONS = [
   [/^div\.track-name/, 'Spurname'],
   // Klaviatur: Tasten wie am Klavier (weiße 48 px breit, schwarze schmaler und überlappend)
   [/^button\.pat-key/, 'Klaviertasten'],
-  // Zoom-Leiste unten: Greifer sind 44 px lang und 44 px hoch (zoom-bars.test.cjs misst das ohne Werkzeugleiste); bei
-  // ausgewähltem Clip schwebt die Werkzeugleiste knapp darüber und nimmt dem oberen Teil der Fläche ein Stück weg
-  [/^div\.zbar-(grip|thumb)/, 'Zoom-Leiste unter der schwebenden Werkzeugleiste'],
   // Quellenangaben im Fließtext
   [/^a\./, 'Links im Text'],
 ];
