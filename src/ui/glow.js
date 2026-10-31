@@ -350,27 +350,32 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
   }
 
-  // ---------- Hintergrund: Master-Amplitude, von rechts (jetzt) nach links (vorhin) ----------
-  // Lichtstriche wie die Wellenform in der Timeline; am rechten Rand, wo es gerade klingt, glühen sie auf.
-  const SPEED = 120; // px/s: bei 60 Bildern 2 px pro Strich
-  const NOW_GLOW = 110; // px am rechten Rand mit Schein
-  const hist = [];
+  // ---------- Hintergrund: Master-Amplitude, steht fest und schlägt zur Ausgabe aus ----------
+  // Lichtstriche wie die Wellenform in der Timeline, quer über den Bildschirm: in der Mitte die Bässe, nach außen die Höhen.
+  // Schnell hoch, langsam zurück; laute Striche glühen.
+  const PITCH = 4;
+  let bars = new Float32Array(0);
   let waveA = 0;
   function drawMasterWave(now, live, dt) {
-    if (live) hist.push({ t: now, v: Math.min(1, engine.peakLevel()) });
     // Ein- und Ausblenden: schnell da, nach dem Stopp sanft weg
     waveA += ((live ? 1 : 0) - waveA) * Math.min(1, dt * (live ? 4 : 1.1));
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    while (hist.length && (now - hist[0].t) * SPEED / 1000 > W + 4) hist.shift();
-    if (waveA < 0.01 || reduced.matches || !hist.length) {
+    if (waveA < 0.01 || reduced.matches) {
       if (!mwave.hidden) { mwave.hidden = true; mc.clearRect(0, 0, mwave.width, mwave.height); }
-      if (!live && waveA < 0.01) hist.length = 0;
+      bars.fill(0);
       return;
     }
     mwave.hidden = false;
     // Halbe Auflösung und jedes zweite Bild: als Hintergrund reicht das, die Seite bleibt leicht
     if (frameNo % 2) return;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const half = Math.ceil(W / 2 / PITCH);
+    if (bars.length !== half) bars = new Float32Array(half);
+    const bands = live ? engine.outputBands(half) : null;
+    for (let k = 0; k < half; k++) {
+      const t = bands ? bands[k] : 0;
+      bars[k] += (t - bars[k]) * (t > bars[k] ? 0.6 : 0.12);
+    }
     const RES = 0.5;
     if (mwave.width !== Math.round(W * RES) || mwave.height !== Math.round(H * RES)) { mwave.width = Math.round(W * RES); mwave.height = Math.round(H * RES); }
     mc.setTransform(RES, 0, 0, RES, 0, 0);
@@ -384,42 +389,23 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       col = [r | 0, g | 0, b | 0];
     }
     const mid = H * 0.5;
-    const amp = H * 0.34;
+    const amp = H * 0.36;
+    const cx = W / 2;
     mc.globalCompositeOperation = 'lighter';
-    // Striche im 2-px-Raster; jede Spalte nimmt den lautesten Wert der Zeit, die sie abdeckt (auch bei wenigen Bildern lückenlos)
-    const PITCH = 4;
-    const cols = [];
-    let j = hist.length - 1;
-    for (let age = 0; age < W && j >= 0; age += PITCH) {
-      const tOld = now - ((age + PITCH) * 1000) / SPEED;
-      let v = hist[j].v;
-      while (j > 0 && hist[j].t > tOld) { j--; v = Math.max(v, hist[j].v); }
-      if (hist[j].t > tOld && j === 0) { cols.push(v); break; }
-      cols.push(v);
+    // Schein um laute Striche (ohne shadowBlur): breite, schwache Fläche darunter
+    for (let k = 0; k < half; k++) {
+      const v = bars[k];
+      if (v < 0.45) continue;
+      const a = v * v * amp;
+      mc.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * 0.1 * (v - 0.45) * 2})`;
+      for (const x of [cx + k * PITCH, cx - (k + 1) * PITCH]) mc.fillRect(x - 5, mid - a - 6, 12, 2 * a + 12);
     }
-    const strokes = (glow) => {
-      for (let k = 0; k < cols.length; k++) {
-        const age = k * PITCH;
-        if (glow && age > NOW_GLOW) break;
-        const x = W - age - 1;
-        const a = Math.max(0.5, Math.sqrt(cols[k]) * amp);
-        // jünger = heller; am rechten Rand zusätzlich glühend
-        const fresh = Math.max(0, 1 - age / W);
-        const near = Math.max(0, 1 - age / NOW_GLOW);
-        const alpha = waveA * (glow ? 0.45 * near : 0.1 + 0.35 * fresh * fresh);
-        mc.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
-        mc.fillRect(x, mid - a, PITCH / 2, Math.max(1, 2 * a));
-      }
-    };
-    strokes(false);
-    // Schein am rechten Rand ohne shadowBlur (teuer): breite, schwache Striche unter den hellen
-    for (let k = 0; k * PITCH <= NOW_GLOW && k < cols.length; k++) {
-      const near = 1 - (k * PITCH) / NOW_GLOW;
-      const a = Math.max(0.5, Math.sqrt(cols[k]) * amp);
-      mc.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * 0.12 * near})`;
-      mc.fillRect(W - k * PITCH - 1 - 5, mid - a - 6, 12, 2 * a + 12);
+    for (let k = 0; k < half; k++) {
+      const v = bars[k];
+      const a = Math.max(0.5, v * v * amp);
+      mc.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.08 + 0.42 * v)})`;
+      for (const x of [cx + k * PITCH, cx - (k + 1) * PITCH]) mc.fillRect(x, mid - a, PITCH / 2, 2 * a);
     }
-    strokes(true);
     mc.globalCompositeOperation = 'source-over';
     mc.setTransform(1, 0, 0, 1, 0, 0);
   }
@@ -500,5 +486,5 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   readColors();
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, wave: { alpha: waveA, n: hist.length, shown: !mwave.hidden } }; } };
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, wave: { alpha: waveA, n: bars.length, peak: bars.reduce((m, v) => Math.max(m, v), 0), shown: !mwave.hidden } }; } };
 }

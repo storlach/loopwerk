@@ -81,7 +81,7 @@ const DIR = process.env.SHOT_DIR || '/tmp';
     await page.evaluate(() => window.loopwerk.engine.play(16));
     await page.waitForTimeout(2500);
     const mw = await page.evaluate(() => ({ ...window.loopwerk.glow.state.wave, el: !!document.querySelector('canvas.ambient-wave:not([hidden])') }));
-    check('Wiedergabe: Master-Amplitude läuft im Hintergrund', mw.shown && mw.el && mw.n > 0 && mw.alpha > 0.5, JSON.stringify(mw));
+    check('Wiedergabe: Master-Amplitude steht im Hintergrund und schlägt zur Ausgabe aus', mw.shown && mw.el && mw.n > 0 && mw.peak > 0.1 && mw.alpha > 0.5, JSON.stringify(mw));
     await page.evaluate(() => window.loopwerk.engine.stop());
     await page.waitForTimeout(700);
     const fading = await page.evaluate(() => window.loopwerk.glow.state.wave.alpha);
