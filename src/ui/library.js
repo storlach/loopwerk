@@ -105,10 +105,32 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   // Handy: Filter hinter einem Knopf neben der Suche, die Zahl zeigt, wie viele gerade wirken
   const filterBtn = document.getElementById('shelf-filter-btn');
   const filterBox = document.getElementById('shelf-filters');
+  // Auf- und Zuklappen in Bewegung: die Fläche wächst, die Liste darunter rutscht sichtbar nach unten,
+  // die Filterzeilen gleiten nacheinander von oben herein (beim Schließen umgekehrt)
+  const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let filterAnim = null;
   filterBtn?.addEventListener('click', () => {
     const open = !filterBox.classList.contains('open');
-    filterBox.classList.toggle('open', open);
     filterBtn.setAttribute('aria-expanded', String(open));
+    filterAnim?.cancel();
+    if (open) filterBox.classList.add('open');
+    if (calm.matches || !filterBox.animate) { filterBox.classList.toggle('open', open); return; }
+    const h = filterBox.scrollHeight;
+    const ease = 'cubic-bezier(.2, .8, .2, 1)';
+    filterBox.style.overflow = 'hidden';
+    const frames = [{ height: '0px', opacity: 0, marginTop: '-8px' }, { height: `${h}px`, opacity: 1, marginTop: '0px' }];
+    filterAnim = filterBox.animate(open ? frames : [...frames].reverse(), { duration: open ? 280 : 200, easing: ease });
+    if (open) {
+      [...filterBox.children].forEach((row, i) => row.animate(
+        [{ transform: 'translateY(-10px)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+        { duration: 260, delay: 50 + i * 45, easing: ease, fill: 'backwards' },
+      ));
+    }
+    filterAnim.onfinish = () => {
+      filterBox.style.overflow = '';
+      filterAnim = null;
+      if (!open) filterBox.classList.remove('open');
+    };
   });
   buildChips();
   search.addEventListener('input', render);

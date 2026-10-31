@@ -2304,6 +2304,14 @@
   }
   .loop-fav, .loop-fav:hover { color: var(--muted); }
   .loop-fav.on { color: var(--ink); }
+
+  /* Spur, auf der gerade etwas klingt: leuchtet leise in ihrer Farbe (glow.js setzt --lit 0…1 und --lit-c) */
+  .lane::after {
+    content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgb(var(--lit-c, 255 255 255) / calc(var(--lit, 0) * 0.16)), rgb(var(--lit-c, 255 255 255) / calc(var(--lit, 0) * 0.06)) 60%);
+  }
+  .track-row .track-head { background-image: linear-gradient(90deg, rgb(var(--lit-c, 255 255 255) / calc(var(--lit, 0) * 0.26)), transparent 80%); }
+  .track-row .track-dot { box-shadow: 0 0 calc(4px + var(--lit, 0) * 10px) var(--cat, transparent); }
 </style>
 
 

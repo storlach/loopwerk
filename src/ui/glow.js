@@ -85,9 +85,35 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     return top;
   }
 
+  // Spuren, auf denen gerade etwas klingt, leuchten leise in ihrer Farbe (Spurkopf und Fläche, CSS --lit/--lit-c)
+  const litRows = new Map(); // trackId → { row, v }
+  const trackCat = new Map();
+  function litTracks(p, hits) {
+    for (const h of hits) trackCat.set(h.trackId, h.cat);
+    const seen = new Set();
+    for (const t of p.tracks) {
+      const g = trackGlow.get(t.id) ?? 0;
+      const v = Math.round(Math.min(1, g * 3) * 50) / 50;
+      const prev = litRows.get(t.id);
+      if (!v && !prev) continue;
+      seen.add(t.id);
+      if (prev && prev.v === v && prev.row.isConnected) continue;
+      const row = (prev?.row?.isConnected && prev.row) || grid.querySelector(`.lane[data-track-id="${t.id}"]`)?.closest('.track-row');
+      if (!row) continue;
+      const [r, gg, b] = rgb[trackCat.get(t.id)] || [136, 136, 136];
+      row.style.setProperty('--lit', String(v));
+      row.style.setProperty('--lit-c', `${r} ${gg} ${b}`);
+      if (v) litRows.set(t.id, { row, v });
+      else { litRows.delete(t.id); row.style.removeProperty('--lit'); }
+    }
+    for (const [id, x] of litRows) if (!seen.has(id)) { x.row.style.removeProperty('--lit'); litRows.delete(id); }
+  }
+
   function hide() {
     if (!shown) return;
     shown = false;
+    for (const x of litRows.values()) x.row.style.removeProperty('--lit');
+    litRows.clear();
     beam.hidden = true;
     sparks = [];
   }
@@ -143,6 +169,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const hitIds = new Set(hits.map((h) => h.trackId));
     for (const [id, g] of trackGlow) if (!hitIds.has(id)) { if (g < 0.003) trackGlow.delete(id); else trackGlow.set(id, g * 0.85); }
 
+    litTracks(p, hits);
     // Marke: aus, sobald Kern und Funken verglüht sind (der Hintergrund klingt unabhängig davon aus)
     if (!live && !sparks.length && !trackGlow.size) { hide(); return; }
     if (!shown) { shown = true; beam.hidden = false; }
