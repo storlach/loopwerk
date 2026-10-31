@@ -588,7 +588,8 @@ export class Engine extends Emitter {
 
   // ---------- Vorhören und Pegel ----------
 
-  async previewSample(sampleId) {
+  // loop: bis stopPreview() wiederholen (Länge = Sound-Länge in Schlägen); at: Einstieg in s (nahtlos weiterspielen)
+  async previewSample(sampleId, { loop = false, at = 0 } = {}) {
     await this._ensure();
     this.stopPreview();
     // Sound auf Abruf: beim ersten Anhören laden bzw. erzeugen
@@ -605,8 +606,16 @@ export class Engine extends Emitter {
     const g = this.ctx.createGain();
     g.gain.value = 0.8;
     src.connect(g).connect(this.mix.master);
-    src.start(when);
-    const preview = { sampleId, src, g, when, duration: sample.buffer.duration };
+    let duration = sample.buffer.duration;
+    if (loop) {
+      duration = Math.min(sample.buffer.duration, (sample.lengthBeats || 4) * this.spb);
+      src.loop = true;
+      src.loopStart = 0;
+      src.loopEnd = duration;
+      at %= duration;
+      src.start(when, at);
+    } else src.start(when);
+    const preview = { sampleId, src, g, when: when - (loop ? at : 0), duration, loop, rev: sample.rev };
     src.onended = () => { if (this.preview === preview) { this.preview = null; this.emit('preview'); } };
     this.preview = preview;
     this.emit('preview');

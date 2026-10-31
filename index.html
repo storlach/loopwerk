@@ -2051,7 +2051,7 @@
   .dbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
   .dbtn.primary { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
   /* Schalter im Editor (Anhören im Loop, Autotune): an = Weißglut */
-  .dbtn[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 35%, transparent); }
+  .dbtn[aria-pressed="true"], .dbtn[aria-pressed="true"]:hover:not(:disabled) { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 35%, transparent); }
   .pat-field select, .ed-name, #pat-name, .ed-beats { border-radius: var(--radius); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
   #pat-live[aria-pressed="true"] { background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent); }
 
@@ -2289,6 +2289,12 @@
     .app.has-clipbar .hint { margin-bottom: 86px; }
     .app.has-clipbar .arr-grid { padding-bottom: 84px; }
   }
+  /* Beat-/Melodie-Editor: der Schritt, der gerade klingt, leuchtet (Anhören im Loop, Live, Song) */
+  .pat-cell.now { box-shadow: inset 0 0 0 1px var(--ink), 0 0 10px -2px color-mix(in srgb, var(--ink) 55%, transparent); }
+  .pat-cell.now[aria-pressed="true"] { filter: brightness(1.35); box-shadow: inset 0 0 0 1px var(--ink), 0 0 16px 1px color-mix(in srgb, var(--cat) 75%, transparent); }
+  .pat-roll-wrap { position: relative; }
+  .pat-roll-head { position: absolute; top: 0; z-index: 1; pointer-events: none; background: color-mix(in srgb, var(--ink) 10%, transparent); box-shadow: inset 1px 0 0 color-mix(in srgb, var(--ink) 55%, transparent); }
+  .pat-roll-head[hidden] { display: none; }
 </style>
 
 

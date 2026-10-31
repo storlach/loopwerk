@@ -128,10 +128,76 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   recBtn.addEventListener('click', () => { rec = !rec; render(); });
   liveBtn.addEventListener('click', () => (looper.running ? looper.stop() : looper.start()));
   for (const b of viewBtns) b.addEventListener('click', () => { view = b.dataset.view; render(); });
-  $('pat-play').addEventListener('click', () => {
-    if (engine.preview?.sampleId === patternSampleId(id)) engine.stopPreview();
-    else engine.previewSample(patternSampleId(id));
+  // Anhören läuft im Loop; ändert man das Pattern, geht es an derselben Stelle mit dem neuen Klang weiter
+  const playBtn = $('pat-play');
+  const pid = () => patternSampleId(id);
+  playBtn.addEventListener('click', () => {
+    if (engine.preview?.sampleId === pid()) engine.stopPreview();
+    else engine.previewSample(pid(), { loop: true });
   });
+  library.on?.(() => {
+    const pv = engine.preview;
+    if (!pv?.loop || pv.sampleId !== pid()) return;
+    const s = library.get(pid());
+    if (!s || s.rev === pv.rev) return;
+    engine.previewSample(pid(), { loop: true, at: Math.max(0, engine.ctx.currentTime - pv.when) });
+  });
+
+  // ---------- Wo die Wiedergabe gerade ist: der klingende Schritt leuchtet ----------
+  // Quellen: Anhören im Loop, Live-Aufnahme oder der Song (ein Clip dieses Patterns unter der Marke)
+  function currentStep() {
+    const p = pat();
+    if (!p || ui.dock !== 'pattern') return null;
+    const n = steps();
+    const wrap = (x) => ((Math.floor(x) % n) + n) % n;
+    if (looper.running) {
+      const x = ((engine.heardTime() - looper.t0) / looper.spb) * STEPS_PER_BEAT;
+      return x < 0 ? null : wrap(x);
+    }
+    const pv = engine.preview;
+    if (pv?.loop && pv.sampleId === pid()) {
+      const t = engine.heardTime() - pv.when;
+      return t < 0 ? null : wrap(((t % pv.duration) / engine.spb) * STEPS_PER_BEAT);
+    }
+    if (engine.playing) {
+      const beat = engine.heardBeat();
+      const len = p.bars * 4;
+      for (const t of store.project.tracks) {
+        for (const c of t.clips) {
+          if (c.sampleId !== pid() || beat < c.startBeat || beat >= c.startBeat + c.lengthBeats) continue;
+          const b = (((beat - c.startBeat) / (c.stretch || 1) + (c.offsetBeats || 0)) % len + len) % len;
+          return wrap(b * STEPS_PER_BEAT);
+        }
+      }
+    }
+    return null;
+  }
+  const rollHead = el('div', 'pat-roll-head');
+  rollHead.hidden = true;
+  rollHead.setAttribute('aria-hidden', 'true');
+  rollWrap.append(rollHead);
+  let litKey = '';
+  function showStep() {
+    requestAnimationFrame(showStep);
+    const step = currentStep();
+    const playing = !!engine.preview && engine.preview.sampleId === pid();
+    if (playBtn.getAttribute('aria-pressed') !== String(playing)) {
+      playBtn.setAttribute('aria-pressed', String(playing));
+      playBtn.textContent = playing ? '■ Stopp' : '▶ Anhören';
+    }
+    const key = `${step}|${drumsEl.dataset.key}`;
+    if (key === litKey) return;
+    litKey = key;
+    for (const c of drumsEl.querySelectorAll('.pat-cell.now')) c.classList.remove('now');
+    if (step != null) for (const c of drumsEl.querySelectorAll(`.pat-cell[data-step="${step}"]`)) c.classList.add('now');
+    if (step == null || pat()?.type !== 'synth') { rollHead.hidden = true; return; }
+    const { cellW, h } = rollGeometry();
+    rollHead.hidden = false;
+    rollHead.style.left = keyW() + step * cellW + 'px';
+    rollHead.style.width = cellW + 'px';
+    rollHead.style.height = h + 'px';
+  }
+  requestAnimationFrame(showStep);
   $('pat-clear').addEventListener('click', () => update((p) => {
     if (p.type === 'drums') p.rows = resizeDrumRows({}, p.bars);
     else p.notes = [];
