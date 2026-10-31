@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
+import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { makeKnob } from './knob.js';
 import { touch } from './place.js';
@@ -16,6 +16,8 @@ const WAVE_TOP = 17; // Abstand der Wellenform vom Clip-Oberrand (Platz für den
 
 export const formatDb = (g) => (g <= 0.0001 ? '−∞ dB' : `${(20 * Math.log10(g)).toFixed(1).replace('.', ',').replace('-', '−')} dB`);
 const formatBeats = (b) => `${(Math.round(b * 100) / 100).toString().replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`;
+// Krümmung eines Fades in Worten (Anzeige beim Ziehen, Inspektor)
+export const formatCurve = (c) => (!c ? 'linear' : `${c > 0 ? 'schnell' : 'langsam'} ${Math.round(Math.abs(c) * 100)} %`);
 const formatPos = (b, bpb = 4) => `Takt ${Math.floor(b / bpb) + 1}, Schlag ${String(Math.round(((b % bpb) + 1) * 100) / 100).replace('.', ',')}`;
 
 // „Frei“ (und Umschalt beim Ziehen) rastet in 1/64 Schlag – fein genug zum Hören, exakt als Gleitkommazahl.
@@ -532,7 +534,14 @@ export function mountArranger({ root, store, engine, library, ui }) {
       c.lineWidth = 1.5;
       c.beginPath();
       const L = clip.lengthBeats;
-      const pts = [0, clip.fadeInBeats || 0, L - (clip.fadeOutBeats || 0), L];
+      const fi = clip.fadeInBeats || 0;
+      const fo = clip.fadeOutBeats || 0;
+      // Gekrümmte Fades als Kurve: Stützpunkte etwa alle 3 px
+      const along = (a, b, curved) => {
+        const n = curved ? Math.max(2, Math.ceil(((b - a) * ppb()) / 3)) : 1;
+        return Array.from({ length: n + 1 }, (_, k) => a + ((b - a) * k) / n);
+      };
+      const pts = [...along(0, fi, clip.fadeInCurve), ...along(L - fo, L, clip.fadeOutCurve)];
       pts.forEach((x, i) => {
         const y = envY(clipEnvelope(clip, Math.min(L, Math.max(0, x))), h);
         if (i === 0) c.moveTo(x * ppb(), y); else c.lineTo(x * ppb(), y);
@@ -558,6 +567,18 @@ export function mountArranger({ root, store, engine, library, ui }) {
     set('.clip-fade-in', clamp(fi, edge, L - edge));
     set('.clip-fade-out', clamp(L - fo, edge, L - edge));
     set('.clip-vol', L / 2);
+    // Bézier-Griffe: auf dem Kurvenpunkt in der Mitte des Fades; nur, wenn der Fade lang genug ist, um ihn neben dem
+    // Fade-Griff zu fassen (am Finger braucht die 44-px-Trefferfläche Platz)
+    const room = touch.matches ? 88 : 28;
+    for (const [which, len, c] of [['in', fi, clip.fadeInCurve || 0], ['out', fo, clip.fadeOutCurve || 0]]) {
+      const n = node.querySelector(`.clip-curve-${which}`);
+      n.hidden = len < room;
+      if (n.hidden) continue;
+      const [tx, ty] = fadeHandlePoint(c);
+      const x = which === 'in' ? tx * len : L - tx * len;
+      n.style.left = x - half + 'px';
+      n.style.top = WAVE_TOP + envY(clipGain(clip) * ty, h) - half + 'px';
+    }
   }
 
   function makeClip(clip) {
@@ -583,7 +604,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
     fadeOut.title = 'Fade-Out: nach links ziehen';
     const vol = el('div', 'clip-grip clip-vol');
     vol.title = 'Lautstärke: nach unten ziehen';
-    node.append(canvas, label, trim, handle, fadeIn, fadeOut, vol);
+    // Bézier-Griffe der Fades liegen unter den Fade-Griffen, damit die Länge immer fassbar bleibt
+    const curveIn = el('div', 'clip-grip clip-curve clip-curve-in');
+    curveIn.title = 'Kurve des Fade-Ins: hoch = schnell, runter = langsam; Doppelklick = linear';
+    const curveOut = el('div', 'clip-grip clip-curve clip-curve-out');
+    curveOut.title = 'Kurve des Fade-Outs: hoch = lange laut, runter = früh leise; Doppelklick = linear';
+    node.append(canvas, label, trim, handle, curveIn, curveOut, fadeIn, fadeOut, vol);
     return { node, canvas, sample };
   }
 
@@ -868,6 +894,35 @@ export function mountArranger({ root, store, engine, library, ui }) {
     });
   }
 
+  // Bézier-Griff: senkrecht ziehen biegt die Kurve (der Griff folgt dem Finger); nahe linear rastet ein (Umschalt: frei).
+  // Zweimal schnell antippen oder Doppelklick setzt auf linear zurück.
+  let curveTap = null;
+  function startCurve(e, node, which) {
+    const key = which === 'in' ? 'fadeInCurve' : 'fadeOutCurve';
+    const tap = `${node.dataset.clipId}|${which}`;
+    const now = performance.now();
+    if (curveTap?.key === tap && now - curveTap.t < 350) {
+      curveTap = null;
+      const c = store.findClip(node.dataset.clipId)?.clip;
+      if (c?.[key]) store.setClip(c.id, { [key]: 0 });
+      ui.flash(`${which === 'in' ? 'Fade-In' : 'Fade-Out'} wieder linear.`);
+      return;
+    }
+    curveTap = { key: tap, t: now };
+    const h = node.querySelector('canvas')?.clientHeight || 30;
+    dragClip(e, node, {
+      preview: (clip, dx, dy, ev) => {
+        if (Math.hypot(dx, dy) > 4) curveTap = null;
+        const scale = ((h - 2) * Math.max(0.25, clipGain(clip))) / 4;
+        let c = clamp((clip[key] || 0) - dy / scale, -1, 1);
+        if (!ev.shiftKey && Math.abs(c) < 0.06) c = 0;
+        c = fadeCurveOf(Math.round(c * 100) / 100);
+        return { clip: { [key]: c }, status: `${which === 'in' ? 'Fade-In' : 'Fade-Out'}: ${formatCurve(c)}` };
+      },
+      commit: (clip, r) => { if ((r[key] || 0) !== (clip[key] || 0)) store.setClip(clip.id, r); else render(true); },
+    });
+  }
+
   function startVol(e, node) {
     const h = node.querySelector('canvas')?.clientHeight || 30;
     dragClip(e, node, {
@@ -965,7 +1020,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
         });
         return;
       }
-      if (t.closest('.clip-fade-in')) startFade(e, clip, 'in');
+      if (t.closest('.clip-curve-in')) startCurve(e, clip, 'in');
+      else if (t.closest('.clip-curve-out')) startCurve(e, clip, 'out');
+      else if (t.closest('.clip-fade-in')) startFade(e, clip, 'in');
       else if (t.closest('.clip-fade-out')) startFade(e, clip, 'out');
       else if (t.closest('.clip-vol')) startVol(e, clip);
       else if (t.closest('.clip-trim')) startTrim(e, clip);

@@ -144,6 +144,71 @@ export function resizeDrumRows(rows, bars) {
 const SR = 44100;
 const TAIL = 2;
 
+// ---------- Gleiten (Portamento) ----------
+// pattern.glide: 0 = aus (Töne springen), sonst Anteil der längsten Gleitzeit. Folgt ein Ton direkt (legato) oder
+// überlappend auf einen anderen, spielt eine Stimme weiter und ihre Tonhöhe gleitet zum neuen Ton.
+export const GLIDE_MAX = 0.3; // Sekunden bei glide = 1
+export const GLIDE_OPTIONS = [{ value: 0, label: 'Aus' }, { value: 0.25, label: 'Kurz' }, { value: 1, label: 'Lang' }];
+export const glideOf = (pattern) => Math.min(1, Math.max(0, Number(pattern?.glide) || 0));
+
+// Noten zu Ketten verbinden: [{ pitch, start, len, vel, steps: [{ beat, pitch, len }] }]. Bei Akkorden gleitet jede
+// Stimme zum nächstgelegenen Ton; derselbe Ton noch einmal wird neu angeschlagen.
+export function glideChains(notes, beats) {
+  const TOL = 1e-3;
+  const list = (notes || []).filter((n) => n.start < beats)
+    .map((n) => ({ pitch: n.pitch, start: n.start, len: Math.max(0.05, Math.min(n.len, beats - n.start)), vel: n.vel ?? 1 }))
+    .sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+  const chains = [];
+  for (const n of list) {
+    const open = chains.filter((c) => c.lastStart < n.start - TOL && c.end >= n.start - TOL);
+    let best = null;
+    if (!open.some((c) => c.lastPitch === n.pitch)) {
+      for (const c of open) if (!best || Math.abs(c.lastPitch - n.pitch) < Math.abs(best.lastPitch - n.pitch)) best = c;
+    }
+    if (best) {
+      best.steps.push({ beat: n.start, pitch: n.pitch, len: n.len });
+      Object.assign(best, { end: n.start + n.len, lastStart: n.start, lastPitch: n.pitch });
+    } else {
+      chains.push({ pitch: n.pitch, start: n.start, vel: n.vel, steps: [], end: n.start + n.len, lastStart: n.start, lastPitch: n.pitch });
+    }
+  }
+  return chains.map(({ pitch, start, vel, steps, end }) => ({ pitch, start, len: end - start, vel, steps }));
+}
+
+// Eine Kette spielt der Klang wie eine lange Note auf dem ersten Ton; alle Ton-Oszillatoren dieser Note
+// (bzw. die Sampler-Quelle) hängen an einer gemeinsamen Tonhöhenkurve in Cent.
+function renderGlide(ctx, bus, pattern, beats, spb, inst, preset) {
+  const secs = glideOf(pattern) * GLIDE_MAX;
+  const made = [];
+  const create = ctx.createOscillator;
+  ctx.createOscillator = () => { const o = create.call(ctx); made.push(o); return o; };
+  const kit = createKit(ctx, bus, spb);
+  for (const c of glideChains(pattern.notes, beats)) {
+    made.length = 0;
+    const t = c.start * spb;
+    let sources;
+    if (inst) sources = [playSampled(ctx, bus, inst, c.pitch, t, c.len * spb, c.vel).src];
+    else {
+      playNote(kit, preset, c.pitch, c.start, c.len, c.vel, spb);
+      sources = made.filter((o) => o.frequency.value >= 20); // Vibrato-LFOs bleiben, wie sie sind
+    }
+    if (!c.steps.length) continue;
+    const bend = ctx.createConstantSource();
+    bend.offset.setValueAtTime(0, t);
+    let prev = c.pitch;
+    for (const s of c.steps) {
+      const at = s.beat * spb;
+      bend.offset.setValueAtTime((prev - c.pitch) * 100, at);
+      bend.offset.linearRampToValueAtTime((s.pitch - c.pitch) * 100, at + Math.min(secs, s.len * spb * 0.8));
+      prev = s.pitch;
+    }
+    for (const o of sources) bend.connect(o.detune);
+    bend.start(t);
+    bend.stop((c.start + c.len) * spb + TAIL);
+  }
+  delete ctx.createOscillator;
+}
+
 export async function renderPattern(pattern, bpm, library) {
   const spb = 60 / bpm;
   const beats = pattern.bars * 4;
@@ -186,11 +251,14 @@ export async function renderPattern(pattern, bpm, library) {
       const notes = (pattern.notes || []).filter((n) => n.start < beats)
         .map((n) => ({ ...n, len: Math.max(0.05, Math.min(n.len, beats - n.start)) }));
       if (notes.length) kit.pcm(0, (sr) => renderGuitarNotes(preset, notes, { sr, spb, loopFrames: frames }));
-    } else for (const n of pattern.notes || []) {
-      if (n.start >= beats) continue;
-      const len = Math.max(0.05, Math.min(n.len, beats - n.start));
-      if (inst) playSampled(ctx, bus, inst, n.pitch, n.start * spb, len * spb, n.vel ?? 1);
-      else playNote(kit, preset, n.pitch, n.start, len, n.vel ?? 1, spb);
+    } else if (glideOf(pattern) > 0) renderGlide(ctx, bus, pattern, beats, spb, inst, preset);
+    else {
+      for (const n of pattern.notes || []) {
+        if (n.start >= beats) continue;
+        const len = Math.max(0.05, Math.min(n.len, beats - n.start));
+        if (inst) playSampled(ctx, bus, inst, n.pitch, n.start * spb, len * spb, n.vel ?? 1);
+        else playNote(kit, preset, n.pitch, n.start, len, n.vel ?? 1, spb);
+      }
     }
   }
 

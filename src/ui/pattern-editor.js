@@ -5,6 +5,7 @@
 import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
   noteName, resizeDrumRows, previewNote, previewDrum, startNote, sampledPresets, allPresets, presetInfo, preparePreset,
+  GLIDE_OPTIONS, glideOf,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
@@ -36,6 +37,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   const barsSel = $('pat-bars');
   const kitSel = $('pat-kit');
   const presetSel = $('pat-preset');
+  const glideSel = $('pat-glide');
   const lenSel = $('pat-len');
   const recBtn = $('pat-rec');
   const drumsEl = $('pat-drums');
@@ -65,7 +67,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
   // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');
-  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
+  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-glide-field'), $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
     const always = [nameIn, $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-clear')].includes(node);
     place(node, always ? { wide: moreEl, narrow: moreEl } : { narrow: moreEl });
   }
@@ -80,6 +82,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (const p of real) { const o = el('option', null, p.label); o.value = p.id; group.append(o); }
     presetSel.append(group);
   }
+
+  for (const g of GLIDE_OPTIONS) { const o = el('option', null, g.label); o.value = String(g.value); glideSel.append(o); }
 
   const pat = () => (id ? store.project.patterns?.[id] : null);
   const steps = () => pat().bars * 4 * STEPS_PER_BEAT;
@@ -121,6 +125,10 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (const t of store.project.tracks) for (const c of t.clips) if (c.sampleId === sid && c.lengthBeats < bars * 4) store.resizeClip(c.id, bars * 4);
   }
   kitSel.addEventListener('change', () => update((p) => { p.kit = kitSel.value; }));
+  glideSel.addEventListener('change', () => update((p) => {
+    const v = Number(glideSel.value);
+    if (v > 0) p.glide = v; else delete p.glide;
+  }));
   presetSel.addEventListener('change', () => {
     preparePreset(presetSel.value); // echtes Instrument: Laden beginnt sofort, nicht erst beim Rendern
     update((p) => { p.preset = presetSel.value; });
@@ -1115,11 +1123,15 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     barsSel.value = String(p.bars);
     $('pat-kit-field').hidden = !drums;
     $('pat-preset-field').hidden = drums;
+    $('pat-glide-field').hidden = drums;
     $('pat-len-field').hidden = drums;
     recBtn.hidden = drums;
     recBtn.setAttribute('aria-pressed', String(rec));
     kitSel.value = p.kit || 'elektro';
     presetSel.value = p.preset || 'pluck';
+    // Zwischenwerte (0–1, z. B. aus einer Projektdatei) zeigt die Wahl als nächstliegende Stufe
+    const gv = glideOf(p);
+    glideSel.value = String(GLIDE_OPTIONS.reduce((a, b) => (Math.abs(b.value - gv) < Math.abs(a.value - gv) ? b : a)).value);
     drumsEl.hidden = !drums || pads;
     padsEl.hidden = !pads;
     $('pat-pages').hidden = !drums || pads || !narrow.matches;
