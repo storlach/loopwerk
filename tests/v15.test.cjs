@@ -188,7 +188,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await selectR(page, '#ed-at-root', '9');
     await selectR(page, '#ed-at-scale', 'minor');
     await clickR(page, '#ed-autotune');
-    await page.waitForFunction(() => document.getElementById('ed-busy').hidden && window.loopwerk.editor.state.history.length === 1, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.loopwerk.editor.state.rev >= 1 && window.loopwerk.editor.state.history.length === 1, null, { timeout: 20000 });
     const cents = await page.evaluate(async () => {
       const { detectPitch, voicing, midiOf } = await import('./src/dsp/pitch.js');
       const st = window.loopwerk.editor.state;

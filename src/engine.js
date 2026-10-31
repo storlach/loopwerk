@@ -579,7 +579,8 @@ export class Engine extends Emitter {
   }
 
   // Beliebigen Puffer vorhören (Sample-Editor). Gibt Startzeit und Dauer zurück.
-  async previewBuffer(buffer, offset = 0, duration = buffer.duration - offset) {
+  // loop: Bereich wiederholen, bis stopPreview(); at: Einstieg im Bereich (s ab offset) – zum nahtlosen Weiterspielen
+  async previewBuffer(buffer, offset = 0, duration = buffer.duration - offset, { loop = false, at = 0 } = {}) {
     await this._ensure();
     this.stopPreview();
     const src = this.ctx.createBufferSource();
@@ -588,8 +589,13 @@ export class Engine extends Emitter {
     g.gain.value = 0.8;
     src.connect(g).connect(this.mix.master);
     const when = this.ctx.currentTime + 0.02;
-    src.start(when, offset, duration);
-    const preview = { sampleId: null, src, g, when, offset, duration };
+    if (loop) {
+      src.loop = true;
+      src.loopStart = offset;
+      src.loopEnd = offset + duration;
+      src.start(when, offset + (at % duration));
+    } else src.start(when, offset, duration);
+    const preview = { sampleId: null, src, g, when: when - (loop ? at % duration : 0), offset, duration, loop };
     src.onended = () => { if (this.preview === preview) { this.preview = null; this.emit('preview'); } };
     this.preview = preview;
     this.emit('preview');
