@@ -392,8 +392,14 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       for (const c of CATS) { const sh = level[c] / total; r += rgb[c][0] * sh; g += rgb[c][1] * sh; b += rgb[c][2] * sh; }
       col = [r | 0, g | 0, b | 0];
     }
-    const mid = H * 0.5;
-    const amp = H * 0.32;
+    // Nur im Arranger (Hauptfenster): hinter Seitenleisten und Deck bleibt das Licht weich und ruhig
+    const ar = root.getBoundingClientRect();
+    mc.save();
+    mc.beginPath();
+    mc.rect(ar.left, ar.top, ar.width, ar.height);
+    mc.clip();
+    const mid = ar.top + ar.height * 0.5;
+    const amp = ar.height * 0.4;
     const STEP = 8;
     mc.globalCompositeOperation = 'lighter';
     mc.lineJoin = 'round';
@@ -401,11 +407,11 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       const v = bars[k];
       const a = Math.max(2, v * v * amp);
       mc.beginPath();
-      for (let x = 0; x <= W + STEP; x += STEP) {
-        const u = x / W;
-        const env = Math.sin(Math.PI * Math.min(1, u)) ** 0.7;
+      for (let x = ar.left; x <= ar.right + STEP; x += STEP) {
+        const u = (x - ar.left) / ar.width;
+        const env = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, u)))) ** 0.7;
         const y = mid + a * env * Math.sin(2 * Math.PI * sn.cycles * u + sn.phase);
-        if (x === 0) mc.moveTo(x, y); else mc.lineTo(x, y);
+        if (x === ar.left) mc.moveTo(x, y); else mc.lineTo(x, y);
       }
       // Schein (breiter, schwacher Strich) und heller Kern
       mc.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.04 + 0.12 * v)})`;
@@ -415,6 +421,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       mc.lineWidth = 2;
       mc.stroke();
     });
+    mc.restore();
     mc.globalCompositeOperation = 'source-over';
     mc.setTransform(1, 0, 0, 1, 0, 0);
   }
