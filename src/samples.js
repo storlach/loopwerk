@@ -1622,6 +1622,30 @@ export class Library extends Emitter {
     this.emit();
   }
 
+  // Tempo einzelner Sounds aus dem Projekt (sampleId → Schläge): Aufnahme gilt dann als Loop dieser Länge.
+  // Nur Sounds mit Originalaufnahme; Rückgabe: true, wenn sich etwas geändert hat.
+  async applySampleTempo(map = {}) {
+    let changed = false;
+    const ids = new Set([...Object.keys(map), ...[...this.samples.values()].filter((s) => s.tempoBase).map((s) => s.id)]);
+    for (const id of ids) {
+      const s = this.samples.get(id);
+      if (!s || s.def || s.make) continue;
+      if (s.lazy) await this.ensure(id);
+      if (!s.orig) continue;
+      const beats = map[id] ?? null;
+      s.tempoBase ??= { kind: s.kind, beats: s.beats, bpm: s.bpm };
+      const want = beats == null ? s.tempoBase : { kind: 'loop', beats, bpm: Math.round((beats * 60 / s.orig.duration) * 100) / 100 };
+      if (s.kind === want.kind && s.beats === want.beats) { if (beats == null) delete s.tempoBase; continue; }
+      Object.assign(s, want);
+      if (beats == null) delete s.tempoBase;
+      this.prepared.delete(id);
+      await this._prepare(s, this.bpm);
+      changed = true;
+    }
+    if (changed) this.emit();
+    return changed;
+  }
+
   async setTempo(bpm) {
     this.bpm = bpm;
     for (const s of this.samples.values()) {

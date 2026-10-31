@@ -235,6 +235,25 @@ function mountTempo({ store, engine, library, ui, arranger }) {
   return { apply, get busy() { return !!running; } };
 }
 
+// Tempo einzelner Sounds (Inspektor): Aufnahme neu einpassen, Wiedergabe an derselben Stelle fortsetzen
+function mountSampleTempo({ store, engine, library, ui, arranger }) {
+  let last = '';
+  let chain = Promise.resolve();
+  store.on(() => {
+    const map = store.project.sampleTempo || {};
+    const key = JSON.stringify(map);
+    if (key === last) return;
+    last = key;
+    chain = chain.then(async () => {
+      const changed = await library.applySampleTempo(map);
+      if (!changed) return;
+      arranger.render();
+      if (engine.playing) { const pos = engine.heardBeat(); engine.stop(); engine.play(pos); }
+      ui.emit?.();
+    }).catch((err) => console.warn('Sound-Tempo:', err?.message || err));
+  });
+}
+
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
 function mountRecording({ store, engine, ui, arranger, recorder }) {
   const btn = document.getElementById('rec-btn');
@@ -437,6 +456,7 @@ async function boot() {
   doubleTapRanges();
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
+  mountSampleTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
   if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }

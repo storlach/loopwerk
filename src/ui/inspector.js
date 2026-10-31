@@ -73,9 +73,39 @@ export function mountInspector({ root, store, ui, library, tools }) {
   for (const [f, label] of [[0.5, '½'], [1, '1'], [2, '2']]) runBtn(label, `Laufzeit ×${String(f).replace('.', ',')}`, () => setRun(f)).dataset.run = String(f);
   runBtn('+', 'Länger (langsamer, gleiche Tonhöhe)', () => setRun(stepRun(curRun(), 1))).id = 'insp-run-up';
   run.append(el('span', null, 'Laufzeit'), runOut, runBtns);
+  // Tempo des Sounds: wie schnell die Aufnahme ist. Mit Tempo wird ein Einzelklang zum Loop, der sich dem Song anpasst.
+  const stempo = el('div', 'insp-row insp-stempo');
+  const stOut = el('output');
+  stOut.id = 'insp-stempo-out';
+  const stBtns = el('div', 'insp-run-btns');
+  const stIn = document.createElement('input');
+  Object.assign(stIn, { type: 'number', id: 'insp-stempo', min: '20', max: '400', step: '0.1', inputMode: 'decimal', placeholder: '–' });
+  stIn.setAttribute('aria-label', 'Tempo des Sounds (BPM)');
+  const selSample = () => { const c = selClip(); return c ? library.get(c.sampleId) : null; };
+  const soundBpm = (smp) => (smp?.kind === 'loop' && smp.beats && smp.orig ? (smp.beats * 60) / smp.orig.duration : null);
+  const setSoundBpm = (bpm) => {
+    const smp = selSample();
+    if (!smp?.orig || !(bpm > 0)) return;
+    store.setSampleTempo(smp.id, Math.max(0.25, (bpm * smp.orig.duration) / 60));
+  };
+  stIn.addEventListener('change', () => setSoundBpm(Number(String(stIn.value).replace(',', '.'))));
+  stIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') stIn.blur(); });
+  const stBtn = (label, title, fn) => { const b = el('button', 'key', label); b.type = 'button'; b.title = title; b.addEventListener('click', fn); stBtns.append(b); return b; };
+  stBtn('÷2', 'Halbes Tempo (Aufnahme zählt doppelt so viele Schläge)', () => { const v = soundBpm(selSample()); if (v) setSoundBpm(v / 2); }).id = 'insp-stempo-half';
+  stBtn('×2', 'Doppeltes Tempo', () => { const v = soundBpm(selSample()); if (v) setSoundBpm(v * 2); }).id = 'insp-stempo-double';
+  const stSong = stBtn('Als Song-Tempo', 'Song-Tempo auf das Tempo dieses Sounds setzen', () => {
+    const v = soundBpm(selSample());
+    if (v) store.setBpm(clamp(Math.round(v * 10) / 10, MIN_BPM, MAX_BPM));
+  });
+  stSong.id = 'insp-stempo-song';
+  stSong.classList.add('wide');
+  const stReset = stBtn('Wie geliefert', 'Eigenes Tempo für diesen Sound entfernen', () => { const smp = selSample(); if (smp) store.setSampleTempo(smp.id, null); });
+  stReset.id = 'insp-stempo-reset';
+  stReset.classList.add('wide');
+  stempo.append(el('span', null, 'Sound-Tempo'), stOut, stIn, stBtns);
   const btns = el('div', 'insp-btns');
   btns.id = 'insp-clip-btns';
-  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, fout.row, run, btns);
+  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, fout.row, run, stempo, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: Number(gain.input.value) }, 'insp-gain-' + c.id); });
@@ -230,6 +260,18 @@ export function mountInspector({ root, store, ui, library, tools }) {
       const f = clip.stretch || 1;
       runOut.textContent = `×${String(f).replace('.', ',')}${f === 1 ? '' : f > 1 ? ' · langsamer' : ' · schneller'}`;
       for (const b of runBtns.querySelectorAll('[data-run]')) b.setAttribute('aria-pressed', String(Number(b.dataset.run) === f));
+      // Sound-Tempo: nur Aufnahmen; erzeugte Loops und Patterns folgen ohnehin dem Song
+      const own = !!(s?.orig && !s.def && !s.make);
+      stIn.hidden = !own;
+      stBtns.hidden = !own;
+      const sb = own ? soundBpm(s) : null;
+      const fixed = store.project.sampleTempo?.[s?.id] != null;
+      const fmtBpm = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
+      stOut.textContent = !s ? '' : !own ? (s.def || s.make ? 'folgt dem Song' : '–') : sb ? `${fmtBpm(sb)} BPM · ${fmtBeats(s.beats)}` : 'Einzelklang · Tempo eingeben';
+      if (document.activeElement !== stIn) stIn.value = sb ? String(Math.round(sb * 10) / 10) : '';
+      for (const b of [stBtns.querySelector('#insp-stempo-half'), stBtns.querySelector('#insp-stempo-double'), stSong]) b.disabled = !sb;
+      stSong.setAttribute('aria-pressed', String(!!sb && Math.abs(sb - store.project.bpm) < 0.05));
+      stReset.hidden = !fixed;
     }
 
     if (mode !== 'song') {

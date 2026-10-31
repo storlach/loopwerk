@@ -723,6 +723,17 @@ export class Store extends Emitter {
     });
   }
 
+  // Tempo eines Sounds festlegen: so viele Schläge lang ist die Aufnahme (null = wie geliefert). Gilt im Projekt.
+  setSampleTempo(sampleId, beats) {
+    const cur = this.project.sampleTempo?.[sampleId] ?? null;
+    const v = beats == null ? null : Math.round(beats * 4) / 4;
+    if (v === cur || (v != null && !(v > 0))) return;
+    this.dispatch('sample-tempo', (p) => {
+      p.sampleTempo = { ...(p.sampleTempo || {}) };
+      if (v == null) delete p.sampleTempo[sampleId]; else p.sampleTempo[sampleId] = v;
+    });
+  }
+
   setBpm(bpm) {
     const v = Math.round(Math.min(MAX_BPM, Math.max(MIN_BPM, bpm)) * 10) / 10;
     if (v === this.project.bpm) return;
