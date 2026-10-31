@@ -184,8 +184,58 @@ export function keySemis(key) {
   return d > 5 ? d - 12 : d;
 }
 
+// Tonart je Takt: project.keyChanges = [{ bar, key }], Taktnummern wie im Lineal (1 = Songanfang). Takt 1 hat immer
+// die Grundtonart project.key; ein Wechsel gilt bis zum nächsten. Alte Projekte ohne das Feld haben keine Wechsel.
+export function keyChangesOf(project) {
+  const list = Array.isArray(project?.keyChanges) ? project.keyChanges : [];
+  const byBar = new Map();
+  for (const c of list) if (Number.isInteger(c?.bar) && c.bar >= 2 && KEYS.includes(c.key)) byBar.set(c.bar, c.key);
+  return [...byBar].sort((a, b) => a[0] - b[0]).map(([bar, key]) => ({ bar, key }));
+}
+
+export function keyAtBar(project, bar) {
+  let key = keyOf(project);
+  for (const c of keyChangesOf(project)) { if (c.bar > bar) break; key = c.key; }
+  return key;
+}
+
+export const barOfBeat = (project, beat) => Math.floor(beat / project.beatsPerBar + EPS) + 1;
+export const keyAtBeat = (project, beat) => keyAtBar(project, barOfBeat(project, beat));
+
+// Halbtöne von der Grundtonart zu `key` – so weit wandern Loops und Melodien, wie beim Wechsel der Songtonart
+export const keyDelta = (project, key) => keySemis(key) - keySemis(keyOf(project));
+
+// Abschnitte gleicher Tonart im Bereich [from, to) (Schläge): [{ from, to, key }]
+export function keySpans(project, from, to) {
+  const bpb = project.beatsPerBar;
+  const spans = [];
+  let key = keyAtBeat(project, from);
+  let start = from;
+  for (const c of keyChangesOf(project)) {
+    const b = (c.bar - 1) * bpb;
+    if (b <= from + EPS) continue;
+    if (b >= to - EPS) break;
+    if (c.key === key) continue;
+    spans.push({ from: start, to: b, key });
+    start = b;
+    key = c.key;
+  }
+  spans.push({ from: start, to, key });
+  return spans;
+}
+
+// Tonhöhe verschieben und im Bereich der Piano-Roll halten (C2…C6)
+export function transposePitch(m, delta) {
+  m += delta;
+  while (m > 84) m -= 12;
+  while (m < 36) m += 12;
+  return m;
+}
+export const transposePattern = (pattern, delta) => ({ ...pattern, notes: (pattern.notes || []).map((n) => ({ ...n, pitch: transposePitch(n.pitch, delta) })) });
+
 export function isValidProject(p) {
-  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips));
+  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips))
+    && (p.keyChanges == null || Array.isArray(p.keyChanges));
 }
 
 export class Store extends Emitter {
@@ -713,13 +763,29 @@ export class Store extends Emitter {
       p.key = key;
       for (const pat of Object.values(p.patterns || {})) {
         if (pat.type !== 'synth') continue;
-        for (const n of pat.notes || []) {
-          let m = n.pitch + delta;
-          while (m > 84) m -= 12;
-          while (m < 36) m += 12;
-          n.pitch = m;
-        }
+        for (const n of pat.notes || []) n.pitch = transposePitch(n.pitch, delta);
       }
+    });
+  }
+
+  // Tonart ab Takt `bar` (1 = Grundtonart). Dieselbe Tonart wie davor entfernt den Wechsel.
+  setKeyAt(bar, key) {
+    bar = Math.round(bar);
+    if (!KEYS.includes(key) || !(bar >= 1) || bar > this.project.lengthBars) return;
+    if (bar === 1) { this.setKey(key); return; }
+    if (key === keyAtBar(this.project, bar - 1)) { this.clearKeyAt(bar); return; }
+    if (keyChangesOf(this.project).some((c) => c.bar === bar && c.key === key)) return;
+    this.dispatch('key-at', (p) => {
+      p.keyChanges = [...keyChangesOf(p).filter((c) => c.bar !== bar), { bar, key }].sort((a, b) => a.bar - b.bar);
+    });
+  }
+
+  // Wechsel ab Takt `bar` entfernen: dort gilt wieder die Tonart davor
+  clearKeyAt(bar) {
+    if (!keyChangesOf(this.project).some((c) => c.bar === bar)) return;
+    this.dispatch('key-at', (p) => {
+      const rest = keyChangesOf(p).filter((c) => c.bar !== bar);
+      if (rest.length) p.keyChanges = rest; else delete p.keyChanges;
     });
   }
 

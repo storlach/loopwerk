@@ -80,6 +80,7 @@
 <link rel="modulepreload" href="src/ui/knob.js">
 <link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/ui/touch.js">
+<link rel="modulepreload" href="src/ui/key-row.js">
 <link rel="modulepreload" href="src/ui/transport.js">
 <link rel="modulepreload" href="src/ui/project-io.js">
 <link rel="modulepreload" href="src/ui/save-file.js">
@@ -500,13 +501,53 @@
   }
   .loop-band.off { opacity: 0.25; }
   .loop-shade {
-    position: absolute; top: 30px; bottom: 0; z-index: 1;
+    position: absolute; top: calc(var(--ruler-h) + var(--key-row-h)); bottom: 0; z-index: 1;
     background: color-mix(in srgb, var(--amber) 9%, transparent);
     border-left: 1px solid color-mix(in srgb, var(--amber) 60%, transparent);
     border-right: 1px solid color-mix(in srgb, var(--amber) 60%, transparent);
     pointer-events: none;
   }
   .loop-shade.off { display: none; }
+  /* Tonart je Takt: schmale Zeile unter dem Lineal. Eine Einstellung ist eine Linie, ein Wechsel leuchtet weiß. */
+  .arr-grid { --ruler-h: 30px; --key-row-h: 22px; }
+  .key-row { display: flex; position: sticky; top: var(--ruler-h); z-index: 4; height: var(--key-row-h); }
+  /* Das Lineal liegt darüber: die Fassfläche des Marken-Griffs reicht ein Stück in die Zeile */
+  .ruler-row { z-index: 5; }
+  .key-strip {
+    position: relative; flex: 1; cursor: pointer; outline: none;
+    background: color-mix(in srgb, var(--sheet-bg) 62%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .key-strip:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+  .key-sec { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; box-sizing: border-box; pointer-events: none; }
+  .key-sec.changed { box-shadow: inset 1px 0 0 var(--ink); }
+  .key-name { pointer-events: auto; padding: 0 6px; font: 500 10px/1 var(--font-mono); color: var(--muted); white-space: nowrap; }
+  .key-sec.changed .key-name { color: var(--ink); text-shadow: var(--glow-ink); }
+  .key-hover { position: absolute; top: 3px; bottom: 3px; border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--key-line); pointer-events: none; }
+  .key-pop {
+    position: fixed; z-index: 50; padding: 8px;
+    background: var(--sheet-bg); border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--key-line);
+  }
+  .key-pop[hidden] { display: none; }
+  .key-pop-head { margin: 2px 2px 8px; font: 600 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .key-pop-grid { display: grid; grid-template-columns: repeat(4, 44px); gap: 4px; }
+  .key-pop-key, .key-pop-same {
+    height: 30px; padding: 0; border: 0; border-radius: var(--radius);
+    background: transparent; box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer;
+    font: 500 12px/1 var(--font-mono);
+  }
+  .key-pop-same { width: 100%; margin-top: 6px; font: 600 10px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  .key-pop-key:hover, .key-pop-same:hover { background: var(--lane-alt); }
+  .key-pop-key:focus-visible, .key-pop-same:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
+  .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
+  /* Finger: Zeile und Tasten 44 px */
+  @media (pointer: coarse) {
+    .arr-grid { --key-row-h: 44px; }
+    .key-name { font-size: 12px; }
+    .key-pop-grid { grid-template-columns: repeat(4, 56px); }
+    .key-pop-key, .key-pop-same { height: 44px; font-size: 14px; }
+    .key-pop-same { font-size: 11px; }
+  }
   .track-row { display: flex; height: var(--track-h); border-bottom: 1px solid var(--line); }
   .track-head {
     position: sticky; left: 0; z-index: 3;
@@ -2103,7 +2144,7 @@
     /* Lineal fingerhoch; Ziehen markiert den Loop, statt zu scrollen */
     .ruler-row { height: 44px; }
     .ruler { touch-action: none; }
-    .loop-shade { top: 44px; }
+    .arr-grid { --ruler-h: 44px; }
     .bar-mark { top: 8px; }
     .ph-grip { width: 18px; left: -9px; height: 26px; }
     .ph-grip::after { inset: -10px -13px -8px; }

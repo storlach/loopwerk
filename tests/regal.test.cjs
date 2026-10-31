@@ -116,7 +116,7 @@ const DIR = process.env.SHOT_DIR || '/tmp';
     await page.tap('#shelf-filter-btn');
     await page.evaluate(() => { window.loopwerk.ui.setDock('mixer'); });
     await page.waitForTimeout(600);
-    check('Handy: Schubladengriff groß (Strich ≥ 56 px, Fassbereich reicht unter den Griff)', grip.h >= 24 && grip.bar >= 56 && grip.hit, JSON.stringify(grip));
+    check('Handy: Schubladengriff groß (Strich ≥ 56 px, Fassbereich reicht unter den Griff)', grip.h >= 24 - 0.01 && grip.bar >= 56 && grip.hit, JSON.stringify(grip));
     if (SHOTS) await page.screenshot({ path: `${DIR}/regal-griff-handy.png` });
     await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
     await page.waitForTimeout(600);

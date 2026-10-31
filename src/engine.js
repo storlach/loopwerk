@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, EPS } from './model.js';
+import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, keyChangesOf, keySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 
@@ -176,6 +176,29 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) 
   return { src, g };
 }
 
+// Hörbare Stücke eines Clips samt dem Sound, der dort klingt: [{ seg, from, to, sample }]. Tonale Sounds klingen in
+// der Tonart des jeweiligen Takts – läuft ein Segment über einen Tonartwechsel, wird es an der Taktgrenze geteilt und
+// mit derselben Position in der umgestimmten Fassung fortgesetzt (Schnittkante überblendet startVoice).
+// Fehlt eine Fassung noch, klingt der Grund-Sound; die Signatur ändert sich, sobald sie da ist (Live-Resync).
+export function clipPieces(project, library, clip, ranges, { stale = false } = {}) {
+  const base = sampleFor(library, clip);
+  if (!base?.buffer) return [];
+  const segs = audibleSegments(clip, base.lengthBeats, ranges);
+  if (!keyChangesOf(project).length || !library.followsKey?.(clip.sampleId)) return segs.map((x) => ({ ...x, sample: base }));
+  const out = [];
+  for (const x of segs) {
+    for (const span of keySpans(project, x.from, x.to)) {
+      const delta = keyDelta(project, span.key);
+      const v = delta ? library.variant(clip.sampleId, { delta, stretch: clip.stretch || 1, stale }) : base;
+      const sample = v?.buffer && Math.abs(v.lengthBeats - base.lengthBeats) < EPS ? v : base;
+      const last = out[out.length - 1];
+      if (last && last.seg === x.seg && last.sample === sample && Math.abs(last.to - span.from) < EPS) last.to = span.to;
+      else out.push({ seg: x.seg, from: span.from, to: span.to, sample });
+    }
+  }
+  return out;
+}
+
 // Spielt einen Clip-Ausschnitt [fromBeat, toBeat] eines Segments ab Kontextzeit `when`.
 function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) {
   const offset = (fromBeat - seg.start + seg.offset) * spb;
@@ -192,15 +215,15 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const duration = (end - fromBeat) * spb + tailSeconds;
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
   const lat = limiter && compensate ? await limiterLatency(sampleRate) : 0;
+  // Tonart je Takt: umgestimmte Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
+  if (keyChangesOf(project).length) await library.ensureKeyVariants?.(project);
   const ctx = new OfflineAudioContext(2, frames + lat, sampleRate);
   const mix = buildMix(ctx, project, { limiter, grid: -fromBeat * spb });
   const audible = audibleMap(project);
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
-      const sample = sampleFor(library, clip);
-      if (!sample?.buffer) continue;
-      for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, audible.get(clip.id))) {
+      for (const { seg, from, to, sample } of clipPieces(project, library, clip, audible.get(clip.id))) {
         if (from >= end - EPS || to <= fromBeat + EPS) continue;
         const f = Math.max(from, fromBeat);
         playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), (f - fromBeat) * spb, spb);
@@ -430,14 +453,18 @@ export class Engine extends Emitter {
     return this._aud;
   }
 
+  _pieces(clip) {
+    return clipPieces(this.project, this.library, clip, this._audible().get(clip.id), { stale: true });
+  }
+
   _forEachClip(filter, fn) {
-    const audible = this._audible();
     for (const track of this.project.tracks) {
       const node = this.mix.tracks.get(track.id);
+      if (!node) continue;
       for (const clip of track.clips) {
         if (filter && !filter(clip)) continue;
-        const sample = sampleFor(this.library, clip);
-        if (sample?.buffer && node) fn(track, clip, sample, node, audible.get(clip.id));
+        const pieces = this._pieces(clip);
+        if (pieces.length) fn(track, clip, pieces, node);
       }
     }
   }
@@ -445,8 +472,8 @@ export class Engine extends Emitter {
   // Alle (hörbaren) Stücke, die im Bereich [b0, b1) beginnen.
   _scheduleSpan(b0, b1, t0, limit, filter) {
     const spb = this.spb;
-    this._forEachClip(filter, (track, clip, sample, node, ranges) => {
-      for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, ranges)) {
+    this._forEachClip(filter, (track, clip, pieces, node) => {
+      for (const { seg, from, to, sample } of pieces) {
         if (from < b0 - EPS || from >= b1 - EPS || from >= limit - EPS) continue;
         this._voice(track, clip, sample, node, seg, from, Math.min(to, limit), t0 + (from - b0) * spb);
       }
@@ -455,8 +482,8 @@ export class Engine extends Emitter {
 
   // Stücke, die bei Schlag b bereits laufen: mitten im Sample einsteigen.
   _scheduleActiveAt(b, t, limit, filter) {
-    this._forEachClip(filter, (track, clip, sample, node, ranges) => {
-      for (const { seg, from, to } of audibleSegments(clip, sample.lengthBeats, ranges)) {
+    this._forEachClip(filter, (track, clip, pieces, node) => {
+      for (const { seg, from, to, sample } of pieces) {
         if (!(from < b - EPS && to > b + EPS)) continue;
         this._voice(track, clip, sample, node, seg, b, Math.min(to, limit), t);
       }
@@ -497,9 +524,16 @@ export class Engine extends Emitter {
 
   // Signatur enthält die Version des Sounds: wird er neu erzeugt (Tempo, Editor, Pattern), plant die Engine neu.
   // Auch die hörbaren Bereiche gehören dazu: wird ein Clip verdeckt oder frei, plant die Engine ihn neu.
+  // Tonart je Takt: welche Stücke in welcher Fassung klingen – ändert sich ein Wechsel oder wird eine Fassung fertig,
+  // plant die Engine den Clip ohne Stopp neu.
   _sig(track, clip) {
     const ranges = this._audible().get(clip.id) ?? [];
-    return clipSignature(track.id, clip) + '|' + (sampleFor(this.library, clip)?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
+    const base = sampleFor(this.library, clip);
+    let sig = clipSignature(track.id, clip) + '|' + (base?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
+    if (keyChangesOf(this.project).length && this.library.followsKey?.(clip.sampleId)) {
+      sig += '|' + this._pieces(clip).filter((p) => p.sample !== base).map((p) => `${p.from}-${p.to}:${p.sample.id}.${p.sample.rev}`).join(',');
+    }
+    return sig;
   }
 
   _signatures() {

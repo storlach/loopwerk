@@ -8,6 +8,7 @@ import { VCSL_CATALOG } from './catalog-vcsl.js';
 import { fetchAsset } from './fetch-asset.js';
 import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { timeStretch } from './dsp/stretch.js';
+import { keyChangesOf, keySpans, keyDelta } from './model.js';
 
 export const CATEGORIES = [
   { id: 'drums', label: 'Drums' },
@@ -1487,22 +1488,109 @@ export class Library extends Emitter {
     this.coreIds = []; // Grundausstattung (Tests warten darauf über catalogReady)
     this.semis = 0; // Tonart des Songs relativ zu A-Moll (die synthetischen Loops werden darin gerendert)
     this.pending = new Map(); // id → laufendes Laden auf Abruf
+    this.keyedVariants = new Map(); // „id~delta“ → Fassung in einer anderen Tonart (Tonartwechsel ab einem Takt)
+    this.variantRev = 0;
   }
 
   // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
   // Gilt nur, solange der Grund-Sound unverändert ist (gleiche rev, z. B. nach Tempowechsel neu).
   stretched(id, factor) {
-    const base = this.samples.get(id);
+    return this._stretchedOf(this.samples.get(id), factor);
+  }
+
+  _stretchedOf(base, factor) {
     if (!base || !factor || factor === 1) return base;
-    const v = this.variants.get(`${id}@${factor}`);
+    const v = this.variants.get(`${base.id}@${factor}`);
     return v && v.baseRev === base.rev ? v : null;
   }
 
-  async ensureStretched(id, factor) {
+  ensureStretched(id, factor) {
+    return this._ensureStretchedOf(this.samples.get(id), factor);
+  }
+
+  // ---------- Tonart-Fassungen ----------
+  // Ein tonaler Sound, wie er in einer anderen Tonart klingt: synthetische Loops werden dort neu erzeugt, Melodie-Patterns
+  // mit verschobenen Noten (s.transpose). delta = Halbtöne gegenüber der Grundtonart. Fremd-Samples und Drums folgen nicht.
+  followsKey(id) {
+    const s = this.samples.get(id);
+    return !!s && (!!(s.def && s.key) || typeof s.transpose === 'function');
+  }
+
+  // Fertige Fassung (synchron, für den Scheduler) oder null. stale: eine Fassung vom vorigen Stand des Sounds gilt,
+  // solange sie gleich lang ist (z. B. kurz nach einer Pattern-Änderung, bis die neue fertig ist).
+  variant(id, { delta = 0, stretch = 1, stale = false } = {}) {
     const base = this.samples.get(id);
+    if (!delta) return this._stretchedOf(base, stretch);
+    if (!base?.buffer) return null;
+    const v = this.keyedVariants.get(`${id}~${delta}`);
+    if (!v) return null;
+    const fresh = v.baseRev === base.rev;
+    if (!fresh && !(stale && v.buffer.length === base.buffer.length)) return null;
+    return this._stretchedOf(v, stretch);
+  }
+
+  async ensureVariant(id, { delta = 0, stretch = 1 } = {}) {
+    const base = await this.ensure(id);
+    if (!delta || !base?.buffer || !this.followsKey(id)) return this._ensureStretchedOf(base, stretch);
+    const key = `${id}~${delta}`;
+    let v = this.keyedVariants.get(key);
+    if (!v || v.baseRev !== base.rev) {
+      const pendingKey = `${key}#${base.rev}`;
+      if (!this.pendingVariants.has(pendingKey)) {
+        this.pendingVariants.set(pendingKey, (async () => {
+          const baseRev = base.rev;
+          try {
+            const r = base.def ? await renderLoop(base.def, this.bpm, this.semis + delta) : await base.transpose(this.bpm, delta);
+            const kv = {
+              id: key, baseId: id, delta, baseRev, rev: ++this.variantRev,
+              name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
+              buffer: r.buffer, lengthBeats: r.lengthBeats,
+            };
+            // Nur übernehmen, wenn sich der Grund-Sound währenddessen nicht geändert hat
+            if (base.rev === baseRev) this.keyedVariants.set(key, kv);
+            return kv;
+          } finally {
+            this.pendingVariants.delete(pendingKey);
+          }
+        })());
+      }
+      v = await this.pendingVariants.get(pendingKey);
+    }
+    return this._ensureStretchedOf(v, stretch);
+  }
+
+  // Welche Tonart-Fassungen braucht das Projekt? [{ id, delta, stretch }]
+  keyNeeds(project) {
+    if (!keyChangesOf(project).length) return [];
+    const out = new Map();
+    for (const t of project.tracks) {
+      for (const c of t.clips) {
+        if (!this.followsKey(c.sampleId)) continue;
+        for (const span of keySpans(project, c.startBeat, c.startBeat + c.lengthBeats)) {
+          const delta = keyDelta(project, span.key);
+          if (delta) out.set(`${c.sampleId}~${delta}@${c.stretch || 1}`, { id: c.sampleId, delta, stretch: c.stretch || 1 });
+        }
+      }
+    }
+    return [...out.values()];
+  }
+
+  // Alle Tonart-Fassungen bereitstellen, die das Projekt braucht; nicht mehr gebrauchte fallen weg.
+  // Gibt die Zahl der neu erzeugten zurück.
+  async ensureKeyVariants(project) {
+    const needs = this.keyNeeds(project);
+    const used = new Set(needs.map((n) => `${n.id}~${n.delta}`));
+    for (const k of this.keyedVariants.keys()) if (!used.has(k)) this.keyedVariants.delete(k);
+    const missing = needs.filter((n) => !this.variant(n.id, n));
+    await Promise.all(missing.map((n) => this.ensureVariant(n.id, n)));
+    return missing.length;
+  }
+
+  async _ensureStretchedOf(base, factor) {
     if (!base?.buffer || !factor || factor === 1) return base;
-    const ready = this.stretched(id, factor);
+    const ready = this._stretchedOf(base, factor);
     if (ready) return ready;
+    const id = base.id;
     const key = `${id}@${factor}`;
     const pendingKey = `${key}#${base.rev}`;
     if (this.pendingVariants.has(pendingKey)) return this.pendingVariants.get(pendingKey);
@@ -1532,6 +1620,7 @@ export class Library extends Emitter {
     await this.ensureMany(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
     const jobs = [];
     for (const t of project.tracks) for (const c of t.clips) if (c.stretch && c.stretch !== 1) jobs.push(this.ensureStretched(c.sampleId, c.stretch));
+    jobs.push(this.ensureKeyVariants(project));
     await Promise.all(jobs);
   }
   get(id) { return this.samples.get(id); }

@@ -3,7 +3,7 @@
 
 import { EFFECTS } from './effects.js';
 import { askJson } from './ai.js';
-import { keyOf } from './model.js';
+import { keyOf, keyChangesOf, KEYS } from './model.js';
 
 const CATS = ['drums', 'bass', 'chords', 'synth', 'fx'];
 const CAT_WORDS = {
@@ -17,6 +17,17 @@ const GENRES = { techno: /techno/, house: /house/, hiphop: /hip.?hop|rap|trap/, 
 const FX_WORDS = { hall: /hall|reverb|raum/, echo: /echo|delay/, drive: /verzerr|dreckig|distortion|crunch/, filter: /filter|dumpf/, pump: /pump/, comp: /kompress|druck/ };
 const NUM = { ein: 1, eins: 1, einen: 1, zwei: 2, drei: 3, vier: 4, fünf: 5, sechs: 6, acht: 8, zehn: 10, zwölf: 12, sechzehn: 16, zwanzig: 20, zweiunddreißig: 32 };
 const num = (w) => (w == null ? null : /^\d+$/.test(w) ? Number(w) : NUM[w] ?? null);
+
+// Tonart aus dem Text: „D-Moll“, „fis-moll“, „in Dm“, „Tonart C#m“ → Kürzel aus KEYS (nur Moll; die Loops stehen in Moll)
+const KEY_WORDS = { c: 'Cm', cis: 'C♯m', des: 'C♯m', d: 'Dm', dis: 'E♭m', es: 'E♭m', e: 'Em', f: 'Fm', fis: 'F♯m', ges: 'F♯m', g: 'Gm', gis: 'G♯m', as: 'G♯m', a: 'Am', ais: 'B♭m', b: 'B♭m', h: 'Hm' };
+const KEY_SYMBOLS = { C: 'Cm', 'C#': 'C♯m', Db: 'C♯m', D: 'Dm', 'D#': 'E♭m', Eb: 'E♭m', E: 'Em', F: 'Fm', 'F#': 'F♯m', Gb: 'F♯m', G: 'Gm', 'G#': 'G♯m', Ab: 'G♯m', A: 'Am', 'A#': 'B♭m', Bb: 'B♭m', B: 'Hm', H: 'Hm' };
+export function keyInText(text) {
+  const w = String(text).toLowerCase().match(/(?:^|[^a-zäöüß])(cis|des|dis|es|fis|ges|gis|as|ais|[a-h])\s*-?\s*moll(?![a-zäöü])/);
+  if (w) return KEY_WORDS[w[1]];
+  const sym = String(text).replace(/♯/g, '#').replace(/♭/g, 'b').match(/(?:\b[Ii]n|\b[Tt]onart|\b[Nn]ach)\s+([A-H])([#b]?)m(?![a-zäöü])/);
+  if (sym) return KEY_SYMBOLS[sym[1] + sym[2]] ?? null;
+  return null;
+}
 
 // ---------- Plan prüfen und ausführen ----------
 
@@ -111,6 +122,12 @@ export function applyPlan(store, library, plan) {
             }
             break;
           }
+          case 'key': {
+            const bar = Math.round(Number(a.bar) || 1);
+            if (!KEYS.includes(a.key) || bar < 1 || bar > p.lengthBars) throw 0;
+            store.setKeyAt(bar, a.key);
+            break;
+          }
           case 'name':
             if (!a.name) throw 0;
             store.setProjectName(String(a.name));
@@ -185,6 +202,14 @@ export function planByRules(text, project, library) {
   // Jeder Teilsatz für sich: „Techno-Beat ab Takt 9, Bass dazu, Pad mit Hall“
   const clauses = whole ? [] : t.split(/[,;.]|\bund\b|\bdazu\b|\bplus\b|\bsowie\b/).map((x) => x.trim()).filter(Boolean);
   let lastCats = [];
+  // „ab Takt 9 in D-Moll“: Tonartwechsel ab dem genannten Takt (ohne Takt: Grundtonart). Im Original-Text suchen,
+  // damit „Dm“ (Großschreibung) erkannt wird.
+  for (const cl of String(text).split(/[,;.]|\bund\b|\bdazu\b|\bplus\b|\bsowie\b/)) {
+    const key = keyInText(cl);
+    if (!key) continue;
+    const kr = cl.toLowerCase().match(new RegExp('(?:von|ab)\\s*takt\\s*' + W));
+    actions.push({ do: 'key', bar: kr ? num(kr[1]) || 1 : 1, key });
+  }
   for (const cl of clauses) {
     let cc = CATS.filter((c) => CAT_WORDS[c].test(cl));
     const fx = Object.keys(FX_WORDS).filter((f) => FX_WORDS[f].test(cl));
@@ -229,6 +254,7 @@ export function planByRules(text, project, library) {
   if (actions.some((a) => a.do === 'tempo')) parts.push(`Tempo ${actions.find((a) => a.do === 'tempo').bpm}`);
   if (names.length) parts.push(names.join(', '));
   if (actions.some((a) => a.do === 'remove')) parts.push('entfernt');
+  for (const a of actions.filter((x) => x.do === 'key')) parts.push(a.bar > 1 ? `ab Takt ${a.bar} in ${a.key}` : `Tonart ${a.key}`);
   if (actions.some((a) => a.do === 'volume')) parts.push(louder ? 'lauter' : 'leiser');
   for (const f of fxs2) parts.push(EFFECTS.find((e) => e.id === f)?.label);
   return { summary: parts.filter(Boolean).join(' · ') + (notes.length ? ` – ${notes.join(', ')}` : ''), actions };
@@ -263,7 +289,7 @@ export async function planWish(text, project, library) {
 
 Wunsch: „${text}“
 
-Projekt: ${project.bpm} BPM, ${project.beatsPerBar}/4, ${project.lengthBars} Takte.
+Projekt: ${project.bpm} BPM, ${project.beatsPerBar}/4, ${project.lengthBars} Takte, Grundtonart ${keyOf(project)}, Tonartwechsel: ${keyChangesOf(project).map((c) => `ab Takt ${c.bar} ${c.key}`).join(', ') || 'keine'}.
 Spuren (höchstens 16):
 ${d.tracks.join('\n')}
 
@@ -280,6 +306,7 @@ Bausteine (Takte zählen ab 1, toBar ist inklusive; Loops wiederholen sich im Cl
 {"do":"remove","track":"<Spur>","fromBar":n,"toBar":n}
 {"do":"volume","track":"<Spur>","level":0-1}
 {"do":"mute","track":"<Spur>","on":true|false}
+{"do":"key","bar":n,"key":"<eine von ${KEYS.join(', ')}>"} (Tonart ab Takt n; Takt 1 = Grundtonart; tonale Loops und Melodien klingen dort umgestimmt)
 {"do":"effect","track":"<Spur> oder master oder @<sound-id> (die Spur, auf die du diesen Sound gerade gesetzt hast)","effect":"<id>","on":true,"params":{}}
 
 Antworte nur mit JSON: {"summary":"ein kurzer deutscher Satz, was du gemacht hast","actions":[...]}`;

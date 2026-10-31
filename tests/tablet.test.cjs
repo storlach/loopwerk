@@ -189,6 +189,9 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     s = await lw();
     check('Langes Drücken auf einen Clip schaltet „Auswählen“ ein und wählt ihn aus', s.selecting && s.ids.length === 1 && s.ids[0] === pad.id, JSON.stringify(s.ids));
     check('„Auswählen“ leuchtet, Einblender mit „Fertig“', await page.getAttribute('#select-btn', 'aria-pressed') === 'true' && await page.locator('#hint-done').isVisible());
+    // Unter Lineal und Tonart-Zeile läge der Riser am Tablet unter dem Einblender: Spuren ganz nach unten scrollen
+    await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 1e4; });
+    await page.waitForTimeout(100);
     const rBox = await box(`.clip[data-clip-id="${riser.id}"]`);
     await tapAt(rBox, 0.5, 0.5);
     s = await lw();
@@ -218,6 +221,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     check('„Alle“ wählt alle Clips aus', s.ids.length === s.tracks.flat().length && s.selecting, `${s.ids.length}/${s.tracks.flat().length}`);
     await page.tap('#select-btn');
     await clear();
+    await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 0; });
     // Rahmen: langes Drücken auf freie Fläche, dann ziehen
     const lane5 = await box('.lane[data-track-id="t5"]');
     const lane7 = await box('.lane[data-track-id="t7"]');
@@ -259,6 +263,8 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     check('Spurgruppe über das Menü bilden', !!grp);
     await page.tap(`.group-row[data-group-id="${grp}"] .group-toggle`);
     check('Gruppe auf- und zuklappen per Antippen', await page.evaluate((id) => window.loopwerk.store.project.groups.find((g) => g.id === id).collapsed, grp));
+    // Unterste Spur halb hinter der Arranger-Leiste unten zählt nicht als kleine Tippfläche: ganz nach unten scrollen
+    await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 1e4; });
     await targets('Spurgruppe eingeklappt');
     await page.tap('#undo-btn');
     await page.tap('#undo-btn');

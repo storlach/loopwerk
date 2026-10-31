@@ -6,6 +6,7 @@ import { clamp, el, trackPointer } from '../util.js';
 import { makeKnob } from './knob.js';
 import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
+import { mountKeyRow } from './key-row.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
@@ -49,7 +50,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
   phGrip.setAttribute('aria-label', 'Wiedergabeposition');
   phGrip.tabIndex = -1;
   ruler.append(phGrip);
-  grid.append(rulerRow, rowsEl, addRow, loopShade, playhead);
+  // Tonart je Takt: schmale Zeile unter dem Lineal
+  const keyRow = mountKeyRow({ store, engine, ui });
+  grid.append(rulerRow, keyRow.row, rowsEl, addRow, loopShade, playhead);
   root.append(grid);
 
   const rows = new Map();
@@ -645,6 +648,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     grid.classList.toggle('coarse', ppb() < 10);
     grid.style.width = headW() + totalBeats(p) * ppb() + 'px';
     renderRuler();
+    keyRow.render();
     syncRows();
     for (const t of p.tracks) renderLane(rows.get(t.id), t);
     forceAll = false;
