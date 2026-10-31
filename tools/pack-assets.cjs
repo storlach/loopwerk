@@ -1,4 +1,4 @@
-// Fasst die VCSL-Aufnahmen zu Klang-Paketen zusammen: zusammengehörige WAV-Dateien (eine Familie wie „kick“,
+// Fasst die VCSL- und Karoryfer-Aufnahmen zu Klang-Paketen zusammen: zusammengehörige WAV-Dateien (eine Familie wie „kick“,
 // „conga“ oder ein ganzes Instrument) hintereinander in eine Datei. Die App lädt ein Paket einmal und schneidet
 // die WAV-Datei heraus (src/fetch-asset.js). Weniger Dateien = weniger Anfragen und passt ins Artifact-Limit.
 // Endung .wav, weil das Artifact nur bekannte Medientypen ausliefert; der Anfang ist ohnehin die erste WAV-Datei.
@@ -7,7 +7,10 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const SRC = 'assets/samples/vcsl';
+const SOURCES = [
+  { dir: 'assets/samples/vcsl', prefix: 'vcsl' },
+  { dir: 'assets/samples/karoryfer', prefix: 'karoryfer' },
+];
 const OUT = 'assets/packs';
 
 function walk(dir) {
@@ -18,8 +21,8 @@ function walk(dir) {
 }
 
 // Familie: Instrumente (inst/<id>) als Ganzes, sonst Ordner + Name ohne Nummer bzw. Tonname
-function family(rel) {
-  const parts = rel.slice(SRC.length + 1).split('/');
+function family(rel, src) {
+  const parts = rel.slice(src.length + 1).split('/');
   if (parts[0] === 'inst') return `inst-${parts[1]}`;
   const base = parts[parts.length - 1].replace(/\.wav$/, '')
     .replace(/-[a-g]s?\d$/, '')      // melodisch: fluegel-c3 → fluegel
@@ -28,21 +31,25 @@ function family(rel) {
   return `${parts[0]}-${base}`;
 }
 
-const files = walk(SRC).sort();
+const files = [];
 const groups = new Map();
-for (const f of files) {
-  const fam = family(f);
-  if (!groups.has(fam)) groups.set(fam, []);
-  groups.get(fam).push(f);
-}
+SOURCES.forEach(({ dir, prefix }, src) => {
+  for (const f of walk(dir).sort()) {
+    files.push(f);
+    const fam = `${prefix}-${family(f, dir)}`;
+    if (!groups.has(fam)) groups.set(fam, { src, list: [] });
+    groups.get(fam).list.push(f);
+  }
+});
 
 fs.rmSync(path.join(ROOT, OUT), { recursive: true, force: true });
 fs.mkdirSync(path.join(ROOT, OUT), { recursive: true });
 const packs = [];
 const packed = {};
-for (const [fam, list] of [...groups].sort()) {
+// Je Quelle alphabetisch, Quellen in fester Reihenfolge (neue Quellen hängen hinten an)
+for (const [fam, { list }] of [...groups].sort((a, b) => a[1].src - b[1].src || (a[0] < b[0] ? -1 : 1))) {
   const bufs = list.map((f) => fs.readFileSync(path.join(ROOT, f)));
-  const name = `${OUT}/vcsl-${fam}.wav`;
+  const name = `${OUT}/${fam}.wav`;
   const i = packs.length;
   packs.push(name);
   let off = 0;

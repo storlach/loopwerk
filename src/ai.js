@@ -170,7 +170,8 @@ const PRESET_WORDS = [
   [/acid|303|squelch/i, 'acid'],
   [/bass/i, 'bass'],
   [/fl[äa]che|pad|teppich|atmo/i, 'pad'],
-  [/pluck|zupf|harfe|harp|gitarre|guitar/i, 'pluck'],
+  [/gitarre|guitar/i, 'guitar'],
+  [/pluck|zupf|harfe|harp/i, 'pluck'],
   [/lead|synth|säge|saw/i, 'lead'],
 ];
 // Echtes Instrument, wenn die Beschreibung es beim Namen nennt („Harfe“, „Flügel“ ⊂ „Konzertflügel“)
@@ -183,12 +184,16 @@ function realInstrument(t, presets) {
   })?.id ?? null;
 }
 
+// Verzerrte Gitarre: der Gitarrenklang bringt Verstärker und Box schon mit
+const DRIVE_WORDS = /verzerr|dreckig|crunch|distort|dirty|fuzz|übersteuer|rock|metal|grunge/;
+
 export function soundFromWords(text, presets = []) {
   const t = text.toLowerCase();
-  const preset = realInstrument(t, presets) ?? PRESET_WORDS.find(([re]) => re.test(t))?.[1] ?? null;
+  const driveGuitar = /gitarre|guitar/.test(t) && DRIVE_WORDS.test(t);
+  const preset = (driveGuitar ? 'guitarDrive' : null) ?? realInstrument(t, presets) ?? PRESET_WORDS.find(([re]) => re.test(t))?.[1] ?? null;
   const fx = {};
   const has = (re) => re.test(t);
-  if (has(/verzerr|dreckig|kaputt|crunch|distort|dirty|fuzz|übersteuer|rau/)) fx.drive = { on: true, type: has(/fuzz/) ? 'fuzz' : has(/hart|hard|brutal/) ? 'hard' : 'soft', drive: has(/stark|sehr|brutal|heavy/) ? 0.8 : 0.5 };
+  if (!driveGuitar && has(/verzerr|dreckig|kaputt|crunch|distort|dirty|fuzz|übersteuer|rau/)) fx.drive = { on: true, type: has(/fuzz/) ? 'fuzz' : has(/hart|hard|brutal/) ? 'hard' : 'soft', drive: has(/stark|sehr|brutal|heavy/) ? 0.8 : 0.5 };
   if (has(/8-?bit|lo-?fi|retro|gameboy|chiptune|bitcrush/)) fx.drive = { on: true, type: 'crush', drive: 0.7, tone: 0.6 };
   if (has(/warm|weich|soft|dumpf|dunkel|dark|gedämpft|mellow/)) fx.filter = { on: true, type: 'lowpass', cutoff: has(/dunkel|dark|dumpf/) ? 0.45 : 0.58, reso: 0.1, lfo: 'off' };
   if (has(/telefon|radio|dünn|thin/)) fx.filter = { on: true, type: 'bandpass', cutoff: 0.6, reso: 0.3, lfo: 'off' };

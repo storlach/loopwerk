@@ -2,6 +2,7 @@
 // So laufen sie durch dieselbe Engine wie jeder andere Clip (Fades, Effekte, Export, Rückgängig).
 
 import { createKit } from './samples.js';
+import { isGuitarPreset, renderGuitarNotes } from './dsp/guitar.js';
 import {
   sampledInstruments, isSampled, getInstrument, loadInstrument, loadedInstrument, playSampled, fallbackPreset, releaseTail,
 } from './sampler.js';
@@ -46,6 +47,9 @@ export const SYNTH_PRESETS = [
   { id: 'bass', label: 'Bass', category: 'bass' },
   { id: 'acid', label: 'Acid-Bass', category: 'bass' },
   { id: 'pad', label: 'Fläche', category: 'chords' },
+  // E-Gitarre: Saiten, Verstärker und Effekte selbst gerechnet (src/dsp/guitar.js)
+  { id: 'guitar', label: 'E-Gitarre clean', category: 'chords' },
+  { id: 'guitarDrive', label: 'E-Gitarre verzerrt', category: 'chords' },
 ];
 
 // Echte Instrumente (Sampler, src/sampler.js) als weitere Klänge; Kennung = Instrument-id.
@@ -177,7 +181,12 @@ export async function renderPattern(pattern, bpm, library) {
     }
   } else {
     const preset = sampled(pattern.preset) ? fallbackPreset(getInstrument(pattern.preset)) : pattern.preset;
-    for (const n of pattern.notes || []) {
+    if (!inst && isGuitarPreset(preset)) {
+      // Gitarre: alle Noten zusammen durch Verstärker und Effekte, als nahtloser Loop gerechnet
+      const notes = (pattern.notes || []).filter((n) => n.start < beats)
+        .map((n) => ({ ...n, len: Math.max(0.05, Math.min(n.len, beats - n.start)) }));
+      if (notes.length) kit.pcm(0, (sr) => renderGuitarNotes(preset, notes, { sr, spb, loopFrames: frames }));
+    } else for (const n of pattern.notes || []) {
       if (n.start >= beats) continue;
       const len = Math.max(0.05, Math.min(n.len, beats - n.start));
       if (inst) playSampled(ctx, bus, inst, n.pitch, n.start * spb, len * spb, n.vel ?? 1);
@@ -220,17 +229,42 @@ function liveSampler(preset) {
   return { preset: fallbackPreset(getInstrument(preset)) };
 }
 
+// Gitarren-Ton als fertiger Puffer (gleiche Rechnung wie beim Rendern der Melodie); je Klang, Ton und Länge gemerkt
+const guitarCache = new Map();
+function guitarNote(preset, pitch, seconds) {
+  const key = `${preset}|${pitch}|${seconds}`;
+  let buf = guitarCache.get(key);
+  if (!buf) {
+    const frames = Math.round((seconds + 0.6) * SR);
+    const chans = renderGuitarNotes(preset, [{ start: 0, pitch, len: seconds, vel: 1 }], { sr: SR, spb: 1, frames });
+    buf = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: SR });
+    chans.forEach((d, c) => buf.copyToChannel(d, c));
+    if (guitarCache.size > 96) guitarCache.delete(guitarCache.keys().next().value);
+    guitarCache.set(key, buf);
+  }
+  return buf;
+}
+function playGuitar(ctx, dest, preset, pitch, seconds, when) {
+  const src = ctx.createBufferSource();
+  src.buffer = guitarNote(preset, pitch, seconds);
+  src.connect(dest);
+  src.start(when);
+  return src;
+}
+
 export function previewNote(ctx, dest, preset, pitch) {
   const { kit, out } = previewKit(ctx, dest);
   const t = ctx.currentTime + 0.01;
   const s = liveSampler(preset);
   if (s.loaded) { playSampled(ctx, out, s.loaded, pitch, t, 0.4, 1); return; }
+  if (isGuitarPreset(s.preset)) { playGuitar(ctx, out, s.preset, pitch, 0.4, t); return; }
   playNote(kit, s.preset, pitch, t, s.preset === 'pad' || s.preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
 }
 
 // Gehaltener Ton (Klaviatur, Tasten, Finger): klingt bis stop(), höchstens 12 s. Eigener Ausgang je Ton,
 // damit sich ein einzelner Ton weich beenden lässt.
 const HOLD_MAX = 12;
+const GUITAR_HOLD = 3; // Gitarre klingt ohnehin aus
 export function startNote(ctx, dest, preset, pitch) {
   const s = liveSampler(preset);
   if (s.loaded) {
@@ -242,7 +276,8 @@ export function startNote(ctx, dest, preset, pitch) {
   g.connect(dest);
   g.gain.value = 0.8;
   const t = ctx.currentTime + 0.005;
-  playNote(createKit(ctx, g, 1), preset, pitch, t, HOLD_MAX, 1, 1);
+  if (isGuitarPreset(preset)) playGuitar(ctx, g, preset, pitch, GUITAR_HOLD, t);
+  else playNote(createKit(ctx, g, 1), preset, pitch, t, HOLD_MAX, 1, 1);
   let stopped = false;
   return {
     stop() {

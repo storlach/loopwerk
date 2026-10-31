@@ -42,7 +42,8 @@ const { check, finish } = createChecker();
         const d = (await ctx.startRendering()).getChannelData(0);
         let peak = 0;
         for (const v of d) peak = Math.max(peak, Math.abs(v));
-        out.push({ id: i.id, peak: Math.round(peak * 100) / 100, ok: i.license === 'CC0' && /VCSL/.test(i.origin) && /^https:\/\/github\.com\/sgossner\/VCSL/.test(i.source || '') });
+        out.push({ id: i.id, peak: Math.round(peak * 100) / 100, ok: i.license === 'CC0' && ((/VCSL/.test(i.origin) && /^https:\/\/github\.com\/sgossner\/VCSL/.test(i.source || ''))
+          || (/Karoryfer/.test(i.origin) && /^https:\/\/github\.com\/sfzinstruments\/karoryfer\./.test(i.source || ''))) });
       }
       return out;
     });

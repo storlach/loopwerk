@@ -7,6 +7,8 @@ import { CATALOG, PEAK_TARGET } from './catalog.js';
 import { VCSL_CATALOG } from './catalog-vcsl.js';
 import { fetchAsset } from './fetch-asset.js';
 import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
+import { GUITAR_LOOP_DEFS, GUITAR_GENRES } from './loops-guitar.js';
+import { GUITAR_CATALOG } from './catalog-guitar.js';
 import { timeStretch } from './dsp/stretch.js';
 
 export const CATEGORIES = [
@@ -29,6 +31,7 @@ export const GENRES = [
 ];
 // Neue Genres aus dem großen Loop-Paket
 GENRES.push(...MORE_GENRES.filter((g) => !GENRES.some((x) => x.id === g.id)));
+GENRES.push(...GUITAR_GENRES.filter((g) => !GENRES.some((x) => x.id === g.id)));
 
 export const LIBRARY_BPM = 120;
 export const LIBRARY_KEY = 'Am';
@@ -655,6 +658,18 @@ export function createKit(ctx, out, spb, semis = 0) {
       o.start(t);
       o.stop(t + 1.6);
       noiseSource(t, 0.5).connect(biquad('lowpass', 700)).connect(decayGain(t, 0.6, 0.35));
+    },
+
+    // Selbst gerechneter Klang (E-Gitarre, src/dsp/guitar.js): fn(sampleRate, spb, semis) liefert Kanaldaten,
+    // die ab Schlag beat erklingen
+    pcm(beat, fn) {
+      const chans = fn(ctx.sampleRate, spb, semis);
+      const buf = new AudioBuffer({ numberOfChannels: chans.length, length: Math.max(1, chans[0].length), sampleRate: ctx.sampleRate });
+      chans.forEach((d, c) => buf.copyToChannel(d, c));
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(out);
+      src.start(T(beat));
     },
 
     // ---------- Erweiterung für die weiteren Loops (src/loops-more.js) ----------
@@ -1656,8 +1671,8 @@ async function loadCatalogEntry(entry) {
 // Synthetische Loops und die Katalog-Sounds, die das Projekt braucht, vor dem Start; die übrigen Katalog-Sounds
 // (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
 // Gesamte Bibliothek: eigene synthetische Loops und freie Katalog-Sounds (CC0)
-const ALL_LOOP_DEFS = [...LOOP_DEFS, ...MORE_LOOP_DEFS];
-const ALL_CATALOG = [...CATALOG, ...VCSL_CATALOG];
+const ALL_LOOP_DEFS = [...LOOP_DEFS, ...MORE_LOOP_DEFS, ...GUITAR_LOOP_DEFS];
+const ALL_CATALOG = [...CATALOG, ...VCSL_CATALOG, ...GUITAR_CATALOG];
 
 // Alle Sounds als Einträge sofort im Regal; geladen bzw. erzeugt wird nur, was das Projekt braucht (need) –
 // der Rest beim ersten Anhören oder Einsetzen (library.ensure).
@@ -1669,7 +1684,7 @@ export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, n
     lib.stub({
       id: def.id, name: def.name, category: def.category, kind: def.oneShot ? 'oneshot' : 'loop',
       beats: def.bars * 4, bpm: null, key: def.category === 'drums' || def.category === 'fx' ? null : LIBRARY_KEY,
-      oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', genres: def.genres || [], def,
+      oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', genres: def.genres || [], tags: def.tags, def,
     });
   }
   for (const entry of ALL_CATALOG) {
