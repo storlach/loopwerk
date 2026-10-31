@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Loop-basierter Music Maker im Browser",
   "scripts": {
-    "test": "node tests/spike.test.cjs && node tests/stufe2.test.cjs && node tests/stufe3.test.cjs && node tests/stufe4.test.cjs && node tests/stufe5.test.cjs && node tests/stufe6.test.cjs && node tests/stufe7.test.cjs && node tests/mobil.test.cjs && node tests/v14.test.cjs && node tests/v15.test.cjs && node tests/v17.test.cjs && node tests/v18.test.cjs && node tests/v19.test.cjs && node tests/v20.test.cjs && node tests/v21.test.cjs && node tests/v22.test.cjs && node tests/more-loops.test.cjs && node tests/sampler.test.cjs && node tests/regal.test.cjs && node tests/tablet.test.cjs && node tests/sound-tempo.test.cjs && node tests/key-bars.test.cjs",
+    "test": "node tests/spike.test.cjs && node tests/stufe2.test.cjs && node tests/stufe3.test.cjs && node tests/stufe4.test.cjs && node tests/stufe5.test.cjs && node tests/stufe6.test.cjs && node tests/stufe7.test.cjs && node tests/mobil.test.cjs && node tests/v14.test.cjs && node tests/v15.test.cjs && node tests/v17.test.cjs && node tests/v18.test.cjs && node tests/v19.test.cjs && node tests/v20.test.cjs && node tests/v21.test.cjs && node tests/v22.test.cjs && node tests/more-loops.test.cjs && node tests/sampler.test.cjs && node tests/regal.test.cjs && node tests/tablet.test.cjs && node tests/sound-tempo.test.cjs && node tests/key-bars.test.cjs && node tests/editor-live.test.cjs",
     "serve": "node tests/serve.cjs 8080"
   }
 }
