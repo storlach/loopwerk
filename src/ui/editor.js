@@ -52,6 +52,8 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
       beats: sample.kind === 'loop' ? (sample.beats || sample.lengthBeats) : Math.max(1, Math.round(base.duration / (60 / store.project.bpm))),
       pitch: 0,
     };
+    live = null;
+    $('ed-autotune').setAttribute('aria-pressed', 'false');
     nameIn.value = sample.category === 'own' ? sample.name : `${sample.name} (bearbeitet)`;
     $('editor-title').textContent = `Sample-Editor: ${sample.name}`;
     ui.setDock('editor');
@@ -59,11 +61,55 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   }
 
   function apply(fn) {
+    endLive();
     st.history.push(st.chs);
     if (st.history.length > 30) st.history.shift();
     st.chs = fn(st.chs);
     if (st.sel) st.sel = [Math.min(st.sel[0], len()), Math.min(st.sel[1], len())];
     render();
+    replay();
+  }
+
+  // ---------- Sofort hören: Tonhöhe und Autotune wirken beim Einstellen ----------
+  // Eine Live-Sitzung rechnet immer vom Stand vor der Sitzung aus (ein Rückgängig-Schritt);
+  // ein anderes Werkzeug oder „Übernehmen“ macht das Ergebnis fest.
+  let live = null; // { base, pitch, autotune }
+  function startLive() {
+    if (live) return live;
+    st.history.push(st.chs);
+    if (st.history.length > 30) st.history.shift();
+    live = { base: st.chs, pitch: 0, autotune: false, token: 0 };
+    return live;
+  }
+  function endLive() {
+    if (!live) return;
+    live = null;
+    st && (st.pitch = 0);
+    $('ed-autotune').setAttribute('aria-pressed', 'false');
+  }
+  let liveTimer = null;
+  function relive() {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(computeLive, 120);
+  }
+  async function computeLive() {
+    if (!st || !live) return;
+    const token = ++live.token;
+    let chs = live.base;
+    if (live.pitch) chs = E.pitch(chs, live.pitch);
+    if (live.autotune) {
+      const [a, b] = live.sel ?? [0, chs[0].length];
+      const part = chs.map((d) => d.slice(a, b));
+      const out = await work('Autotune rechnet …', 'autotune', { chs: part, sampleRate: st.sr, opts: atOpts() }, { quiet: true });
+      if (!out || !live || token !== live.token) return;
+      chs = chs.map((d, c) => { const r = d.slice(); r.set(out[c], a); return r; });
+    }
+    if (!st || !live || token !== live.token) return;
+    st.chs = chs;
+    st.rev = (st.rev || 0) + 1;
+    if (!live.pitch && !live.autotune) { st.history.pop(); live = null; }
+    render();
+    replay();
   }
 
   // ---------- Darstellung ----------
@@ -128,7 +174,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
       const b = frameAt(ev.clientX);
       st.sel = [Math.min(a, b), Math.max(a, b)];
       render();
-    }, () => { if (!moved) { st.sel = null; render(); } });
+    }, () => { if (!moved) st.sel = null; render(); if (isPlaying()) play(0); });
   });
 
   // ---------- Werkzeuge ----------
@@ -143,26 +189,40 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   tool('ed-normalize', (chs) => E.normalize(chs, 0.89, ...selOrAll()));
   tool('ed-louder', (chs) => E.gain(chs, 3, ...selOrAll()));
   tool('ed-quieter', (chs) => E.gain(chs, -3, ...selOrAll()));
-  $('ed-pitch-down').addEventListener('click', () => { if (st) { st.pitch = Math.max(-12, st.pitch - 1); render(); } });
-  $('ed-pitch-up').addEventListener('click', () => { if (st) { st.pitch = Math.min(12, st.pitch + 1); render(); } });
-  $('ed-pitch-apply').addEventListener('click', () => {
-    if (!st || !st.pitch) return;
-    const p = st.pitch;
-    st.pitch = 0;
-    st.sel = null;
-    apply((chs) => E.pitch(chs, p));
-  });
+  const setPitch = (p) => {
+    if (!st) return;
+    const l = startLive();
+    l.pitch = clamp(p, -12, 12);
+    st.pitch = l.pitch;
+    render();
+    relive();
+  };
+  $('ed-pitch-down').addEventListener('click', () => setPitch((live?.pitch ?? 0) - 1));
+  $('ed-pitch-up').addEventListener('click', () => setPitch((live?.pitch ?? 0) + 1));
+  $('ed-pitch-apply').hidden = true;
   loopIn.addEventListener('change', () => { st.kind = loopIn.checked ? 'loop' : 'oneshot'; render(); });
   beatsIn.addEventListener('change', () => { st.beats = clamp(Math.round(Number(beatsIn.value) || 1), 1, 64); render(); });
 
-  $('ed-undo').addEventListener('click', () => { if (st?.history.length) { st.chs = st.history.pop(); st.sel = null; render(); } });
+  $('ed-undo').addEventListener('click', () => {
+    if (!st?.history.length) return;
+    live = null;
+    st.pitch = 0;
+    $('ed-autotune').setAttribute('aria-pressed', 'false');
+    st.chs = st.history.pop();
+    st.sel = null;
+    render();
+    replay();
+  });
 
   // ---------- Lange Berechnungen (Autotune, Trennen) ----------
 
   const busyEl = $('ed-busy');
   let busy = false;
-  async function work(text, job, args) {
+  async function work(text, job, args, { quiet = false } = {}) {
     if (!st || busy) return null;
+    if (quiet) {
+      try { return await runJob(job, args, {}); } catch (err) { ui.flash(`Das hat nicht geklappt: ${err.message}`); return null; }
+    }
     busy = true;
     root.classList.add('busy');
     busyEl.hidden = false;
@@ -180,19 +240,24 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     }
   }
 
-  $('ed-autotune').addEventListener('click', async () => {
-    if (!st) return;
-    const [a, b] = selOrAll();
-    const opts = {
-      root: Number($('ed-at-root').value), scale: $('ed-at-scale').value,
-      strength: Number($('ed-at-strength').value), speed: $('ed-at-robot').checked ? 1 : 0.6,
-    };
-    const part = st.chs.map((d) => d.slice(a, b));
-    const out = await work('Autotune rechnet …', 'autotune', { chs: part, sampleRate: st.sr, opts });
-    if (!out || !st) return;
-    apply((chs) => chs.map((d, c) => { const r = d.slice(); r.set(out[c], a); return r; }));
-    ui.flash('Autotune angewendet. „Rückgängig“ im Editor nimmt es zurück.');
+  const atOpts = () => ({
+    root: Number($('ed-at-root').value), scale: $('ed-at-scale').value,
+    strength: Number($('ed-at-strength').value), speed: $('ed-at-robot').checked ? 1 : 0.6,
   });
+  const atBtn = $('ed-autotune');
+  atBtn.textContent = 'Autotune';
+  atBtn.setAttribute('aria-pressed', 'false');
+  atBtn.addEventListener('click', () => {
+    if (!st) return;
+    const l = startLive();
+    l.autotune = !l.autotune;
+    if (l.autotune && !l.sel) l.sel = hasSel() ? [...st.sel] : null;
+    atBtn.setAttribute('aria-pressed', String(l.autotune));
+    relive();
+  });
+  for (const id of ['ed-at-root', 'ed-at-scale', 'ed-at-strength', 'ed-at-robot']) {
+    $(id).addEventListener(id === 'ed-at-strength' ? 'input' : 'change', () => { if (live?.autotune) relive(); });
+  }
 
   const separateNow = () => work('Trenne Gesang, Drums, Bass und Instrumente … (dauert bei langen Songs etwas)', 'separate', { chs: st.chs, sampleRate: st.sr });
   $('ed-novocal').addEventListener('click', async () => {
@@ -224,27 +289,45 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
 
   // ---------- Anhören ----------
 
+  // Anhören läuft im Loop (Auswahl oder ganzer Clip), bis man es anhält; Änderungen hört man sofort an derselben Stelle
   let previewing = null;
-  $('ed-play').addEventListener('click', async () => {
+  const playBtn = $('ed-play');
+  const isPlaying = () => !!previewing && engine.preview === previewing;
+  const syncPlay = () => { const on = isPlaying(); playBtn.textContent = on ? '■ Stopp' : '▶ Anhören'; playBtn.setAttribute('aria-pressed', String(on)); };
+  async function play(at = 0) {
     if (!st) return;
-    if (previewing && engine.preview === previewing) { engine.stopPreview(); return; }
     const buffer = channelsToBuffer(st.chs, st.sr);
     const [a, b] = selOrAll();
-    previewing = await engine.previewBuffer(buffer, a / st.sr, (b - a) / st.sr);
+    const dur = (b - a) / st.sr;
+    if (dur <= 0) return;
+    previewing = await engine.previewBuffer(buffer, a / st.sr, dur, { loop: true, at });
+    syncPlay();
     const tick = () => {
-      if (!previewing || engine.preview !== previewing) { headEl.hidden = true; return; }
-      const t = engine.heardTime() - previewing.when;
+      if (!isPlaying()) { headEl.hidden = true; syncPlay(); return; }
+      const t = Math.max(0, engine.heardTime() - previewing.when) % previewing.duration;
       headEl.hidden = false;
-      headEl.style.left = clamp((a / st.sr + Math.max(0, t)) / (len() / st.sr), 0, 1) * 100 + '%';
+      headEl.style.left = clamp((previewing.offset + t) / (len() / st.sr), 0, 1) * 100 + '%';
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
+  }
+  // Nach einer Änderung: an derselben Stelle mit dem neuen Klang weiter
+  function replay() {
+    if (!isPlaying()) return;
+    const at = Math.max(0, engine.ctx.currentTime - previewing.when);
+    play(at);
+  }
+  playBtn.addEventListener('click', () => {
+    if (!st) return;
+    if (isPlaying()) { engine.stopPreview(); syncPlay(); return; }
+    play(0);
   });
 
   // ---------- Abschließen ----------
 
   function close() {
     engine.stopPreview();
+    live = null;
     st = null;
     if (ui.dock === 'editor') ui.setDock(null);
   }

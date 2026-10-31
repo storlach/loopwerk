@@ -2052,6 +2052,8 @@
   .dock-head h2 { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
   .dbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
   .dbtn.primary { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
+  /* Schalter im Editor (Anhören im Loop, Autotune): an = Weißglut */
+  .dbtn[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 35%, transparent); }
   .pat-field select, .ed-name, #pat-name, .ed-beats { border-radius: var(--radius); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
   #pat-live[aria-pressed="true"] { background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent); }
 
