@@ -1972,6 +1972,12 @@
     .sheet-grip::before { width: 64px; height: 5px; border-radius: 3px; background: var(--muted); }
     .sheet-grip:active::before, .sheet.dragging .sheet-grip::before { background: var(--ink); }
   }
+  /* Finger: Längenfilter als Raster aus sechs gleich großen Feldern (3 × 2), jedes fingerbreit */
+  @media (pointer: coarse) {
+    .shelf-len { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); overflow: visible; }
+    .shelf-len .shelf-sort-label { display: none; }
+    .shelf-len .seg { min-height: 44px; padding-inline: 4px; }
+  }
   .dock-head h2 { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
   .dbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
   .dbtn.primary { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
