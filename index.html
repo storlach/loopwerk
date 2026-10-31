@@ -1618,8 +1618,9 @@
   /* Master-Amplitude hinter allem: Lichtstriche, die während der Wiedergabe nach links wandern */
   .ambient-wave { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
   .ambient-wave[hidden] { display: none; }
-  /* Fenster (nicht der Arranger) und Tipps: durchscheinend mit Weichzeichner */
-  aside.shelf, .insp, .dock, .more-panel, .deck, .tabbar, .tip, .pop, .hint, .track-menu, .clipbar {
+  /* Fenster (nicht der Arranger) und Tipps: durchscheinend mit Weichzeichner.
+     Deck und Fachleiste bleiben ohne: ihr Weichzeichner würde die Menüs darin unter die Seitenfenster legen. */
+  aside.shelf, .insp, .dock, .more-panel, .tip, .pop, .hint, .track-menu, .clipbar {
     -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
   }
   /* Lichtleiste ganz oben: dasselbe Licht wie der Hintergrund, hell und strahlend – wirkt auch am Handy */
