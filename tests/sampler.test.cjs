@@ -43,9 +43,10 @@ function installHelpers() {
     // ---------- Format und Auswahl im Editor ----------
     const fmt = await page.evaluate(async () => {
       const { SAMPLED_INSTRUMENTS } = await import('./src/instruments-vcsl.js');
-      const bad = SAMPLED_INSTRUMENTS.filter((i) => !(i.id && i.label && i.zones?.length && i.license === 'CC0'
+      const { SHELF_INSTRUMENTS } = await import('./src/instruments-shelf.js');
+      const bad = [...SAMPLED_INSTRUMENTS, ...SHELF_INSTRUMENTS].filter((i) => !(i.id && i.label && i.zones?.length && i.license === 'CC0'
         && i.zones.every((z, k) => Number.isFinite(z.midi) && z.file && (k === 0 || z.midi > i.zones[k - 1].midi)))).map((i) => i.id);
-      return { ids: SAMPLED_INSTRUMENTS.map((i) => i.id), labels: SAMPLED_INSTRUMENTS.map((i) => i.label), bad };
+      return { ids: SAMPLED_INSTRUMENTS.map((i) => i.id), shelfIds: SHELF_INSTRUMENTS.map((i) => i.id), labels: SAMPLED_INSTRUMENTS.map((i) => i.label), bad };
     });
     check('Instrumentliste im erwarteten Format, CC0, Zonen aufsteigend', fmt.ids.length >= 1 && !fmt.bad.length, `${fmt.ids.join(', ')}${fmt.bad.length ? ' – fehlerhaft: ' + fmt.bad.join(', ') : ''}`);
     const A = fmt.ids[0];
@@ -67,7 +68,7 @@ function installHelpers() {
       };
     });
     check('Feld „Klang“: Gruppe „Echte Instrumente (CC0)“ nach den Synth-Klängen',
-      sel.groups.length === 1 && sel.groups[0] === 'Echte Instrumente (CC0)' && sel.groupLast && sel.synth === 11 && JSON.stringify(sel.inGroup) === JSON.stringify(fmt.ids),
+      sel.groups.length === 1 && sel.groups[0] === 'Echte Instrumente (CC0)' && sel.groupLast && sel.synth === 11 && JSON.stringify(sel.inGroup) === JSON.stringify([...fmt.ids, ...fmt.shelfIds]),
       JSON.stringify(sel));
 
     // Auswahl startet das Laden sofort – auch ohne Noten (dann rendert das Pattern nichts, was laden müsste)

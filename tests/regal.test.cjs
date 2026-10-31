@@ -22,6 +22,7 @@ const DIR = process.env.SHOT_DIR || '/tmp';
     await page.click('.shelf-len .seg[data-len="2"]');
     v = await visible();
     check('Filter 2 Takte: nur Loops mit 2 Takten', v.length > 3 && v.every((s) => s.kind === 'loop' && s.bars > 1 && s.bars <= 2), String(v.length));
+    check('Längenfilter lässt „Ordnen“ unberührt', await page.getAttribute('.shelf-sort .seg[data-sort="cat"]', 'aria-pressed') === 'true');
     await page.click('.shelf-len .seg[data-len="2"]');
     check('Noch einmal tippen hebt den Filter auf', await page.getAttribute('.shelf-len .seg[data-len="all"]', 'aria-pressed') === 'true');
     await page.click('.shelf-len .seg[data-len="1"]');
@@ -92,6 +93,29 @@ const DIR = process.env.SHOT_DIR || '/tmp';
       const hit = r && document.elementFromPoint(r.left + r.width / 2, r.bottom + 10)?.closest('.sheet-grip') === g;
       return { h: r?.height, bar: b && parseFloat(b.width), hit };
     });
+    // Filter am Handy: Knopf neben der Suche, klappt die Filter auf, Zahl zeigt aktive Filter, bleibt beim Scrollen oben
+    await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
+    await page.waitForTimeout(600);
+    const fb = await page.evaluate(() => {
+      const s = document.getElementById('shelf-search').getBoundingClientRect();
+      const b = document.getElementById('shelf-filter-btn').getBoundingClientRect();
+      return { sameRow: Math.abs(s.top - b.top) < 4 && b.left > s.right - 1, hidden: !document.querySelector('.shelf-len').offsetParent };
+    });
+    check('Handy: Knopf „Filter“ neben der Suche, Filter zunächst zu', fb.sameRow && fb.hidden, JSON.stringify(fb));
+    await page.tap('#shelf-filter-btn');
+    await page.tap('.shelf-len .seg[data-len="shot"]');
+    await page.evaluate(() => { document.querySelector('.shelf').scrollTop = 500; });
+    await page.waitForTimeout(200);
+    const fo = await page.evaluate(() => {
+      const len = document.querySelector('.shelf-len').getBoundingClientRect();
+      const sh = document.querySelector('.shelf').getBoundingClientRect();
+      return { n: document.getElementById('shelf-filter-n').textContent, visible: len.top >= sh.top && len.bottom <= sh.bottom, expanded: document.getElementById('shelf-filter-btn').getAttribute('aria-expanded') };
+    });
+    check('Handy: Filter offen bleiben beim Scrollen sichtbar, Zahl zeigt 1 aktiven', fo.n === '1' && fo.visible && fo.expanded === 'true', JSON.stringify(fo));
+    await page.tap('.shelf-len .seg[data-len="all"]');
+    await page.tap('#shelf-filter-btn');
+    await page.evaluate(() => { window.loopwerk.ui.setDock('mixer'); });
+    await page.waitForTimeout(600);
     check('Handy: Schubladengriff groß (Strich ≥ 56 px, Fassbereich reicht unter den Griff)', grip.h >= 24 && grip.bar >= 56 && grip.hit, JSON.stringify(grip));
     if (SHOTS) await page.screenshot({ path: `${DIR}/regal-griff-handy.png` });
     await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));

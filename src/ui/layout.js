@@ -23,6 +23,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('tips-reset'), { narrow: slot('project') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
   place($('shelf-search'), { narrow: $('shelf-sticky') });
+  place($('shelf-filter-btn'), { narrow: $('shelf-sticky') });
+  place($('shelf-filters'), { narrow: $('shelf-sticky') });
   place($('wish-form'), { narrow: slot('wish') });
   place(document.querySelector('.deck .brand'), { narrow: slot('about') });
 

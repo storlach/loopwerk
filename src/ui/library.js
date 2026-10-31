@@ -78,7 +78,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       chipsEl.append(chip);
     }
   }
-  const sortBtns = [...document.querySelectorAll('.shelf-sort .seg')];
+  const sortBtns = [...document.querySelectorAll('.shelf-sort .seg[data-sort]')];
   for (const b of sortBtns) {
     b.addEventListener('click', () => {
       if (sort === b.dataset.sort) return;
@@ -102,6 +102,14 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       render();
     });
   }
+  // Handy: Filter hinter einem Knopf neben der Suche, die Zahl zeigt, wie viele gerade wirken
+  const filterBtn = document.getElementById('shelf-filter-btn');
+  const filterBox = document.getElementById('shelf-filters');
+  filterBtn?.addEventListener('click', () => {
+    const open = !filterBox.classList.contains('open');
+    filterBox.classList.toggle('open', open);
+    filterBtn.setAttribute('aria-expanded', String(open));
+  });
   buildChips();
   search.addEventListener('input', render);
 
@@ -166,6 +174,12 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     for (const chip of chipsEl.children) chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter));
     for (const b of sortBtns) b.setAttribute('aria-pressed', String(b.dataset.sort === sort));
     for (const b of lenBtns) b.setAttribute('aria-pressed', String(b.dataset.len === len));
+    const active = (filter !== 'all') + (len !== 'all') + (sort !== 'cat');
+    if (filterBtn) {
+      document.getElementById('shelf-filter-n').textContent = active ? String(active) : '';
+      filterBtn.classList.toggle('active', active > 0);
+      filterBtn.setAttribute('aria-label', active ? `Filter, ${active} aktiv` : 'Filter');
+    }
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {

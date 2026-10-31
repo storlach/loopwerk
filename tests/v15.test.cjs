@@ -306,7 +306,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
       const t = store.project.tracks.find((x) => x.clips.some((c) => c.sampleId === 'pat-' + patternEditor.id));
       return { preset: p.preset, hall: t.fx?.hall, filter: t.fx?.filter, status: document.getElementById('sing-status').textContent };
     });
-    check('Klang nach Stichworten: Flöte, weich (Tiefpass), viel Hall', snd.preset === 'flute' && snd.hall?.on && snd.hall.mix >= 0.4 && snd.filter?.on && snd.filter.type === 'lowpass', JSON.stringify(snd));
+    check('Klang nach Stichworten: Flöte, weich (Tiefpass), viel Hall', ['flute', 'vc-blockfloete'].includes(snd.preset) && snd.hall?.on && snd.hall.mix >= 0.4 && snd.filter?.on && snd.filter.type === 'lowpass', JSON.stringify(snd));
     await page.keyboard.press('Control+z');
     check('Klang bauen ist ein Rückgängig-Schritt', await page.evaluate(() => window.loopwerk.store.project.patterns[window.loopwerk.patternEditor.id].preset) === 'pluck');
 
