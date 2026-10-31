@@ -4,10 +4,13 @@
 import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { makeKnob } from './knob.js';
+import { touch } from './place.js';
+import { holdArea, pressHold } from './touch.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
+// Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
 const narrow = window.matchMedia('(max-width: 760px)');
-export const headW = () => (narrow.matches ? 124 : 176);
+export const headW = () => (narrow.matches ? 124 : touch.matches ? 208 : 176);
 const WAVE_TOP = 17; // Abstand der Wellenform vom Clip-Oberrand (Platz für den Namen)
 
 export const formatDb = (g) => (g <= 0.0001 ? '−∞ dB' : `${(20 * Math.log10(g)).toFixed(1).replace('.', ',').replace('-', '−')} dB`);
@@ -531,9 +534,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const L = clip.lengthBeats * ppb();
     const fi = (clip.fadeInBeats || 0) * ppb();
     const fo = (clip.fadeOutBeats || 0) * ppb();
-    const set = (cls, x) => { const n = node.querySelector(cls); n.style.left = x - 5.5 + 'px'; n.style.top = y - 0.5 + 'px'; };
-    set('.clip-fade-in', clamp(fi, 5, L - 5));
-    set('.clip-fade-out', clamp(L - fo, 5, L - 5));
+    // Griffgröße aus dem CSS (am Tablet größer); Mitte des Griffs liegt auf der Hüllkurve
+    const half = (node.querySelector('.clip-vol').offsetWidth || 11) / 2;
+    const edge = Math.max(5, half);
+    const set = (cls, x) => { const n = node.querySelector(cls); n.style.left = x - half + 'px'; n.style.top = y + 5 - half + 'px'; };
+    set('.clip-fade-in', clamp(fi, edge, L - edge));
+    set('.clip-fade-out', clamp(L - fo, edge, L - edge));
     set('.clip-vol', L / 2);
   }
 
@@ -709,7 +715,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     let dt = 0;
     forceAll = true;
     trackPointer(e, (ev) => {
-      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      if (pinch || (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4)) return;
       moved = true;
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
       const want = snap(lead.clip.startBeat + (ev.clientX - sx) / ppb(), ev) - lead.clip.startBeat;
@@ -736,12 +742,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }, () => { ui.status(null); render(true); });
   }
 
-  // Rahmen aufziehen (Maus, freie Fläche): alle berührten Clips auswählen; Umschalt fügt hinzu
+  // Rahmen aufziehen (Maus, freie Fläche): alle berührten Clips auswählen; Umschalt fügt hinzu.
+  // Finger: nach langem Drücken auf freier Fläche (add: zur bisherigen Auswahl hinzufügen)
   const marquee = el('div', 'marquee');
-  function startMarquee(e, lane) {
+  function startMarquee(e, lane, { add = e.shiftKey, finger = false } = {}) {
     const sx = e.clientX;
     const sy = e.clientY;
-    const keep = e.shiftKey ? ui.selectedIds() : [];
+    const keep = add ? ui.selectedIds() : [];
     let active = false;
     let hits = [];
     trackPointer(e, (ev) => {
@@ -763,7 +770,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }, (ev) => {
       marquee.remove();
       ui.status(null);
-      if (!active) { laneClick(ev, lane); return; }
+      if (!active) { if (!finger) laneClick(ev, lane); return; }
       ui.selectMany([...keep, ...hits]);
       markSelection();
     }, () => { marquee.remove(); ui.status(null); markSelection(); });
@@ -783,7 +790,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     let newStart = clip.startBeat;
     forceAll = true;
     trackPointer(e, (ev) => {
-      if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      // Zwei Finger zoomen – dann bleibt der Clip liegen
+      if (pinch || (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4)) return;
       moved = true;
       node.classList.add('dragging');
       node.classList.toggle('copying', ev.altKey || ev.ctrlKey || ev.metaKey);
@@ -926,11 +934,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     }
     if (clip) {
       e.preventDefault();
-      // Finger: ein nicht ausgewählter Clip wird nur ausgewählt, damit Wischen scrollt statt verschiebt
-      if (e.pointerType === 'touch' && ui.selectedClipId !== clip.dataset.clipId) {
-        trackPointer(e, () => {}, () => select(clip.dataset.clipId));
-        return;
-      }
+      if (e.pointerType === 'touch' && touchClip(e, clip, t)) return;
       if (e.shiftKey && e.pointerType === 'mouse' && !t.closest('.clip-grip, .clip-trim, .clip-handle')) {
         // Umschalt-Klick: Clip zur Auswahl hinzufügen oder herausnehmen; Umschalt-Ziehen verschiebt frei (ohne Raster)
         const cid = clip.dataset.clipId;
@@ -957,8 +961,52 @@ export function mountArranger({ root, store, engine, library, ui }) {
     if (!lane) return;
     // Maus auf freier Fläche: Rahmen aufziehen (ein Klick ohne Ziehen bleibt ein Klick)
     if (e.pointerType === 'mouse' && !ui.armedSampleId && !scissors) { e.preventDefault(); startMarquee(e, lane); return; }
+    // Finger: erst beim Loslassen handeln – wer wischt, scrollt nur. Lang drücken und ziehen zieht einen Rahmen auf.
+    if (e.pointerType === 'touch') {
+      pressHold(e, {
+        onTap: () => { if (!ui.selecting) laneClick(e, lane); },
+        onHold: () => {
+          if (ui.armedSampleId || scissors) return;
+          ui.setSelecting?.(true);
+          startMarquee(e, lane, { add: true, finger: true });
+        },
+      });
+      return;
+    }
     laneClick(e, lane);
   });
+  holdArea(root);
+
+  // ---------- Finger am Clip ----------
+  // Antippen wählt aus (Wischen scrollt), ein ausgewählter Clip lässt sich ziehen, an den Rändern kürzen und verlängern.
+  // Langes Drücken nimmt den Clip zur Auswahl hinzu und schaltet „Auswählen“ ein: dann wählt jedes Antippen weitere
+  // Clips aus oder ab, und die ausgewählten lassen sich gemeinsam ziehen. Gibt true zurück, wenn der Finger erledigt ist.
+  function enterSelect(ids) {
+    ui.setSelecting?.(true);
+    ui.selectMany(ids);
+    markSelection();
+  }
+  function toggleSel(cid) {
+    const ids = ui.selectedIds();
+    ui.selectMany(ids.includes(cid) ? ids.filter((x) => x !== cid) : [...ids, cid]);
+    markSelection();
+  }
+  function touchClip(e, clip, t) {
+    const cid = clip.dataset.clipId;
+    const isSel = ui.selectedIds().includes(cid);
+    if (ui.selecting) {
+      if (isSel) startMove(e, clip, { toggle: () => toggleSel(cid) });
+      else pressHold(e, { onTap: () => toggleSel(cid), onHold: () => toggleSel(cid) });
+      return true;
+    }
+    if (!isSel) {
+      pressHold(e, { onTap: () => select(cid), onHold: () => enterSelect([...ui.selectedIds(), cid]) });
+      return true;
+    }
+    // Ausgewählt: Griffe und Ränder wie mit der Maus; langes Drücken auf den Körper schaltet „Auswählen“ ein
+    if (!t.closest('.clip-grip, .clip-trim, .clip-handle')) pressHold(e, { onHold: () => enterSelect(ui.selectedIds()) });
+    return false;
+  }
 
   // ---------- Ablegen aus dem Sound-Regal ----------
 
@@ -982,7 +1030,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   function armScissors(onDone) {
     scissors = { onDone };
     grid.classList.add('scissors');
-    ui.status('Schere: Klick auf die Stelle im Clip, an der geteilt wird – Esc bricht ab');
+    ui.status(touch.matches ? 'Schere: Tippe auf die Stelle im Clip, an der geteilt wird' : 'Schere: Klick auf die Stelle im Clip, an der geteilt wird – Esc bricht ab');
   }
   function cancelScissors() {
     if (!scissors) return false;
@@ -1029,20 +1077,35 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Zwei Finger auseinander/zusammen
   let pinch = null;
   const spread = (t) => Math.abs(t[0].clientX - t[1].clientX);
+  // Beim Zoomen werden die Clips neu gezeichnet: Touch-Ereignisse eines Fingers, der auf einem (jetzt ersetzten) Clip
+  // aufgesetzt hat, erreichen den Arranger nicht mehr – darum hören auch die berührten Elemente selbst mit.
+  function pinchMove(e) {
+    if (!pinch || e.touches.length !== 2 || e.pinchSeen) return;
+    e.pinchSeen = true;
+    if (e.cancelable) e.preventDefault();
+    const [a, b] = e.touches;
+    zoomTo(pinch.ppb * Math.max(20, spread(e.touches)) / pinch.d, (a.clientX + b.clientX) / 2);
+  }
+  function pinchEnd(e) {
+    if (e.touches.length >= 2 || !pinch) return;
+    for (const n of pinch.nodes) { n.removeEventListener('touchmove', pinchMove); n.removeEventListener('touchend', pinchEnd); n.removeEventListener('touchcancel', pinchEnd); }
+    pinch = null;
+  }
   root.addEventListener('touchstart', (e) => {
     if (e.touches.length !== 2) return;
     // Zweiter Finger: Scrollen für diese Geste abbestellen, solange es noch nicht begonnen hat
     if (e.cancelable) e.preventDefault();
-    pinch = { d: Math.max(20, spread(e.touches)), ppb: ppb() };
+    const nodes = [...new Set([...e.touches].map((t) => t.target))].filter((n) => n !== root && n instanceof Element);
+    for (const n of nodes) {
+      n.addEventListener('touchmove', pinchMove, { passive: false });
+      n.addEventListener('touchend', pinchEnd);
+      n.addEventListener('touchcancel', pinchEnd);
+    }
+    pinch = { d: Math.max(20, spread(e.touches)), ppb: ppb(), nodes };
   }, { passive: false });
-  root.addEventListener('touchmove', (e) => {
-    if (!pinch || e.touches.length !== 2) return;
-    if (e.cancelable) e.preventDefault();
-    const [a, b] = e.touches;
-    zoomTo(pinch.ppb * Math.max(20, spread(e.touches)) / pinch.d, (a.clientX + b.clientX) / 2);
-  }, { passive: false });
-  root.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
-  root.addEventListener('touchcancel', () => { pinch = null; });
+  root.addEventListener('touchmove', pinchMove, { passive: false });
+  root.addEventListener('touchend', pinchEnd);
+  root.addEventListener('touchcancel', pinchEnd);
 
   // Ausgewählten Clip mit Alt + Pfeil um einen Rasterschritt schieben (mit Umschalt: 1/64 Schlag)
   function nudge(dir, ev) {
@@ -1063,6 +1126,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   store.on(() => render());
   narrow.addEventListener('change', () => render(true));
+  touch.addEventListener('change', () => render(true));
   render(true);
   ui.on(() => {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);

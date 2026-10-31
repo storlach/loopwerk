@@ -6,7 +6,7 @@ import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
 import { stepRun } from './inspector.js';
 
-import { narrow } from './place.js';
+import { narrow, touch } from './place.js';
 
 export { narrow };
 // Diese Fächer gibt es nur am Handy; Mixer, Editoren und Export sind die gewöhnlichen Docks.
@@ -70,7 +70,7 @@ export function mountMobile({ store, ui, tools }) {
     if (c) store.setClip(c.id, { fadeOutBeats: clamp(Number(fadeOut.value), 0, c.lengthBeats - (c.fadeInBeats || 0)) }, 'lvl-out-' + c.id);
   });
 
-  // Der ausgewählte Clip soll nicht hinter der Werkzeugleiste verschwinden
+  // Der ausgewählte Clip soll nicht hinter der Werkzeugleiste verschwinden (Handy: darüber; Tablet: sie schwebt im Arranger)
   let shownFor = null;
   const reveal = () => requestAnimationFrame(() => {
     const node = document.querySelector('.clip.selected');
@@ -78,18 +78,27 @@ export function mountMobile({ store, ui, tools }) {
     if (!node) return;
     const r = node.getBoundingClientRect();
     const b = box.getBoundingClientRect();
-    if (r.bottom > b.bottom) box.scrollTop += r.bottom - b.bottom + 8;
-    else if (r.top < b.top + 34) box.scrollTop -= b.top + 34 - r.top;
+    const bottom = narrow.matches ? b.bottom : Math.min(b.bottom, bar.getBoundingClientRect().top);
+    const top = b.top + (narrow.matches ? 34 : 48);
+    if (r.bottom > bottom) box.scrollTop += r.bottom - bottom + 8;
+    else if (r.top < top) box.scrollTop -= top - r.top;
   });
 
   function syncBar() {
     const c = selected();
     // Beim Einsetzen eines Sounds und bei offenem Fach stören die Clip-Werkzeuge; der Arranger braucht den Platz
     bar.hidden = !c || !!ui.armedSampleId || !!ui.dock;
-    const key = bar.hidden ? null : `${c.id}|${showLevels}`;
-    if (key && key !== shownFor && narrow.matches) reveal();
+    // Sichtbar ist sie nur am Handy und am Tablet mit eingeklapptem Inspektor (CSS entscheidet)
+    const shown = !bar.hidden && getComputedStyle(bar).display !== 'none';
+    app.classList.toggle('has-clipbar', shown && !narrow.matches);
+    const key = shown ? `${c.id}|${showLevels}` : null;
+    if (key && key !== shownFor && (narrow.matches || touch.matches)) reveal();
     shownFor = key;
     if (bar.hidden) return;
+    // Mehrere Clips: Duplizieren und Löschen gelten für alle; Bearbeiten, Teilen und Pegel nur für einen
+    const many = ui.multi.length > 1;
+    for (const id of ['cb-edit', 'cb-split', 'cb-levels']) $(id).disabled = many;
+    if (many) showLevels = false;
     levels.hidden = !showLevels;
     levelsBtn.setAttribute('aria-pressed', String(showLevels));
     if (!showLevels) return;
@@ -197,6 +206,8 @@ export function mountMobile({ store, ui, tools }) {
   ui.on(sync);
   store.on(sync);
   narrow.addEventListener('change', () => { layout(); setInputMode(); });
+  touch.addEventListener('change', sync);
+  window.addEventListener('resize', syncBar);
   layout();
   setInputMode();
   sync();

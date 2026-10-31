@@ -2,6 +2,8 @@
 // sitzen am Desktop in Deck, Leisten und Menüs, am Handy im Fach „Mehr“ oder an ihrem Ursprungsort.
 
 export const narrow = window.matchMedia('(max-width: 760px)');
+// Eingabeart statt Breite: Finger ohne Maus (Tablet, Handy). Ein Tablet bekommt das Desktop-Layout, aber Fingerbedienung.
+export const touch = window.matchMedia('(hover: none) and (pointer: coarse)');
 
 const entries = [];
 

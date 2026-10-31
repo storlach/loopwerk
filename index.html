@@ -78,13 +78,14 @@
 <link rel="modulepreload" href="src/ui/library.js">
 <link rel="modulepreload" href="src/ui/arranger.js">
 <link rel="modulepreload" href="src/ui/knob.js">
+<link rel="modulepreload" href="src/ui/place.js">
+<link rel="modulepreload" href="src/ui/touch.js">
 <link rel="modulepreload" href="src/ui/transport.js">
 <link rel="modulepreload" href="src/ui/project-io.js">
 <link rel="modulepreload" href="src/ui/save-file.js">
 <link rel="modulepreload" href="src/zip.js">
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
-<link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
 <link rel="modulepreload" href="src/ui/key-select.js">
@@ -1420,7 +1421,19 @@
     .ex-go { min-width: 0; }
     .ex-go .dbtn { height: 44px; }
 
-    /* Werkzeuge für den ausgewählten Clip */
+    /* Fachleiste in Daumennähe: vier gleich breite Reiter */
+    .tabbar {
+      grid-area: tabs; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
+      padding: 4px max(6px, env(safe-area-inset-right, 0px)) max(4px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
+    }
+    .tab { display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 52px; padding: 0 4px; border-radius: 5px; font-size: 10px; }
+    .tab svg { width: 20px; height: 20px; }
+    /* Rückmeldungen über der Fachleiste */
+    .hint { margin-bottom: 10px; font-size: 14px; }
+  }
+  /* Werkzeuge für den ausgewählten Clip: am Handy über der Leiste, am Tablet (Finger, eingeklappter Inspektor) schwebend
+     unten im Arranger – dort, wo der Daumen ist */
+  @media (max-width: 760px), (min-width: 761px) and (max-width: 1365px) and (hover: none) and (pointer: coarse) {
     .clipbar {
       grid-area: clip; display: grid; gap: 4px;
       padding: 6px max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px));
@@ -1443,15 +1456,6 @@
     .lvl-run-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .lvl-run-btns .key { width: 100%; height: 44px; }
 
-    /* Fachleiste in Daumennähe: vier gleich breite Reiter */
-    .tabbar {
-      grid-area: tabs; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px;
-      padding: 4px max(6px, env(safe-area-inset-right, 0px)) max(4px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
-    }
-    .tab { display: grid; justify-items: center; align-content: center; gap: 4px; min-height: 52px; padding: 0 4px; border-radius: 5px; font-size: 10px; }
-    .tab svg { width: 20px; height: 20px; }
-    /* Rückmeldungen über der Fachleiste */
-    .hint { margin-bottom: 10px; font-size: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .shelf-chevron { transition: none; }
@@ -2059,6 +2063,154 @@
     .key.play, .key.play[aria-pressed="true"] { width: 46px; min-width: 46px; height: 46px; }
   }
   @media (prefers-reduced-motion: reduce) { .wish.busy { animation: none; } }
+
+  /* ================= Finger statt Maus (Tablet): Desktop-Layout, fingergroß ================= */
+  /* Grundlage ist die Eingabeart, nicht die Breite. Handy (≤ 760 px) hat eigene Regeln oben. */
+  .arr-bar-select, .for-touch { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    span.for-touch { display: inline; }
+    .keys-list.for-touch { display: grid; }
+    .for-mouse { display: none; }
+    /* Kein Hover: was sonst erst beim Überfahren erscheint, ist gedämpft sichtbar */
+    .loop-fav { color: color-mix(in srgb, var(--muted) 55%, transparent); }
+  }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    :root { --track-h: 76px; }
+    button, .lane, .clip, .ruler, .track-head, .ccard, .loop-item { -webkit-tap-highlight-color: transparent; }
+    .arranger, .shelf, .dock, .insp { -webkit-touch-callout: none; }
+    .arr-scroll, #pat-roll, .track-head { -webkit-user-select: none; user-select: none; }
+
+    /* Deck: Tasten 44 px; Tempo- und Tonart-Feld mit ihrer Beschriftung zusammen 44 px hoch */
+    .deck .key { min-width: 44px; height: 44px; }
+    #loop-btn, #metro-btn { width: 44px; }
+    .lcd { padding-top: 0; padding-bottom: 0; }
+    .lcd-input, .lcd .key-sel { height: 31px; }
+
+    /* Arranger-Leiste: Zoom, Raster, Auswählen */
+    .arr-bar { height: 56px; }
+    .arr-bar .key, .arr-bar .snap { height: 44px; min-width: 44px; }
+    .arr-bar-select { display: flex; align-items: center; gap: 4px; padding-left: 10px; box-shadow: inset 1px 0 0 var(--line); }
+    .arr-bar-select .key { padding: 0 14px; }
+    /* Auswählen aktiv: nicht gewählte Clips treten zurück */
+    .app.selecting .clip:not(.selected) { opacity: 0.6; }
+
+    /* Lineal fingerhoch; Ziehen markiert den Loop, statt zu scrollen */
+    .ruler-row { height: 44px; }
+    .ruler { touch-action: none; }
+    .loop-shade { top: 44px; }
+    .bar-mark { top: 8px; }
+    .ph-grip { width: 18px; left: -9px; height: 26px; }
+    .ph-grip::after { inset: -10px -13px -8px; }
+
+    /* Spurkopf: Name oben, darunter vier Knöpfe in Fingergröße – Stumm, Solo, Lautstärke, Menü */
+    .track-head {
+      grid-template-columns: repeat(4, 44px); grid-template-rows: 26px 44px; justify-content: space-between;
+      align-content: center; gap: 2px 0; padding: 0 8px 0 10px;
+    }
+    .track-row .track-top, .track-row .track-btns { display: contents; }
+    .track-row .track-dot { grid-area: 1 / 1; align-self: center; z-index: 1; margin: 0 0 0 3px; }
+    .track-row .track-name { grid-area: 1 / 1 / 2 / -1; align-self: stretch; padding-left: 16px; line-height: 26px; }
+    .track-row .track-name-input { grid-area: 1 / 1 / 2 / -1; height: 26px; margin-left: 14px; font-size: 16px; }
+    .track-row .tbtn-mute { grid-area: 2 / 1; }
+    .track-row .tbtn-solo { grid-area: 2 / 2; }
+    .track-row .track-vol-wrap { grid-area: 2 / 3; }
+    .track-row .tbtn-menu { grid-area: 2 / 4; }
+    .tbtn { position: relative; width: 40px; height: 32px; font-size: 11px; }
+    .tbtn::after { content: ""; position: absolute; inset: -6px -2px; }
+    .track-head .tbtn { justify-self: center; align-self: center; }
+    .tbtn.tbtn-menu { width: 40px; font-size: 18px; opacity: 1; }
+    .track-vol-wrap { width: 44px; height: 44px; margin: 0; padding: 0; justify-content: center; align-items: center; }
+    .track-vol-wrap .knob { width: 34px; height: 34px; }
+    .track-vol-wrap .knob-ind { top: 4px; height: 11px; transform-origin: 50% 13px; }
+    .knob::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
+    .add-row { height: 52px; }
+    /* Gruppenkopf: Auf/Zu, Name, Menü in einer Zeile; eingeklappt darunter Stumm/Solo */
+    .group-head { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 0; padding: 0 8px 0 4px; }
+    .group-head .track-top { height: 44px; }
+    .group-head .track-btns { height: 44px; gap: 4px; }
+    .group-head .group-toggle { width: 44px; height: 44px; }
+    .group-row { height: 48px; }
+    .group-row.collapsed { height: calc(var(--track-h) + 16px); }
+
+    /* Clip: größere Griffe; Ränder (Kürzen, Länge) in der unteren Hälfte, damit sie sich nicht mit den Griffen streiten */
+    .clip-grip { width: 14px; height: 14px; }
+    /* Trefferfläche vor allem nach oben (dort ist nur das Etikett): die Mitte des Clips bleibt zum Verschieben frei */
+    .clip-grip::before { inset: -14px -13px -4px; }
+    .clip-trim, .clip-handle { top: 45%; width: clamp(14px, 22%, 26px); }
+
+    /* Regal und Erstellen */
+    .ltab { height: 44px; }
+    .shelf-search { height: 44px; font-size: 16px; }
+    .seg { min-height: 44px; padding: 0 14px; }
+    .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .chip { flex: none; min-width: 44px; min-height: 44px; padding: 0 12px; justify-content: center; }
+    .shelf-cat, .loop-item { min-height: 44px; }
+    .loop-row { grid-template-columns: minmax(0, 1fr) 44px; }
+    .loop-row.own { grid-template-columns: minmax(0, 1fr) 44px 44px; }
+    .loop-fav, .loop-del { width: 44px; height: 44px; }
+    /* Karten lassen sich seitwärts auf eine Spur ziehen; senkrechtes Wischen scrollt die Liste */
+    .ccard { touch-action: pan-y; }
+    .wish-input { font-size: 16px; }
+    .wish-toggle, .wish-go { height: 44px; }
+    .wish-toggle { width: 44px; }
+
+    /* Inspektor */
+    .insp .key, .insp-btns .key, .insp-run-btns .key { min-width: 44px; height: 44px; }
+    .insp-row input[type="range"], .fx-param input[type="range"] { height: 44px; }
+    .insp select, .fx-param select, .fxl-params .fx-param select { min-height: 44px; }
+    .insp-link { min-height: 44px; }
+    .fxl-head { min-height: 44px; padding-top: 0; padding-bottom: 0; }
+    .fxl-switch::before { content: ""; position: absolute; inset: -13px -6px; }
+
+    /* Mixer */
+    .strip { flex-basis: 100px; }
+    .strip-name, .strip-sum { min-height: 44px; }
+    .knob { width: 40px; height: 40px; }
+    .knob-ind { top: 5px; height: 13px; transform-origin: 50% 15px; }
+    .track-vol-wrap .knob { width: 34px; height: 34px; }
+    .track-vol-wrap .knob-ind { top: 4px; height: 11px; transform-origin: 50% 13px; }
+    .strip-ms { gap: 4px; }
+
+    /* Menüs, Einblender, Tipps */
+    .track-menu-item { min-height: 44px; padding: 0 14px; font-size: 15px; }
+    .project-menu .pop-body .key, .pop-item { height: 44px; }
+    .project-menu .project-name { height: 44px; font-size: 16px; }
+    .hint-done { height: 44px; padding: 0 18px; }
+    .tip-btns button { height: 44px; padding: 0 16px; }
+    .tabbar { min-height: 48px; }
+
+    /* Fächer: Editoren und Export */
+    .dbtn { min-height: 44px; padding: 0 14px; }
+    .ed-tab { height: 44px; }
+    .pat-field select, .ed-sel-small, .ed-name, #pat-name, .ed-beats { min-height: 44px; font-size: 16px; }
+    .ed-check, .ed-inline { min-height: 44px; }
+    .ed-check input, .ed-inline input[type="checkbox"], .ex-set input { width: 20px; height: 20px; }
+    .ed-inline input[type="range"] { height: 44px; }
+    .pat-cell, .pat-row-label { height: 44px; }
+    .pat-cell.bar::before { content: ""; position: absolute; inset: 0 0 0 -3px; }
+    /* Schritte mindestens fingerbreit; reicht der Platz nicht, scrollt das Raster seitwärts */
+    .pat-drums { grid-template-columns: 76px repeat(var(--steps, 16), minmax(44px, 1fr)); gap: 3px; }
+    .pat-oct { width: 44px; }
+    .pat-keys { height: 120px; }
+    .ex-set label { min-height: 44px; }
+    .ex-go .dbtn { height: 44px; }
+  }
+  /* Tablet mit eingeklapptem Inspektor: Clip-Werkzeuge schweben unten im Arranger */
+  @media (min-width: 761px) and (max-width: 1365px) and (hover: none) and (pointer: coarse) {
+    .app { --insp-w: 48px; }
+    .app.insp-open .insp-toggle { min-height: 44px; }
+    .clipbar {
+      grid-area: arr; align-self: end; justify-self: center; z-index: 16; position: relative;
+      width: min(520px, calc(100% - 24px)); box-sizing: border-box; margin-bottom: 12px; padding: 6px; gap: 6px;
+      background: var(--deck-2); border: 0; border-radius: var(--radius-lg);
+      box-shadow: inset 0 0 0 1px var(--key-line), 0 10px 30px #000;
+    }
+    .cbtn { background: transparent; border: 0; box-shadow: var(--key-shadow); border-radius: var(--radius); }
+    .cbtn:disabled { color: var(--muted); opacity: 0.45; }
+    .clip-levels { padding: 2px 6px; }
+    .app.has-clipbar .hint { margin-bottom: 86px; }
+    .app.has-clipbar .arr-grid { padding-bottom: 84px; }
+  }
 </style>
 
 
@@ -2234,6 +2386,10 @@
   <main class="arranger" aria-label="Arranger">
     <div class="arr-bar" id="arr-bar" role="toolbar" aria-label="Ansicht">
       <div class="arr-bar-view" id="arr-bar-view"></div>
+      <div class="arr-bar-select" role="group" aria-label="Auswahl">
+        <button class="key" id="select-btn" type="button" aria-pressed="false" title="Mehrere Clips auswählen: Clips antippen">Auswählen</button>
+        <button class="key" id="select-all-btn" type="button" title="Alle Clips auswählen">Alle</button>
+      </div>
       <span class="arr-bar-status" id="arr-bar-status"></span>
     </div>
     <div class="arr-scroll" id="arr-scroll"></div>
@@ -2500,9 +2656,19 @@
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5h3v3H2zm4.5 0h3v3h-3zm4.5 0h3v3h-3z"/></svg><span class="tab-label">Mehr</span>
     </button>
     <div class="menu-wrap tabbar-end">
-      <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false">? Tastenkürzel</button>
+      <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false"><span class="for-mouse">? Tastenkürzel</span><span class="for-touch">? Gesten</span></button>
       <div class="pop keys-pop" id="keys-pop" hidden>
-        <dl class="keys-list">
+        <dl class="keys-list for-touch">
+          <dt>Antippen</dt><dd>Sound hören und auswählen, Clip auswählen</dd>
+          <dt>Ausgewählten Clip ziehen</dt><dd>Verschieben, an den Rändern kürzen oder verlängern</dd>
+          <dt>Lange drücken</dt><dd>Clip zur Auswahl hinzufügen, danach weitere antippen</dd>
+          <dt>Lange drücken, dann ziehen</dt><dd>Auf freier Fläche: Rahmen um mehrere Clips</dd>
+          <dt>Zwei Finger</dt><dd>Auseinander und zusammen: zoomen</dd>
+          <dt>Lineal</dt><dd>Antippen setzt die Marke, Ziehen markiert den Loop</dd>
+          <dt>Spurname antippen</dt><dd>Umbenennen</dd>
+          <dt>Piano-Roll</dt><dd>Antippen setzt oder löscht eine Note, lange drücken und ziehen verschiebt sie</dd>
+        </dl>
+        <dl class="keys-list for-mouse">
           <dt>Leertaste</dt><dd>Abspielen / Pause</dd>
           <dt>Pos1</dt><dd>Zum Anfang</dd>
           <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
