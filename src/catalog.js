@@ -5,6 +5,7 @@
 
 const CC0 = { license: 'CC0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/', origin: 'Sonic Pi' };
 const fs = (n) => `https://freesound.org/people/${n}`;
+const GUITAR = ['gitarre', 'guitar'];
 
 const entry = (file, name, category, extra) => ({
   id: 'sp-' + file.replace(/_/g, '-'),
@@ -44,8 +45,10 @@ const CATALOG_ENTRIES = [
   entry('bass_woodsy_c', 'Bass Woodsy (C)', 'bass', { key: 'C', source: fs('ani_music/sounds/165322/') }),
   // Akkorde und Flächen
   entry('ambi_piano', 'Klavier-Fläche', 'chords', { source: fs('RutgerMuller/sounds/51245/') }),
-  entry('guit_em9', 'Gitarre Em9', 'chords', { key: 'Em', source: fs('Sub-d/sounds/46992/') }),
-  entry('guit_e_fifths', 'Gitarre E-Quinten', 'chords', { key: 'E', source: fs('Sub-d/sounds/46990/') }),
+  entry('guit_em9', 'Gitarre Em9', 'chords', { key: 'Em', tags: GUITAR, source: fs('Sub-d/sounds/46992/') }),
+  entry('guit_e_fifths', 'Gitarre E-Quinten', 'chords', { key: 'E', tags: GUITAR, source: fs('Sub-d/sounds/46990/') }),
+  entry('guit_harmonics', 'Gitarre Flageolett', 'chords', { key: 'E', tags: GUITAR, source: fs('BStateham/sounds/141524/') }),
+  entry('guit_e_slide', 'Gitarre E-Slide', 'chords', { key: 'E', tags: GUITAR, source: fs('Suva/sounds/2410/') }),
   entry('ambi_choir', 'Chor', 'chords', { source: fs('Exsomniel/sounds/207809/') }),
   // Synth und Glocken
   entry('elec_chime', 'Glockenspiel elektrisch', 'synth', { source: fs('looppool/sounds/13138/') }),
@@ -69,6 +72,7 @@ const GENRES_OF = {
   'sp-drum-cowbell': ['house'],
   'sp-bass-hard-c': ['techno', 'house'], 'sp-bass-voxy-c': ['house', 'pop'], 'sp-bass-woodsy-c': ['hiphop', 'pop'],
   'sp-ambi-piano': ['ambient', 'pop'], 'sp-guit-em9': ['pop', 'ambient'], 'sp-guit-e-fifths': ['pop'], 'sp-ambi-choir': ['ambient'],
+  'sp-guit-harmonics': ['ambient', 'rock'], 'sp-guit-e-slide': ['rock', 'blues'],
   'sp-elec-chime': ['ambient', 'pop'], 'sp-elec-blip': ['techno', 'house'], 'sp-perc-bell': ['ambient'],
   'sp-ambi-drone': ['ambient', 'techno'], 'sp-ambi-glass-hum': ['ambient'], 'sp-misc-cineboom': ['ambient', 'hiphop'],
   'sp-ambi-swoosh': ['ambient', 'pop', 'house'],
