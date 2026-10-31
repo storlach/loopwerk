@@ -21,6 +21,11 @@ const formatPos = (b, bpb = 4) => `Takt ${Math.floor(b / bpb) + 1}, Schlag ${Str
 export const FREE_STEP = 1 / 64;
 export const MIN_PPB = 4;
 export const MAX_PPB = 192;
+// Spurhöhe stufenlos: Faktor auf die Grundhöhe (`--track-h`, je Gerät verschieden)
+export const MIN_TRACK_ZOOM = 0.4;
+export const MAX_TRACK_ZOOM = 3;
+const cssPx = (name, fallback) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || fallback;
+export const baseTrackH = () => cssPx('--track-h', 58);
 const MAX_CANVAS = 16000; // Gerätepixel; größere Canvas-Flächen verweigert der Browser
 
 export function mountArranger({ root, store, engine, library, ui }) {
@@ -57,6 +62,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
   let marksKey = '';
 
   const ppb = () => ui.pxPerBeat;
+  const trackZoom = () => clamp(ui.trackZoom ?? 1, MIN_TRACK_ZOOM, MAX_TRACK_ZOOM);
+  const rowH = () => Math.round(baseTrackH() * trackZoom());
   const step = (ev) => (ev?.shiftKey || !ui.snapBeats ? FREE_STEP : ui.snapBeats);
   const snap = (b, ev) => Math.round(b / step(ev)) * step(ev);
   const snapDown = (b, ev) => Math.floor(b / step(ev) + 1e-9) * step(ev);
@@ -544,7 +551,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Griffe sitzen auf der Hüllkurve: Fade-In-Ende, Mitte (Lautstärke), Fade-Out-Anfang.
   function placeHandles(node, clip) {
     const h = (node.querySelector('canvas')?.clientHeight || 30);
-    const y = WAVE_TOP + envY(clipGain(clip), h) - 5;
+    const y = (node.querySelector('canvas')?.offsetTop ?? WAVE_TOP) + envY(clipGain(clip), h) - 5;
     const L = clip.lengthBeats * ppb();
     const fi = (clip.fadeInBeats || 0) * ppb();
     const fo = (clip.fadeOutBeats || 0) * ppb();
@@ -587,7 +594,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Nur Spuren neu zeichnen, deren Clips sich geändert haben: schnelle Eingaben (Tasten, Pads) bleiben flüssig.
   // Während eines Ziehens verändert die Vorschau das DOM direkt – dann zeichnet der nächste Durchlauf alles neu.
   let forceAll = true;
-  const laneKey = (track) => `${ppb()}|${headW()}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
+  const laneKey = (track) => `${ppb()}|${headW()}|${rowH()}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
   function renderLane(r, track) {
     const key = laneKey(track);
     if (!forceAll && r.key === key) return;
@@ -643,6 +650,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     // Feine Rasterlinien (Sechzehntel) erst, wenn genug Platz ist; Schlaglinien bei sehr kleinem Zoom weg
     grid.classList.toggle('fine', ppb() >= 64);
     grid.classList.toggle('coarse', ppb() < 10);
+    // Spurhöhe: Zeilenhöhe setzen; bei kleiner Höhe wird der Spurkopf kompakt, Clips verlieren Beschriftung und Griffe
+    const rh = rowH();
+    grid.style.setProperty('--row-h', rh + 'px');
+    grid.classList.toggle('rh-one', rh < cssPx('--rh-two', 52));
+    grid.classList.toggle('rh-tiny', rh < cssPx('--rh-one', 30));
+    grid.classList.toggle('ch-low', rh < 44);
+    grid.classList.toggle('ch-tiny', rh < 30);
     grid.style.width = headW() + totalBeats(p) * ppb() + 'px';
     renderRuler();
     syncRows();
@@ -653,6 +667,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     markSelection();
     showLoop(p.loop.startBeat, p.loop.endBeat, p.loop.on);
     setPlayhead(engine.heardBeat());
+    root.dispatchEvent(new Event('arr-layout'));
   }
 
   let gripDrag = null; // während des Ziehens bestimmt der Griff die Position
@@ -1067,30 +1082,85 @@ export function mountArranger({ root, store, engine, library, ui }) {
 
   // ---------- Zoom ----------
 
-  // Zoomt so, dass der Schlag unter `clientX` (Standard: Mitte des sichtbaren Rasters) an seinem Platz bleibt.
-  function zoomTo(target, clientX) {
-    const next = clamp(Math.round(target * 4) / 4, MIN_PPB, MAX_PPB);
-    if (next === ppb()) return;
-    const box = root.getBoundingClientRect();
-    const x = clientX == null ? headW() + (box.width - headW()) / 2 : clamp(clientX - box.left, headW(), box.width);
-    const beat = (root.scrollLeft + x - headW()) / ppb();
-    ui.pxPerBeat = next;
-    render();
-    root.scrollLeft = Math.max(0, beat * next + headW() - x);
-    ui.emit();
+  // Zeile unter einer Höhe im Inhalt merken, damit sie nach dem Zoomen an derselben Stelle bleibt
+  function rowAnchor(cy) {
+    for (const r of rowsEl.children) {
+      if (r.hidden || !r.offsetHeight) continue;
+      if (cy >= r.offsetTop && cy < r.offsetTop + r.offsetHeight) return { row: r, frac: (cy - r.offsetTop) / r.offsetHeight };
+    }
+    return { below: cy - (rowsEl.offsetTop + rowsEl.offsetHeight) };
   }
-  const zoom = (factor, clientX) => zoomTo(ppb() * factor, clientX);
 
-  // Strg + Mausrad (und Zwei-Finger-Zoom auf dem Trackpad, das kommt als Strg + Rad)
+  // Waagrecht (Schläge je Pixel) und senkrecht (Spurhöhe) zoomen. Ohne `after` bleibt der Punkt unter dem Zeiger
+  // (Standard: Mitte des sichtbaren Rasters) stehen; mit `after` setzt der Aufrufer die Scrollposition selbst
+  // (die Zoom-Leisten halten so die Gegenkante fest).
+  function applyZoom({ ppb: wantX = ppb(), tz: wantY = trackZoom() } = {}, { clientX, clientY, after } = {}) {
+    const nx = clamp(Math.round(wantX * 4) / 4, MIN_PPB, MAX_PPB);
+    const ny = clamp(Math.round(wantY * 100) / 100, MIN_TRACK_ZOOM, MAX_TRACK_ZOOM);
+    const changedX = nx !== ppb();
+    const changedY = ny !== trackZoom();
+    if (!changedX && !changedY) return false;
+    const box = root.getBoundingClientRect();
+    const ruler = rulerRow.offsetHeight;
+    const x = clientX == null ? headW() + (box.width - headW()) / 2 : clamp(clientX - box.left, headW(), box.width);
+    const y = clientY == null ? ruler + (box.height - ruler) / 2 : clamp(clientY - box.top, ruler, box.height);
+    const beat = (root.scrollLeft + x - headW()) / ppb();
+    const anchor = rowAnchor(root.scrollTop + y);
+    ui.pxPerBeat = nx;
+    ui.trackZoom = ny;
+    render();
+    if (after) after();
+    else {
+      if (changedX) root.scrollLeft = Math.max(0, beat * nx + headW() - x);
+      if (changedY) {
+        const top = anchor.row ? anchor.row.offsetTop + anchor.frac * anchor.row.offsetHeight : rowsEl.offsetTop + rowsEl.offsetHeight + anchor.below;
+        root.scrollTop = Math.max(0, top - y);
+      }
+    }
+    ui.emit();
+    return true;
+  }
+  const zoomTo = (target, clientX) => applyZoom({ ppb: target }, { clientX });
+  const zoom = (factor, clientX) => zoomTo(ppb() * factor, clientX);
+  const zoomYTo = (target, clientY) => applyZoom({ tz: target }, { clientY });
+  const zoomY = (factor, clientY) => zoomYTo(trackZoom() * factor, clientY);
+
+  // Maße für die Zoom-Leisten: sichtbarer Ausschnitt (v…), Inhalt (c…) je Richtung, in Pixeln.
+  // Senkrecht zählen nur die Spuren und die „+ Spur“-Zeile; ein offenes Fach (Polster unten) gehört nicht zum Ausschnitt.
+  // fixed/n: wie viel der Höhe nicht mit der Spurhöhe wächst, und wie viele Zeilen mitwachsen.
+  function metrics() {
+    const ruler = rulerRow.offsetHeight;
+    const pad = parseFloat(getComputedStyle(grid).paddingBottom) || 0;
+    const h = rowH();
+    let fixed = addRow.offsetHeight;
+    let n = 0;
+    for (const r of rowsEl.children) {
+      if (r.hidden || !r.offsetHeight) continue;
+      if (r.classList.contains('track-row') || r.classList.contains('collapsed')) { n++; fixed += r.offsetHeight - h; } else fixed += r.offsetHeight;
+    }
+    return {
+      headW: headW(), ruler, pad, beats: totalBeats(store.project), base: baseTrackH(), fixed, n,
+      vx: root.clientWidth - headW(), cx: totalBeats(store.project) * ppb(),
+      vy: root.clientHeight - ruler - pad, cy: rowsEl.offsetHeight + addRow.offsetHeight,
+    };
+  }
+
+  // Strg + Mausrad (und Zwei-Finger-Zoom auf dem Trackpad, das kommt als Strg + Rad) zoomt waagrecht,
+  // Alt + Mausrad ändert die Spurhöhe
   root.addEventListener('wheel', (e) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    zoom(Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0025)), e.clientX);
+    const k = e.deltaMode === 1 ? 0.05 : 0.0025;
+    if (e.altKey) {
+      e.preventDefault();
+      zoomY(Math.exp(-(e.deltaY || e.deltaX) * k), e.clientY);
+    } else if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      zoom(Math.exp(-e.deltaY * k), e.clientX);
+    }
   }, { passive: false });
 
-  // Zwei Finger auseinander/zusammen
+  // Zwei Finger auseinander/zusammen: waagrecht gespreizt zoomt die Zeit, senkrecht die Spurhöhe, schräg beides
   let pinch = null;
-  const spread = (t) => Math.abs(t[0].clientX - t[1].clientX);
+  const spread = (t) => ({ dx: Math.max(20, Math.abs(t[0].clientX - t[1].clientX)), dy: Math.max(20, Math.abs(t[0].clientY - t[1].clientY)) });
   // Beim Zoomen werden die Clips neu gezeichnet: Touch-Ereignisse eines Fingers, der auf einem (jetzt ersetzten) Clip
   // aufgesetzt hat, erreichen den Arranger nicht mehr – darum hören auch die berührten Elemente selbst mit.
   function pinchMove(e) {
@@ -1098,7 +1168,11 @@ export function mountArranger({ root, store, engine, library, ui }) {
     e.pinchSeen = true;
     if (e.cancelable) e.preventDefault();
     const [a, b] = e.touches;
-    zoomTo(pinch.ppb * Math.max(20, spread(e.touches)) / pinch.d, (a.clientX + b.clientX) / 2);
+    const s = spread(e.touches);
+    applyZoom({
+      ppb: pinch.useX ? pinch.ppb * s.dx / pinch.dx : pinch.ppb,
+      tz: pinch.useY ? pinch.tz * s.dy / pinch.dy : pinch.tz,
+    }, { clientX: (a.clientX + b.clientX) / 2, clientY: (a.clientY + b.clientY) / 2 });
   }
   function pinchEnd(e) {
     if (e.touches.length >= 2 || !pinch) return;
@@ -1115,7 +1189,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       n.addEventListener('touchend', pinchEnd);
       n.addEventListener('touchcancel', pinchEnd);
     }
-    pinch = { d: Math.max(20, spread(e.touches)), ppb: ppb(), nodes };
+    const s = spread(e.touches);
+    // Eine Richtung zählt, wenn die Finger dort weit genug auseinander stehen und sie nicht klar überwiegt
+    const useY = s.dy >= 40 && s.dy >= s.dx * 0.5;
+    pinch = { dx: s.dx, dy: s.dy, ppb: ppb(), tz: trackZoom(), useY, useX: !useY || (s.dx >= 40 && s.dx >= s.dy * 0.5), nodes };
   }, { passive: false });
   root.addEventListener('touchmove', pinchMove, { passive: false });
   root.addEventListener('touchend', pinchEnd);
@@ -1146,5 +1223,5 @@ export function mountArranger({ root, store, engine, library, ui }) {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
     markSelection();
   });
-  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, nudge, armScissors, cancelScissors, revealClip, get scissors() { return !!scissors; } };
+  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, get scissors() { return !!scissors; } };
 }

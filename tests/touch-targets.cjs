@@ -4,7 +4,7 @@
 
 // Läuft im Browser. Gibt für jedes sichtbare Bedienelement { label, w, h } zurück.
 function measureTargets(selector) {
-  const SEL = selector || 'button, input:not([type=hidden]), select, textarea, a[href], [role=slider], [role=tab], .knob, .clip-grip, .clip-trim, .clip-handle, .ph-grip, .track-name, .pat-cell, .vkey';
+  const SEL = selector || 'button, input:not([type=hidden]), select, textarea, a[href], [role=slider], [role=tab], .knob, .clip-grip, .clip-trim, .clip-handle, .ph-grip, .zbar-grip, .zbar-thumb, .track-name, .pat-cell, .vkey';
   const out = [];
   const seen = new Set();
   for (const n of document.querySelectorAll(SEL)) {

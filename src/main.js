@@ -7,6 +7,7 @@ import { Emitter } from './util.js';
 import { encodeWav } from './wav.js';
 import { mountLibrary } from './ui/library.js';
 import { mountArranger } from './ui/arranger.js';
+import { mountZoomBars, loadZoom } from './ui/zoombars.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
 import { createSplash } from './ui/splash.js';
@@ -48,9 +49,11 @@ async function loadSaved(library, patterns) {
 
 function createUi() {
   const ui = new Emitter();
+  const zoom0 = loadZoom();
   let flashTimer = null;
   Object.assign(ui, {
-    pxPerBeat: 24,
+    pxPerBeat: zoom0.ppb ?? 24,
+    trackZoom: zoom0.trackZoom ?? 1, // Spurhöhe als Faktor auf die Grundhöhe
     snapBeats: 1,
     selectedClipId: null,
     selectedTrackId: null,
@@ -378,6 +381,7 @@ async function boot() {
   const ui = createUi();
 
   const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui });
+  mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger,
     onDeleteOwn: async (id) => {

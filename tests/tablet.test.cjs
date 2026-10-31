@@ -18,6 +18,9 @@ const EXCEPTIONS = [
   [/^div\.track-name/, 'Spurname'],
   // Klaviatur: Tasten wie am Klavier (weiße 48 px breit, schwarze schmaler und überlappend)
   [/^button\.pat-key/, 'Klaviertasten'],
+  // Zoom-Leiste unten: Greifer sind 44 px lang und 44 px hoch (zoom-bars.test.cjs misst das ohne Werkzeugleiste); bei
+  // ausgewähltem Clip schwebt die Werkzeugleiste knapp darüber und nimmt dem oberen Teil der Fläche ein Stück weg
+  [/^div\.zbar-(grip|thumb)/, 'Zoom-Leiste unter der schwebenden Werkzeugleiste'],
   // Quellenangaben im Fließtext
   [/^a\./, 'Links im Text'],
 ];
@@ -64,6 +67,8 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
   const shot = async (name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `tablet-${name}.png`) }); };
   // Tippflächen im aktuellen Zustand prüfen
   async function targets(name) {
+    // Spuren von oben: Köpfe, die am unteren Rand der Scrollfläche abgeschnitten wären, zählen nicht als zu klein
+    await page.evaluate(() => { const a = document.getElementById('arr-scroll'); if (a.scrollTop) a.scrollTop = 0; });
     const list = await page.evaluate(measureTargets);
     const bad = list.filter((x) => (x.w < 44 || x.h < 44) && !exempt(x.label));
     check(`Tippflächen ≥ 44 px: ${name}`, list.length > 5 && bad.length === 0, bad.length ? bad.map((x) => `${x.label} ${x.w}×${x.h}`).join(' | ') : `${list.length} Elemente`);

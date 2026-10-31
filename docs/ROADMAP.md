@@ -186,6 +186,14 @@
 - Regal am Handy: Knopf „Filter“ neben der Suche; Lichtleiste als LED-Band
 - Tests: `tests/tablet.test.cjs`, `tests/touch-targets.cjs`
 
+## ✅ 2.6 – Zoom-Leisten und Spurhöhe
+- Vertikaler Zoom: Spurhöhe stufenlos ×0,4 bis ×3 (`ui.trackZoom`), Clips, Wellenformen, Spurköpfe, Gruppenköpfe, Drop-Vorschau, Rahmen und Licht passen sich an; bei kleiner Höhe wird der Spurkopf einzeilig, ganz klein nur Farbpunkt und Name
+- Eigene Rollbalken (`src/ui/zoombars.js`): unten Zeit, rechts Spuren, Daumen = sichtbarer Ausschnitt; Klick in die Bahn springt; Greifer an beiden Enden zoomen (Zeit = `pxPerBeat`, senkrecht = Spurhöhe), die Gegenkante bleibt stehen; native Balken ausgeblendet
+- Bedienung: Alt+Mausrad = Spurhöhe, Strg+Mausrad = Zeit, Knöpfe „Spuren höher/niedriger“, Tastatur am Daumen (Pfeile, +/−); Zwei Finger senkrecht = Spurhöhe, waagrecht = Zeit
+- Tablet: Greifer fingergroß (44 px); Handy: nur schmaler senkrechter Streifen, Zoomen mit zwei Fingern
+- Zoom-Stufe pro Gerät im Browser gemerkt (`loopwerk.zoom`), nicht im Undo-Verlauf
+- Tests: `tests/zoom-bars.test.cjs`
+
 ## Als Nächstes
 - Mehr Quellen: freesound.org (in dieser Umgebung gesperrt)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre

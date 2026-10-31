@@ -79,6 +79,7 @@
 <link rel="modulepreload" href="src/wav.js">
 <link rel="modulepreload" href="src/ui/library.js">
 <link rel="modulepreload" href="src/ui/arranger.js">
+<link rel="modulepreload" href="src/ui/zoombars.js">
 <link rel="modulepreload" href="src/ui/knob.js">
 <link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/ui/touch.js">
@@ -196,6 +197,9 @@
     /* Klaviertasten sehen wie ein Klavier aus */
     --key-white: #fdfdfb; --key-white-ink: #5b6475; --key-black: #1d2330; --key-black-ink: #b9c2d3;
     --track-h: 58px;
+    /* Spurhöhe unter diesen Werten: Spurkopf einzeilig bzw. nur Name (siehe Zoom-Leisten unten) */
+    --rh-two: 52px; --rh-one: 30px;
+    --zbar: 12px; --zbar-b: 12px; --zbar-r: 12px; /* Dicke der Zoom-Leisten (unten, rechts) */
   }
 
   html, body { height: 100%; }
@@ -468,7 +472,9 @@
     border-radius: var(--radius);
     overflow: hidden;
   }
-  .arr-scroll { height: 100%; overflow: auto; overscroll-behavior: contain; }
+  .arr-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; box-sizing: border-box; padding: 0 var(--zbar-r) var(--zbar-b) 0; }
+  .arr-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .arr-scroll::-webkit-scrollbar { display: none; }
   .arr-grid { position: relative; min-height: 100%; }
   .ruler-row { display: flex; position: sticky; top: 0; z-index: 4; height: 30px; }
   .corner {
@@ -509,7 +515,7 @@
     pointer-events: none;
   }
   .loop-shade.off { display: none; }
-  .track-row { display: flex; height: var(--track-h); border-bottom: 1px solid var(--line); }
+  .track-row { display: flex; height: var(--row-h, var(--track-h)); border-bottom: 1px solid var(--line); }
   .track-head {
     position: sticky; left: 0; z-index: 3;
     flex: 0 0 var(--head-w);
@@ -1130,7 +1136,7 @@
     .arr-bar-view { display: flex; align-items: center; gap: 4px; }
     .arr-bar .key, .arr-bar .snap { height: 28px; min-width: 28px; background: var(--lane); color: var(--ink); border-color: var(--line); box-shadow: none; }
     .arr-bar-status { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .arr-scroll { flex: 1 1 auto; height: auto; min-height: 0; }
+    .arr-wrap { flex: 1 1 auto; height: auto; min-height: 0; }
     .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
     .tbtn.tbtn-del { display: none; }
 
@@ -1216,7 +1222,7 @@
     /* Am Handy unten im Arranger Platz lassen, damit die letzten Spuren über das offene Fach scrollen */
     .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
     /* Das Fach lässt dem Arranger immer mindestens gut 150 px */
-    :root { --track-h: 62px; --fach-max: calc(100dvh - 320px); }
+    :root { --track-h: 62px; --rh-two: 56px; --rh-one: 36px; --zbar-b: 0px; --zbar-r: 0px; --fach-max: calc(100dvh - 320px); }
     button, .lane, .clip, .ruler { -webkit-tap-highlight-color: transparent; }
 
     /* Deck: nur Transport und Anzeige, der Rest liegt unter „Mehr“ */
@@ -1565,7 +1571,7 @@
   .track-vol { accent-color: var(--amber); }
   /* Spurgruppen: Kopfzeile als Akkordeon, eingeklappt mit Übersicht der Clips */
   .group-row { display: flex; height: 34px; border-bottom: 1px solid var(--line); background: var(--deck-2); }
-  .group-row.collapsed { height: var(--track-h); }
+  .group-row.collapsed { height: var(--row-h, var(--track-h)); }
   .group-head { cursor: pointer; background: var(--deck-2); padding-left: 6px; gap: 3px; }
   .group-row:not(.collapsed) .group-head .track-btns { display: none; }
   .group-head .group-toggle {
@@ -1603,7 +1609,7 @@
   @media (max-width: 760px) { .wish-input { font-size: 16px; } .wish-go { height: 40px; } }
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
   .arranger { position: relative; isolation: isolate; }
-  .arranger > .arr-scroll { position: relative; z-index: 1; }
+  .arranger > .arr-wrap { position: relative; z-index: 1; }
   .ambient { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
   /* Master-Amplitude hinter allem: Lichtstriche, die während der Wiedergabe nach links wandern */
   .ambient-wave { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -2096,7 +2102,7 @@
     .loop-fav { color: color-mix(in srgb, var(--muted) 55%, transparent); }
   }
   @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
-    :root { --track-h: 76px; }
+    :root { --track-h: 76px; --rh-two: 72px; --rh-one: 48px; --zbar: 22px; --zbar-b: 22px; --zbar-r: 22px; }
     button, .lane, .clip, .ruler, .track-head, .ccard, .loop-item { -webkit-tap-highlight-color: transparent; }
     .arranger, .shelf, .dock, .insp { -webkit-touch-callout: none; }
     .arr-scroll, #pat-roll, .track-head { -webkit-user-select: none; user-select: none; }
@@ -2151,7 +2157,7 @@
     .group-head .track-btns { height: 44px; gap: 4px; }
     .group-head .group-toggle { width: 44px; height: 44px; }
     .group-row { height: 48px; }
-    .group-row.collapsed { height: calc(var(--track-h) + 16px); }
+    .group-row.collapsed { height: calc(var(--row-h, var(--track-h)) + 16px); }
 
     /* Clip: größere Griffe; Ränder (Kürzen, Länge) in der unteren Hälfte, damit sie sich nicht mit den Griffen streiten */
     .clip-grip { width: 14px; height: 14px; }
@@ -2233,6 +2239,107 @@
     .app.has-clipbar .hint { margin-bottom: 86px; }
     .app.has-clipbar .arr-grid { padding-bottom: 84px; }
   }
+
+  /* ---------- Spurhöhe (vertikaler Zoom) und Zoom-Leisten ---------- */
+  /* Clips: Die Wellenform beginnt unter dem Namen; bei kleiner Höhe schrumpft der Name, ganz klein liegt er über der Welle */
+  .arr-grid { --wave-top: 17px; }
+  .arr-grid.ch-low { --wave-top: 13px; }
+  .arr-grid.ch-tiny { --wave-top: 0px; }
+  .clip-wave { top: var(--wave-top); height: calc(100% - var(--wave-top) - 2px); }
+  .arr-grid.ch-low .clip-label { height: 13px; padding: 0 5px; font: 600 10px/13px var(--font-body); }
+  .arr-grid.ch-low .clip-tag, .arr-grid.ch-low .clip-grip { display: none; }
+  .arr-grid.ch-tiny .clip { top: 2px; bottom: 2px; }
+  .arr-grid.ch-tiny .clip-label { top: 0; height: 100%; padding: 0 5px; font: 600 10px/1 var(--font-body); text-shadow: 0 0 3px var(--clip-body), 0 0 6px var(--clip-body); }
+  .arr-grid.ch-tiny .clip-wave { opacity: 0.4; }
+  .arr-grid.ch-tiny .clip-handle, .arr-grid.ch-tiny .clip-trim { top: 0; }
+
+  /* Spurkopf bei geringer Höhe: erst eine Zeile (Punkt, Name, M, S, Menü), dann nur Farbpunkt und Name */
+  .arr-grid.rh-one .track-row .track-head { display: flex; align-items: center; gap: 4px; padding: 0 6px 0 10px; }
+  .arr-grid.rh-one .track-row .track-top, .arr-grid.rh-one .track-row .track-btns { display: contents; }
+  .arr-grid.rh-one .track-row .track-dot { order: 0; flex: none; margin: 0 2px 0 0; }
+  .arr-grid.rh-one .track-row .track-name, .arr-grid.rh-one .track-row .track-name-input { order: 1; flex: 1 1 0; min-width: 0; margin: 0; padding: 0; line-height: 1.2; align-self: center; }
+  .arr-grid.rh-one .track-row .tbtn-mute { order: 2; }
+  .arr-grid.rh-one .track-row .tbtn-solo { order: 3; }
+  .arr-grid.rh-one .track-row .tbtn-menu { order: 4; }
+  .arr-grid.rh-one .track-row .track-vol-wrap { display: none; }
+  .arr-grid.rh-one .track-row .tbtn { flex: none; height: 20px; }
+  .arr-grid.rh-tiny .track-row .track-head { display: flex; align-items: center; gap: 0; padding: 0 6px 0 10px; }
+  .arr-grid.rh-tiny .track-row .track-top { display: flex; flex: 1 1 0; align-items: center; min-width: 0; height: auto; }
+  .arr-grid.rh-tiny .track-row .track-btns, .arr-grid.rh-tiny .track-row .tbtn-menu { display: none; }
+  .arr-grid.rh-tiny .track-row .track-dot { margin: 0 6px 0 0; flex: none; }
+  .arr-grid.rh-tiny .track-row .track-name, .arr-grid.rh-tiny .track-row .track-name-input { padding: 0; margin: 0; font-size: 12px; line-height: 1.2; height: auto; align-self: center; }
+  /* Eingeklappte Gruppen: bei geringer Höhe nur Pfeil und Name */
+  .arr-grid.rh-one .group-row.collapsed .group-head .track-btns, .arr-grid.rh-tiny .group-row.collapsed .group-head .track-btns,
+  .arr-grid.rh-tiny .group-row.collapsed .group-head .tbtn-menu { display: none; }
+  .arr-grid.rh-tiny .group-row.collapsed .group-toggle { height: 20px; }
+  @media (max-width: 760px) {
+    .arr-grid.rh-one .track-row .tbtn-menu { display: none; }
+    .arr-grid.rh-one .track-row .tbtn { width: 28px; height: 24px; }
+    .arr-grid.rh-one .track-row .track-head { padding: 0 4px 0 9px; gap: 3px; }
+    .arr-grid.rh-one .track-row .track-dot { display: none; }
+  }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    .arr-grid.rh-one .track-row .tbtn-menu { display: none; }
+    .arr-grid.rh-one .track-row .tbtn { height: 32px; margin: 0 2px; }
+    .arr-grid.rh-tiny .group-row.collapsed .group-toggle { height: 44px; }
+  }
+
+  /* Zoom-Leisten: unten Zeit, rechts Spuren. Dünne Linie; Daumen = sichtbarer Ausschnitt, Enden = Greifer zum Zoomen */
+  .zbar { position: absolute; z-index: 6; box-sizing: border-box; touch-action: none; -webkit-user-select: none; user-select: none; }
+  .zbar::before { content: ""; position: absolute; background: var(--line); }
+  .zbar-x { left: var(--zhead, 176px); right: var(--zbar-r); bottom: var(--zpad, 0px); height: var(--zbar); cursor: pointer; }
+  .zbar-x::before { left: 0; right: 0; top: 50%; height: 1px; }
+  .zbar-y { top: var(--zruler, 30px); right: 0; bottom: calc(var(--zbar-b) + var(--zpad, 0px)); width: var(--zbar); cursor: pointer; }
+  .zbar-y::before { top: 0; bottom: 0; left: 50%; width: 1px; }
+  .zbar-thumb { position: absolute; isolation: isolate; outline: none; cursor: grab; }
+  .zbar.active .zbar-thumb { cursor: grabbing; }
+  .zbar-x .zbar-thumb { top: 0; bottom: 0; }
+  .zbar-y .zbar-thumb { left: 0; right: 0; }
+  .zbar-thumb::before { content: ""; position: absolute; border-radius: 2px; background: color-mix(in srgb, var(--ink) 40%, transparent); transition: background 0.12s, box-shadow 0.12s; }
+  .zbar-x .zbar-thumb::before { left: 0; right: 0; top: 50%; height: 3px; margin-top: -1.5px; }
+  .zbar-y .zbar-thumb::before { top: 0; bottom: 0; left: 50%; width: 3px; margin-left: -1.5px; }
+  .zbar-thumb:hover::before, .zbar.active .zbar-thumb::before, .zbar-thumb:focus-visible::before { background: var(--ink); box-shadow: 0 0 8px rgb(255 255 255 / 0.5); }
+  .zbar-thumb.full::before { opacity: 0.55; }
+  /* Fläche zum Greifen reicht bei Fingerbedienung über die Leiste hinaus in den Arranger (unter den Greifern) */
+  .zbar-thumb::after { content: ""; position: absolute; z-index: -1; }
+  .zbar-grip { position: absolute; }
+  .zbar-grip::after { content: ""; position: absolute; border-radius: 1px; background: var(--ink); opacity: 0.6; transition: opacity 0.12s, box-shadow 0.12s; }
+  .zbar-grip:hover::after, .zbar.zooming .zbar-grip::after { opacity: 1; box-shadow: 0 0 6px rgb(255 255 255 / 0.6); }
+  .zbar-x .zbar-grip { top: 0; bottom: 0; width: 14px; cursor: ew-resize; }
+  .zbar-x .zbar-grip-a { left: 0; }
+  .zbar-x .zbar-grip-b { right: 0; }
+  .zbar-x .zbar-grip::after { top: 2px; bottom: 2px; width: 2px; }
+  .zbar-x .zbar-grip-a::after { left: 0; }
+  .zbar-x .zbar-grip-b::after { right: 0; }
+  .zbar-y .zbar-grip { left: 0; right: 0; height: 14px; cursor: ns-resize; }
+  .zbar-y .zbar-grip-a { top: 0; }
+  .zbar-y .zbar-grip-b { bottom: 0; }
+  .zbar-y .zbar-grip::after { left: 2px; right: 2px; height: 2px; }
+  .zbar-y .zbar-grip-a::after { top: 0; }
+  .zbar-y .zbar-grip-b::after { bottom: 0; }
+  @media (prefers-reduced-motion: reduce) { .zbar-thumb::before, .zbar-grip::after { transition: none; } }
+  /* Finger: breitere Leisten, Greifer 44 px lang und 44 px breit (die Hälfte ragt in den Arranger) */
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    .zbar-x .zbar-grip { width: 44px; }
+    .zbar-y .zbar-grip { height: 44px; }
+    .zbar-x .zbar-grip::before, .zbar-x .zbar-thumb::after { content: ""; position: absolute; left: 0; right: 0; top: -22px; bottom: 0; }
+    .zbar-y .zbar-grip::before, .zbar-y .zbar-thumb::after { content: ""; position: absolute; top: 0; bottom: 0; left: -22px; right: 0; }
+    .zbar-x .zbar-thumb::after { left: 0; right: 0; }
+    .zbar-x .zbar-thumb::before { height: 4px; margin-top: -2px; }
+    .zbar-y .zbar-thumb::before { width: 4px; margin-left: -2px; }
+    .zbar-x .zbar-grip::after { top: 5px; bottom: 5px; width: 3px; }
+    .zbar-y .zbar-grip::after { left: 5px; right: 5px; height: 3px; }
+  }
+  /* Handy: nur ein schmaler senkrechter Streifen am Rand über dem Raster (Zoomen mit zwei Fingern) */
+  @media (max-width: 760px) {
+    :root { --zbar: 14px; }
+    .zbar-x, .zbar-grip { display: none; }
+    .zbar-y { border: 0; width: 14px; }
+    .zbar-y::before { display: none; }
+    .zbar-y .zbar-thumb::before { left: auto; right: 3px; margin: 0; width: 3px; background: color-mix(in srgb, var(--ink) 30%, transparent); }
+    .zbar-y .zbar-thumb::after { content: ""; position: absolute; top: 0; bottom: 0; left: -30px; right: 0; }
+    .zbar-y .zbar-thumb.full { visibility: hidden; }
+  }
 </style>
 
 
@@ -2294,8 +2401,14 @@
       <button class="key" id="redo-btn" type="button" aria-label="Wiederholen" title="Wiederholen (Strg+Umschalt+Z)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3l5 4-5 4V8H6a3 3 0 000 6h2v2H6A5 5 0 016 6h4z"/></svg>
       </button>
-      <button class="key" id="zoom-out" type="button" aria-label="Verkleinern" title="Verkleinern">−</button>
-      <button class="key" id="zoom-in" type="button" aria-label="Vergrößern" title="Vergrößern">+</button>
+      <button class="key" id="zoom-out" type="button" aria-label="Verkleinern" title="Verkleinern (Strg+Mausrad)">−</button>
+      <button class="key" id="zoom-in" type="button" aria-label="Vergrößern" title="Vergrößern (Strg+Mausrad)">+</button>
+      <button class="key" id="zoomy-out" type="button" aria-label="Spuren niedriger" title="Spuren niedriger (Alt+Mausrad)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1l3 3.5H5v7h2L4 15 1 11.5h2v-7H1zM9 7h6v2H9z"/></svg>
+      </button>
+      <button class="key" id="zoomy-in" type="button" aria-label="Spuren höher" title="Spuren höher (Alt+Mausrad)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1l3 3.5H5v7h2L4 15 1 11.5h2v-7H1zM9 7h6v2H9zm2-2h2v6h-2z"/></svg>
+      </button>
       <label class="sr" for="snap-sel" hidden>Raster</label>
       <select class="snap" id="snap-sel" title="Raster (beim Ziehen Umschalt halten: frei)">
         <option value="4">Raster: Takt</option>
@@ -2414,7 +2527,9 @@
       </div>
       <span class="arr-bar-status" id="arr-bar-status"></span>
     </div>
-    <div class="arr-scroll" id="arr-scroll"></div>
+    <div class="arr-wrap" id="arr-wrap">
+      <div class="arr-scroll" id="arr-scroll"></div>
+    </div>
   </main>
 
   <aside class="insp" id="insp" aria-label="Eigenschaften"></aside>
@@ -2685,7 +2800,8 @@
           <dt>Ausgewählten Clip ziehen</dt><dd>Verschieben, an den Rändern kürzen oder verlängern</dd>
           <dt>Lange drücken</dt><dd>Clip zur Auswahl hinzufügen, danach weitere antippen</dd>
           <dt>Lange drücken, dann ziehen</dt><dd>Auf freier Fläche: Rahmen um mehrere Clips</dd>
-          <dt>Zwei Finger</dt><dd>Auseinander und zusammen: zoomen</dd>
+          <dt>Zwei Finger</dt><dd>Auseinander und zusammen: zoomen – nebeneinander die Zeit, übereinander die Spurhöhe</dd>
+          <dt>Rollbalken</dt><dd>Daumen ziehen scrollt, die Enden ziehen zoomt (Zeit unten, Spurhöhe rechts)</dd>
           <dt>Lineal</dt><dd>Antippen setzt die Marke, Ziehen markiert den Loop</dd>
           <dt>Spurname antippen</dt><dd>Umbenennen</dd>
           <dt>Piano-Roll</dt><dd>Antippen setzt oder löscht eine Note, lange drücken und ziehen verschiebt sie</dd>
@@ -2704,7 +2820,9 @@
           <dt>Alt+Ziehen</dt><dd>Clip oder Spur kopieren</dd>
           <dt>Umschalt+Ziehen</dt><dd>Ohne Raster ziehen</dd>
           <dt>Alt+← / →</dt><dd>Clip um einen Rasterschritt schieben</dd>
-          <dt>Strg+Mausrad</dt><dd>Zoomen</dd>
+          <dt>Strg+Mausrad</dt><dd>Zeit zoomen</dd>
+          <dt>Alt+Mausrad</dt><dd>Spurhöhe ändern</dd>
+          <dt>Rollbalken-Enden</dt><dd>Ziehen zoomt (unten Zeit, rechts Spurhöhe), der Daumen scrollt</dd>
           <dt>A S D F G H J K</dt><dd>Pads spielen (halten = Wirbel)</dd>
           <dt>A W S E D … K</dt><dd>Klaviatur (halten = langer Ton), Pfeil ↑↓ Oktave</dd>
         </dl>

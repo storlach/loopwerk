@@ -15,7 +15,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Rückgängig ist eine Funktion: am Handy als Taste im Deck, Wiederholen unter „Mehr“
   place($('undo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
   place($('redo-btn'), { wide: $('deck-edit'), narrow: slot('edit') });
-  for (const id of ['zoom-out', 'zoom-in', 'snap-sel']) place($(id), { wide: $('arr-bar-view'), narrow: slot('edit') });
+  for (const id of ['zoom-out', 'zoom-in', 'zoomy-out', 'zoomy-in', 'snap-sel']) place($(id), { wide: $('arr-bar-view'), narrow: slot('edit') });
   for (const id of ['project-name', 'open-btn', 'save-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
   place($('export-btn'), { wide: $('deck-export'), narrow: slot('project') });
   // Neu anfangen (Beispiel, Leeren) im Menü abgesetzt von Datei-Befehlen
