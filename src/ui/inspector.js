@@ -6,7 +6,7 @@ import { EFFECTS, withFx } from '../effects.js';
 import { clipGain, MIN_BPM, MAX_BPM } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
-import { formatDb } from './arranger.js';
+import { formatCurve, formatDb } from './arranger.js';
 import { formatParam } from './mixer.js';
 import { narrow } from './place.js';
 import { place } from './place.js';
@@ -61,6 +61,10 @@ export function mountInspector({ root, store, ui, library, tools }) {
   const gain = slider('Lautstärke', 'insp-gain', 0, 1, 0.01);
   const fin = slider('Einblenden', 'insp-fadein', 0, 4, 0.25);
   const fout = slider('Ausblenden', 'insp-fadeout', 0, 4, 0.25);
+  // Krümmung der Fades (wie der Bézier-Griff am Clip); nur sichtbar, wenn es den Fade gibt
+  const cin = slider('Kurve', 'insp-curvein', -1, 1, 0.05);
+  const cout = slider('Kurve', 'insp-curveout', -1, 1, 0.05);
+  for (const c of [cin, cout]) c.row.classList.add('insp-sub-row');
   // Laufzeit: der Clip spielt länger oder kürzer, ohne dass sich die Tonhöhe ändert (×2 = halbes Tempo)
   const run = el('div', 'insp-row insp-run');
   const runOut = el('output');
@@ -105,12 +109,16 @@ export function mountInspector({ root, store, ui, library, tools }) {
   stempo.append(el('span', null, 'Sound-Tempo'), stOut, stIn, stBtns);
   const btns = el('div', 'insp-btns');
   btns.id = 'insp-clip-btns';
-  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, fout.row, run, stempo, btns);
+  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, cin.row, fout.row, cout.row, run, stempo, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: Number(gain.input.value) }, 'insp-gain-' + c.id); });
   fin.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { fadeInBeats: clamp(Number(fin.input.value), 0, c.lengthBeats - (c.fadeOutBeats || 0)) }, 'insp-in-' + c.id); });
   fout.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { fadeOutBeats: clamp(Number(fout.input.value), 0, c.lengthBeats - (c.fadeInBeats || 0)) }, 'insp-out-' + c.id); });
+  for (const [r, key] of [[cin, 'fadeInCurve'], [cout, 'fadeOutCurve']]) {
+    r.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { [key]: Number(r.input.value) }, `insp-${key}-${c.id}`); });
+    r.input.addEventListener('dblclick', () => { const c = selClip(); if (c) store.setClip(c.id, { [key]: 0 }); });
+  }
 
   // Die Clip-Knöpfe (Bearbeiten, Teilen, Duplizieren, Löschen) ziehen vom Deck hierher
   const clipGroup = document.querySelector('.deck .group[aria-label="Clip"]');
@@ -257,6 +265,10 @@ export function mountInspector({ root, store, ui, library, tools }) {
       setR(gain, clipGain(clip), 1, formatDb(clipGain(clip)));
       setR(fin, clip.fadeInBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeInBeats || 0));
       setR(fout, clip.fadeOutBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeOutBeats || 0));
+      setR(cin, clip.fadeInCurve || 0, 1, formatCurve(clip.fadeInCurve || 0));
+      setR(cout, clip.fadeOutCurve || 0, 1, formatCurve(clip.fadeOutCurve || 0));
+      cin.row.hidden = !clip.fadeInBeats;
+      cout.row.hidden = !clip.fadeOutBeats;
       const f = clip.stretch || 1;
       runOut.textContent = `×${String(f).replace('.', ',')}${f === 1 ? '' : f > 1 ? ' · langsamer' : ' · schneller'}`;
       for (const b of runBtns.querySelectorAll('[data-run]')) b.setAttribute('aria-pressed', String(Number(b.dataset.run) === f));

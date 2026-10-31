@@ -66,7 +66,7 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}`;
 }
 
 // Stapel: Liegen Clips einer Spur übereinander, klingt der obere. Der untere bleibt unverändert erhalten
@@ -156,8 +156,27 @@ export function normalizeClip(clip) {
   }
   clip.fadeInBeats = fi;
   clip.fadeOutBeats = fo;
+  for (const k of ['fadeInCurve', 'fadeOutCurve']) if (clip[k] != null) clip[k] = fadeCurveOf(clip[k]);
   return clip;
 }
+
+// Krümmung eines Fades: −1 (langsam, exponentiell) … 0 (linear) … 1 (schnell, logarithmisch). Fehlt sie, ist er linear.
+export const fadeCurveOf = (c) => {
+  const v = Math.min(1, Math.max(-1, Number(c) || 0));
+  return Math.abs(v) < 1e-3 ? 0 : Math.round(v * 1000) / 1000;
+};
+
+// Form eines Fades als quadratische Bézierkurve von (0,0) nach (1,1) mit dem Kontrollpunkt ((1−c)/2, (1+c)/2):
+// t = Anteil der Fade-Länge, Ergebnis = Pegelanteil 0…1. Der Griff im Arranger sitzt auf dem Kurvenpunkt bei s = ½.
+export function fadeShape(t, c = 0) {
+  t = Math.min(1, Math.max(0, t));
+  if (!c) return t;
+  const s = (Math.sqrt((1 - c) ** 2 + 4 * c * t) - (1 - c)) / (2 * c);
+  return Math.min(1, Math.max(0, (1 + c) * s - c * s * s));
+}
+
+// Kurvenpunkt in der Mitte des Fades (Bézier-Parameter ½) als [Zeitanteil, Pegelanteil]
+export const fadeHandlePoint = (c = 0) => [0.5 - c / 4, 0.5 + c / 4];
 
 // Lautstärke-Hüllkurve an Position x (Schläge ab Clip-Start).
 export function clipEnvelope(clip, x) {
@@ -165,8 +184,8 @@ export function clipEnvelope(clip, x) {
   const fi = clip.fadeInBeats || 0;
   const fo = clip.fadeOutBeats || 0;
   let v = 1;
-  if (fi > 0) v = Math.min(v, x / fi);
-  if (fo > 0) v = Math.min(v, (L - x) / fo);
+  if (fi > 0) v = Math.min(v, fadeShape(x / fi, clip.fadeInCurve || 0));
+  if (fo > 0) v = Math.min(v, fadeShape((L - x) / fo, clip.fadeOutCurve || 0));
   return clipGain(clip) * Math.max(0, Math.min(1, v));
 }
 
@@ -521,9 +540,11 @@ export class Store extends Emitter {
           lengthBeats: end - beat,
           offsetBeats: ((clip.offsetBeats || 0) + (beat - clip.startBeat)) % sb,
           fadeInBeats: 0,
+          fadeInCurve: undefined,
         });
         clip.lengthBeats = beat - clip.startBeat;
         clip.fadeOutBeats = 0;
+        delete clip.fadeOutCurve;
         normalizeClip(clip);
         track.clips.splice(track.clips.indexOf(clip) + 1, 0, right);
       });

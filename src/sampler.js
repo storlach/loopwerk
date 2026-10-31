@@ -135,6 +135,7 @@ export function playSampled(ctx, dest, loaded, pitch, when, dur = null, vel = 1)
   const rel = Math.max(0.01, inst.release ?? 0.3);
   let released = false;
   const voice = {
+    src, // Tonhöhe von außen formbar (Gleiten über src.detune)
     release(at) {
       if (released) return;
       released = true;

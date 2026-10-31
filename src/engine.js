@@ -123,19 +123,51 @@ export function syncMix(ctx, project, mix, spb, live = true) {
   syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);
 }
 
-// Stützpunkte der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat],
-// als [Kontextzeit, Wert]. null, wenn der Clip unverändert laut ist.
-export function envelopePoints(clip, fromBeat, toBeat, when, spb) {
+// Automation der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat] ab Kontextzeit `when`:
+// { v0, ops } mit ['ramp', t, v] für gerade Stücke und ['curve', t, dauer, Werte] für gekrümmte Fades
+// (setValueCurveAtTime, vorab aus clipEnvelope berechnet). Realtime und Offline nutzen dieselbe Rechnung; wer mitten im
+// Fade einsteigt, beginnt genau auf der Kurve. null, wenn der Clip unverändert laut ist.
+const CURVE_RATE = 500; // Stützwerte je Sekunde (dazwischen interpoliert die Web Audio API linear)
+export function envelopeAutomation(clip, fromBeat, toBeat, when, spb) {
   const fi = clip.fadeInBeats || 0;
   const fo = clip.fadeOutBeats || 0;
   if (!fi && !fo && clipGain(clip) === 1) return null;
+  const L = clip.lengthBeats;
   const x0 = fromBeat - clip.startBeat;
   const x1 = toBeat - clip.startBeat;
   const xs = [x0];
-  for (const k of [fi, clip.lengthBeats - fo]) if (k > x0 + EPS && k < x1 - EPS) xs.push(k);
+  for (const k of [fi, L - fo]) if (k > x0 + EPS && k < x1 - EPS && !xs.includes(k)) xs.push(k);
   xs.push(x1);
   xs.sort((a, b) => a - b);
-  return xs.map((x) => [when + (x - x0) * spb, clipEnvelope(clip, x)]);
+  const at = (x) => when + (x - x0) * spb;
+  const ops = [];
+  for (let i = 1; i < xs.length; i++) {
+    const a = xs[i - 1];
+    const b = xs[i];
+    const m = (a + b) / 2;
+    const c = fi > 0 && m < fi ? clip.fadeInCurve || 0 : fo > 0 && m > L - fo ? clip.fadeOutCurve || 0 : 0;
+    const dur = (b - a) * spb;
+    if (c && dur > 1e-4) {
+      const n = Math.min(4096, Math.max(16, Math.ceil(dur * CURVE_RATE) + 1));
+      const values = new Float32Array(n);
+      for (let k = 0; k < n; k++) values[k] = clipEnvelope(clip, a + ((b - a) * k) / (n - 1));
+      ops.push(['curve', at(a), dur, values]);
+    } else {
+      ops.push(['ramp', at(b), clipEnvelope(clip, b)]);
+    }
+  }
+  return { t0: when, v0: clipEnvelope(clip, x0), ops };
+}
+
+// Hüllkurve auf einen Gain-Parameter legen. Eine Werteliste darf sich mit keinem anderen Ereignis überschneiden:
+// der Startwert wird nur gesetzt, wenn nicht sofort eine Kurve beginnt.
+function applyEnvelope(param, env) {
+  param.value = env.v0;
+  if (env.ops[0]?.[0] !== 'curve') param.setValueAtTime(env.v0, env.t0);
+  for (const op of env.ops) {
+    if (op[0] === 'curve') param.setValueCurveAtTime(op[3], op[1], op[2]);
+    else param.linearRampToValueAtTime(op[2], op[1]);
+  }
 }
 
 // Spielt ein Stück eines Samples. An Schnittkanten (Einstieg mitten im Sample, Abschneiden vor dem Ende)
@@ -150,9 +182,7 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) 
   src.connect(g);
   if (env) {
     const e = ctx.createGain();
-    e.gain.value = env[0][1];
-    e.gain.setValueAtTime(env[0][1], env[0][0]);
-    for (const [t, v] of env.slice(1)) e.gain.linearRampToValueAtTime(v, t);
+    applyEnvelope(e.gain, env);
     g.connect(e).connect(dest);
   } else {
     g.connect(dest);
@@ -203,7 +233,7 @@ export function clipPieces(project, library, clip, ranges, { stale = false } = {
 function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) {
   const offset = (fromBeat - seg.start + seg.offset) * spb;
   const stopAt = when + (toBeat - fromBeat) * spb;
-  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopePoints(clip, fromBeat, toBeat, when, spb));
+  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb));
 }
 
 // Rendert das Projekt offline (Tests, Export). Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
