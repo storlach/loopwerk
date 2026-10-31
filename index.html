@@ -157,6 +157,8 @@
     --cat-fx: #FF7F45;
     --cat-own: #FF62A5;
     --ambient-max: 0.64; --glow-blend: screen;
+    /* Weichzeichner für alle Fenster außer dem Arranger: Licht und Amplitude dahinter stören nicht */
+    --glass: blur(18px) saturate(1.15);
     /* Spuren durchsichtig, damit das Umgebungslicht dahinter wirkt */
     --lane-a: transparent;
     --lane-alt-a: rgb(255 255 255 / 0.012);
@@ -469,7 +471,8 @@
     overflow: hidden;
   }
   .arr-scroll { height: 100%; overflow: auto; overscroll-behavior: contain; }
-  .arr-grid { position: relative; min-height: 100%; }
+  .arr-grid { position: relative; min-height: 100%; display: flex; flex-direction: column; }
+  .arr-grid > * { flex: none; }
   .ruler-row { display: flex; position: sticky; top: 0; z-index: 4; height: 30px; }
   .corner {
     position: sticky; left: 0; z-index: 5;
@@ -554,7 +557,14 @@
   .track-menu-item:hover:not(:disabled), .track-menu-item:focus-visible { background: var(--lane-alt); outline: none; }
   .track-menu-item:disabled { opacity: 0.4; cursor: default; }
   .track-menu-item.confirm { background: var(--meter-hot); color: #fff; }
-  .add-row { display: flex; height: 40px; }
+  /* Die Spurkopf-Spalte reicht immer bis ganz unten, auch unter der letzten Spur */
+  .arr-grid > .add-row { display: flex; align-items: flex-start; flex: 1 0 40px; min-height: 40px; height: auto; }
+  .add-row::before {
+    content: ""; position: sticky; left: 0; z-index: 2; flex: 0 0 var(--head-w); width: var(--head-w);
+    align-self: stretch; margin-right: calc(-1 * var(--head-w)); box-sizing: border-box;
+    background: var(--panel); border-right: 1px solid var(--line);
+  }
+  .add-row .add-track { height: 40px; }
   .add-track {
     position: sticky; left: 0; z-index: 3;
     flex: 0 0 var(--head-w); width: var(--head-w);
@@ -1367,7 +1377,7 @@
     .tbtn.tbtn-menu { width: 34px; font-size: 18px; }
     .track-menu-item { padding: 12px 14px; font-size: 15px; }
     .track-vol, .track-vol-wrap { display: none; }
-    .add-row { height: 52px; }
+    .arr-grid > .add-row { min-height: 52px; } .add-row .add-track { height: 52px; }
     .app.armed-mode .lane { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 50%, transparent); }
 
     /* Mixer: Kanäle füllen die Schublade; Effekte eines Kanals als eigene Seite */
@@ -1608,6 +1618,10 @@
   /* Master-Amplitude hinter allem: Lichtstriche, die während der Wiedergabe nach links wandern */
   .ambient-wave { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
   .ambient-wave[hidden] { display: none; }
+  /* Fenster (nicht der Arranger) und Tipps: durchscheinend mit Weichzeichner */
+  aside.shelf, .insp, .dock, .more-panel, .deck, .tabbar, .tip, .pop, .hint, .track-menu, .clipbar {
+    -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+  }
   /* Lichtleiste ganz oben: dasselbe Licht wie der Hintergrund, hell und strahlend – wirkt auch am Handy */
   /* LED-Band in einer Nut: dunkler Kanal mit Kanten, darin einzelne Leuchtpunkte, knapper Schein nur nach unten */
   .lightbar-well {
@@ -2144,7 +2158,7 @@
     .track-vol-wrap .knob { width: 34px; height: 34px; }
     .track-vol-wrap .knob-ind { top: 4px; height: 11px; transform-origin: 50% 13px; }
     .knob::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
-    .add-row { height: 52px; }
+    .arr-grid > .add-row { min-height: 52px; } .add-row .add-track { height: 52px; }
     /* Gruppenkopf: Auf/Zu, Name, Menü in einer Zeile; eingeklappt darunter Stumm/Solo */
     .group-head { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 0; padding: 0 8px 0 4px; }
     .group-head .track-top { height: 44px; }

@@ -350,11 +350,17 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
   }
 
-  // ---------- Hintergrund: Master-Amplitude, steht fest und schlägt zur Ausgabe aus ----------
-  // Lichtstriche wie die Wellenform in der Timeline, quer über den Bildschirm: in der Mitte die Bässe, nach außen die Höhen.
-  // Schnell hoch, langsam zurück; laute Striche glühen.
-  const PITCH = 4;
-  let bars = new Float32Array(0);
+  // ---------- Hintergrund: Master-Amplitude als stehende Sinuskurven ----------
+  // Je Frequenzband eine Sinuskurve quer über den Bildschirm (tief = lange Welle, hoch = kurze). Die Kurven stehen fest
+  // und schlagen mit dem Pegel ihres Bandes aus: schnell hoch, langsam zurück. Zu den Rändern laufen sie flach aus.
+  const SINES = [
+    { cycles: 1.5, phase: 0.0 },
+    { cycles: 2.5, phase: 1.3 },
+    { cycles: 3.5, phase: 2.6 },
+    { cycles: 5, phase: 0.7 },
+    { cycles: 7, phase: 2.0 },
+  ];
+  let bars = new Float32Array(SINES.length);
   let waveA = 0;
   function drawMasterWave(now, live, dt) {
     // Ein- und Ausblenden: schnell da, nach dem Stopp sanft weg
@@ -369,12 +375,10 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     if (frameNo % 2) return;
     const W = window.innerWidth;
     const H = window.innerHeight;
-    const half = Math.ceil(W / 2 / PITCH);
-    if (bars.length !== half) bars = new Float32Array(half);
-    const bands = live ? engine.outputBands(half) : null;
-    for (let k = 0; k < half; k++) {
+    const bands = live ? engine.outputBands(SINES.length) : null;
+    for (let k = 0; k < SINES.length; k++) {
       const t = bands ? bands[k] : 0;
-      bars[k] += (t - bars[k]) * (t > bars[k] ? 0.6 : 0.12);
+      bars[k] += (t - bars[k]) * (t > bars[k] ? 0.5 : 0.08);
     }
     const RES = 0.5;
     if (mwave.width !== Math.round(W * RES) || mwave.height !== Math.round(H * RES)) { mwave.width = Math.round(W * RES); mwave.height = Math.round(H * RES); }
@@ -389,23 +393,28 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       col = [r | 0, g | 0, b | 0];
     }
     const mid = H * 0.5;
-    const amp = H * 0.36;
-    const cx = W / 2;
+    const amp = H * 0.32;
+    const STEP = 8;
     mc.globalCompositeOperation = 'lighter';
-    // Schein um laute Striche (ohne shadowBlur): breite, schwache Fläche darunter
-    for (let k = 0; k < half; k++) {
+    mc.lineJoin = 'round';
+    SINES.forEach((sn, k) => {
       const v = bars[k];
-      if (v < 0.45) continue;
-      const a = v * v * amp;
-      mc.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * 0.1 * (v - 0.45) * 2})`;
-      for (const x of [cx + k * PITCH, cx - (k + 1) * PITCH]) mc.fillRect(x - 5, mid - a - 6, 12, 2 * a + 12);
-    }
-    for (let k = 0; k < half; k++) {
-      const v = bars[k];
-      const a = Math.max(0.5, v * v * amp);
-      mc.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.08 + 0.42 * v)})`;
-      for (const x of [cx + k * PITCH, cx - (k + 1) * PITCH]) mc.fillRect(x, mid - a, PITCH / 2, 2 * a);
-    }
+      const a = Math.max(2, v * v * amp);
+      mc.beginPath();
+      for (let x = 0; x <= W + STEP; x += STEP) {
+        const u = x / W;
+        const env = Math.sin(Math.PI * Math.min(1, u)) ** 0.7;
+        const y = mid + a * env * Math.sin(2 * Math.PI * sn.cycles * u + sn.phase);
+        if (x === 0) mc.moveTo(x, y); else mc.lineTo(x, y);
+      }
+      // Schein (breiter, schwacher Strich) und heller Kern
+      mc.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.04 + 0.12 * v)})`;
+      mc.lineWidth = 10;
+      mc.stroke();
+      mc.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.12 + 0.5 * v)})`;
+      mc.lineWidth = 2;
+      mc.stroke();
+    });
     mc.globalCompositeOperation = 'source-over';
     mc.setTransform(1, 0, 0, 1, 0, 0);
   }

@@ -15,7 +15,7 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
   // Projektname: frei editierbar, Enter oder Verlassen übernimmt, Escape verwirft; leer = alter Name
   nameIn.placeholder = 'Projektname';
   const showName = () => {
-    const name = store.project.name || 'Neues Projekt';
+    const name = store.project.name || 'unbenannt';
     if (document.activeElement !== nameIn) nameIn.value = name;
     document.title = `${name} · Loopwerk`;
   };

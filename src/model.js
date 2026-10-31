@@ -11,7 +11,7 @@ export const PROJECT_VERSION = 1;
 export function createEmptyProject() {
   return {
     version: PROJECT_VERSION,
-    name: 'Neues Projekt',
+    name: 'unbenannt',
     bpm: 120,
     beatsPerBar: 4,
     lengthBars: 32,
