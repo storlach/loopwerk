@@ -926,7 +926,7 @@
     background: var(--key-black); color: var(--key-black-ink); border-color: var(--key-black);
   }
   .pat-key.c { border-left-color: var(--grid-bar); }
-  .pat-key.down, .pat-key:active { background: var(--cat-own); color: #fff; }
+  .pat-key.down, .pat-key:active { background: var(--cat-own); color: var(--accent-ink); }
   .pat-key-name { position: absolute; top: 4px; font-size: 9px; opacity: 0.6; }
   .pat-vkeys { display: none; }
   .pat-cell { height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: var(--lane); cursor: pointer; }
@@ -2149,7 +2149,7 @@
     .keys-list.for-touch { display: grid; }
     .for-mouse { display: none; }
     /* Kein Hover: was sonst erst beim Überfahren erscheint, ist gedämpft sichtbar */
-    .loop-fav { color: color-mix(in srgb, var(--muted) 55%, transparent); }
+    .loop-fav { color: var(--muted); }
   }
   @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
     :root { --track-h: 76px; }
@@ -2295,6 +2295,15 @@
   .pat-roll-wrap { position: relative; }
   .pat-roll-head { position: absolute; top: 0; z-index: 1; pointer-events: none; background: color-mix(in srgb, var(--ink) 10%, transparent); box-shadow: inset 1px 0 0 color-mix(in srgb, var(--ink) 55%, transparent); }
   .pat-roll-head[hidden] { display: none; }
+
+  /* Lesbarkeit: helle Knöpfe (dunkle Schrift) bleiben hell – auch bei Mauszeiger, Drücken und Fokus.
+     Sonst setzt eine allgemeine Hover-Regel dunklen Grund unter dunkle Schrift. Geprüft in tests/contrast.test.cjs. */
+  :is(.dbtn.primary, .wish-go, #export-btn, .tip-ok, .hint-done, .key.play.on, .app.playing .key.play, .tbtn-solo[aria-pressed="true"],
+    .chip[aria-pressed="true"], .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"], .dbtn[aria-pressed="true"]):is(:hover, :active, :focus-visible):not(:disabled) {
+    background: var(--ink); color: var(--accent-ink);
+  }
+  .loop-fav, .loop-fav:hover { color: var(--muted); }
+  .loop-fav.on { color: var(--ink); }
 </style>
 
 
