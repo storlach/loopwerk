@@ -225,6 +225,8 @@ function mountTempo({ store, engine, library, ui, arranger }) {
           await library.setKey(keySemis(key));
           ui.flash(`Tonart ${key}.`);
         }
+        // Tonart je Takt: umgestimmte Fassungen passend zum neuen Stand, bevor es weitergeht
+        await library.ensureKeyVariants(store.project).catch(() => {});
         arranger.render();
         if (wasPlaying) engine.play(pos);
       }

@@ -186,6 +186,12 @@
 - Regal am Handy: Knopf „Filter“ neben der Suche; Lichtleiste als LED-Band
 - Tests: `tests/tablet.test.cjs`, `tests/touch-targets.cjs`
 
+## ✅ 2.6 – Tonart pro Takt
+- Tonartwechsel ab einem Takt (`project.keyChanges`), z. B. ab Takt 5 Dm statt Am; Rückgängig, Projektdatei, alte Projekte laden weiter
+- Tonale Loops und Melodien klingen in jedem Takt in der dort gültigen Tonart, auch mitten im Sample (umgestimmte Fassung, Schnittkante überblendet); Drums und Fremd-Samples bleiben; Realtime, Live-Änderung und Export gleich
+- Tonart-Zeile unter dem Lineal: Takt antippen → Tonart oder „Wie davor“; Wunsch-Agent versteht „ab Takt 9 in D-Moll“
+- Spec: `docs/specs/v2.6-tonart-pro-takt.md`, Tests: `tests/key-bars.test.cjs`
+
 ## Als Nächstes
 - Mehr Quellen: freesound.org (in dieser Umgebung gesperrt)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre

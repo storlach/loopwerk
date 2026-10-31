@@ -2,6 +2,7 @@
 // neue Patterns registrieren, geänderte neu rendern, entfernte austragen. Die Engine plant geänderte Clips neu.
 
 import { renderPattern, presetInfo } from './instruments.js';
+import { transposePattern } from './model.js';
 
 export const patternSampleId = (id) => 'pat-' + id;
 
@@ -38,6 +39,8 @@ export class Patterns {
         instrument: p.type === 'drums' ? 'Beat' : presetInfo(p.preset)?.label,
         // Farbe im Arranger: Beats wie Drums, Melodien wie ihr Klang (Bass, Akkorde, Synth)
         colorCat: p.type === 'drums' ? 'drums' : presetInfo(p.preset)?.category ?? 'synth',
+        // Melodien folgen der Tonart je Takt: Fassung mit verschobenen Noten (Library.ensureVariant)
+        transpose: p.type === 'synth' ? (bpm, delta) => renderPattern(transposePattern(this.current(id), delta), bpm, lib) : undefined,
       };
       let s = lib.get(sid);
       if (!s) {
