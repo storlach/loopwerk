@@ -3,22 +3,25 @@
 // Im Projekt-Menü (am Handy unter „Mehr“) lassen sie sich wieder einschalten.
 
 import { el } from '../util.js';
-import { narrow } from './place.js';
+import { narrow, touch } from './place.js';
 
 const KEY = 'loopwerk.tips';
 
-// sel: Element, an dem der Tipp steht (das erste sichtbare Treffer-Element); only: 'wide' | 'narrow'
+// sel: Element, an dem der Tipp steht (das erste sichtbare Treffer-Element)
+// only: Bildschirm ('wide' | 'narrow') oder Eingabe ('mouse' | 'touch'), auch als Liste (eins davon genügt)
+// touchText: Wortlaut für Finger (Tablet und Handy)
 const TIPS = [
-  { id: 'sounds', sel: '#library .loop-item', only: 'wide', text: 'Hier sind die Sounds. Klick hört rein – auf eine Spur ziehen setzt ihn ein.' },
-  { id: 'sounds-phone', sel: '#library .loop-item', only: 'narrow', text: 'Antippen hört rein und wählt den Sound aus. Danach in eine Spur tippen setzt ihn ein.' },
+  { id: 'sounds', sel: '#library .loop-item', only: 'mouse', text: 'Hier sind die Sounds. Klick hört rein – auf eine Spur ziehen setzt ihn ein.' },
+  { id: 'sounds-phone', sel: '#library .loop-item', only: ['narrow', 'touch'], text: 'Antippen hört rein und wählt den Sound aus. Danach in eine Spur tippen setzt ihn ein.' },
   { id: 'create', sel: '#ltab-create', only: 'wide', text: 'Unter „Erstellen“ baust du Beats und Melodien, singst ein, nimmst auf oder importierst Dateien.' },
-  { id: 'ruler', sel: '.ruler', text: 'Das Lineal: Klick setzt die Abspielmarke, Ziehen markiert einen Bereich zum Wiederholen (Loop).' },
-  { id: 'clip', sel: '.clip.selected', text: 'Ziehen verschiebt den Clip, die Ränder kürzen oder verlängern ihn. Die Punkte oben regeln Lautstärke und Ein-/Ausblenden. Doppelklick öffnet den Editor.' },
+  { id: 'ruler', sel: '.ruler', text: 'Das Lineal: Klick setzt die Abspielmarke, Ziehen markiert einen Bereich zum Wiederholen (Loop).', touchText: 'Das Lineal: Antippen setzt die Abspielmarke, Ziehen markiert einen Bereich zum Wiederholen (Loop). Zwei Finger zoomen.' },
+  { id: 'clip', sel: '.clip.selected', text: 'Ziehen verschiebt den Clip, die Ränder kürzen oder verlängern ihn. Die Punkte oben regeln Lautstärke und Ein-/Ausblenden. Doppelklick öffnet den Editor.', touchText: 'Den ausgewählten Clip ziehen verschiebt ihn, unten an den Rändern kürzt oder verlängert er sich. Die Punkte oben regeln Lautstärke und Ein-/Ausblenden.' },
+  { id: 'select-touch', sel: '#select-btn', only: 'touch', text: 'Lange auf einen Clip drücken wählt mehrere aus – danach weitere antippen. Lange auf eine freie Stelle drücken und ziehen zieht einen Rahmen auf.' },
   { id: 'inspector', sel: '#insp[data-mode="clip"] .insp-sec:not([hidden])', only: 'wide', text: 'Rechts stehen immer die Einstellungen des Ausgewählten: Clip, Spur mit ihren Effekten – oder ohne Auswahl der ganze Song.' },
   { id: 'sheet', sel: '.dock:not([hidden]) > .sheet-grip, .app[data-dock="sounds"] .shelf > .sheet-grip', text: 'Am Griff ziehen macht das Fach größer oder kleiner. Nach unten wischen schließt es.' },
-  { id: 'mixer', sel: '#mixer:not([hidden]) .strip', text: 'Jede Spur hat einen Kanal: Fader für die Lautstärke, M stumm, S solo. Klick auf den Namen zeigt ihre Effekte.' },
-  { id: 'beat', sel: '#pattern:not([hidden])[data-type="drums"] #pat-view', text: 'Schritte anklicken setzt Schläge (gedrückt ziehen malt mehrere). Bei „Pads“ trommelst du mit A–K – halten gibt einen Wirbel.' },
-  { id: 'melody', sel: '#pattern:not([hidden])[data-type="synth"] .pat-roll-wrap', text: 'Klick ins Raster setzt eine Note, Ziehen macht sie länger. Tasten spielen – gehalten klingt der Ton länger.' },
+  { id: 'mixer', sel: '#mixer:not([hidden]) .strip', text: 'Jede Spur hat einen Kanal: Fader für die Lautstärke, M stumm, S solo. Klick auf den Namen zeigt ihre Effekte.', touchText: 'Jede Spur hat einen Kanal: Fader hoch und runter ziehen für die Lautstärke, M stumm, S solo. Der Name zeigt ihre Effekte.' },
+  { id: 'beat', sel: '#pattern:not([hidden])[data-type="drums"] #pat-view', text: 'Schritte anklicken setzt Schläge (gedrückt ziehen malt mehrere). Bei „Pads“ trommelst du mit A–K – halten gibt einen Wirbel.', touchText: 'Schritte antippen setzt Schläge. Bei „Pads“ trommelst du mit den Fingern – halten gibt einen Wirbel.' },
+  { id: 'melody', sel: '#pattern:not([hidden])[data-type="synth"] .pat-roll-wrap', text: 'Klick ins Raster setzt eine Note, Ziehen macht sie länger. Tasten spielen – gehalten klingt der Ton länger.', touchText: 'Antippen setzt eine Note, nochmal antippen löscht sie. Lange drücken und ziehen verschiebt sie, am rechten Ende wird sie länger.' },
   { id: 'sing', sel: '#pattern:not([hidden]) #sing-rec', text: 'Sing, summ oder pfeif eine Melodie – Loopwerk macht Noten daraus. Unter „Wie soll es klingen?“ beschreibst du den Klang.' },
   { id: 'vkeys', sel: '#pattern:not([hidden]) .pat-vkeys', only: 'narrow', text: 'Die Tasten links sind spielbar: halten = langer Ton, mit dem Finger darübergleiten spielt weiter.' },
   { id: 'editor', sel: '#editor:not([hidden]) #ed-wave', text: 'Über die Wellenform ziehen wählt einen Bereich. Darunter findest du Schneiden, Klang, Tonhöhe und Autotune und das Trennen von Stimme und Instrumenten.' },
@@ -91,14 +94,15 @@ export function mountTips({ ui, store }) {
       if (!visible(current.target) || !document.contains(current.target)) hide();
       else { position(); return; }
     }
-    const mode = narrow.matches ? 'narrow' : 'wide';
+    const modes = [narrow.matches ? 'narrow' : 'wide', touch.matches ? 'touch' : 'mouse'];
+    const fits = (t) => !t.only || [t.only].flat().some((m) => modes.includes(m));
     for (const tip of TIPS) {
-      if (state.seen.includes(tip.id) || (tip.only && tip.only !== mode)) continue;
+      if (state.seen.includes(tip.id) || !fits(tip)) continue;
       const target = [...document.querySelectorAll(tip.sel)].find(visible);
       if (!target) continue;
       current = { tip, target };
-      text.textContent = tip.text;
-      const left = TIPS.filter((t) => !state.seen.includes(t.id) && (!t.only || t.only === mode)).length;
+      text.textContent = (touch.matches && tip.touchText) || tip.text;
+      const left = TIPS.filter((t) => !state.seen.includes(t.id) && fits(t)).length;
       step.textContent = left > 1 ? `Tipp · noch ${left - 1} weitere` : 'Tipp';
       target.classList.add('tip-target');
       box.hidden = false;
@@ -111,6 +115,7 @@ export function mountTips({ ui, store }) {
   ui.on(schedule);
   store.on(schedule);
   narrow.addEventListener('change', schedule);
+  touch.addEventListener('change', schedule);
   window.addEventListener('resize', () => { if (current) position(); });
   document.addEventListener('scroll', () => { if (current) position(); }, true);
   schedule();

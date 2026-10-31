@@ -13,7 +13,8 @@ import { startMicCapture } from '../recorder.js';
 import { decodeAudio } from '../samples.js';
 import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
-import { place } from './place.js';
+import { place, touch } from './place.js';
+import { holdArea, pressHold } from './touch.js';
 
 // Linke Spalte der Piano-Roll: am Handy die (senkrechte, spielbare) Klaviatur, am Desktop nur Notennamen –
 // dort spielt man auf der waagerechten Klaviatur darunter
@@ -257,7 +258,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   // Sichtbarer Tonbereich der Piano-Roll: lo…hi, Zeilenhöhe, Abstand oben (Platz für ▲ am Handy)
   function pitchView() {
-    if (!narrow.matches) return { lo: PITCH_LOW, hi: PITCH_HIGH, row: 14, top: 0 };
+    // Am Tablet (Finger) höhere Zeilen, damit eine Note zu treffen ist
+    if (!narrow.matches) return { lo: PITCH_LOW, hi: PITCH_HIGH, row: touch.matches ? 22 : 14, top: 0 };
     const avail = Math.max(240, rollWrap.clientHeight - 2 * OCT_BTN);
     const count = clamp(Math.floor(avail / MIN_ROW), 12, 25);
     const lo = clamp(viewLo, PITCH_LOW, PITCH_HIGH - count + 1);
@@ -270,7 +272,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   function rollGeometry() {
     const n = steps();
     const v = pitchView();
-    const cellW = Math.max(narrow.matches ? 28 : 12, Math.floor((rollWrap.clientWidth - keyW() - 2) / n));
+    const cellW = Math.max(narrow.matches ? 28 : touch.matches ? 20 : 12, Math.floor((rollWrap.clientWidth - keyW() - 2) / n));
     const h = narrow.matches ? v.top * 2 + (v.hi - v.lo + 1) * v.row : (v.hi - v.lo + 1) * v.row;
     return { n, cellW, w: keyW() + n * cellW, h };
   }
@@ -329,6 +331,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
 
   const noteAt = (notes, pitch, beat) => notes.findIndex((n) => n.pitch === pitch && beat >= n.start && beat < n.start + n.len);
 
+  holdArea(canvas);
   canvas.addEventListener('pointerdown', async (e) => {
     if (e.button !== 0 || !pat()) return;
     e.preventDefault();
@@ -349,15 +352,44 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const notes = p.notes.map((n) => ({ ...n }));
     const hit = noteAt(notes, pitch, beat);
     let moved = false;
-    // Finger: Wischen scrollt die Piano-Roll, Antippen setzt eine Note (Länge aus „Notenlänge“) oder löscht sie
+    // Finger: Wischen scrollt die Piano-Roll, Antippen setzt eine Note (Länge aus „Notenlänge“) oder löscht sie.
+    // Lange drücken und ziehen: Note verschieben, am rechten Ende verlängern – auf freier Fläche eine Note aufziehen.
     if (e.pointerType === 'touch') {
-      trackPointer(e, () => {}, async () => {
-        if (hit >= 0) notes.splice(hit, 1);
-        else {
-          notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 });
-          previewNote(await audio(), engine.mix.master, p.preset, pitch);
-        }
-        update((q) => { q.notes = notes; });
+      pressHold(e, {
+        onTap: async () => {
+          if (hit >= 0) notes.splice(hit, 1);
+          else {
+            notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 });
+            previewNote(await audio(), engine.mix.master, p.preset, pitch);
+          }
+          update((q) => { q.notes = notes; });
+        },
+        onHold: () => {
+          let n = notes[hit];
+          let lengthen = hit < 0;
+          if (n) {
+            const w = n.len * STEPS_PER_BEAT * cellW;
+            lengthen = keyW() + n.start * STEPS_PER_BEAT * cellW + w - x <= Math.max(16, w * 0.3);
+          } else {
+            n = { pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 };
+            notes.push(n);
+          }
+          const start0 = n.start;
+          const pitch0 = n.pitch;
+          canvas.classList.add('holding');
+          drawRoll(p, notes);
+          audio().then((a) => previewNote(a, engine.mix.master, p.preset, n.pitch));
+          trackPointer(e, (ev) => {
+            if (lengthen) n.len = clamp((stepAt(ev.clientX) + 1) / STEPS_PER_BEAT - n.start, 0.25, total - n.start);
+            else {
+              const dx = Math.round((ev.clientX - e.clientX) / cellW) / STEPS_PER_BEAT;
+              n.start = clamp(start0 + dx, 0, total - n.len);
+              n.pitch = clamp(pitch0 - Math.round((ev.clientY - e.clientY) / rowH()), PITCH_LOW, PITCH_HIGH);
+            }
+            drawRoll(p, notes);
+          }, () => { canvas.classList.remove('holding'); update((q) => { q.notes = notes; }); },
+          () => { canvas.classList.remove('holding'); render(); });
+        },
       });
       return;
     }

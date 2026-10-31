@@ -47,7 +47,27 @@ export function makeKnob(input, { wrapClass = 'knob-wrap', center = false } = {}
   };
   input.addEventListener('input', update);
   relativeDrag(knob, input, { span: () => 140 });
-  knob.addEventListener('dblclick', () => input.dispatchEvent(new MouseEvent('dblclick')));
+  // Grundwert: Doppelklick – mit dem Finger zweimal schnell antippen (nicht jeder Browser meldet das als Doppelklick)
+  let lastTap = 0;
+  let resetAt = 0;
+  const reset = () => {
+    if (performance.now() - resetAt < 500) return;
+    resetAt = performance.now();
+    input.dispatchEvent(new MouseEvent('dblclick'));
+  };
+  knob.addEventListener('dblclick', reset);
+  knob.addEventListener('pointerdown', (down) => {
+    if (down.pointerType !== 'touch') return;
+    const v0 = input.value;
+    const up = (ev) => {
+      if (ev.pointerId !== down.pointerId) return;
+      window.removeEventListener('pointerup', up);
+      if (input.value !== v0) { lastTap = 0; return; } // gedreht, nicht getippt
+      const now = performance.now();
+      if (now - lastTap < 350) { lastTap = 0; reset(); } else lastTap = now;
+    };
+    window.addEventListener('pointerup', up);
+  });
   const wrap = el('div', wrapClass);
   wrap.prepend(input);
   wrap.append(knob);

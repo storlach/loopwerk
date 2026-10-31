@@ -29,6 +29,7 @@ import { newDrumPattern, newSynthPattern } from './instruments.js';
 import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
+import { touch } from './ui/place.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
@@ -82,7 +83,20 @@ function createUi() {
       ui.emit();
     },
     selectedIds() { return ui.multi.length ? ui.multi.slice() : ui.selectedClipId ? [ui.selectedClipId] : []; },
-    arm(id) { if (ui.armedSampleId !== id) { ui.armedSampleId = id; ui.emit(); } },
+    arm(id) {
+      if (ui.armedSampleId === id) return;
+      ui.armedSampleId = id;
+      if (id) ui.selecting = false;
+      ui.emit();
+    },
+    // Finger: „Auswählen“ – jedes Antippen nimmt einen Clip zur Auswahl hinzu oder heraus (statt Umschalt-Klick)
+    selecting: false,
+    setSelecting(on) {
+      if (ui.selecting === !!on) return;
+      ui.selecting = !!on;
+      if (on) ui.armedSampleId = null;
+      ui.emit();
+    },
     // Laufende Anzeige beim Ziehen (z. B. „Fade-In: 1,5 Schläge“)
     status(text) { if (ui.statusText !== text) { ui.statusText = text; ui.emit(); } },
     // Kurze Rückmeldung nach einer Aktion
@@ -102,19 +116,28 @@ function mountHints({ root, ui, library, store, engine }) {
   // Nur Rückmeldungen und der Einsetz-Modus erscheinen – erklärt wird über die Tipps
   const sync = () => {
     const armed = ui.armedSampleId && library.get(ui.armedSampleId);
-    const phone = narrow.matches;
-    document.getElementById('app').classList.toggle('armed-mode', !!armed);
-    done.hidden = !armed;
+    const finger = narrow.matches || touch.matches;
+    const app = document.getElementById('app');
+    app.classList.toggle('armed-mode', !!armed);
+    app.classList.toggle('selecting', ui.selecting);
+    done.hidden = !armed && !ui.selecting;
+    const n = ui.selectedIds().length;
     const msg = ui.statusText
       ?? ui.flashText
-      ?? (armed ? (phone ? `„${armed.name}“ ausgewählt. Tippe in eine Spur.` : `„${armed.name}“ ausgewählt – in eine Spur klicken setzt ihn ein, Esc beendet`) : '');
+      ?? (ui.selecting ? (n ? `${n} ${n === 1 ? 'Clip' : 'Clips'} ausgewählt` : 'Clips antippen zum Auswählen') : null)
+      ?? (armed ? (finger ? `„${armed.name}“ ausgewählt. Tippe in eine Spur.` : `„${armed.name}“ ausgewählt – in eine Spur klicken setzt ihn ein, Esc beendet`) : '');
     text.textContent = msg;
     root.classList.toggle('show', !!msg);
   };
-  done.addEventListener('click', () => { ui.arm(null); engine.stopPreview(); });
+  done.addEventListener('click', () => {
+    if (ui.selecting) { ui.setSelecting(false); return; }
+    ui.arm(null);
+    engine.stopPreview();
+  });
   ui.on(sync);
   store.on(sync);
   narrow.addEventListener('change', sync);
+  touch.addEventListener('change', sync);
   sync();
 }
 
@@ -123,6 +146,8 @@ function mountClipTools({ store, engine, ui, arranger }) {
   const dupBtn = document.getElementById('dup-btn');
   const editBtn = document.getElementById('edit-btn');
   const delBtn = document.getElementById('del-btn');
+  const selectBtn = document.getElementById('select-btn');
+  const selectAllBtn = document.getElementById('select-all-btn');
 
   const tools = {
     split() {
@@ -158,12 +183,21 @@ function mountClipTools({ store, engine, ui, arranger }) {
     edit() {
       if (ui.selectedClipId) tools.onEdit?.(ui.selectedClipId);
     },
+    selectAll() {
+      ui.selectMany(store.project.tracks.flatMap((t) => t.clips.map((c) => c.id)));
+    },
   };
   editBtn.addEventListener('click', () => tools.edit());
   splitBtn.addEventListener('click', tools.split);
   dupBtn.addEventListener('click', tools.duplicate);
   delBtn.addEventListener('click', tools.remove);
-  const sync = () => { dupBtn.disabled = delBtn.disabled = editBtn.disabled = !ui.selectedClipId; };
+  // Finger: Auswählen-Modus und „Alle“ als Knöpfe (statt Umschalt-Klick, Rahmen und Strg+A)
+  selectBtn.addEventListener('click', () => ui.setSelecting(!ui.selecting));
+  selectAllBtn.addEventListener('click', () => { ui.setSelecting(true); tools.selectAll(); });
+  const sync = () => {
+    dupBtn.disabled = delBtn.disabled = editBtn.disabled = !ui.selectedClipId;
+    selectBtn.setAttribute('aria-pressed', String(ui.selecting));
+  };
   ui.on(sync);
   sync();
   return tools;
@@ -353,7 +387,8 @@ async function boot() {
   tools.onEdit = openClip;
   document.getElementById('arr-scroll').addEventListener('dblclick', (e) => {
     const clip = e.target.closest('.clip');
-    if (clip && !e.target.closest('.clip-grip')) openClip(clip.dataset.clipId);
+    // Beim Auswählen mit dem Finger ist zweimal Antippen ab- und wieder anwählen, kein Doppelklick
+    if (clip && !e.target.closest('.clip-grip') && !ui.selecting) openClip(clip.dataset.clipId);
   });
 
   // Patterns synchron halten; geänderte Pattern-Sounds sofort hörbar und sichtbar
@@ -457,6 +492,7 @@ async function boot() {
       tools.remove();
     } else if (e.key === 'Escape') {
       if (arranger.cancelScissors()) return;
+      if (ui.selecting) { ui.setSelecting(false); return; }
       if (ui.dock) { ui.setDock(null); return; }
       ui.arm(null);
       ui.select(null);
@@ -474,7 +510,7 @@ async function boot() {
     } else if (mod && key === 'a') {
       // Alle Clips auswählen
       e.preventDefault();
-      ui.selectMany(store.project.tracks.flatMap((t) => t.clips.map((c) => c.id)));
+      tools.selectAll();
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();

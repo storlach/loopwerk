@@ -7,7 +7,7 @@
 // Der Arranger bekommt unten so viel Platz, dass die letzten Spuren über das Fach gescrollt werden können.
 
 import { clamp, el, trackPointer } from '../util.js';
-import { narrow } from './place.js';
+import { narrow, touch } from './place.js';
 
 const KEY = 'loopwerk.sheetH';
 const MID = 0.5;
@@ -64,7 +64,9 @@ export function mountSheets({ ui, arranger }) {
   const openFrac = (s) => {
     const v = s && stored()[keyOf(s)];
     if (v === TOP || v === MID) return v;
-    return narrow.matches && s && ['pattern-synth', 'editor', 'mixer'].includes(keyOf(s)) ? TOP : MID;
+    if (narrow.matches && s && ['pattern-synth', 'editor', 'mixer'].includes(keyOf(s))) return TOP;
+    // Tablet (Finger): Piano-Roll und Klaviatur brauchen fingergroße Zeilen – die Melodie öffnet ganz
+    return touch.matches && s && keyOf(s) === 'pattern-synth' ? TOP : MID;
   };
 
   const sheets = [];
