@@ -20,13 +20,6 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   amb.height = 30;
   amb.setAttribute('aria-hidden', 'true');
   document.body.prepend(amb);
-  // Große Master-Amplitude im Hintergrund: läuft während der Wiedergabe von rechts nach links
-  const mwave = document.createElement('canvas');
-  mwave.className = 'ambient-wave';
-  mwave.setAttribute('aria-hidden', 'true');
-  mwave.hidden = true;
-  amb.after(mwave);
-  const mc = mwave.getContext('2d');
   const beam = document.createElement('canvas');
   beam.className = 'beam';
   beam.setAttribute('aria-hidden', 'true');
@@ -115,7 +108,6 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     // Raumlicht (Hintergrund, Leiste oben, Regal) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde
     if (frameNo++ % 3 === 0) drawRoom(now / 1000);
     drawRow();
-    drawMasterWave(now, live, dt);
     if (!live && !shown) return;
 
     const p = store.project;
@@ -350,82 +342,6 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
   }
 
-  // ---------- Hintergrund: Master-Amplitude als stehende Sinuskurven ----------
-  // Je Frequenzband eine Sinuskurve quer über den Bildschirm (tief = lange Welle, hoch = kurze). Die Kurven stehen fest
-  // und schlagen mit dem Pegel ihres Bandes aus: schnell hoch, langsam zurück. Zu den Rändern laufen sie flach aus.
-  const SINES = [
-    { cycles: 1.5, phase: 0.0 },
-    { cycles: 2.5, phase: 1.3 },
-    { cycles: 3.5, phase: 2.6 },
-    { cycles: 5, phase: 0.7 },
-    { cycles: 7, phase: 2.0 },
-  ];
-  let bars = new Float32Array(SINES.length);
-  let waveA = 0;
-  function drawMasterWave(now, live, dt) {
-    // Ein- und Ausblenden: schnell da, nach dem Stopp sanft weg
-    waveA += ((live ? 1 : 0) - waveA) * Math.min(1, dt * (live ? 4 : 1.1));
-    if (waveA < 0.01 || reduced.matches) {
-      if (!mwave.hidden) { mwave.hidden = true; mc.clearRect(0, 0, mwave.width, mwave.height); }
-      bars.fill(0);
-      return;
-    }
-    mwave.hidden = false;
-    // Halbe Auflösung und jedes zweite Bild: als Hintergrund reicht das, die Seite bleibt leicht
-    if (frameNo % 2) return;
-    const W = window.innerWidth;
-    const H = window.innerHeight;
-    const bands = live ? engine.outputBands(SINES.length) : null;
-    for (let k = 0; k < SINES.length; k++) {
-      const t = bands ? bands[k] : 0;
-      bars[k] += (t - bars[k]) * (t > bars[k] ? 0.5 : 0.08);
-    }
-    const RES = 0.5;
-    if (mwave.width !== Math.round(W * RES) || mwave.height !== Math.round(H * RES)) { mwave.width = Math.round(W * RES); mwave.height = Math.round(H * RES); }
-    mc.setTransform(RES, 0, 0, RES, 0, 0);
-    mc.clearRect(0, 0, W, H);
-    // Farbe: Mischung der gerade klingenden Kategorien (wie der Hintergrund), sonst Weißgrau
-    const total = CATS.reduce((n, c) => n + level[c], 0);
-    let col = GREY;
-    if (total > 0.0005) {
-      let r = 0, g = 0, b = 0;
-      for (const c of CATS) { const sh = level[c] / total; r += rgb[c][0] * sh; g += rgb[c][1] * sh; b += rgb[c][2] * sh; }
-      col = [r | 0, g | 0, b | 0];
-    }
-    // Nur im Arranger (Hauptfenster): hinter Seitenleisten und Deck bleibt das Licht weich und ruhig
-    const ar = root.getBoundingClientRect();
-    mc.save();
-    mc.beginPath();
-    mc.rect(ar.left, ar.top, ar.width, ar.height);
-    mc.clip();
-    const mid = ar.top + ar.height * 0.5;
-    const amp = ar.height * 0.4;
-    const STEP = 8;
-    mc.globalCompositeOperation = 'lighter';
-    mc.lineJoin = 'round';
-    SINES.forEach((sn, k) => {
-      const v = bars[k];
-      const a = Math.max(2, v * v * amp);
-      mc.beginPath();
-      for (let x = ar.left; x <= ar.right + STEP; x += STEP) {
-        const u = (x - ar.left) / ar.width;
-        const env = Math.max(0, Math.sin(Math.PI * Math.min(1, Math.max(0, u)))) ** 0.7;
-        const y = mid + a * env * Math.sin(2 * Math.PI * sn.cycles * u + sn.phase);
-        if (x === ar.left) mc.moveTo(x, y); else mc.lineTo(x, y);
-      }
-      // Schein (breiter, schwacher Strich) und heller Kern
-      mc.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.04 + 0.12 * v)})`;
-      mc.lineWidth = 10;
-      mc.stroke();
-      mc.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${waveA * (0.12 + 0.5 * v)})`;
-      mc.lineWidth = 2;
-      mc.stroke();
-    });
-    mc.restore();
-    mc.globalCompositeOperation = 'source-over';
-    mc.setTransform(1, 0, 0, 1, 0, 0);
-  }
-
   // ---------- Regal: Wellenform in der gewählten Zeile ----------
   let rowKey = '';
   function drawRow() {
@@ -502,5 +418,5 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   readColors();
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, wave: { alpha: waveA, n: bars.length, peak: bars.reduce((m, v) => Math.max(m, v), 0), shown: !mwave.hidden } }; } };
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level } }; } };
 }

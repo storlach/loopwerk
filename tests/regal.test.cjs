@@ -77,17 +77,6 @@ const DIR = process.env.SHOT_DIR || '/tmp';
     });
     check('Regal-Töne als Instrumente: alle klingen im Klavier', Object.values(inst).every((p) => p > 0.2 && p <= 1), JSON.stringify(inst));
     check('Im Melodie-Editor wählbar', await page.evaluate(() => [...document.querySelectorAll('option')].some((o) => o.value === 'vc-marimba')));
-    // ---------- Master-Amplitude im Hintergrund ----------
-    await page.evaluate(() => window.loopwerk.engine.play(16));
-    await page.waitForTimeout(2500);
-    const mw = await page.evaluate(() => ({ ...window.loopwerk.glow.state.wave, el: !!document.querySelector('canvas.ambient-wave:not([hidden])') }));
-    check('Wiedergabe: Master-Amplitude steht im Hintergrund und schlägt zur Ausgabe aus', mw.shown && mw.el && mw.n > 0 && mw.peak > 0.1 && mw.alpha > 0.5, JSON.stringify(mw));
-    await page.evaluate(() => window.loopwerk.engine.stop());
-    await page.waitForTimeout(700);
-    const fading = await page.evaluate(() => window.loopwerk.glow.state.wave.alpha);
-    check('Nach dem Stopp blendet sie sanft aus (nicht sofort weg)', fading > 0.05 && fading < 0.9, String(fading));
-    await page.waitForFunction(() => !window.loopwerk.glow.state.wave.shown, null, { timeout: 15000 });
-    check('… und ist danach ganz weg', await page.evaluate(() => document.querySelector('canvas.ambient-wave').hidden));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 
