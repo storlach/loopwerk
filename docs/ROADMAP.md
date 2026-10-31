@@ -207,8 +207,8 @@
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
 ## Als Nächstes
-- Mehr Quellen: freesound.org (in dieser Umgebung gesperrt)
-- Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre
+- Aus dem Markt-Scout: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
+- Kleine Lücken: Clip-Leiste am Tablet verdeckt die untere Zoom-Leiste; aufgeklappte Gruppenköpfe wachsen nicht mit der Spurhöhe; Sound-Tempo am Handy; Tonartwechsel im Inspektor „Song“ auflisten
 
 ## Look
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
