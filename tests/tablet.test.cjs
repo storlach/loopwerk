@@ -388,6 +388,61 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     check('Erster Tipp spricht vom Antippen', tip.id === 'sounds-phone' && tip.text.includes('Antippen'), JSON.stringify(tip));
     await page.evaluate(() => window.loopwerk.tips.disable());
 
+    // ---------- Spur per Finger verschieben: lange drücken, ziehen ----------
+    await page.evaluate(() => { window.loopwerk.ui.setDock(null); document.getElementById('arr-scroll').scrollTop = 0; });
+    await page.waitForTimeout(300);
+    const order0 = await page.evaluate(() => window.loopwerk.store.project.tracks.map((t) => t.id));
+    // Finger auf den Spurnamen (Knöpfe im Kopf bleiben Knöpfe)
+    const headSpot = (id) => page.evaluate((tid) => {
+      const row = document.querySelector(`.lane[data-track-id="${tid}"]`).closest('.track-row');
+      const n = row.querySelector('.track-name').getBoundingClientRect();
+      const h = row.querySelector('.track-head').getBoundingClientRect();
+      return { x: n.x + Math.min(30, n.width / 2), y: n.y + n.height / 2, top: h.top, bottom: h.bottom };
+    }, id);
+    const p0 = await headSpot(order0[0]);
+    const p2 = await headSpot(order0[2]);
+    const swipeBefore = await page.evaluate(() => document.getElementById('arr-scroll').scrollTop);
+    await swipe(p0.x, p0.y, 0, p2.bottom - 4 - p0.y, { hold: 650, steps: 14 });
+    const order1 = await page.evaluate(() => window.loopwerk.store.project.tracks.map((t) => t.id));
+    check('Finger: Spur lange drücken und ziehen verschiebt sie', order1.indexOf(order0[0]) === 2 && order1.length === order0.length, JSON.stringify({ order0, order1 }));
+    check('Beim Verschieben scrollt der Arranger nicht, kein Umbenennen', await page.evaluate(() => document.getElementById('arr-scroll').scrollTop) === swipeBefore && await page.evaluate(() => !document.querySelector('.track-name-input')));
+    await page.evaluate(() => window.loopwerk.store.undo());
+
+    // ---------- Schieberegler: zweimal antippen setzt den Grundwert ----------
+    const t0 = order0[0];
+    await page.evaluate((id) => { window.loopwerk.store.setTrackFx(id, 'echo', { on: true, mix: 0.9 }); window.loopwerk.ui.selectTrack?.(id); }, t0);
+    await page.waitForTimeout(300);
+    if (!(await page.evaluate(() => document.getElementById('app').classList.contains('insp-open')))) await page.tap('.insp-toggle');
+    await page.waitForTimeout(300);
+    const pb = await page.evaluate(() => {
+      const n = [...document.querySelectorAll('#insp .fx-param input[type="range"]')].find((x) => x.offsetParent && Math.abs(Number(x.value) - 0.9) < 1e-6);
+      if (!n) return null;
+      n.dataset.dtap = '1';
+      n.scrollIntoView({ block: 'center' });
+      const r = n.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    });
+    if (pb) {
+      await page.waitForTimeout(150);
+      await tapAt(pb, 0.8);
+      await page.waitForTimeout(80);
+      await tapAt(pb, 0.8);
+      await page.waitForTimeout(250);
+      const r = await page.evaluate(() => {
+        const n = document.querySelector('[data-dtap]');
+        return { label: n.closest('label')?.textContent.trim().slice(0, 30), value: Number(n.value), undo: window.loopwerk.store.undoStack.length };
+      });
+      const def = await page.evaluate(() => {
+        const n = document.querySelector('[data-dtap]');
+        n.value = String(Number(n.max)); n.dispatchEvent(new Event('input', { bubbles: true }));
+        const before = Number(n.value);
+        n.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        return { before, after: Number(n.value) };
+      });
+      // Vergleich: was ein echter Doppelklick als Grundwert setzt, muss auch zweimal Antippen ergeben
+      check('Finger: Schieberegler zweimal antippen setzt den Grundwert', Math.abs(r.value - def.after) < 1e-6 && def.before !== def.after, JSON.stringify({ r, def }));
+    } else check('Finger: Schieberegler im Inspektor gefunden', false);
+
     const over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     check('Keine horizontale Seitenverschiebung', over <= 0, `${over}px`);
 

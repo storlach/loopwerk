@@ -30,6 +30,7 @@ import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
 import { touch } from './ui/place.js';
+import { doubleTapRanges } from './ui/touch.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
@@ -433,6 +434,7 @@ async function boot() {
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine);
   const glow = mountGlow({ engine, store, library, ui });
+  doubleTapRanges();
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });

@@ -65,3 +65,33 @@ export function holdArea(node) {
   node.addEventListener('touchmove', (e) => { if (locks && e.cancelable) e.preventDefault(); }, { passive: false });
   node.addEventListener('contextmenu', (e) => { if (e.pointerType === 'touch' || touch.matches) e.preventDefault(); });
 }
+
+// Schieberegler: zweimal schnell antippen = Doppelklick (setzt auf den Grundwert). Nicht jeder Browser meldet
+// das als dblclick; meldet er es doch, zählt es nur einmal.
+let synthAt = 0;
+let synthEl = null;
+export function doubleTapRanges(root = document) {
+  let last = { el: null, t: 0 };
+  root.addEventListener('pointerdown', (down) => {
+    const input = down.target.closest?.('input[type="range"]');
+    if (!input || down.pointerType !== 'touch') return;
+    const x0 = down.clientX;
+    const y0 = down.clientY;
+    const up = (ev) => {
+      if (ev.pointerId !== down.pointerId) return;
+      window.removeEventListener('pointerup', up, true);
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > SLOP) { last = { el: null, t: 0 }; return; }
+      const now = performance.now();
+      if (last.el === input && now - last.t < 350) {
+        last = { el: null, t: 0 };
+        synthAt = now;
+        synthEl = input;
+        input.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      } else last = { el: input, t: now };
+    };
+    window.addEventListener('pointerup', up, true);
+  }, true);
+  root.addEventListener('dblclick', (e) => {
+    if (e.isTrusted && e.target === synthEl && performance.now() - synthAt < 600) e.stopImmediatePropagation();
+  }, true);
+}

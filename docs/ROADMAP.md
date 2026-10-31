@@ -178,6 +178,14 @@
 - Handy und Touch: großer Schubladengriff
 - Tests: `tests/sampler.test.cjs`, `tests/regal.test.cjs`
 
+## ✅ 2.5 – Tablet: Desktop-Ansicht mit Fingerbedienung
+- Bedienung nach Eingabeart statt Breite (`(hover: none) and (pointer: coarse)`, `touch` in `place.js`, Gesten in `src/ui/touch.js`)
+- Lang drücken: Clips auswählen (Auswählen-Modus, „Alle“), Rahmen aufziehen, Noten verschieben/verlängern, Spuren verschieben
+- Tippflächen ab 44 px, Einsetzen erst beim Loslassen, Pinch-Zoom auch auf Clips, Lineal ohne Scrollen, schwebende Clip-Leiste
+- Zweimal antippen setzt Drehregler und Schieberegler auf den Grundwert; Tipps und „? Gesten“ in Fingersprache
+- Regal am Handy: Knopf „Filter“ neben der Suche; Lichtleiste als LED-Band
+- Tests: `tests/tablet.test.cjs`, `tests/touch-targets.cjs`
+
 ## Als Nächstes
 - Mehr Quellen: freesound.org (in dieser Umgebung gesperrt)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre

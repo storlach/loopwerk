@@ -410,11 +410,19 @@ export function mountArranger({ root, store, engine, library, ui }) {
   });
   root.addEventListener('scroll', () => closeMenu(), { passive: true });
 
-  // Spurkopf ziehen: verschiebt die Spur, mit Alt/Strg wird sie kopiert. (Finger nutzen das Menü.)
+  // Spurkopf ziehen: verschiebt die Spur, mit Alt/Strg wird sie kopiert. Finger: erst lange drücken, dann ziehen.
   const dropLine = el('div', 'track-drop-line');
   function startTrackDrag(e, trackId) {
-    if (e.button !== 0 || e.pointerType === 'touch' || e.target.closest('button, input, .knob')) return;
+    if (e.button !== 0 || e.target.closest('button, input, .knob')) return;
+    if (e.pointerType === 'touch') {
+      pressHold(e, { onHold: () => { ui.status('Spur verschieben: ziehen und loslassen'); dragTrack(e, trackId, true); } });
+      return;
+    }
+    dragTrack(e, trackId, false);
+  }
+  function dragTrack(e, trackId, held) {
     const r = rows.get(trackId);
+    if (held) r.row.classList.add('moving');
     const sy = e.clientY;
     let to = null;
     // Ziel als Index in der Spurliste; Gruppenköpfe und eingeklappte Spuren zählen nicht
@@ -424,7 +432,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
       return hit ? hit.i : store.project.tracks.length;
     };
     trackPointer(e, (ev) => {
-      if (to == null && Math.abs(ev.clientY - sy) < 6) return;
+      if (to == null && !held && Math.abs(ev.clientY - sy) < 6) return;
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
       to = indexAt(ev.clientY);
       r.row.classList.add('moving');
@@ -438,6 +446,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
       r.row.classList.remove('moving', 'copying');
       dropLine.remove();
       ui.status(null);
+      // Nach dem Halten kein Klick auf den Namen (würde das Umbenennen öffnen)
+      if (held) {
+        const stop = (c) => { c.preventDefault(); c.stopPropagation(); };
+        window.addEventListener('click', stop, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 80);
+      }
       if (to == null) return;
       const from = store.project.tracks.findIndex((t) => t.id === trackId);
       if (ev.altKey || ev.ctrlKey || ev.metaKey) store.duplicateTrack(trackId, to);
