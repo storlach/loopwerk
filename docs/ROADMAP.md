@@ -192,6 +192,20 @@
 - Tonart-Zeile unter dem Lineal: Takt antippen → Tonart oder „Wie davor“; Wunsch-Agent versteht „ab Takt 9 in D-Moll“
 - Spec: `docs/specs/v2.6-tonart-pro-takt.md`, Tests: `tests/key-bars.test.cjs`
 
+## ✅ 2.7 – Zoom-Leisten und Spurhöhe
+- Vertikaler Zoom: Spurhöhe stufenlos ×0,4 bis ×3 (`ui.trackZoom`), Clips, Wellenformen, Spurköpfe, Gruppenköpfe, Drop-Vorschau, Rahmen und Licht passen sich an; bei kleiner Höhe wird der Spurkopf einzeilig, ganz klein nur Farbpunkt und Name
+- Eigene Rollbalken (`src/ui/zoombars.js`): unten Zeit, rechts Spuren, Daumen = sichtbarer Ausschnitt; Klick in die Bahn springt; Greifer an beiden Enden zoomen (Zeit = `pxPerBeat`, senkrecht = Spurhöhe), die Gegenkante bleibt stehen; native Balken ausgeblendet
+- Bedienung: Alt+Mausrad = Spurhöhe, Strg+Mausrad = Zeit, Knöpfe „Spuren höher/niedriger“, Tastatur am Daumen (Pfeile, +/−); Zwei Finger senkrecht = Spurhöhe, waagrecht = Zeit
+- Tablet: Greifer fingergroß (44 px); Handy: nur schmaler senkrechter Streifen, Zoomen mit zwei Fingern
+- Zoom-Stufe pro Gerät im Browser gemerkt (`loopwerk.zoom`), nicht im Undo-Verlauf
+- Tests: `tests/zoom-bars.test.cjs`
+
+## ✅ 2.8 – Gitarren, Fades, Gleiten, Feinschliff
+- E-Gitarren: eigene Gitarren-Simulation (`src/dsp/guitar.js`: Saite, Amp, Box, Effekte), 26 Loops + 9 One-Shots (`src/loops-guitar.js`), Presets „E-Gitarre clean/verzerrt“, echte Gitarren von Karoryfer (CC0, `src/catalog-guitar.js`)
+- Clip-Fades mit Bézier-Kurve (`fadeInCurve`/`fadeOutCurve`, Griff mitten auf der Linie, Inspektor „Kurve“); Melodien mit Gleiten (Aus/Kurz/Lang)
+- Sound-Tempo im Inspektor; Clip-Editor und Beat-/Melodie-Editor spielen im Loop, klingender Schritt leuchtet; Tonhöhe/Autotune sofort hören
+- Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
+
 ## Als Nächstes
 - Mehr Quellen: freesound.org (in dieser Umgebung gesperrt)
 - Aus dem Markt-Scout: Song-Starter, Akkord-Streifen, Songtonart, Effekt-Pad, Ein-Klick-Mastering, Tonleiter-Sperre

@@ -32,6 +32,8 @@ export function mountTransport({ store, engine, ui, arranger }) {
 
   $('zoom-in').addEventListener('click', () => arranger.zoom(1.5));
   $('zoom-out').addEventListener('click', () => arranger.zoom(1 / 1.5));
+  $('zoomy-in').addEventListener('click', () => arranger.zoomY(1.25));
+  $('zoomy-out').addEventListener('click', () => arranger.zoomY(0.8));
   // Raster merkt sich der Browser (nur eine Bequemlichkeit, kein Projektinhalt)
   const snapSel = $('snap-sel');
   try {
