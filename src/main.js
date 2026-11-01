@@ -1,7 +1,9 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME } from './model.js';
+import { Store, createDemoProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf } from './model.js';
+import { accompanimentPlan, applyPlan } from './starter.js';
+import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
 import { Emitter } from './util.js';
 import { encodeWav } from './wav.js';
@@ -485,8 +487,17 @@ async function boot() {
       record: (t) => recording.start(t),
       import: (t) => importer.pick(t),
       link: (t) => linkImport.open(t),
+      accomp: (t) => accompany(t),
     },
   });
+  // Begleitung ab dem Takt der Ablage (Klick: ab Takt 1), folgt dem Akkord-Streifen
+  function accompany(t) {
+    const fromBar = t ? Math.floor(t.startBeat / store.project.beatsPerBar) + 1 : 1;
+    const plan = accompanimentPlan(store.project, { fromBar, chordsEmpty: !chordsOf(store.project).length });
+    const res = applyPlan(store, library, plan);
+    ui.flash(res.done.length ? 'Begleitung folgt jetzt dem Akkord-Streifen – Akkord antippen zum Ändern.' : 'Keine freie Spur für die Begleitung.');
+  }
+  const starter = mountStarter({ root: document.getElementById('create-panel'), store, library, ui, onAccomp: accompany });
   const wish = mountWish({ store, library, ui });
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
@@ -555,7 +566,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, wish, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, wish, starter, ready: true };
 }
 
 boot().catch((err) => {

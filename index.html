@@ -86,6 +86,10 @@
 <link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/ui/touch.js">
 <link rel="modulepreload" href="src/ui/key-row.js">
+<link rel="modulepreload" href="src/ui/chord-row.js">
+<link rel="modulepreload" href="src/ui/starter.js">
+<link rel="modulepreload" href="src/starter.js">
+<link rel="modulepreload" href="src/harmony.js">
 <link rel="modulepreload" href="src/ui/zoombars.js">
 <link rel="modulepreload" href="src/ui/transport.js">
 <link rel="modulepreload" href="src/ui/project-io.js">
@@ -555,9 +559,39 @@
   .key-pop-key:hover, .key-pop-same:hover { background: var(--lane-alt); }
   .key-pop-key:focus-visible, .key-pop-same:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
   .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
+  /* Akkord-Streifen unter der Tonart-Zeile: gesetzte Akkorde leuchten weiß, ungesetzte (Stufe i) bleiben Linie */
+  .arr-grid { --chord-row-h: 22px; }
+  .chord-row { display: flex; position: sticky; top: calc(var(--ruler-h) + var(--key-row-h)); z-index: 4; height: var(--chord-row-h); }
+  .chord-row .corner span, .key-row .corner span { font: 600 9px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .chord-strip {
+    position: relative; flex: 1; cursor: pointer; outline: none;
+    background: color-mix(in srgb, var(--sheet-bg) 62%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .chord-strip:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+  .chord-sec { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; box-sizing: border-box; overflow: hidden; pointer-events: none; box-shadow: inset 1px 0 0 var(--line); }
+  .chord-sec.set { box-shadow: inset 1px 0 0 color-mix(in srgb, var(--ink) 45%, transparent); }
+  .chord-name { padding: 0 6px; font: 500 10px/1 var(--font-mono); color: var(--muted); white-space: nowrap; }
+  .chord-sec.set .chord-name { color: var(--ink); text-shadow: var(--glow-ink); }
+  .chord-sec.rest .chord-name { color: var(--muted); text-shadow: none; }
+  .chord-pop { width: 252px; max-width: calc(100vw - 16px); box-sizing: border-box; }
+  .chord-pop-parts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+  .chord-pop-parts .key-pop-same { margin-top: 0; }
+  .key-pop-grid.chord-pop-grid { grid-template-columns: repeat(3, 1fr); }
+  .chord-pop-key, .chord-pop-progbtn { display: grid; place-items: center; align-content: center; gap: 2px; height: 40px; }
+  .chord-pop-name { font: 500 13px/1 var(--font-mono); }
+  .chord-pop-deg { font: 500 9px/1 var(--font-mono); letter-spacing: 0.04em; opacity: 0.75; }
+  .chord-pop-sub { margin-top: 10px; }
+  .chord-pop-prog { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  .chord-pop-prog .key-pop-same { margin-top: 0; text-transform: none; letter-spacing: 0; }
+  .chord-pop-prog .chord-pop-name { font-size: 11px; }
+  .loop-shade { top: calc(var(--ruler-h) + var(--key-row-h) + var(--chord-row-h)); }
   /* Finger: Zeile und Tasten 44 px */
   @media (pointer: coarse) {
-    .arr-grid { --key-row-h: 44px; }
+    .arr-grid { --key-row-h: 44px; --chord-row-h: 44px; }
+    .chord-name { font-size: 12px; }
+    .chord-pop { width: 300px; }
+    .chord-pop-key, .chord-pop-progbtn, .chord-pop-parts .key-pop-same { height: 44px; }
     .key-name { font-size: 12px; }
     .key-pop-grid { grid-template-columns: repeat(4, 56px); }
     .key-pop-key, .key-pop-same { height: 44px; font-size: 14px; }
@@ -1132,6 +1166,24 @@
   .ccard-ico svg { width: 18px; height: 18px; fill: var(--cat); }
   .ccard-title { font: 600 14px/1.3 var(--font-body); }
   .ccard-sub { font-size: 12px; color: var(--muted); line-height: 1.3; }
+  /* Song-Starter: Genres als Tasten; „Sicher?“ in Rot (ersetzt das Lied), gewähltes Genre in Weißglut */
+  .starter { display: grid; gap: 6px; }
+  .starter-genres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .starter-genre {
+    height: 36px; padding: 0 6px; border: 0; border-radius: var(--radius); cursor: pointer;
+    background: transparent; box-shadow: var(--key-shadow); color: var(--ink);
+    font: 600 11px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .starter-genre:hover { background: var(--lane-alt); }
+  .starter-genre:focus-visible, .starter-again:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
+  .starter-genre[aria-pressed="true"] { background: var(--ink); color: var(--accent-ink); box-shadow: none; }
+  .starter-genre[data-confirm], .starter-again[data-confirm] { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
+  .starter-again { height: 32px; font: 600 10px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  .create-panel.busy .starter { opacity: 0.6; pointer-events: none; }
+  @media (pointer: coarse), (max-width: 760px) { .starter-genre, .starter-again, .starter-accomp { height: 44px; } }
+  /* Begleitung: am Desktop als Karte unter „Selbst spielen“, am Handy (kein Fach „Erstellen“) hier als Knopf */
+  .starter-accomp { display: none; height: 32px; font: 600 10px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
+  @media (max-width: 760px) { .starter-accomp { display: block; } .starter-genres { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
   /* ---------- Tipps (Tutorial) ---------- */
   .tip {
@@ -2327,7 +2379,7 @@
   /* Lesbarkeit: helle Knöpfe (dunkle Schrift) bleiben hell – auch bei Mauszeiger, Drücken und Fokus.
      Sonst setzt eine allgemeine Hover-Regel dunklen Grund unter dunkle Schrift. Geprüft in tests/contrast.test.cjs. */
   :is(.dbtn.primary, .wish-go, #export-btn, .tip-ok, .hint-done, .key.play.on, .app.playing .key.play, .tbtn-solo[aria-pressed="true"],
-    .chip[aria-pressed="true"], .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"], .dbtn[aria-pressed="true"]):is(:hover, :active, :focus-visible):not(:disabled) {
+    .chip[aria-pressed="true"], .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"], .dbtn[aria-pressed="true"], .starter-genre[aria-pressed="true"]):is(:hover, :active, :focus-visible):not(:disabled) {
     background: var(--ink); color: var(--accent-ink);
   }
   .loop-fav, .loop-fav:hover { color: var(--muted); }
@@ -2615,6 +2667,11 @@
     </div>
     <div class="shelf-list" id="library"></div>
     <div class="create-panel" id="create-panel" role="tabpanel" aria-label="Erstellen">
+      <h3 class="create-sec">Song-Starter</h3>
+      <div class="starter" id="starter" role="group" aria-label="Song-Starter: Genre wählen">
+        <div class="starter-genres" id="starter-genres"></div>
+        <button class="key starter-again" id="starter-again" type="button" disabled title="Andere Fassung desselben Genres">Nochmal</button>
+      </div>
       <h3 class="create-sec">Wünschen</h3>
       <form class="wish" id="wish-form" autocomplete="off">
         <textarea id="wish-input" class="wish-input" rows="2" maxlength="300" placeholder="z. B. Techno-Beat ab Takt 5, Bass dazu, Pad mit Hall" aria-label="Was soll passieren?"></textarea>
@@ -2624,6 +2681,7 @@
       <button class="ccard cat-drums" type="button" data-create="beat"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 12h4v3H1zm5 0h4v3H6zm5 0h4v3h-4z"/></svg></span><span class="ccard-title">Beat bauen</span><span class="ccard-sub">Schlagzeug in Schritten oder auf Pads</span></button>
       <button class="ccard cat-synth" type="button" data-create="melody"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h14v12H1zm2 2v8h1.5V8H6v4h1V8h2v4h1V8h1.5v4H13V4h-1v4h-1V4H9v4H8V4H6v4H5V4z"/></svg></span><span class="ccard-title">Melodie schreiben</span><span class="ccard-sub">Noten setzen oder auf der Klaviatur spielen</span></button>
       <button class="ccard cat-own" type="button" data-create="sing"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a3 3 0 013 3v4a3 3 0 01-6 0V4a3 3 0 013-3zM3 7h1.5v1a3.5 3.5 0 007 0V7H13v1a5 5 0 01-4.25 4.94V15h-1.5v-2.06A5 5 0 013 8z"/></svg></span><span class="ccard-title">Melodie einsingen</span><span class="ccard-sub">Summen, singen, pfeifen – wird zu Noten</span></button>
+      <button class="ccard cat-chords" type="button" data-create="accomp"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2 3h3v10H2zm4.5 2h3v8h-3zM11 1h3v12h-3zM1 14h14v1.5H1z"/></svg></span><span class="ccard-title">Begleitung</span><span class="ccard-sub">Fläche, Bass und Arp folgen dem Akkord-Streifen</span></button>
       <h3 class="create-sec">Aufnehmen und holen</h3>
       <button class="ccard cat-fx" type="button" data-create="record"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/></svg></span><span class="ccard-title">Audio aufnehmen</span><span class="ccard-sub">Stimme oder Instrument als Sound auf eine Spur</span></button>
       <button class="ccard cat-bass" type="button" data-create="import"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M7 1h2v8l3-3 1.4 1.4L8 12.8 2.6 7.4 4 6l3 3zM2 13h12v2H2z"/></svg></span><span class="ccard-title">Datei importieren</span><span class="ccard-sub">WAV, MP3, OGG … – oder direkt auf eine Spur ziehen</span></button>

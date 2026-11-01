@@ -3,6 +3,7 @@
 
 import { Emitter } from './util.js';
 import { withFx } from './effects.js';
+import { isChord } from './harmony.js';
 
 export const EPS = 1e-6;
 export const DEFAULT_TRACK_NAME = /^Spur \d+$/;
@@ -243,6 +244,51 @@ export function keySpans(project, from, to) {
   return spans;
 }
 
+// Akkord-Streifen: project.chords = [{ beat, chord }], chord = Stufe der dort gültigen Tonart („i“, „VI“ …) oder „-“
+// (Pause). Ein Eintrag gilt bis zum nächsten; vor dem ersten Eintrag und ohne Streifen klingt die Stufe i.
+// Raster: halbe Takte. Alte Projekte ohne das Feld haben keinen Streifen.
+export const tonicOf = (key) => Math.max(0, KEYS.indexOf(key));
+export const chordGrid = (project) => project.beatsPerBar / 2;
+export function chordsOf(project) {
+  const list = Array.isArray(project?.chords) ? project.chords : [];
+  const byBeat = new Map();
+  for (const c of list) if (Number.isFinite(c?.beat) && c.beat >= 0 && isChord(c.chord)) byBeat.set(c.beat, c.chord);
+  return [...byBeat].sort((a, b) => a[0] - b[0]).map(([beat, chord]) => ({ beat, chord }));
+}
+
+export function chordAtBeat(project, beat, list = chordsOf(project)) {
+  let chord = 'i';
+  for (const c of list) { if (c.beat > beat + EPS) break; chord = c.chord; }
+  return chord;
+}
+
+// Abschnitte gleichen Akkords im Bereich [from, to): [{ from, to, chord }]
+export function chordSpans(project, from, to) {
+  const list = chordsOf(project);
+  const spans = [];
+  let chord = chordAtBeat(project, from, list);
+  let start = from;
+  for (const c of list) {
+    if (c.beat <= from + EPS) continue;
+    if (c.beat >= to - EPS) break;
+    if (c.chord === chord) continue;
+    spans.push({ from: start, to: c.beat, chord });
+    start = c.beat;
+    chord = c.chord;
+  }
+  spans.push({ from: start, to, chord });
+  return spans;
+}
+
+// Tonart und Akkord zusammen: [{ from, to, key, chord }] – geteilt an jedem Tonart- und Akkordwechsel
+export function harmonySpans(project, from, to) {
+  const out = [];
+  for (const k of keySpans(project, from, to)) {
+    for (const c of chordSpans(project, k.from, k.to)) out.push({ from: c.from, to: c.to, key: k.key, chord: c.chord });
+  }
+  return out;
+}
+
 // Tonhöhe verschieben und im Bereich der Piano-Roll halten (C2…C6)
 export function transposePitch(m, delta) {
   m += delta;
@@ -254,7 +300,7 @@ export const transposePattern = (pattern, delta) => ({ ...pattern, notes: (patte
 
 export function isValidProject(p) {
   return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips))
-    && (p.keyChanges == null || Array.isArray(p.keyChanges));
+    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords));
 }
 
 export class Store extends Emitter {
@@ -818,6 +864,67 @@ export class Store extends Emitter {
     this.dispatch('key-at', (p) => {
       const rest = keyChangesOf(p).filter((c) => c.bar !== bar);
       if (rest.length) p.keyChanges = rest; else delete p.keyChanges;
+    });
+  }
+
+  // Akkord für [beat, beat + span) festlegen (Standard: ein Takt); was danach kommt, bleibt, wie es war.
+  // Ein Rückgängig-Schritt; Raster halbe Takte.
+  setChordAt(beat, chord, span = this.project.beatsPerBar) {
+    const p = this.project;
+    const g = chordGrid(p);
+    const a = Math.round(beat / g) * g;
+    const b = Math.min(totalBeats(p), a + Math.max(g, Math.round(span / g) * g));
+    if (!isChord(chord) || !(a >= 0) || a >= totalBeats(p) - EPS) return;
+    const next = chordsOf(p);
+    const after = chordAtBeat(p, b, next);
+    let list = next.filter((c) => c.beat < a - EPS || c.beat > b - EPS);
+    if (b < totalBeats(p) - EPS && !list.some((c) => Math.abs(c.beat - b) < EPS)) list.push({ beat: b, chord: after });
+    list.push({ beat: a, chord });
+    this._setChords(list, 'chord');
+  }
+
+  // Folge ab `fromBeat` bis `toBeat` (Standard: Songende) wiederholen, je Akkord `per` Schläge (ein Schritt)
+  fillChords(fromBeat, chords, { toBeat, per } = {}) {
+    const p = this.project;
+    const g = chordGrid(p);
+    const len = Math.max(g, Math.round((per ?? p.beatsPerBar) / g) * g);
+    const a = Math.max(0, Math.round(fromBeat / g) * g);
+    const end = Math.min(totalBeats(p), toBeat ?? totalBeats(p));
+    const seq = (chords || []).filter(isChord);
+    if (!seq.length || a >= end - EPS) return;
+    const old = chordsOf(p);
+    const after = chordAtBeat(p, end, old);
+    const list = old.filter((c) => c.beat < a - EPS || c.beat > end - EPS);
+    for (let i = 0, x = a; x < end - EPS; i++, x += len) list.push({ beat: x, chord: seq[i % seq.length] });
+    if (end < totalBeats(p) - EPS && !list.some((c) => Math.abs(c.beat - end) < EPS)) list.push({ beat: end, chord: after });
+    this._setChords(list, 'chords');
+  }
+
+  clearChords() {
+    if (!chordsOf(this.project).length) return;
+    this.dispatch('chords', (p) => { delete p.chords; });
+  }
+
+  // Sortieren, Überflüssiges weglassen (gleicher Akkord wie davor, führendes „i“)
+  _setChords(list, label) {
+    const sorted = [...new Map(list.map((c) => [c.beat, c.chord]))].sort((x, y) => x[0] - y[0]);
+    const out = [];
+    let prev = 'i';
+    for (const [beat, chord] of sorted) { if (chord !== prev) out.push({ beat, chord }); prev = chord; }
+    if (JSON.stringify(out) === JSON.stringify(chordsOf(this.project))) return;
+    this.dispatch(label, (p) => { if (out.length) p.chords = out; else delete p.chords; });
+  }
+
+  // Leeres Lied (Song-Starter „Ersetzen“): keine Spuren, Patterns, Wechsel und Akkorde; Master bleibt. Ein Schritt.
+  clearSong() {
+    this.dispatch('clear-song', (p) => {
+      p.tracks = [];
+      delete p.patterns;
+      delete p.groups;
+      delete p.keyChanges;
+      delete p.chords;
+      delete p.sampleTempo;
+      p.loop = { on: false, startBeat: 0, endBeat: 16 };
     });
   }
 

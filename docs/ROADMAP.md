@@ -207,8 +207,13 @@
 - Lücken geschlossen: Clip-Leiste am Tablet über der Zoom-Leiste, Gruppenköpfe wachsen mit, Sound-Tempo am Handy (Pegel), Tonartwechsel im Inspektor, Gleiten am Handy als Knopf (`tests/luecken.test.cjs`)
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
+## ✅ 2.9 – Song-Starter und Akkord-Streifen
+- Song-Starter unter „Erstellen“ (am Handy im Fach „Song“): neun Genres, ein Antippen baut ein ganzes Lied – Tempo, Tonart, Intro → Strophe → Refrain → Break → Refrain → Outro, Spuren Drums bis FX mit Lautstärken, Riser/Crash an den Übergängen; Loops mit derselben Akkordfolge, sonst Begleit-Patterns; „Sicher?“ im Knopf statt Dialog, „Nochmal“ würfelt, ein Rückgängig-Schritt
+- Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
+- Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
+
 ## Als Nächstes
-- Aus dem Markt-Scout: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
+- Aus dem Markt-Scout: Effekt-Pad, Ein-Klick-Mastering (Tonleiter-Sperre, Akkord-Streifen, Song-Starter erledigt)
 
 ## Look
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.

@@ -45,6 +45,10 @@ function measureTargets(selector) {
     t = cy; b = cy;
     while (t > cy - 80 && owns(mx, t - 1)) t--;
     while (b < cy + 80 && owns(mx, b + 1)) b++;
+    // Die (oft unsichtbar vergrößerte) Trefferfläche endet an einer Schublade oder einem klebenden Kopf: das Element liegt
+    // am Rand und ist erst beim Hinscrollen ganz erreichbar – nicht messen (die Ecken-Prüfung sieht nur das Element selbst)
+    const cut = (x, y) => { const h = document.elementFromPoint(x, y); return !!h && !h.closest(SEL) && !!h.closest('.sheet, .ruler-row, .key-row, .chord-row'); };
+    if ((b - t + 1 < 44 && (cut(mx, b + 1) || cut(mx, t - 1))) || (rr - l + 1 < 44 && (cut(l - 1, cy) || cut(rr + 1, cy)))) continue;
     const name = n.id ? `#${n.id}` : `${n.tagName.toLowerCase()}.${[...n.classList].slice(0, 2).join('.')}`;
     const label = `${name}${n.getAttribute('aria-label') ? ` „${n.getAttribute('aria-label')}“` : n.textContent.trim() ? ` „${n.textContent.trim().slice(0, 18)}“` : ''}`;
     const key = label.replace(/-t\d+\b/g, '-tN').replace(/\d+/g, '#');
