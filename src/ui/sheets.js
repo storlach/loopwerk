@@ -64,7 +64,7 @@ export function mountSheets({ ui, arranger }) {
   const openFrac = (s) => {
     const v = s && stored()[keyOf(s)];
     if (v === TOP || v === MID) return v;
-    if (narrow.matches && s && ['pattern-synth', 'editor', 'mixer'].includes(keyOf(s))) return TOP;
+    if (narrow.matches && s && ['pattern-synth', 'editor', 'mixer', 'fxpad'].includes(keyOf(s))) return TOP;
     // Tablet (Finger): Piano-Roll und Klaviatur brauchen fingergroße Zeilen – die Melodie öffnet ganz
     return touch.matches && s && keyOf(s) === 'pattern-synth' ? TOP : MID;
   };

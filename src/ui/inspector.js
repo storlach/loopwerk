@@ -12,6 +12,7 @@ import { narrow } from './place.js';
 import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
+import { mountMasteringControls } from './mastering.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -33,7 +34,7 @@ function fxSummary(e, f) {
   return parts.join(', ');
 }
 
-export function mountInspector({ root, store, ui, library, tools }) {
+export function mountInspector({ root, store, ui, library, tools, engine, mastering }) {
   const app = document.getElementById('app');
   root.innerHTML = '';
 
@@ -244,6 +245,10 @@ export function mountInspector({ root, store, ui, library, tools }) {
   lenRow.append(el('span', null, 'Länge'), lenOut, lenIn);
   const masterSub = el('p', 'insp-sub', 'Master');
   songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, masterSub);
+  // Mastering der Summe: direkt unter „Master“, vor Lautstärke und Effekten
+  const mstSlot = el('div', 'insp-mst');
+  songSec.append(mstSlot);
+  if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
 

@@ -3,8 +3,10 @@
 import { exportSong, exportRange } from '../export.js';
 import { saveFile, safeName } from './save-file.js';
 import { formatDb } from './arranger.js';
+import { masteringOf } from '../engine.js';
+import { mountMasteringControls } from './mastering.js';
 
-export function mountExport({ root, store, library, ui, engine, tempo }) {
+export function mountExport({ root, store, library, ui, engine, tempo, mastering }) {
   const $ = (id) => root.querySelector('#' + id);
   const btn = document.getElementById('export-btn');
   const go = $('ex-go');
@@ -14,6 +16,18 @@ export function mountExport({ root, store, library, ui, engine, tempo }) {
   let busy = false;
 
   const value = (name) => root.querySelector(`input[name="${name}"]:checked`)?.value;
+
+  // Mastering: Bedienung wie im Inspektor; der Haken folgt dem Schalter, lässt sich für einen Export aber abwählen
+  const withMaster = $('ex-mastering');
+  if (mastering) mountMasteringControls($('ex-master-ctl'), { store, engine, analysis: mastering, prefix: 'ex-mst' });
+  let lastOn = null;
+  const syncMaster = () => {
+    const on = !!masteringOf(store.project).on;
+    if (on !== lastOn) { withMaster.checked = on; lastOn = on; }
+    withMaster.disabled = !on;
+  };
+  store.on(syncMaster);
+  syncMaster();
 
   function describe() {
     const p = store.project;
@@ -43,6 +57,7 @@ export function mountExport({ root, store, library, ui, engine, tempo }) {
         format,
         range: value('ex-range'),
         tail: $('ex-tail').checked,
+        mastering: withMaster.checked && !withMaster.disabled,
         onProgress: (p) => {
           bar.value = p;
           status.textContent = p < (format === 'mp3' ? 0.5 : 0.95) ? `Song wird gerendert … ${Math.round(p * 100)} %` : format === 'mp3' ? `MP3 wird erzeugt … ${Math.round(p * 100)} %` : 'Datei wird geschrieben …';
@@ -51,7 +66,8 @@ export function mountExport({ root, store, library, ui, engine, tempo }) {
       const filename = `${safeName(store.project.name)}.${format}`;
       const saved = await saveFile(filename, res.blob);
       const mb = (res.blob.size / 1048576).toFixed(1).replace('.', ',');
-      status.textContent = `Fertig: ${saved.filename} (${mb} MB, ${res.duration.toFixed(1).replace('.', ',')} s, Spitze ${formatDb(res.peak)})${saved.zipped ? ' – als ZIP, weil claude.ai Audiodateien nur verpackt speichern kann.' : '.'}`;
+      const loud = res.analysis ? `, ${res.analysis.outLufs.toFixed(1).replace('.', ',').replace('-', '−')} LUFS` : '';
+      status.textContent = `Fertig: ${saved.filename} (${mb} MB, ${res.duration.toFixed(1).replace('.', ',')} s, Spitze ${formatDb(res.peak)}${loud})${saved.zipped ? ' – als ZIP, weil claude.ai Audiodateien nur verpackt speichern kann.' : '.'}`;
       ui.flash(`Exportiert: ${saved.filename}`);
     } catch (err) {
       if (err?.code === 'declined') status.textContent = 'Speichern abgebrochen.';

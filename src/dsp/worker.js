@@ -3,12 +3,14 @@ import { separate } from './separate.js';
 import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
 import { timeStretch } from './stretch.js';
+import { searchMaster } from './master-search.js';
 
 const JOBS = {
   separate: ({ chs, sampleRate }, progress) => separate(chs, sampleRate, { onProgress: progress }),
   autotune: ({ chs, sampleRate, opts }) => autotune(chs, sampleRate, opts),
   pitch: ({ chs, sampleRate }) => detectPitch(toMono(chs), sampleRate),
   stretch: ({ chs, sampleRate, ratio, loop }) => timeStretch(chs, ratio, sampleRate, Math.round(chs[0].length * ratio), { loop }),
+  master: ({ chs, sampleRate, style, target }) => searchMaster(chs, sampleRate, style, target),
 };
 
 self.onmessage = (e) => {

@@ -1,8 +1,9 @@
 // Export des Songs als WAV oder MP3. Gerendert wird offline mit derselben Signalkette wie beim Abspielen.
 // MP3 mit LAME (lamejs, LGPL-3.0, lame.sourceforge.net) – wird erst beim ersten MP3-Export geladen.
 
-import { renderProject } from './engine.js';
+import { renderProject, masteringOf } from './engine.js';
 import { encodeWav } from './wav.js';
+import { analyzeMastering } from './mastering.js';
 
 export const EXPORT_TAIL = 2.5; // Sekunden Ausklang für Hall und Echo
 
@@ -65,19 +66,29 @@ export function peakOf(buffer) {
   return p;
 }
 
-// format: 'wav' | 'mp3'; range: 'song' | 'loop'
-export async function exportSong(project, library, { format = 'wav', range = 'song', tail = true, onProgress } = {}) {
+// format: 'wav' | 'mp3'; range: 'song' | 'loop'; mastering: mit Mastering (Standard: wie im Projekt eingeschaltet)
+export async function exportSong(project, library, { format = 'wav', range = 'song', tail = true, mastering = masteringOf(project).on, onProgress } = {}) {
   const [fromBeat, toBeat] = exportRange(project, range);
   if (toBeat <= fromBeat) throw new Error('Im Song liegen noch keine Clips – es gibt nichts zu exportieren.');
   const renderShare = format === 'mp3' ? 0.5 : 0.95;
   await library.ensureProject?.(project);
+  const tailSeconds = tail ? EXPORT_TAIL : 0;
+  // Mastering: erst den Bereich analysieren (Ziellautheit), dann mit diesen Verstärkungen über dieselbe Kette rendern
+  const master = mastering && masteringOf(project).on;
+  const share = master ? 0.35 : 0;
+  let gains = false;
+  let analysis = null;
+  if (master) {
+    analysis = await analyzeMastering(project, library, { fromBeat, toBeat, tailSeconds, onProgress: (p) => onProgress?.(p * share * renderShare) });
+    gains = analysis ? { pre: analysis.pre, drive: analysis.drive } : false;
+  }
   const audio = await renderProject(project, library, {
-    fromBeat, toBeat, tailSeconds: tail ? EXPORT_TAIL : 0, limiter: true, compensate: true,
-    onProgress: (p) => onProgress?.(p * renderShare),
+    fromBeat, toBeat, tailSeconds, limiter: true, compensate: true, mastering: gains,
+    onProgress: (p) => onProgress?.((share + p * (1 - share)) * renderShare),
   });
   const blob = format === 'mp3'
     ? await encodeMp3(audio, { onProgress: (p) => onProgress?.(renderShare + p * (1 - renderShare)) })
     : encodeWav(audio);
   onProgress?.(1);
-  return { blob, duration: audio.duration, peak: peakOf(audio), fromBeat, toBeat };
+  return { blob, duration: audio.duration, peak: peakOf(audio), fromBeat, toBeat, analysis, audio };
 }

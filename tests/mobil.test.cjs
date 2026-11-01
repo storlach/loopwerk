@@ -49,7 +49,7 @@ const { check, finish } = createChecker();
     check('Arranger direkt unter dem Deck und groß', start.arrTop <= 64 && start.arrH >= 500, `oben ${start.arrTop}, Höhe ${start.arrH}`);
     check('Leiste unten am Bildschirmrand', Math.abs(start.tabsBottom - start.h) <= 1, `${start.tabsBottom}/${start.h}`);
     check('Sound-Regal anfangs eingeklappt', start.shelf === 'none', start.shelf);
-    const tabSizes = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].map((b) => Math.round(Math.min(b.offsetWidth, b.offsetHeight))));
+    const tabSizes = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => b.offsetParent).map((b) => Math.round(Math.min(b.offsetWidth, b.offsetHeight))));
     check('Leiste: vier Knöpfe, alle ≥ 44 px', tabSizes.length === 4 && tabSizes.every((s) => s >= 44), JSON.stringify(tabSizes));
     const moved = await page.evaluate(() => ['rec-btn', 'metro-btn', 'zoom-in', 'snap-sel', 'save-btn', 'export-btn', 'new-btn'].every((id) => document.getElementById(id).closest('#more')));
     check('Seltene Deck-Knöpfe liegen unter „Mehr“', moved);

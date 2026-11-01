@@ -92,6 +92,9 @@ async function session(opts, steps) {
     ['Desktop Mixer', ev(() => window.loopwerk.ui.setDock('mixer'))],
     ['Desktop Clip-Editor', ev(() => { const { store, editor } = window.loopwerk; editor.open(store.track('t4').clips[0].id); })],
     ['Desktop Export', ev(() => window.loopwerk.ui.setDock('export'))],
+    ['Desktop Export mit Mastering', ev(() => window.loopwerk.store.setMastering({ on: true }))],
+    ['Desktop FX-Pad', ev(() => window.loopwerk.ui.setDock('fxpad'))],
+    ['Desktop Song mit Mastering', ev(() => { const { ui } = window.loopwerk; ui.setDock(null); ui.select(null); ui.selectTrack(null); })],
     ['Desktop Projekt-Menü', async (page) => { await page.evaluate(() => window.loopwerk.ui.setDock(null)); await page.click('#project-menu-btn'); }],
   ]);
   await session({ viewport: { width: 1180, height: 820 }, hasTouch: true }, [
@@ -103,6 +106,8 @@ async function session(opts, steps) {
     ['Handy Sounds mit Filter', async (page) => { await page.evaluate(() => window.loopwerk.ui.setDock('sounds')); await page.waitForTimeout(300); await page.tap('#shelf-filter-btn'); }],
     ['Handy Mixer', ev(() => window.loopwerk.ui.setDock('mixer'))],
     ['Handy Mehr', ev(() => window.loopwerk.ui.setDock('more'))],
+    ['Handy FX-Pad', ev(() => window.loopwerk.ui.setDock('fxpad'))],
+    ['Handy Export mit Mastering', ev(() => { window.loopwerk.store.setMastering({ on: true }); window.loopwerk.ui.setDock('export'); })],
   ]);
   finish();
 })();

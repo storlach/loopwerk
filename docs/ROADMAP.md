@@ -207,6 +207,12 @@
 - Lücken geschlossen: Clip-Leiste am Tablet über der Zoom-Leiste, Gruppenköpfe wachsen mit, Sound-Tempo am Handy (Pegel), Tonartwechsel im Inspektor, Gleiten am Handy als Knopf (`tests/luecken.test.cjs`)
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
+## ✅ 2.9 – Mastering mit einem Klick, Effekt-Pad
+- Mastering der Summe (`project.master.mastering = { on, style }`): Ausgewogen, Warm, Hell (−14 LUFS), Laut (−10 LUFS); EQ, Bus-Kompression, Breite nur in den Höhen, True-Peak-Limiter; Analyse für Export und Wiedergabe, A/B gleich laut (ADR 005)
+- Ort: Inspektor „Song“ unter Master, Export-Fach (Haken „Mit Mastering“)
+- Effekt-Pad (Filter, Echo, Stutter, Lo-Fi, Bandstopp, Halten) auf Summe oder Spur, nur live; Desktop: Reiter „FX-Pad“, Handy: Knopf im Mixer-Kopf
+- Tests: `tests/master-fxpad.test.cjs`
+
 ## Als Nächstes
 - Aus dem Markt-Scout: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
 
