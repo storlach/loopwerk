@@ -532,7 +532,7 @@ const { check, finish } = createChecker();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-zoom-mobil.png') });
 
     // Am Handy: Drumpad mit großen Pads, Melodie-Editor ohne Klaviatur (bleibt wie bisher)
-    await page.evaluate(() => window.loopwerk.ui.setDock('more'));
+    await page.evaluate(() => window.loopwerk.ui.setDock('song'));
     await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
     await page.tap('#new-beat-btn');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');

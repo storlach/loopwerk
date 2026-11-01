@@ -1,6 +1,6 @@
 // Tutorial: Tipps erscheinen, wenn ein Bereich zum ersten Mal zu sehen ist – einer nach dem anderen,
 // gut sichtbar neben dem Element. „Verstanden“ blendet ihn aus, „Keine Tipps mehr“ schaltet alle ab.
-// Im Projekt-Menü (am Handy unter „Mehr“) lassen sie sich wieder einschalten.
+// Im Projekt-Menü (am Handy im Fach „Song“) lassen sie sich wieder einschalten.
 
 import { el } from '../util.js';
 import { narrow, touch } from './place.js';
@@ -121,7 +121,7 @@ export function mountTips({ ui, store }) {
   document.addEventListener('scroll', () => { if (current) position(); }, true);
   schedule();
 
-  // Projekt-Menü / „Mehr“: Tipps wieder einschalten
+  // Projekt-Menü / Fach „Song“: Tipps wieder einschalten
   document.getElementById('tips-reset')?.addEventListener('click', () => {
     state.off = false;
     state.seen = [];

@@ -410,10 +410,10 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await page.waitForTimeout(400);
     check('Handy: nach Umbenennen mit Enter ist die Leiste unten wieder da', await tabbar());
 
-    // Projektname im Fach „Mehr“
-    await page.tap('#tab-more');
-    const inMore = await page.evaluate(() => { const n = document.getElementById('project-name'); const r = n.getBoundingClientRect(); return { inMore: !!n.closest('#more'), h: r.height, w: r.width }; });
-    check('Handy: Projektname im Fach „Mehr“, groß genug', inMore.inMore && inMore.h >= 44 && inMore.w > 300, JSON.stringify(inMore));
+    // Projektname im Fach „Song“
+    await page.tap('#tab-song');
+    const inMore = await page.evaluate(() => { const n = document.getElementById('project-name'); const r = n.getBoundingClientRect(); return { inMore: !!n.closest('#song'), h: r.height, w: r.width }; });
+    check('Handy: Projektname im Fach „Song“, groß genug', inMore.inMore && inMore.h >= 44 && inMore.w > 300, JSON.stringify(inMore));
     await page.locator('#project-name').tap();
     await page.fill('#project-name', 'Handy-Song');
     await page.keyboard.press('Enter');

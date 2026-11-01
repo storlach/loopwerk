@@ -1,4 +1,4 @@
-// Schubladen: Fächer (Mixer, Editoren, am Handy auch Sounds und „Mehr“) liegen über den Spuren.
+// Schubladen: Fächer (Mixer, Editoren, am Handy auch Sounds und Song) liegen über den Spuren.
 // Drei Haltepunkte: zu (unter dem Rand), Mitte (50 %) und oben (ganze Arranger-Höhe).
 // Jede Bewegung läuft über eine kritisch gedämpfte Feder: Öffnen, Schließen, Einrasten und Wechseln.
 // Beim Ziehen folgt die Schublade dem Finger 1:1, die Geschwindigkeit beim Loslassen fließt in die Feder,
@@ -70,7 +70,7 @@ export function mountSheets({ ui, arranger }) {
   };
 
   const sheets = [];
-  // „Mehr“ und Tempo am Handy sind so hoch wie ihr Inhalt: dort verschiebt Ziehen nur
+  // Song und Tempo am Handy sind so hoch wie ihr Inhalt: dort verschiebt Ziehen nur
   const autoHeight = (s) => s.classList.contains('more-panel');
   const shown = (s) => {
     if (s.classList.contains('shelf')) return narrow.matches && ui.dock === 'sounds';

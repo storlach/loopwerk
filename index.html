@@ -58,7 +58,7 @@
     <p class="splash-tag">I Like To Loop it Loop it</p>
     <div class="splash-progress" role="progressbar" aria-label="Ladefortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="splash-fill" id="boot-fill"></div></div>
     <p class="splash-status"><span class="splash-step" id="boot-step">Lädt Programm …</span><span class="splash-pct" id="boot-pct">0 %</span></p>
-    <p class="splash-version" id="boot-version">Version 2.5</p>
+    <p class="splash-version" id="boot-version">Version 2.8</p>
     <p class="splash-private">Private use only</p>
   </div>
 </div>
@@ -1255,7 +1255,7 @@
       grid-area: bar; display: flex; align-items: stretch; gap: 2px; min-height: 42px; margin-top: -8px;
       padding: 0 6px; border-radius: 0 0 var(--radius) var(--radius);
     }
-    #tab-sounds, #tab-more { display: none; }
+    #tab-sounds, #tab-song { display: none; }
     .tab { display: inline-flex; align-items: center; gap: 8px; max-width: 320px; padding: 0 16px; }
     .tabbar-end { margin-left: auto; display: flex; }
     .arranger { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -1294,22 +1294,22 @@
       gap: 0;
       padding: 0;
     }
-    .left-tabs, .create-panel, .insp, .arr-bar, .deck-right, .ed-tabs, .tabbar-end { display: none !important; }
+    .left-tabs, .create-panel, .insp, .deck-right, .ed-tabs, .tabbar-end { display: none !important; }
     /* Am Handy unten im Arranger Platz lassen, damit die letzten Spuren über das offene Fach scrollen */
     .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
     /* Das Fach lässt dem Arranger immer mindestens gut 150 px */
     :root { --track-h: 62px; --rh-two: 56px; --rh-one: 36px; --zbar-b: 0px; --zbar-r: 0px; --fach-max: calc(100dvh - 320px); }
     button, .lane, .clip, .ruler { -webkit-tap-highlight-color: transparent; }
 
-    /* Deck: nur Transport und Anzeige, der Rest liegt unter „Mehr“ */
+    /* Deck: Transport mit Aufnahme, Anzeige, Rückgängig/Wiederholen; Klick und Raster sitzen über den Spuren, der Rest im Fach „Song“ */
     .deck {
       flex-wrap: nowrap; gap: 6px; border-radius: 0;
       padding: 6px max(8px, env(safe-area-inset-right, 0px)) 6px max(8px, env(safe-area-inset-left, 0px));
     }
     .deck .meter-wrap, .deck .spacer, .deck .group[aria-label="Clip"], .deck .group:empty, .lcd-more { display: none; }
-    /* Schon beim Laden (bevor die Knöpfe ins Fach „Mehr“ wandern): nichts darf die Seite breiter machen –
+    /* Schon beim Laden (bevor die Knöpfe an ihren Platz wandern): nichts darf die Seite breiter machen –
        sonst zoomt das Handy heraus und der Ladescreen liegt außerhalb des Bildes */
-    .deck .group[aria-label="Projekt"], .deck .group[aria-label="Bearbeiten"], .deck #rec-btn, .deck #metro-btn { display: none; }
+    .deck .group[aria-label="Projekt"], .deck .group[aria-label="Bearbeiten"], .deck #metro-btn { display: none; }
     .deck { overflow-x: clip; }
     .deck .group { flex-wrap: nowrap; }
     .key { min-width: 44px; height: 44px; }
@@ -1321,7 +1321,7 @@
     .lcd-input { width: 100%; height: 30px; }
     .snap { height: 44px; }
 
-    /* Das Fach: Sounds, Mixer, Editoren, Export oder „Mehr“ – immer nur eins, über der Leiste */
+    /* Das Fach: Sounds, Mixer, Editoren, Export oder Song – immer nur eins, über der Leiste */
     .arranger { border-width: 0; border-radius: 0; }
     /* Schublade über den Spuren: Griff oben, Schatten nach oben, Höhe ziehbar */
     .shelf, .dock {
@@ -1349,7 +1349,7 @@
     #pattern > .dock-head h2 { display: none; }
     #pattern .dock-actions { order: 0; flex: 1 1 auto; width: auto; min-width: 0; }
     #pattern .pat-body { padding: 6px 8px 8px; }
-    /* Pattern-Editor: alles in einer Zeile ohne Wischen – Anhören und Live als Tasten, der Rest unter „Mehr“ */
+    /* Pattern-Editor: alles in einer Zeile ohne Wischen – Anhören und Live als Tasten, der Rest im Menü „Mehr“ */
     #pattern .dock-actions { flex-wrap: nowrap; overflow: visible; padding-right: 0; }
     #pat-play, #pat-live { order: -1; width: 48px; padding: 0; justify-content: center; font-size: 0; }
     #pat-play::before { content: "▶"; font-size: 17px; }
@@ -1366,16 +1366,12 @@
     .ed-check { min-height: 44px; }
     .ed-check input { width: 22px; height: 22px; }
 
-    /* Mehr: die eingeklappten Deck-Knöpfe, im Look des Decks */
+    /* Song und Tempo: Fächer in der Höhe ihres Inhalts, im Look des Decks */
     .more-panel {
       display: flex; flex-direction: column; height: auto; max-height: 100%;
       background: var(--deck); color: var(--deck-ink); border-color: var(--deck-2);
     }
     .more-panel .dock-head { border-color: var(--deck-2); }
-    .more-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 10px max(12px, env(safe-area-inset-left, 0px)) 14px; display: grid; gap: 14px; align-content: start; }
-    .more-sec h3 { margin: 0 0 6px; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--deck-muted); }
-    .more-row { display: flex; flex-wrap: wrap; gap: 6px; }
-    #more .project-name { flex: 1 0 100%; width: auto; height: 44px; font-size: 16px; }
 
     /* Tempo ohne Bildschirmtastatur */
     .tempo-body { padding: 12px max(12px, env(safe-area-inset-left, 0px)) 16px; display: grid; gap: 14px; }
@@ -1691,7 +1687,7 @@
   .wish-state { flex: 1; min-width: 0; font: 500 10px/1.3 var(--font-mono); color: var(--muted); letter-spacing: 0.04em; }
   .wish.busy .wish-state::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--amber); animation: wish-pulse 0.9s ease-in-out infinite; }
   @keyframes wish-pulse { 50% { opacity: 0.25; } }
-  .more-wish .wish { background: transparent; box-shadow: none; padding: 0; }
+  .wish-slot .wish { background: transparent; box-shadow: none; padding: 0; }
   .wish-go { height: 30px; padding: 0 12px; font: 600 11px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
   @media (max-width: 760px) { .wish-input { font-size: 16px; } .wish-go { height: 40px; } }
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
@@ -1827,7 +1823,6 @@
   .hint { background: var(--deck-2); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgb(0 0 0 / 0.4); }
   .hint-done { background: var(--amber); color: var(--accent-ink); font: 500 10px/1 var(--font-mono); }
 
-  .more-row .pop-item { height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius); background: var(--key-face); box-shadow: var(--key-shadow); color: var(--deck-ink); font: 500 10.5px/1 var(--font-mono); text-transform: uppercase; }
 
   /* ================= Look „Phosphor“ (2.2): Schwarz, Licht nur wo Musik klingt, Einstellungen als Linien ================= */
   body { background: var(--bg); }
@@ -2138,14 +2133,13 @@
   .insp-btns .key { background: transparent; box-shadow: var(--key-shadow); font: 500 10px/1 var(--font-mono); }
   .insp-link { color: var(--ink); font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.08em; }
   .insp-title { font: 300 26px/1.15 var(--font-display); letter-spacing: -0.03em; }
-  .insp-kind, .create-sec, .more-sec h3 { font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; color: var(--muted); }
+  .insp-kind, .create-sec { font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; color: var(--muted); }
   .ccard { background: transparent; box-shadow: var(--key-shadow); border-radius: 6px; }
   .ccard:hover { background: rgb(255 255 255 / 0.03); }
   .ccard-ico { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat) 40%, transparent); }
   .ccard-ico svg { filter: drop-shadow(0 0 4px var(--cat)); }
   .hint { background: var(--deck-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--key-line), 0 10px 30px #000; border-radius: var(--radius-lg); }
   .hint-done { background: var(--ink); color: var(--accent-ink); }
-  .more-row .pop-item { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
   .fxl-switch[aria-pressed="true"], .toggle[aria-pressed="true"] { background: var(--ink); }
   input[type="range"] { accent-color: var(--ink); }
 
@@ -2167,15 +2161,15 @@
   .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, rgb(255 255 255 / 0.25) 70%, #fff 76%, rgb(255 255 255 / 0.25) 80%, var(--key-line) 88%); animation: wish-run 1.6s linear infinite; }
   .wish.busy .wish-state::after { background: var(--ink); }
   @keyframes wish-run { to { --wish-a: 360deg; } }
-  .more-wish .wish { padding: 1px; background: var(--key-line); }
-  .more-wish .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, #fff 76%, var(--key-line) 88%); }
+  .wish-slot .wish { padding: 1px; background: var(--key-line); }
+  .wish-slot .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, #fff 76%, var(--key-line) 88%); }
 
   /* Handy: Tippflächen mindestens 44 px, Schrift mindestens 11 px */
   @media (max-width: 760px) {
     .tbtn { position: relative; }
     .tbtn::after { content: ""; position: absolute; inset: -7px -2px; }
     .tab { font-size: 11px; }
-    .lcd-label, .seg, .chip, .bar-mark, .dbtn, .tbtn, .insp-kind, .create-sec, .more-sec h3, .dock-head h2, .group-count, .pat-row-label { font-size: 11px; }
+    .lcd-label, .seg, .chip, .bar-mark, .dbtn, .tbtn, .insp-kind, .create-sec, .dock-head h2, .group-count, .pat-row-label { font-size: 11px; }
     .lcd-value { font-size: 22px; line-height: 1; }
     .lcd { padding: 2px 3px; }
     .lcd-input { height: 26px; }
@@ -2340,7 +2334,7 @@
 
   /* Lesbarkeit: helle Knöpfe (dunkle Schrift) bleiben hell – auch bei Mauszeiger, Drücken und Fokus.
      Sonst setzt eine allgemeine Hover-Regel dunklen Grund unter dunkle Schrift. Geprüft in tests/contrast.test.cjs. */
-  :is(.dbtn.primary, .wish-go, #export-btn, .tip-ok, .hint-done, .key.play.on, .app.playing .key.play, .tbtn-solo[aria-pressed="true"],
+  :is(.dbtn.primary, .wish-go, #export-btn, .song-main .key, .wish-fab, .tip-ok, .hint-done, .key.play.on, .app.playing .key.play, .tbtn-solo[aria-pressed="true"],
     .chip[aria-pressed="true"], .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"], .dbtn[aria-pressed="true"]):is(:hover, :active, :focus-visible):not(:disabled) {
     background: var(--ink); color: var(--accent-ink);
   }
@@ -2456,7 +2450,7 @@
     .zbar-y .zbar-thumb.full { visibility: hidden; }
   }
 
-  /* Gleiten am Handy: ein Knopf in der Kopfzeile, antippen wechselt Aus → Kurz → Lang (das Auswahlfeld liegt unter „Mehr“) */
+  /* Gleiten am Handy: ein Knopf in der Kopfzeile, antippen wechselt Aus → Kurz → Lang (das Auswahlfeld liegt im Menü „Mehr“ des Editors) */
   .pat-glide-btn { display: none; }
   @media (max-width: 760px) {
     #pattern[data-type="synth"] .pat-glide-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 58px; height: 44px; padding: 0 8px; white-space: nowrap; }
@@ -2468,6 +2462,105 @@
     #pattern[data-type="synth"] #pat-preset { width: 92px; }
     #pattern[data-type="synth"] .pat-glide-btn { min-width: 52px; padding: 0 6px; }
   }
+  /* ================= Handy, Variante B (2.8): kein „Mehr“ – alles an seinem Ort =================
+     Deck: ▶ mit Aufnahme, Rückgängig mit Wiederholen. Über den Spuren: Raster und Klick. Unten rechts: Wünschen.
+     Fach „Song“: Name, Tempo, Tonart, Länge, Speichern, Exportieren. Zoomen mit zwei Fingern. */
+  .arr-pills, .wish-fab, .wish-sheet { display: none; }
+  @media (max-width: 760px) {
+    /* Deck */
+    .deck { gap: 4px; padding-left: max(6px, env(safe-area-inset-left, 0px)); padding-right: max(6px, env(safe-area-inset-right, 0px)); }
+    .deck .group { gap: 4px; }
+    .deck #rec-btn { width: 44px; min-width: 44px; padding: 0; border-radius: 50%; }
+    .deck #rec-btn svg { width: 22px; height: 22px; }
+    .deck #rec-btn .rec-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .deck #rec-btn.recording { background: var(--meter-hot); box-shadow: none; }
+    .deck #rec-btn.recording svg { fill: var(--accent-ink); }
+    .deck .deck-undo { flex: none; }
+    .deck .deck-undo .key { min-width: 44px; width: 44px; padding: 0; }
+
+    /* Kopfzeile über den Spuren: Pillen */
+    .arranger { display: flex; flex-direction: column; }
+    .arr-wrap { flex: 1 1 auto; height: auto; }
+    .arr-bar { display: flex; align-items: center; height: auto; padding: 0 max(8px, env(safe-area-inset-right, 0px)) 0 max(8px, env(safe-area-inset-left, 0px)); gap: 8px; }
+    .arr-bar > :not(.arr-pills) { display: none; }
+    .arr-pills { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    .arr-pills > * { flex: none; }
+    /* Sichtbar eine 32-px-Pille; die Tippfläche ist 44 px hoch (transparenter Rand) */
+    .arr-pills .key, .arr-pills .snap {
+      box-sizing: border-box; height: 44px; min-width: 44px; padding: 0 12px; border: 6px solid transparent; background-clip: padding-box;
+      border-radius: 22px; box-shadow: inset 0 0 0 1px var(--key-line); color: var(--ink); background-color: transparent;
+      font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .arr-pills .key svg { width: 14px; height: 14px; }
+    .arr-pills .key[aria-pressed="true"] { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7); }
+    .arr-pills .snap {
+      appearance: none; -webkit-appearance: none; padding-right: 26px; cursor: pointer;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; background-size: 5px 5px; background-repeat: no-repeat;
+    }
+    .arr-pills .snap option { background: var(--sheet-bg); color: var(--ink); font: 400 14px/1.4 var(--font-body); text-transform: none; }
+
+    /* Wünschen: schwebender Knopf, nicht über offenen Fächern oder bei offener Tastatur */
+    .wish-fab {
+      display: inline-flex; align-items: center; gap: 8px; grid-area: arr; align-self: end; justify-self: end; z-index: 15;
+      /* rechts bleibt der Streifen des senkrechten Rollbalkens (14 px + Greiffläche 30 px) frei */
+      margin: 0 calc(max(0px, env(safe-area-inset-right, 0px)) + 52px) 14px 0; height: 48px; padding: 0 18px 0 14px; border: 0; border-radius: 24px;
+      background: var(--ink); color: var(--accent-ink); cursor: pointer; font: 600 11px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+      box-shadow: 0 6px 20px rgb(0 0 0 / 0.55), 0 0 22px -6px var(--amber);
+    }
+    .wish-fab svg { width: 18px; height: 18px; fill: currentColor; }
+    .wish-fab[aria-expanded="true"], .app:not([data-dock=""]) .wish-fab, .app.kbd .wish-fab { display: none; }
+    .app:has(.wish.busy) .wish-fab svg { animation: wish-pulse 0.9s ease-in-out infinite; }
+    .wish-sheet {
+      display: block; grid-area: arr; align-self: end; z-index: 25; min-height: 0;
+      margin: 0 max(8px, env(safe-area-inset-right, 0px)) 8px max(8px, env(safe-area-inset-left, 0px)); padding: 0 12px 12px;
+      border-radius: 14px; background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--key-line), 0 -12px 30px rgb(0 0 0 / 0.5);
+    }
+    .wish-sheet[hidden] { display: none; }
+    .wish-sheet-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
+    .wish-sheet-head h2 { margin: 0; font: 500 11px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    .wish-sheet-close { width: 44px; height: 44px; margin-right: -12px; border: 0; background: transparent; color: var(--ink); font: 300 26px/1 var(--font-body); cursor: pointer; }
+    .wish-sheet .wish.open .wish-input { height: min(168px, calc(var(--vvh, 100dvh) * 0.34)); }
+    .app.kbd[data-kbd-in="wish"] { grid-template-rows: 0 minmax(0, 1fr) 0 0; }
+
+    /* Fach „Song“ */
+    .song-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 12px; align-content: start; padding: 8px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px)); }
+    .song-name .project-name {
+      display: block; box-sizing: border-box; width: 100%; height: 52px; padding: 0 16px; border: 0; border-radius: var(--radius-lg);
+      background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--key-line); font: 600 20px/1 var(--font-display);
+    }
+    .song-name .project-name:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px var(--ink); }
+    .song-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .song-tile {
+      position: relative; display: block; min-height: 80px; padding: 0; border: 0; border-radius: var(--radius-lg); background: transparent;
+      box-shadow: inset 0 0 0 1px var(--key-line); color: var(--ink); text-align: left; cursor: pointer;
+    }
+    .song-tile:focus-within, .song-tile:focus-visible { box-shadow: inset 0 0 0 1px var(--ink); outline: 0; }
+    .song-tile-label { position: absolute; top: 10px; left: 12px; right: 8px; font: 500 11px/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--lcd-label); pointer-events: none; }
+    .song-tile-value { position: absolute; inset: 0; box-sizing: border-box; display: flex; align-items: baseline; gap: 4px; padding: 30px 12px 0; font: 400 22px/1.1 var(--font-mono); color: var(--ink); }
+    #song-tempo { font: inherit; }
+    #song-tempo .song-tile-value { pointer-events: none; }
+    .song-tile-value small { font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; color: var(--lcd-label); }
+    .song-tile-unit { position: absolute; left: 12px; right: 8px; bottom: 12px; font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; color: var(--lcd-label); pointer-events: none; }
+    select.song-tile-value { appearance: none; -webkit-appearance: none; width: 100%; height: 100%; margin: 0; border: 0; border-radius: var(--radius-lg); background: transparent; cursor: pointer; }
+    select.song-tile-value option { background: var(--sheet-bg); color: var(--ink); font: 400 14px/1.4 var(--font-body); }
+    .song-main { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .song-main .key { height: 52px; border-radius: 26px; background: var(--ink); color: var(--accent-ink); box-shadow: none; font: 600 12px/1 var(--font-mono); letter-spacing: 0.08em; }
+    .song-main .key:hover:not(:disabled) { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 18px rgb(255 255 255 / 0.25); }
+    .song-links { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; }
+    .song-links > * {
+      position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; height: 44px; min-width: 44px; padding: 0 12px;
+      border: 0; border-radius: var(--radius); background: transparent; box-shadow: none; color: var(--muted);
+      font: 500 13px/1 var(--font-body); letter-spacing: 0; text-transform: none; text-align: center;
+    }
+    .song-links > * + *::before { content: "·"; position: absolute; left: -2px; top: 50%; display: block; width: auto; height: auto; background: none; box-shadow: none; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .song-links > :hover:not(:disabled) { color: var(--ink); background: transparent; box-shadow: none; }
+    .song-links > #new-btn:not(.confirm) { color: var(--danger); }
+    .song-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .song-foot .brand { order: -1; }
+    @media (max-width: 380px) { .deck .lcd-cell { padding: 1px 5px; } .deck .lcd-value { font-size: 20px; } }
+    .song-private { margin: 0; font: 400 11px/1.4 var(--font-mono); letter-spacing: 0.04em; color: var(--muted); }
+  }
 </style>
 
 
@@ -2476,7 +2569,7 @@
     <div class="brand">
       <span class="brand-bars" id="brand-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
       <span class="brand-name">Loop<b>werk</b></span>
-      <span class="brand-tag">Version 2.2</span>
+      <span class="brand-tag">Version 2.8</span>
     </div>
     <span class="deck-sep sep-brand" aria-hidden="true"></span>
 
@@ -2492,7 +2585,7 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 5h7V3l3 3-3 3V7H4v3H2V7a2 2 0 012-2zm8 6H5v2l-3-3 3-3v2h7V6h2v3a2 2 0 01-2 2z"/></svg>
         Loop
       </button>
-      <button class="key rec" id="rec-btn" type="button" title="Mit dem Mikrofon aufnehmen (ein Takt Vorzähler)" aria-pressed="false">
+      <button class="key rec" id="rec-btn" type="button" aria-label="Aufnahme" title="Mit dem Mikrofon aufnehmen (ein Takt Vorzähler)" aria-pressed="false">
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
         <span class="rec-label">Aufnahme</span>
       </button>
@@ -2582,8 +2675,8 @@
           <div class="pop-sep"></div>
           <div class="pop-body" id="project-menu-start"></div>
           <div class="pop-sep"></div>
-          <button class="pop-item" id="tips-reset" type="button">Tipps wieder zeigen</button>
-          <p class="pop-about" id="pop-about">Loopwerk 2.0 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
+          <button class="pop-item" id="tips-reset" type="button"><span class="lbl-long">Tipps wieder zeigen</span><span class="lbl-short">Tipps</span></button>
+          <p class="pop-about" id="pop-about">Loopwerk 2.8 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
         </div>
       </div>
       <div class="deck-export" id="deck-export"></div>
@@ -2654,6 +2747,7 @@
         <button class="key" id="select-all-btn" type="button" title="Alle Clips auswählen">Alle</button>
       </div>
       <span class="arr-bar-status" id="arr-bar-status"></span>
+      <div class="arr-pills" id="arr-pills" role="group" aria-label="Raster, Klick und Loop"></div>
     </div>
     <div class="arr-wrap" id="arr-wrap">
       <div class="arr-scroll" id="arr-scroll"></div>
@@ -2661,6 +2755,16 @@
   </main>
 
   <aside class="insp" id="insp" aria-label="Eigenschaften"></aside>
+
+  <!-- Handy: schwebender Knopf über dem Arranger; das Wunsch-Feld (#wish-form) wandert dann in das Blatt -->
+  <button class="wish-fab" id="wish-fab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="wish-sheet">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1l1.4 3.9L12 6.3 7.9 7.7 6.5 11.6 5.1 7.7 1 6.3l4.1-1.4zM12.5 8.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>
+    <span>Wünschen</span>
+  </button>
+  <section class="wish-sheet" id="wish-sheet" role="dialog" aria-label="Wünschen" hidden>
+    <div class="wish-sheet-head"><h2>Wünschen</h2><button class="wish-sheet-close" id="wish-close" type="button" aria-label="Schließen">×</button></div>
+    <div class="wish-slot" id="wish-slot"></div>
+  </section>
 
   <section class="dock" id="mixer" aria-label="Mixer" hidden>
     <div class="dock-head">
@@ -2860,16 +2964,29 @@
     </div>
   </section>
 
-  <section class="dock more-panel" id="more" aria-label="Mehr" hidden>
+  <section class="dock more-panel song-panel" id="song" aria-label="Song" hidden>
     <div class="dock-head">
-      <h2>Mehr</h2>
+      <h2>Song</h2>
     </div>
-    <div class="more-body">
-      <div class="more-sec"><h3>Wünschen</h3><div class="more-wish" data-slot="wish"></div></div>
-      <div class="more-sec"><h3>Wiedergabe</h3><div class="more-row" data-slot="play"></div></div>
-      <div class="more-sec"><h3>Bearbeiten und Ansicht</h3><div class="more-row" data-slot="edit"></div></div>
-      <div class="more-sec"><h3>Projekt</h3><div class="more-row" data-slot="project"></div></div>
-      <div class="more-sec more-row" data-slot="about"></div>
+    <div class="song-body">
+      <div class="song-name" id="song-name"></div>
+      <div class="song-tiles">
+        <button class="song-tile" id="song-tempo" type="button" aria-label="Tempo einstellen">
+          <span class="song-tile-label">Tempo</span><span class="song-tile-value"><output id="song-tempo-out">120</output><small>BPM</small></span>
+        </button>
+        <label class="song-tile" for="key-sel-song">
+          <span class="song-tile-label">Tonart</span>
+          <select class="song-tile-value" id="key-sel-song"></select>
+        </label>
+        <label class="song-tile" for="song-length">
+          <span class="song-tile-label">Länge</span>
+          <select class="song-tile-value" id="song-length" aria-label="Länge des Songs in Takten"></select>
+          <small class="song-tile-unit">Takte</small>
+        </label>
+      </div>
+      <div class="song-main" id="song-main"></div>
+      <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
+      <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>
     </div>
   </section>
 
@@ -2923,8 +3040,8 @@
     <button class="tab" id="editor-tab" type="button" aria-pressed="false" disabled>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h3l2-5 4 10 2-5h3v1.5h-2l-3 6.5-4-10-1 2.5H1z"/></svg><span class="tab-label" id="editor-tab-label">Editor</span>
     </button>
-    <button class="tab" id="tab-more" type="button" aria-pressed="false">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6.5h3v3H2zm4.5 0h3v3h-3zm4.5 0h3v3h-3z"/></svg><span class="tab-label">Mehr</span>
+    <button class="tab" id="tab-song" type="button" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2.5h9v3H1zm0 4h14v3H1zm0 4h6v3H1zM9 10.5h6v3H9z"/></svg><span class="tab-label">Song</span>
     </button>
     <div class="menu-wrap tabbar-end">
       <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false"><span class="for-mouse">? Tastenkürzel</span><span class="for-touch">? Gesten</span></button>
