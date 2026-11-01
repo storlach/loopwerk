@@ -206,8 +206,15 @@
 - Sound-Tempo im Inspektor; Clip-Editor und Beat-/Melodie-Editor spielen im Loop, klingender Schritt leuchtet; Tonhöhe/Autotune sofort hören
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
+## ✅ 2.9 – Tonleiter-Sperre
+- Schalter „Tonleiter“ im Melodie-Editor (Kopfzeile; am Handy im Streifen über der Piano-Roll, immer in Reichweite): neue Noten rasten auf Töne der Songtonart ein – Setzen, Verschieben, Ziehen in der Piano-Roll, Bildschirm-Klaviatur, Computertastatur, MIDI, Live-Einspielen, Einsingen, Weiterführen
+- Tonleiter: natürliches Moll der Songtonart (Standard), „Dur“ (Paralleltonart, Grundton eine kleine Terz höher) oder Pentatonik; maßgeblich ist die Grundtonart des Songs, denn Melodien wandern bei Tonartwechseln als Ganzes mit (`src/scale.js`)
+- Anzeige: Tonleiter-Zeilen hell, Fremdtöne schwarz, Grundton mit Weißglut-Streifen; Klaviertasten mit Fremdtönen gedämpft, Grundton markiert; vorhandene Fremdnoten bleiben, gestrichelt
+- „Auf Tonleiter ziehen (n)“ rückt Fremdnoten auf den nächsten Ton, ein Rückgängig-Schritt; gespeichert am Pattern (`scaleLock`, `scaleKind`), alte Projekte laden mit „aus“, ändert den Klang nicht (kein Neu-Rendern)
+- Tests: `tests/scale-lock.test.cjs`
+
 ## Als Nächstes
-- Aus dem Markt-Scout: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
+- Aus dem Markt-Scout: Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
 - Kleine Lücken: Clip-Leiste am Tablet verdeckt die untere Zoom-Leiste; aufgeklappte Gruppenköpfe wachsen nicht mit der Spurhöhe; Sound-Tempo am Handy; Tonartwechsel im Inspektor „Song“ auflisten
 
 ## Look

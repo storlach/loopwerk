@@ -121,6 +121,7 @@
 <link rel="modulepreload" href="src/instruments-shelf.js">
 <link rel="modulepreload" href="src/patterns.js">
 <link rel="modulepreload" href="src/recorder.js">
+<link rel="modulepreload" href="src/scale.js">
 <link rel="modulepreload" href="src/ui/mobile.js">
 <link rel="modulepreload" href="src/ui/link-import.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
@@ -947,6 +948,13 @@
   .pat-cell[aria-pressed="true"] { background: var(--cat); border-color: var(--cat); }
   .pat-roll-wrap { overflow: auto; min-height: 0; border: 1px solid var(--line); border-radius: 4px; }
   #pat-roll { display: block; cursor: crosshair; touch-action: none; }
+  /* Tonleiter-Sperre: Fremdtöne auf den Klaviertasten gedämpft, der Grundton trägt die Farbe der Melodie */
+  .pat-scale-bar { display: none; }
+  .pat-key.off, .vkey.off { background: color-mix(in srgb, var(--key-white) 22%, var(--well)); color: var(--muted); }
+  .pat-key.black.off, .vkey.black.off { background: var(--well); border-color: var(--line); color: var(--muted); }
+  .pat-key.root { box-shadow: inset 0 -5px 0 var(--cat-own); }
+  .vkey.root { box-shadow: inset 6px 0 0 var(--cat-own); }
+  #pat-scale-fix { color: var(--cat-own); }
   .pat-hint { margin: 0; font-size: 12px; color: var(--muted); }
 
   /* ---------- Rückmeldungen: kurzer Einblender unten über dem Arranger, nur wenn es etwas zu sagen gibt ---------- */
@@ -1483,6 +1491,12 @@
       background: var(--deck-2); color: var(--ink); font: 500 13px/1 var(--font-mono); cursor: pointer;
     }
     .vkey-oct:disabled { color: var(--muted); opacity: 0.4; }
+    /* Tonleiter-Schalter im freien Streifen über der Piano-Roll: bleibt beim Wischen links stehen */
+    .pat-scale-bar {
+      display: flex; align-items: flex-start; gap: 6px; position: sticky; left: 72px; top: 0; z-index: 3;
+      width: 0; height: 0; padding-left: 6px; pointer-events: none;
+    }
+    .pat-scale-bar > * { flex: none; pointer-events: auto; }
     #pat-live { order: -1; }
     #sing-desc { font-size: 16px; height: 44px; }
     .pat-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); }
@@ -2749,6 +2763,9 @@
         <label class="pat-field" id="pat-len-field">Notenlänge
           <select id="pat-len"><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1" selected>1/4</option><option value="2">1/2</option><option value="4">1/1</option></select>
         </label>
+        <button class="dbtn" id="pat-scale" type="button" aria-pressed="false">Tonleiter</button>
+        <span class="pat-field" id="pat-scale-kind-field"><select id="pat-scale-kind" aria-label="Welche Tonleiter"></select></span>
+        <button class="dbtn" id="pat-scale-fix" type="button" hidden>Auf Tonleiter ziehen</button>
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
         <button class="dbtn" id="pat-continue" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
         <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
@@ -2785,7 +2802,7 @@
         <p class="pat-sing-status" id="sing-status" role="status"></p>
       </div>
       <div class="pat-pads cat-drums" id="pat-pads" hidden></div>
-      <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><div class="pat-vkeys" id="pat-vkeys" role="group" aria-label="Klaviertasten"></div><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
+      <div class="pat-roll-wrap" id="pat-roll-wrap" hidden><div class="pat-scale-bar" id="pat-scale-bar"></div><div class="pat-vkeys" id="pat-vkeys" role="group" aria-label="Klaviertasten"></div><canvas id="pat-roll" aria-label="Piano-Roll"></canvas></div>
       <div class="pat-keys" id="pat-keys" hidden>
         <button type="button" class="dbtn pat-oct" id="pat-oct-down" aria-label="Oktave tiefer">◀</button>
         <div class="pat-keybed" id="pat-keybed" role="group" aria-label="Klaviatur"></div>

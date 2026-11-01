@@ -30,7 +30,8 @@ export class Patterns {
     let changed = false;
     for (const [id, p] of Object.entries(patterns)) {
       const sid = patternSampleId(id);
-      const key = JSON.stringify(p);
+      // Einstellungen der Tonleiter-Sperre ändern nur die Eingabe, nicht den Klang: kein Neu-Rendern
+      const key = JSON.stringify(p, (k, v) => (k === 'scaleLock' || k === 'scaleKind' ? undefined : v));
       const meta = {
         name: p.name,
         category: 'own',
