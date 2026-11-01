@@ -207,8 +207,15 @@
 - Lücken geschlossen: Clip-Leiste am Tablet über der Zoom-Leiste, Gruppenköpfe wachsen mit, Sound-Tempo am Handy (Pegel), Tonartwechsel im Inspektor, Gleiten am Handy als Knopf (`tests/luecken.test.cjs`)
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
+## ✅ 2.9 – Tonleiter-Sperre
+- Schalter „Tonleiter“ im Melodie-Editor (Kopfzeile; am Handy im Streifen über der Piano-Roll, immer in Reichweite): neue Noten rasten auf Töne der Songtonart ein – Setzen, Verschieben, Ziehen in der Piano-Roll, Bildschirm-Klaviatur, Computertastatur, MIDI, Live-Einspielen, Einsingen, Weiterführen
+- Tonleiter: natürliches Moll der Songtonart (Standard), „Dur“ (Paralleltonart, Grundton eine kleine Terz höher) oder Pentatonik; maßgeblich ist die Grundtonart des Songs, denn Melodien wandern bei Tonartwechseln als Ganzes mit (`src/scale.js`)
+- Anzeige: Tonleiter-Zeilen hell, Fremdtöne schwarz, Grundton mit Weißglut-Streifen; Klaviertasten mit Fremdtönen gedämpft, Grundton markiert; vorhandene Fremdnoten bleiben, gestrichelt
+- „Auf Tonleiter ziehen (n)“ rückt Fremdnoten auf den nächsten Ton, ein Rückgängig-Schritt; gespeichert am Pattern (`scaleLock`, `scaleKind`), alte Projekte laden mit „aus“, ändert den Klang nicht (kein Neu-Rendern)
+- Tests: `tests/scale-lock.test.cjs`
+
 ## Als Nächstes
-- Aus dem Markt-Scout: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
+- Aus dem Markt-Scout: Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
 
 ## Look
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.

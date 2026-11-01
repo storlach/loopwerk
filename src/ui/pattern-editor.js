@@ -16,13 +16,14 @@ import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { place, touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
+import { patternScale, scaleKindOf, SCALE_ORDER } from '../scale.js';
 
 // Linke Spalte der Piano-Roll: am Handy die (senkrechte, spielbare) Klaviatur, am Desktop nur Notennamen –
 // dort spielt man auf der waagerechten Klaviatur darunter
 const keyW = () => (narrow.matches ? 72 : 30);
 const narrow = window.matchMedia('(max-width: 760px)');
 // Am Handy zeigt die Piano-Roll einen Tonbereich, der genau in die Höhe passt (▲/▼ wechselt ihn) – nichts scrollt
-const OCT_BTN = 34;
+const OCT_BTN = 44; // auch der Streifen für den Tonleiter-Schalter: fingergroß
 const MIN_ROW = 34;
 // Computertastatur → Halbton über dem Grundton (deutsches und englisches Layout: Z und Y)
 const KEYMAP = { a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7, z: 8, y: 8, h: 9, u: 10, j: 11, k: 12, o: 13, l: 14 };
@@ -93,6 +94,21 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     await engine._ensure();
     return engine.ctx;
   }
+
+  // Tonleiter-Sperre: Schalter und Auswahl liegen am Handy im freien Streifen über der Piano-Roll (immer in Reichweite),
+  // „Auf Tonleiter ziehen“ unter „Mehr“; am Desktop bleiben alle drei in der Kopfzeile
+  const scaleBtn = $('pat-scale');
+  const scaleKindField = $('pat-scale-kind-field');
+  const scaleKindSel = $('pat-scale-kind');
+  const scaleFix = $('pat-scale-fix');
+  const scaleBar = $('pat-scale-bar');
+  place(scaleBtn, { narrow: scaleBar });
+  place(scaleKindField, { narrow: scaleBar });
+  place(scaleFix, { narrow: moreEl });
+  for (const k of SCALE_ORDER) { const o = el('option'); o.value = k; scaleKindSel.append(o); }
+  // Tonleiter dieses Patterns (Grundtonart des Songs, siehe scale.js); lock() rastet einen Ton ein, wenn die Sperre an ist
+  const scaleNow = () => patternScale(store.project, pat());
+  const lock = (pitch, prefer = 0) => (id && pat() ? scaleNow().lock(pitch, prefer) : pitch);
 
   function open(patternId) {
     if (id !== patternId) { page = 0; looper.stop(); }
@@ -385,17 +401,31 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const y0 = vw.top;
     const y1 = vw.top + (vw.hi - vw.lo + 1) * rh;
     c.clearRect(0, 0, w, h);
+    // Tonleiter-Sperre: Zeilen der Tonleiter hell, Fremdtöne schwarz, der Grundton mit Weißglut-Streifen und Namen
+    const sc = patternScale(store.project, p);
     for (let m = vw.hi; m >= vw.lo; m--) {
       const y = yOf(m, vw);
-      c.fillStyle = col(isBlack(m) ? '--lane-alt' : '--lane');
+      c.fillStyle = col(sc.on && !sc.has(m) ? '--well' : isBlack(m) ? '--lane-alt' : '--lane');
       c.fillRect(keyW(), y, w - keyW(), rh);
-      if (m % 12 === 0) {
+      if (sc.on && sc.has(m)) {
+        c.fillStyle = col('--ink');
+        c.globalAlpha = sc.isRoot(m) ? 0.22 : 0.09;
+        c.fillRect(keyW(), y, w - keyW(), rh);
+        c.globalAlpha = 1;
+      }
+      if (sc.on && sc.isRoot(m)) {
+        c.fillStyle = col('--ink');
+        c.fillRect(keyW(), y, 3, rh);
+      }
+      if (m % 12 === 0 || (sc.on && sc.isRoot(m))) {
         // Desktop: Notennamen statt Tasten (gespielt wird auf der waagerechten Klaviatur)
         if (!narrow.matches) {
-          c.fillStyle = col('--muted');
+          c.fillStyle = col(sc.on && sc.isRoot(m) ? '--ink' : '--muted');
           c.font = '10px ' + col('--font-mono');
           c.fillText(noteName(m), 4, y + rh - 3);
         }
+      }
+      if (m % 12 === 0) {
         c.fillStyle = col('--grid-bar');
         c.fillRect(keyW(), y + rh - 1, w - keyW(), 1);
       }
@@ -416,11 +446,31 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     for (const note of notes) {
       if (note.pitch < vw.lo || note.pitch > vw.hi) continue;
       const x = keyW() + note.start * STEPS_PER_BEAT * cellW;
+      const nw = Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2);
+      const ny = yOf(note.pitch, vw) + 1;
+      if (sc.on && !sc.has(note.pitch)) {
+        // Fremdton bleibt erhalten, ist aber nur gestrichelt umrandet
+        c.fillStyle = noteCol;
+        c.globalAlpha = 0.22;
+        c.fillRect(x + 1, ny, nw, rh - 2);
+        c.globalAlpha = 1;
+        c.strokeStyle = noteCol;
+        c.lineWidth = 1.5;
+        c.setLineDash([4, 3]);
+        c.strokeRect(x + 1.75, ny + 0.75, Math.max(1, nw - 1.5), rh - 3.5);
+        c.setLineDash([]);
+        continue;
+      }
       c.fillStyle = noteCol;
-      c.fillRect(x + 1, yOf(note.pitch, vw) + 1, Math.max(3, note.len * STEPS_PER_BEAT * cellW - 2), rh - 2);
+      c.fillRect(x + 1, ny, nw, rh - 2);
     }
   }
 
+  // Neue Tonhöhe beim Verschieben um `rows` Zeilen; ändert sich die Zeile, rastet sie auf die Tonleiter ein (in Zugrichtung)
+  const movedPitch = (pitch0, rows) => {
+    const target = clamp(pitch0 + rows, PITCH_LOW, PITCH_HIGH);
+    return target === pitch0 ? pitch0 : lock(target, Math.sign(rows));
+  };
   const noteAt = (notes, pitch, beat) => notes.findIndex((n) => n.pitch === pitch && beat >= n.start && beat < n.start + n.len);
 
   holdArea(canvas);
@@ -430,7 +480,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const { cellW } = rollGeometry();
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
-    const pitch = pitchAtY(e.clientY - rect.top);
+    const rawPitch = pitchAtY(e.clientY - rect.top);
+    const pitch = lock(rawPitch); // neue Noten rasten auf die Tonleiter ein (nur bei aktiver Sperre)
     const p = pat();
     if (x < keyW()) {
       // Tasten am Rand: Ton klingt, solange gedrückt
@@ -442,7 +493,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const stepAt = (cx) => clamp(Math.floor((cx - rect.left - keyW()) / cellW), 0, steps() - 1);
     const beat = stepAt(e.clientX) / STEPS_PER_BEAT;
     const notes = p.notes.map((n) => ({ ...n }));
-    const hit = noteAt(notes, pitch, beat);
+    // Eine vorhandene Note (auch ein Fremdton) wird dort getroffen, wo sie steht – erst dann zählt die eingerastete Zeile
+    const hit = noteAt(notes, rawPitch, beat) >= 0 ? noteAt(notes, rawPitch, beat) : noteAt(notes, pitch, beat);
     let moved = false;
     // Finger: Wischen scrollt die Piano-Roll, Antippen setzt eine Note (Länge aus „Notenlänge“) oder löscht sie.
     // Lange drücken und ziehen: Note verschieben, am rechten Ende verlängern – auf freier Fläche eine Note aufziehen.
@@ -476,7 +528,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
             else {
               const dx = Math.round((ev.clientX - e.clientX) / cellW) / STEPS_PER_BEAT;
               n.start = clamp(start0 + dx, 0, total - n.len);
-              n.pitch = clamp(pitch0 - Math.round((ev.clientY - e.clientY) / rowH()), PITCH_LOW, PITCH_HIGH);
+              n.pitch = movedPitch(pitch0, -Math.round((ev.clientY - e.clientY) / rowH()));
             }
             drawRoll(p, notes);
           }, () => { canvas.classList.remove('holding'); update((q) => { q.notes = notes; }); },
@@ -499,7 +551,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         if (resize) n.len = clamp(Math.round((ev.clientX - rect.left - keyW()) / cellW) / STEPS_PER_BEAT - n.start, 0.25, total - n.start);
         else {
           n.start = clamp(start0 + dx, 0, total - n.len);
-          n.pitch = clamp(pitch0 - dy, PITCH_LOW, PITCH_HIGH);
+          n.pitch = movedPitch(pitch0, -dy);
         }
         drawRoll(p, notes);
       }, () => {
@@ -860,7 +912,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   const voices = new Map(); // Tonhöhe → gehaltener Ton
   function noteOn(pitch) {
     const p = pat();
-    if (!p || p.type !== 'synth' || voices.has(pitch)) return;
+    if (!p || p.type !== 'synth') return;
+    pitch = lock(pitch); // Computertastatur, MIDI, Klaviertasten und Live-Einspielen: Fremdton → nächster Tonleiterton
+    if (voices.has(pitch)) return;
     keyEl(pitch)?.classList.add('down');
     vkeyEl(pitch)?.classList.add('down');
     reveal(pitch);
@@ -884,6 +938,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     });
   }
   function noteOff(pitch) {
+    pitch = lock(pitch);
     keyEl(pitch)?.classList.remove('down');
     vkeyEl(pitch)?.classList.remove('down');
     voices.get(pitch)?.stop?.();
@@ -945,12 +1000,12 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const k = e.target.closest('.vkey');
     if (!k) return;
     e.preventDefault();
-    let pitch = Number(k.dataset.pitch);
+    let pitch = lock(Number(k.dataset.pitch));
     noteOn(pitch);
-    // Mit dem Finger über die Tasten gleiten spielt die nächste Taste
+    // Mit dem Finger über die Tasten gleiten spielt die nächste Taste (gedämpfte Tasten zählen als ihr Nachbarton)
     trackPointer(e, (ev) => {
       const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest?.('.vkey');
-      const next = over ? Number(over.dataset.pitch) : pitch;
+      const next = over ? lock(Number(over.dataset.pitch)) : pitch;
       if (next !== pitch) { noteOff(pitch); pitch = next; noteOn(pitch); }
     }, () => noteOff(pitch), () => noteOff(pitch));
   });
@@ -991,7 +1046,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const bars = [1, 2, 4, 8, 16].find((b) => b * 4 >= res.beats) ?? 16;
     const notes = fitOctaves(res.notes, PITCH_LOW, PITCH_HIGH)
       .filter((n) => n.start < bars * 4)
-      .map((n) => ({ ...n, len: Math.min(n.len, bars * 4 - n.start) }));
+      .map((n) => ({ ...n, pitch: lock(n.pitch), len: Math.min(n.len, bars * 4 - n.start) }));
     update((p) => { p.notes = notes; p.bars = bars; });
     fitClips(bars);
     say(`${notes.length} Töne erkannt (${bars} ${bars === 1 ? 'Takt' : 'Takte'}). Hör sie dir mit „▶ Anhören“ an und wähle oben den Klang.`);
@@ -1054,7 +1109,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     try {
       const res = await continueMelody(base, { from, beats, seed });
       const bars = [1, 2, 4, 8, 16].find((b) => b * 4 >= from + beats) ?? 16;
-      const all = [...base, ...res.notes];
+      const all = [...base, ...res.notes.map((n) => ({ ...n, pitch: lock(n.pitch) }))];
       update((q) => { q.notes = all; q.bars = Math.max(q.bars, bars); });
       fitClips(Math.max(p.bars, bars));
       lastCont = { id, from, beats, seed, notesKey: notesKey(all) };
@@ -1108,6 +1163,70 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   });
 
+  // ---------- Tonleiter-Sperre ----------
+
+  scaleBtn.addEventListener('click', () => {
+    notesOffAll(); // gehaltene Töne gehören noch zur alten Einstellung
+    const turnOn = !scaleNow().on;
+    update((p) => { if (turnOn) p.scaleLock = true; else delete p.scaleLock; });
+    const n = scaleNow().foreign(pat().notes);
+    if (turnOn && n) ui.flash(`${n} ${n === 1 ? 'Note liegt' : 'Noten liegen'} außerhalb der Tonleiter (gestrichelt). „Auf Tonleiter ziehen“ rückt sie zurecht.`);
+  });
+  scaleKindSel.addEventListener('change', () => {
+    const v = scaleKindSel.value;
+    update((p) => { if (v === 'minor') delete p.scaleKind; else p.scaleKind = v; });
+  });
+  // Fremdtöne auf den nächsten Tonleiterton schieben – ein Rückgängig-Schritt
+  scaleFix.addEventListener('click', () => {
+    const sc = scaleNow();
+    const n = sc.foreign(pat().notes);
+    if (!n) return;
+    update((p) => {
+      const out = [];
+      for (const note of p.notes) {
+        const pitch = sc.snap(note.pitch);
+        // Zwei Noten, die dabei auf demselben Ton und Schlag landen, werden eine (die längere)
+        const twin = out.find((o) => o.pitch === pitch && o.start === note.start);
+        if (twin) twin.len = Math.max(twin.len, note.len);
+        else out.push({ ...note, pitch });
+      }
+      p.notes = out;
+    });
+    ui.flash(`${n} ${n === 1 ? 'Ton' : 'Töne'} auf die Tonleiter gezogen.`);
+  });
+
+  // Klaviertasten: Fremdtöne gedämpft, Grundton markiert (Desktop-Klaviatur und senkrechte Tasten am Handy)
+  function markScale(p) {
+    const sc = patternScale(store.project, p);
+    for (const k of [...keybed.querySelectorAll('.pat-key'), ...vkeys.querySelectorAll('.vkey')]) {
+      const m = Number(k.dataset.pitch);
+      k.classList.toggle('off', sc.on && !sc.has(m));
+      k.classList.toggle('root', sc.on && sc.isRoot(m));
+    }
+  }
+
+  function renderScale(p) {
+    const drums = p.type === 'drums';
+    const sc = patternScale(store.project, p);
+    scaleBtn.hidden = drums;
+    scaleBtn.setAttribute('aria-pressed', String(sc.on));
+    scaleBtn.title = sc.on
+      ? `Tonleiter ${sc.label} ist an: neue Noten rasten auf ihre Töne ein. Antippen schaltet sie aus.`
+      : 'Tonleiter einschalten: neue Noten rasten auf die Töne der Songtonart ein, keine falschen Töne mehr.';
+    scaleKindField.hidden = drums || !sc.on;
+    scaleKindSel.title = 'Welche Tonleiter';
+    for (const o of scaleKindSel.options) {
+      const label = patternScale(store.project, { ...p, scaleKind: o.value }).label;
+      if (o.textContent !== label) o.textContent = label;
+    }
+    if (document.activeElement !== scaleKindSel) scaleKindSel.value = scaleKindOf(p);
+    const n = sc.foreign(p.notes);
+    scaleFix.hidden = drums || !n;
+    scaleFix.textContent = `Auf Tonleiter ziehen (${n})`;
+    scaleFix.title = `${n} ${n === 1 ? 'Note liegt' : 'Noten liegen'} außerhalb der Tonleiter – sie rücken auf den nächsten Ton`;
+    markScale(p);
+  }
+
   // ---------- Darstellung ----------
 
   function render() {
@@ -1160,6 +1279,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       renderKeys();
       if (narrow.matches) renderVkeys();
     }
+    renderScale(p);
   }
 
   ui.on(() => {
