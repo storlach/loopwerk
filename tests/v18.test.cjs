@@ -244,7 +244,7 @@ const { check, finish } = createChecker();
 
     // ---------- Erstellen ----------
     await page.click('#ltab-create');
-    check('Reiter „Erstellen“ zeigt sechs Karten', await page.locator('.ccard:visible').count() === 6);
+    check('Reiter „Erstellen“ zeigt sieben Karten (mit „Begleitung“)', await page.locator('.ccard:visible').count() === 7);
     const tracks0 = (await S()).tracks.length;
     await page.locator('.ccard[data-create="beat"]').click();
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');

@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, keyChangesOf, keySpans, keyDelta, EPS } from './model.js';
+import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
@@ -304,12 +304,16 @@ export function clipPieces(project, library, clip, ranges, { stale = false } = {
   const base = sampleFor(library, clip);
   if (!base?.buffer) return [];
   const segs = audibleSegments(clip, base.lengthBeats, ranges);
-  if (!keyChangesOf(project).length || !library.followsKey?.(clip.sampleId)) return segs.map((x) => ({ ...x, sample: base }));
+  // Begleit-Patterns folgen zusätzlich dem Akkord-Streifen: je Abschnitt die Fassung auf der dortigen Stufe, Pause = still
+  const chords = !!library.followsChords?.(clip.sampleId);
+  if (!chords && !(keyChangesOf(project).length && library.followsKey?.(clip.sampleId))) return segs.map((x) => ({ ...x, sample: base }));
   const out = [];
   for (const x of segs) {
-    for (const span of keySpans(project, x.from, x.to)) {
+    for (const span of chords ? harmonySpans(project, x.from, x.to) : keySpans(project, x.from, x.to)) {
+      if (chords && span.chord === '-') continue;
       const delta = keyDelta(project, span.key);
-      const v = delta ? library.variant(clip.sampleId, { delta, stretch: clip.stretch || 1, stale }) : base;
+      const chord = chords && span.chord !== 'i' ? span.chord : null;
+      const v = delta || chord ? library.variant(clip.sampleId, { delta, chord, stretch: clip.stretch || 1, stale }) : base;
       const sample = v?.buffer && Math.abs(v.lengthBeats - base.lengthBeats) < EPS ? v : base;
       const last = out[out.length - 1];
       if (last && last.seg === x.seg && last.sample === sample && Math.abs(last.to - span.from) < EPS) last.to = span.to;
@@ -326,7 +330,7 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) 
   return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb));
 }
 
-// Rendert das Projekt offline (Tests, Export). Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
+// Rendert das Projekt offline (Tests, Export). Tonart- und Akkord-Fassungen werden vorher bereitgestellt. Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
 // onProgress(0…1) wird etwa alle 2 s Audio gemeldet.
 // compensate: Limiter-Verzögerung herausrechnen (für Export, damit Loops exakt am Dateianfang beginnen).
 // mastering: false = ohne Mastering, { pre, drive } = Verstärkungen aus der Analyse (sonst Vorhalt des Stils).
@@ -338,8 +342,8 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const duration = (end - fromBeat) * spb + tailSeconds;
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
   const wantMaster = !analysis && mastering !== false && masteringOf(project).on;
-  // Tonart je Takt: umgestimmte Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
-  if (keyChangesOf(project).length) await library.ensureKeyVariants?.(project);
+  // Tonart je Takt und Akkord-Streifen: Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
+  await library.ensureKeyVariants?.(project);
   const lat = !compensate ? 0 : wantMaster ? masterLatency(sampleRate) : limiter ? await limiterLatency(sampleRate) : 0;
   const ctx = new OfflineAudioContext(analysis ? 4 : 2, frames + lat, sampleRate);
   const worklets = wantMaster || pad ? await loadFxWorklet(ctx) : false;
@@ -691,7 +695,10 @@ export class Engine extends Emitter {
     const ranges = this._audible().get(clip.id) ?? [];
     const base = sampleFor(this.library, clip);
     let sig = clipSignature(track.id, clip) + '|' + (base?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
-    if (keyChangesOf(this.project).length && this.library.followsKey?.(clip.sampleId)) {
+    if (this.library.followsChords?.(clip.sampleId)) {
+      // Akkord-Streifen: auch Pausen und Abschnitte auf Stufe i gehören dazu
+      sig += '|' + this._pieces(clip).map((p) => `${p.from}-${p.to}:${p.sample.id}.${p.sample.rev}`).join(',');
+    } else if (keyChangesOf(this.project).length && this.library.followsKey?.(clip.sampleId)) {
       sig += '|' + this._pieces(clip).filter((p) => p.sample !== base).map((p) => `${p.from}-${p.to}:${p.sample.id}.${p.sample.rev}`).join(',');
     }
     return sig;

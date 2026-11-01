@@ -7,6 +7,7 @@ import { makeKnob } from './knob.js';
 import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
+import { mountChordRow } from './chord-row.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
@@ -59,7 +60,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
   ruler.append(phGrip);
   // Tonart je Takt: schmale Zeile unter dem Lineal
   const keyRow = mountKeyRow({ store, engine, ui });
-  grid.append(rulerRow, keyRow.row, rowsEl, addRow, loopShade, playhead);
+  // Akkord-Streifen darunter
+  const chordRow = mountChordRow({ store, engine, ui, library });
+  grid.append(rulerRow, keyRow.row, chordRow.row, rowsEl, addRow, loopShade, playhead);
   root.append(grid);
 
   const rows = new Map();
@@ -689,6 +692,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     grid.style.width = headW() + totalBeats(p) * ppb() + 'px';
     renderRuler();
     keyRow.render();
+    chordRow.render();
     syncRows();
     for (const t of p.tracks) renderLane(rows.get(t.id), t);
     forceAll = false;
@@ -1190,7 +1194,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Senkrecht zählen nur die Spuren und die „+ Spur“-Zeile; ein offenes Fach (Polster unten) gehört nicht zum Ausschnitt.
   // fixed/n: wie viel der Höhe nicht mit der Spurhöhe wächst, und wie viele Zeilen mitwachsen.
   function metrics() {
-    const ruler = rulerRow.offsetHeight;
+    const ruler = rowsEl.offsetTop; // Lineal, Tonart-Zeile und Akkord-Streifen kleben oben
     const pad = parseFloat(getComputedStyle(grid).paddingBottom) || 0;
     const h = rowH();
     let fixed = addRow.offsetHeight;
@@ -1284,5 +1288,5 @@ export function mountArranger({ root, store, engine, library, ui }) {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
     markSelection();
   });
-  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, get scissors() { return !!scissors; } };
+  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, chordRow, get scissors() { return !!scissors; } };
 }

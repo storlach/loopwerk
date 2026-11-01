@@ -183,7 +183,8 @@ const { check, finish } = createChecker();
     // Ausgewählter Clip lässt sich ziehen
     const sel = await box('.clip.selected');
     const start0 = (await lw()).tracks[6].find((c) => c.id === riserId).startBeat;
-    await swipe(Math.max(sel.x, 140) + 30, sel.y + 8, 96, 0);
+    // nicht auf dem senkrechten Rollbalken am rechten Rand ansetzen
+    await swipe(Math.max(sel.x, 140) + 22, sel.y + 8, 96, 0);
     const start1 = (await lw()).tracks[6].find((c) => c.id === riserId)?.startBeat;
     check('Ein ausgewählter Clip lässt sich mit dem Finger verschieben', start1 === start0 + 4, `${start0} → ${start1}`);
     await page.tap('#undo-btn');

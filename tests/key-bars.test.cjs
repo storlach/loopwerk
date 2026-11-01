@@ -283,9 +283,10 @@ async function addTestTone() {
     // Loop-Schattierung beginnt unter der Tonart-Zeile
     const shade = await page.evaluate(() => {
       window.loopwerk.store.setLoop({ on: true, startBeat: 0, endBeat: 16 });
-      return Math.round(document.querySelector('.loop-shade').getBoundingClientRect().top - document.querySelector('.key-strip').getBoundingClientRect().bottom);
+      // seit 2.9 liegt darunter noch der Akkord-Streifen
+      return Math.round(document.querySelector('.loop-shade').getBoundingClientRect().top - (document.querySelector('.chord-strip') ?? document.querySelector('.key-strip')).getBoundingClientRect().bottom);
     });
-    check('Loop-Bereich beginnt unter der Tonart-Zeile', Math.abs(shade) <= 1, `${shade} px`);
+    check('Loop-Bereich beginnt unter der Tonart-Zeile (und dem Akkord-Streifen)', Math.abs(shade) <= 1, `${shade} px`);
 
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
     await app.close();

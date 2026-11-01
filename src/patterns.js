@@ -2,7 +2,8 @@
 // neue Patterns registrieren, geänderte neu rendern, entfernte austragen. Die Engine plant geänderte Clips neu.
 
 import { renderPattern, presetInfo } from './instruments.js';
-import { transposePattern } from './model.js';
+import { transposePattern, tonicOf, keyOf } from './model.js';
+import { voicePattern } from './harmony.js';
 
 export const patternSampleId = (id) => 'pat-' + id;
 
@@ -16,6 +17,13 @@ export class Patterns {
   }
 
   current(id) { return this.project?.patterns?.[id]; }
+
+  // Pattern in der Tonart „Grundtonart + delta“ und auf Stufe `chord` (nur Begleit-Patterns)
+  voiced(id, delta = 0, chord = null) {
+    const pat = transposePattern(this.current(id), delta);
+    if (!chord || !pat.follow) return pat;
+    return voicePattern(pat, (tonicOf(keyOf(this.project)) + delta + 120) % 12, chord);
+  }
 
   // Gibt ein Promise zurück, das erfüllt ist, wenn alle Pattern-Sounds zum Projekt passen.
   sync(project) {
@@ -41,7 +49,9 @@ export class Patterns {
         // Farbe im Arranger: Beats wie Drums, Melodien wie ihr Klang (Bass, Akkorde, Synth)
         colorCat: p.type === 'drums' ? 'drums' : presetInfo(p.preset)?.category ?? 'synth',
         // Melodien folgen der Tonart je Takt: Fassung mit verschobenen Noten (Library.ensureVariant)
-        transpose: p.type === 'synth' ? (bpm, delta) => renderPattern(transposePattern(this.current(id), delta), bpm, lib) : undefined,
+        // Begleit-Patterns (follow) zusätzlich auf jeder Stufe des Akkord-Streifens (Vorlage steht auf Stufe i)
+        transpose: p.type === 'synth' ? (bpm, delta, chord) => renderPattern(this.voiced(id, delta, chord), bpm, lib) : undefined,
+        followChords: p.type === 'synth' && !!p.follow,
       };
       let s = lib.get(sid);
       if (!s) {

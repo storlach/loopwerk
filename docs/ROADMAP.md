@@ -221,11 +221,16 @@
 - Effekt-Pad (Filter, Echo, Stutter, Lo-Fi, Bandstopp, Halten) auf Summe oder Spur, nur live; Desktop: Reiter „FX-Pad“, Handy: Knopf im Mixer-Kopf
 - Tests: `tests/master-fxpad.test.cjs`
 
+## ✅ 2.11 – Song-Starter und Akkord-Streifen
+- Song-Starter unter „Erstellen“ (am Handy im Fach „Song“): neun Genres, ein Antippen baut ein ganzes Lied – Tempo, Tonart, Intro → Strophe → Refrain → Break → Refrain → Outro, Spuren Drums bis FX mit Lautstärken, Riser/Crash an den Übergängen; Loops mit derselben Akkordfolge, sonst Begleit-Patterns; „Sicher?“ im Knopf statt Dialog, „Nochmal“ würfelt, ein Rückgängig-Schritt
+- Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
+- Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
+
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
 
 ## Als Nächstes
-- Aus dem Markt-Scout: Akkord-Streifen, Song-Starter (in Arbeit)
+- Aus dem Markt-Scout erledigt: Tonleiter-Sperre, Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
 
 ## Look
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.

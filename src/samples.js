@@ -10,7 +10,8 @@ import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { GUITAR_LOOP_DEFS, GUITAR_GENRES } from './loops-guitar.js';
 import { GUITAR_CATALOG } from './catalog-guitar.js';
 import { timeStretch } from './dsp/stretch.js';
-import { keyChangesOf, keySpans, keyDelta } from './model.js';
+import { keyChangesOf, keySpans, keyDelta, harmonySpans } from './model.js';
+import { DEGREE_IDS, REST } from './harmony.js';
 
 export const CATEGORIES = [
   { id: 'drums', label: 'Drums' },
@@ -1492,6 +1493,10 @@ async function decode(arrayBuffer) {
 }
 export { decode as decodeAudio };
 
+// Schlüssel einer Fassung: „id~delta“ (Tonart) bzw. „id~delta~stufe“ (Begleitung auf einer anderen Stufe als i)
+const chordOn = (chord) => !!chord && chord !== 'i' && chord !== REST;
+const variantKey = (id, delta, chord) => (chordOn(chord) ? `${id}~${delta}~${chord}` : `${id}~${delta}`);
+
 export class Library extends Emitter {
   constructor() {
     super();
@@ -1531,23 +1536,30 @@ export class Library extends Emitter {
     return !!s && (!!(s.def && s.key) || typeof s.transpose === 'function');
   }
 
+  // Begleit-Patterns („folgt Akkorden“): klingen je Abschnitt des Akkord-Streifens auf der dortigen Stufe
+  followsChords(id) {
+    const s = this.samples.get(id);
+    return !!s?.followChords && typeof s.transpose === 'function';
+  }
+
   // Fertige Fassung (synchron, für den Scheduler) oder null. stale: eine Fassung vom vorigen Stand des Sounds gilt,
   // solange sie gleich lang ist (z. B. kurz nach einer Pattern-Änderung, bis die neue fertig ist).
-  variant(id, { delta = 0, stretch = 1, stale = false } = {}) {
+  variant(id, { delta = 0, chord = null, stretch = 1, stale = false } = {}) {
     const base = this.samples.get(id);
-    if (!delta) return this._stretchedOf(base, stretch);
+    if (!delta && !chordOn(chord)) return this._stretchedOf(base, stretch);
     if (!base?.buffer) return null;
-    const v = this.keyedVariants.get(`${id}~${delta}`);
+    const v = this.keyedVariants.get(variantKey(id, delta, chord));
     if (!v) return null;
     const fresh = v.baseRev === base.rev;
     if (!fresh && !(stale && v.buffer.length === base.buffer.length)) return null;
     return this._stretchedOf(v, stretch);
   }
 
-  async ensureVariant(id, { delta = 0, stretch = 1 } = {}) {
+  async ensureVariant(id, { delta = 0, chord = null, stretch = 1 } = {}) {
     const base = await this.ensure(id);
-    if (!delta || !base?.buffer || !this.followsKey(id)) return this._ensureStretchedOf(base, stretch);
-    const key = `${id}~${delta}`;
+    if (!chordOn(chord) || !this.followsChords(id)) chord = null;
+    if ((!delta && !chord) || !base?.buffer || !this.followsKey(id)) return this._ensureStretchedOf(base, stretch);
+    const key = variantKey(id, delta, chord);
     let v = this.keyedVariants.get(key);
     if (!v || v.baseRev !== base.rev) {
       const pendingKey = `${key}#${base.rev}`;
@@ -1555,9 +1567,9 @@ export class Library extends Emitter {
         this.pendingVariants.set(pendingKey, (async () => {
           const baseRev = base.rev;
           try {
-            const r = base.def ? await renderLoop(base.def, this.bpm, this.semis + delta) : await base.transpose(this.bpm, delta);
+            const r = base.def ? await renderLoop(base.def, this.bpm, this.semis + delta) : await base.transpose(this.bpm, delta, chord);
             const kv = {
-              id: key, baseId: id, delta, baseRev, rev: ++this.variantRev,
+              id: key, baseId: id, delta, chord, baseRev, rev: ++this.variantRev,
               name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
               buffer: r.buffer, lengthBeats: r.lengthBeats,
             };
@@ -1574,16 +1586,22 @@ export class Library extends Emitter {
     return this._ensureStretchedOf(v, stretch);
   }
 
-  // Welche Tonart-Fassungen braucht das Projekt? [{ id, delta, stretch }]
+  // Welche Tonart- und Akkord-Fassungen braucht das Projekt? [{ id, delta, chord, stretch }]
+  // Begleit-Patterns: alle Stufen jeder benutzten Tonart, damit Änderungen am Akkord-Streifen sofort klingen.
   keyNeeds(project) {
-    if (!keyChangesOf(project).length) return [];
+    const keyed = keyChangesOf(project).length > 0;
     const out = new Map();
+    const need = (id, delta, chord, stretch) => { if (delta || chordOn(chord)) out.set(`${variantKey(id, delta, chord)}@${stretch}`, { id, delta, chord: chordOn(chord) ? chord : null, stretch }); };
     for (const t of project.tracks) {
       for (const c of t.clips) {
-        if (!this.followsKey(c.sampleId)) continue;
-        for (const span of keySpans(project, c.startBeat, c.startBeat + c.lengthBeats)) {
+        const fc = this.followsChords(c.sampleId);
+        if (!fc && !(keyed && this.followsKey(c.sampleId))) continue;
+        const stretch = c.stretch || 1;
+        const spans = fc ? harmonySpans(project, c.startBeat, c.startBeat + c.lengthBeats) : keySpans(project, c.startBeat, c.startBeat + c.lengthBeats);
+        for (const span of spans) {
           const delta = keyDelta(project, span.key);
-          if (delta) out.set(`${c.sampleId}~${delta}@${c.stretch || 1}`, { id: c.sampleId, delta, stretch: c.stretch || 1 });
+          if (fc) for (const d of DEGREE_IDS) need(c.sampleId, delta, d, stretch);
+          else need(c.sampleId, delta, null, stretch);
         }
       }
     }
@@ -1594,7 +1612,7 @@ export class Library extends Emitter {
   // Gibt die Zahl der neu erzeugten zurück.
   async ensureKeyVariants(project) {
     const needs = this.keyNeeds(project);
-    const used = new Set(needs.map((n) => `${n.id}~${n.delta}`));
+    const used = new Set(needs.map((n) => variantKey(n.id, n.delta, n.chord)));
     for (const k of this.keyedVariants.keys()) if (!used.has(k)) this.keyedVariants.delete(k);
     const missing = needs.filter((n) => !this.variant(n.id, n));
     await Promise.all(missing.map((n) => this.ensureVariant(n.id, n)));
