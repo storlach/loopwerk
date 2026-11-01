@@ -232,6 +232,7 @@
 - Piano-Roll: ein schneller Klick setzt die Note zuverlässig (vorher ging sie verloren, solange der Klang lud)
 - Schubladen schieben die Ansicht: beim Öffnen und Ziehen rücken die Spuren Bild für Bild mit nach oben (Mitte des sichtbaren Inhalts bleibt in der Mitte des freien Bereichs, eine ausgewählte Spur bleibt ganz sichtbar), beim Schließen zurück (`tests/sheet-follow.test.cjs`)
 - Clip-Editor: Name direkt im Kopf ändern; Anhören, Rückgängig, Abbrechen als Icons (nur „Übernehmen“ ausgeschrieben); Wellenform bleibt oben stehen, Werkzeuge scrollen darunter; Autotune, Roboter und „Als Loop“ als Schalter
+- Gitarren-Verzerrer: „Verzerrer“ auf der Spur hat jetzt Amp Crunch, Amp Lead, Amp Metal (Vorstufe mit Mittenanhebung, Röhrenstufen, Klangregelung, 4×12-Box; live und Export gleich); Melodie-Editor: E-Gitarre Crunch, Metal, Fuzz (`tests/amp-drive.test.cjs`)
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

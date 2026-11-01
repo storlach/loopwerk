@@ -32,7 +32,41 @@ const DRIVE_TYPES = [
   { id: 'hard', label: 'Hart' },
   { id: 'fuzz', label: 'Fuzz' },
   { id: 'crush', label: 'Bitcrusher' },
+  { id: 'amp-crunch', label: 'Amp Crunch' },
+  { id: 'amp-lead', label: 'Amp Lead' },
+  { id: 'amp-metal', label: 'Amp Metal' },
 ];
+
+// Gitarren-Verstärker (wie src/dsp/guitar.js): Vorstufe mit Mittenanhebung, ein oder zwei Röhrenstufen,
+// Klangregelung, 4×12-Box. k = Vorverstärkung bei Stärke 0 und 1.
+export const AMP_TYPES = {
+  'amp-crunch': { hp: 100, boost: [800, 6, 0.8], k: [1, 14], k2: 0, bias: 0.15, bass: 1, mid: 2, treble: 2, level: 0.22 },
+  'amp-lead': { hp: 120, boost: [850, 7, 0.8], k: [1.5, 26], k2: 3, bias: 0.12, bass: 1, mid: 3, treble: 1, level: 0.2 },
+  'amp-metal': { hp: 190, boost: [900, 8, 0.7], k: [3, 42], k2: 4, bias: 0.1, bass: 5, mid: -7, treble: 3, level: 0.17 },
+};
+// Box: wie guitar.js, dazu ein weiterer Tiefpass – ein 4×12-Lautsprecher fällt über 5 kHz steil ab
+const CAB_4X12 = [['highpass', 80, 0.9, 0], ['peaking', 120, 1, 3], ['peaking', 450, 1.2, -4], ['peaking', 2300, 1.6, 4], ['lowpass', 4600, 0.8, 0], ['lowpass', 5200, 0.7, 0], ['lowpass', 6500, 0.6, 0]];
+const AMP_IN = 0.25; // Vorabsenkung vor der Mittenanhebung: der Shaper sieht nie mehr als ±1
+const isAmp = (type) => Object.hasOwn(AMP_TYPES, type);
+const ampSat = (x) => (x >= 3 ? 1 : x <= -3 ? -1 : (x * (27 + x * x)) / (27 + 9 * x * x));
+export function ampCurve(type, drive) {
+  const key = `${type}|${Math.round(drive * 100)}`;
+  if (curveCache.has(key)) return curveCache.get(key);
+  const a = AMP_TYPES[type];
+  const k = (a.k[0] + (a.k[1] - a.k[0]) * drive) / AMP_IN;
+  const b = a.bias, b2 = a.bias * 0.5;
+  const t1 = ampSat(b), t2 = ampSat(b2);
+  const n = 8192;
+  const c = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    let y = ampSat(k * x + b) - t1;
+    if (a.k2) y = ampSat(a.k2 * y + b2) - t2;
+    c[i] = y;
+  }
+  curveCache.set(key, c);
+  return c;
+}
 
 const FILTER_TYPES = [
   { id: 'lowpass', label: 'Tiefpass' },
@@ -140,19 +174,51 @@ export const EFFECTS = [
       const wet = ctx.createGain();
       input.connect(dry).connect(output);
       input.connect(shaper).connect(dc).connect(tone).connect(post).connect(wet).connect(output);
+      // Zweiter Zweig: Gitarren-Verstärker mit Box; je nach Art klingt genau einer der beiden Zweige
+      const biq = (type, f, q = 0.7, g = 0) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.gain.value = g; return b; };
+      const aIn = ctx.createGain();
+      aIn.gain.value = AMP_IN;
+      const aHp = biq('highpass', 100);
+      const aBoost = biq('peaking', 800, 0.8, 6);
+      const aShaper = ctx.createWaveShaper();
+      aShaper.oversample = '4x';
+      const aDc = biq('highpass', 25);
+      const aBass = biq('lowshelf', 120, 0.7);
+      const aMid = biq('peaking', 650, 0.8);
+      const aTreble = biq('highshelf', 3200, 0.7);
+      const aCab = CAB_4X12.map(([t, f, q, g]) => biq(t, f, q, g));
+      const aTone = biq('lowpass', 8000, 0.5);
+      const aPost = ctx.createGain();
+      const aWet = ctx.createGain();
+      aWet.gain.value = 0;
+      [input, aIn, aHp, aBoost, aShaper, aDc, aBass, aMid, aTreble, ...aCab, aTone, aPost, aWet, output].reduce((a, b) => a.connect(b));
       let shape = null;
       return {
         input, output,
         set(p, t) {
+          const amp = isAmp(p.type);
           const key = `${p.type}|${Math.round(p.drive * 100)}`;
           if (key !== shape) {
             shape = key;
-            shaper.curve = driveCurve(p.type, p.drive);
-            shaper.oversample = p.type === 'crush' ? 'none' : '4x';
+            if (amp) aShaper.curve = ampCurve(p.type, p.drive);
+            else {
+              shaper.curve = driveCurve(p.type, p.drive);
+              shaper.oversample = p.type === 'crush' ? 'none' : '4x';
+            }
           }
-          ramp(post.gain, driveMakeup(p.type, p.drive), t);
-          ramp(tone.frequency, toneHz(p.tone), t);
-          ramp(wet.gain, p.mix, t);
+          if (amp) {
+            const a = AMP_TYPES[p.type];
+            ramp(aHp.frequency, a.hp, t);
+            ramp(aBoost.frequency, a.boost[0], t); ramp(aBoost.gain, a.boost[1], t); ramp(aBoost.Q, a.boost[2], t);
+            ramp(aBass.gain, a.bass, t); ramp(aMid.gain, a.mid, t); ramp(aTreble.gain, a.treble, t);
+            ramp(aPost.gain, a.level, t);
+            ramp(aTone.frequency, Math.min(toneHz(p.tone), 16000), t);
+          } else {
+            ramp(post.gain, driveMakeup(p.type, p.drive), t);
+            ramp(tone.frequency, toneHz(p.tone), t);
+          }
+          ramp(wet.gain, amp ? 0 : p.mix, t);
+          ramp(aWet.gain, amp ? p.mix : 0, t);
           ramp(dry.gain, 1 - p.mix, t);
         },
       };

@@ -50,6 +50,9 @@ export const SYNTH_PRESETS = [
   // E-Gitarre: Saiten, Verstärker und Effekte selbst gerechnet (src/dsp/guitar.js)
   { id: 'guitar', label: 'E-Gitarre clean', category: 'chords' },
   { id: 'guitarDrive', label: 'E-Gitarre verzerrt', category: 'chords' },
+  { id: 'guitarCrunch', label: 'E-Gitarre Crunch', category: 'chords' },
+  { id: 'guitarMetal', label: 'E-Gitarre Metal', category: 'chords' },
+  { id: 'guitarFuzz', label: 'E-Gitarre Fuzz', category: 'chords' },
 ];
 
 // Echte Instrumente (Sampler, src/sampler.js) als weitere Klänge; Kennung = Instrument-id.

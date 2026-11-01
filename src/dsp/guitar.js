@@ -559,6 +559,9 @@ export function renderGuitar(events, opts) {
 export const GUITAR_PRESETS = {
   guitar: { amp: 'clean', fx: { chorus: { mix: 0.3, rate: 4 }, reverb: { size: 0.6, mix: 0.18 } }, decay: 4, bright: 0.55, level: 1.15 },
   guitarDrive: { amp: 'lead', fx: { echo: { time: 0.75, feedback: 0.3, mix: 0.18 }, reverb: { size: 0.6, mix: 0.12 } }, decay: 6, bright: 0.6, double: true, level: 1 },
+  guitarCrunch: { amp: 'crunch', fx: { reverb: { size: 0.5, mix: 0.12 } }, decay: 4.5, bright: 0.6, double: true, level: 0.9 },
+  guitarMetal: { amp: 'metal', fx: { reverb: { size: 0.4, mix: 0.08 } }, decay: 5, bright: 0.65, double: true, level: 0.95 },
+  guitarFuzz: { amp: 'fuzz', fx: { reverb: { size: 0.5, mix: 0.1 } }, decay: 6, bright: 0.5, level: 0.85 },
 };
 export const isGuitarPreset = (id) => Object.hasOwn(GUITAR_PRESETS, id);
 
