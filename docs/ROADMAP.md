@@ -205,6 +205,7 @@
 - Clip-Fades mit Bézier-Kurve (`fadeInCurve`/`fadeOutCurve`, Griff mitten auf der Linie, Inspektor „Kurve“); Melodien mit Gleiten (Aus/Kurz/Lang)
 - Sound-Tempo im Inspektor; Clip-Editor und Beat-/Melodie-Editor spielen im Loop, klingender Schritt leuchtet; Tonhöhe/Autotune sofort hören
 - Lücken geschlossen: Clip-Leiste am Tablet über der Zoom-Leiste, Gruppenköpfe wachsen mit, Sound-Tempo am Handy (Pegel), Tonartwechsel im Inspektor, Gleiten am Handy als Knopf (`tests/luecken.test.cjs`)
+- Handy ohne „Mehr“ (Variante B): Aufnahme und Wiederholen im Deck, Raster/Klick/Loop über den Spuren, schwebender „Wünschen“-Knopf mit Blatt, Fach „Song“ (Name, Tempo, Tonart, Länge, Speichern, Exportieren) (`tests/handy-b.test.cjs`)
 - Spuren leuchten beim Klingen; Weichzeichner für Schubladen, Menüs, Tipps; Kontrast-Test für alle Knöpfe (`tests/contrast.test.cjs`)
 
 ## Als Nächstes

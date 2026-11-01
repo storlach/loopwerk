@@ -1,32 +1,38 @@
 // Aufteilung der Oberfläche: Desktop mit Deck in einer Zeile, Sounds|Erstellen links, Inspektor rechts,
-// Fachleiste unter dem Arranger; am Handy wandern dieselben Knöpfe ins Fach „Mehr“. Menüs, Reiter und Export-Klappfeld.
+// Fachleiste unter dem Arranger; am Handy wandern dieselben Knöpfe an ihren Ort (Deck, Kopfzeile über den Spuren,
+// Wunsch-Blatt, Fach „Song“). Menüs, Reiter und Export-Klappfeld.
 
 import { place, narrow } from './place.js';
 
 export function mountLayout({ store, ui, library, editName = () => '' }) {
   const $ = (id) => document.getElementById(id);
   const app = $('app');
-  const more = $('more');
-  const slot = (name) => more.querySelector(`[data-slot="${name}"]`);
 
-  // ---------- Plätze: Desktop (wide) und Handy (narrow) ----------
-  place($('rec-btn'), { narrow: slot('play') });
-  place($('metro-btn'), { narrow: slot('play') });
-  // Rückgängig ist eine Funktion: am Handy als Taste im Deck, Wiederholen unter „Mehr“
+  // ---------- Plätze: Desktop (wide) und Handy (narrow). Die Reihenfolge der Anmeldung ist die Reihenfolge im Ziel ----------
+  // Aufnahme sitzt in beiden Fällen im Deck (am Handy als runder Punkt neben ▶), darum ohne Platz.
+  // Raster, Klick und Loop wandern über die Spuren (so bleibt im Deck Platz für Aufnahme, Wiederholen und die Anzeige); Zoomen geht am Handy mit zwei Fingern (die Knöpfe bleiben unsichtbar im Deck)
+  for (const id of ['zoom-out', 'zoom-in', 'zoomy-out', 'zoomy-in']) place($(id), { wide: $('arr-bar-view') });
+  place($('snap-sel'), { wide: $('arr-bar-view'), narrow: $('arr-pills') });
+  place($('metro-btn'), { narrow: $('arr-pills') });
+  place($('loop-btn'), { narrow: $('arr-pills') }); // der Loop-Bereich liegt im Lineal darunter
+  // Rückgängig und Wiederholen: am Handy beide im Deck
   place($('undo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
-  place($('redo-btn'), { wide: $('deck-edit'), narrow: slot('edit') });
-  for (const id of ['zoom-out', 'zoom-in', 'zoomy-out', 'zoomy-in', 'snap-sel']) place($(id), { wide: $('arr-bar-view'), narrow: slot('edit') });
-  for (const id of ['project-name', 'open-btn', 'save-btn']) place($(id), { wide: $('project-menu-body'), narrow: slot('project') });
-  place($('export-btn'), { wide: $('deck-export'), narrow: slot('project') });
-  // Neu anfangen (Beispiel, Leeren) im Menü abgesetzt von Datei-Befehlen
-  for (const id of ['demo-btn', 'new-btn']) place($(id), { wide: $('project-menu-start'), narrow: slot('project') });
-  place($('tips-reset'), { narrow: slot('project') });
+  place($('redo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
+  // Song: Name oben, Speichern und Exportieren als Hauptknöpfe, der Rest als ruhige Textzeile
+  place($('project-name'), { wide: $('project-menu-body'), narrow: $('song-name') });
+  place($('open-btn'), { wide: $('project-menu-body'), narrow: $('song-links') });
+  place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main') });
+  place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main') });
+  place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
+  place($('tips-reset'), { narrow: $('song-links') });
+  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
+  place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
   place($('shelf-search'), { narrow: $('shelf-sticky') });
   place($('shelf-filter-btn'), { narrow: $('shelf-sticky') });
   place($('shelf-filters'), { narrow: $('shelf-sticky') });
-  place($('wish-form'), { narrow: slot('wish') });
-  place(document.querySelector('.deck .brand'), { narrow: slot('about') });
+  // Wünschen: am Handy in einem Blatt, das der schwebende Knopf öffnet
+  place($('wish-form'), { narrow: $('wish-slot') });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
   const pops = [];
@@ -68,6 +74,13 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   $('open-btn').addEventListener('click', () => setProject(false));
   $('save-btn').addEventListener('click', () => setProject(false));
   $('project-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') setProject(false); });
+
+  // Wunsch-Blatt (Handy): Antippen öffnet es mit Tastatur; nach dem Umsetzen oder bei einem offenen Fach schließt es
+  const setWish = popup($('wish-fab'), $('wish-sheet'), { onOpen: () => $('wish-input').focus({ preventScroll: true }) });
+  $('wish-close').addEventListener('click', () => setWish(false));
+  $('wish-form').addEventListener('wish-done', () => setWish(false));
+  ui.on(() => { if (ui.dock) setWish(false); });
+  narrow.addEventListener('change', () => setWish(false));
 
   popup($('keys-btn'), $('keys-pop'));
   const setPatMore = popup($('pat-more-btn'), $('pat-more'));

@@ -102,7 +102,7 @@ async function session(opts, steps) {
     ['Handy Start', async () => {}],
     ['Handy Sounds mit Filter', async (page) => { await page.evaluate(() => window.loopwerk.ui.setDock('sounds')); await page.waitForTimeout(300); await page.tap('#shelf-filter-btn'); }],
     ['Handy Mixer', ev(() => window.loopwerk.ui.setDock('mixer'))],
-    ['Handy Mehr', ev(() => window.loopwerk.ui.setDock('more'))],
+    ['Handy Song', ev(() => window.loopwerk.ui.setDock('song'))],
   ]);
   finish();
 })();

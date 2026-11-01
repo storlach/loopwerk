@@ -1,4 +1,4 @@
-// Wunsch-Feld unter „Erstellen“: Satz eingeben, Enter – der Plan wird als ein Rückgängig-Schritt ausgeführt.
+// Wunsch-Feld unter „Erstellen“ (am Handy im Wunsch-Blatt): Satz eingeben, Enter – der Plan wird als ein Rückgängig-Schritt ausgeführt.
 
 import { runWish } from '../wish.js';
 
@@ -39,6 +39,7 @@ export function mountWish({ store, library, ui }) {
         state.textContent = r.by === 'claude' ? 'Claude' : 'Regeln';
         ui.flash(`${r.summary || 'Umgesetzt'}${r.skipped.length ? ` (${r.skipped.length} ging nicht)` : ''}. Rückgängig nimmt alles zurück.`);
         input.value = '';
+        form.dispatchEvent(new CustomEvent('wish-done', { bubbles: true }));
       }
     } catch (e) {
       state.textContent = '';

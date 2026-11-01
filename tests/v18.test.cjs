@@ -484,7 +484,8 @@ const { check, finish } = createChecker();
     check('Handy: Taste antippen setzt in der Schritt-Eingabe eine Note', JSON.stringify(mn) === '[64]', JSON.stringify(mn));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v18-mobil-tasten.png') });
     const ov = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-    check('Handy: kein Querscrollen, Desktop-Teile ausgeblendet', ov <= 0 && await page.evaluate(() => ['.insp', '.tabbar-end', '.arr-bar', '.left-tabs'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')));
+    check('Handy: kein Querscrollen, Desktop-Teile ausgeblendet', ov <= 0 && await page.evaluate(() => ['.insp', '.tabbar-end', '.arr-bar-view', '.arr-bar-select', '.arr-bar-status', '.left-tabs'].every((s) => getComputedStyle(document.querySelector(s)).display === 'none')
+      && getComputedStyle(document.getElementById('arr-pills')).display === 'flex'));
     check('Keine Fehler in der Konsole (Handy)', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack);

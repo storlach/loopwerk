@@ -135,7 +135,7 @@ const { check, finish } = createChecker();
     app = await openApp({ viewport: { width: 390, height: 844 }, hasTouch: true });
     page = app.page;
     const mtabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
-    check('Handy: Reiter Sounds, Mixer, Editor, Mehr', JSON.stringify(mtabs) === '["tab-sounds","mixer-btn","editor-tab","tab-more"]', JSON.stringify(mtabs));
+    check('Handy: Reiter Sounds, Mixer, Editor, Song', JSON.stringify(mtabs) === '["tab-sounds","mixer-btn","editor-tab","tab-song"]', JSON.stringify(mtabs));
     check('Handy: Rückgängig ist eine Taste im Deck, nicht in der Leiste', await page.evaluate(() => !!document.getElementById('undo-btn').closest('.deck') && !document.getElementById('undo-btn').closest('#tabbar')));
     const undo = await rect('#undo-btn');
     check('Handy: Rückgängig-Taste gut treffbar', undo.w >= 44 && undo.h >= 44, JSON.stringify(undo));

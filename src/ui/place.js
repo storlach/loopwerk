@@ -1,5 +1,5 @@
 // Bedienelemente je nach Bildschirm an ihren Platz bringen: dieselben Knöpfe (gleiche IDs, gleiche Logik)
-// sitzen am Desktop in Deck, Leisten und Menüs, am Handy im Fach „Mehr“ oder an ihrem Ursprungsort.
+// sitzen am Desktop in Deck, Leisten und Menüs, am Handy an ihrem Ort (Deck, Kopfzeile, Fach „Song“) oder am Ursprungsort.
 
 export const narrow = window.matchMedia('(max-width: 760px)');
 // Eingabeart statt Breite: Finger ohne Maus (Tablet, Handy). Ein Tablet bekommt das Desktop-Layout, aber Fingerbedienung.

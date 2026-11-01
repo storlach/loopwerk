@@ -44,15 +44,20 @@ const { check, finish } = createChecker();
       keys: [...document.querySelectorAll('.deck .key')].filter((b) => b.offsetParent).map((b) => `${b.id}:${Math.round(Math.min(b.offsetWidth, b.offsetHeight))}`),
       seps: [...document.querySelectorAll('.deck .deck-sep')].filter((n) => n.offsetParent).length,
     }));
-    check('Handy-Deck: Wiedergabe | Anzeige | Rückgängig, Tasten ≥ 44 px, eine Haarlinie zwischen Transport und Anzeige',
-      deckKeys.keys.join(',').replace(/:\d+/g, '') === 'home-btn,play-btn,loop-btn,undo-btn' && deckKeys.keys.every((k) => +k.split(':')[1] >= 44) && deckKeys.seps === 1, JSON.stringify(deckKeys));
+    check('Handy-Deck: Wiedergabe mit Aufnahme | Anzeige | Rückgängig und Wiederholen, Tasten ≥ 44 px, eine Haarlinie zwischen Transport und Anzeige',
+      deckKeys.keys.join(',').replace(/:\d+/g, '') === 'home-btn,play-btn,rec-btn,undo-btn,redo-btn' && deckKeys.keys.every((k) => +k.split(':')[1] >= 44) && deckKeys.seps === 1, JSON.stringify(deckKeys));
     check('Arranger direkt unter dem Deck und groß', start.arrTop <= 64 && start.arrH >= 500, `oben ${start.arrTop}, Höhe ${start.arrH}`);
     check('Leiste unten am Bildschirmrand', Math.abs(start.tabsBottom - start.h) <= 1, `${start.tabsBottom}/${start.h}`);
     check('Sound-Regal anfangs eingeklappt', start.shelf === 'none', start.shelf);
     const tabSizes = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].map((b) => Math.round(Math.min(b.offsetWidth, b.offsetHeight))));
     check('Leiste: vier Knöpfe, alle ≥ 44 px', tabSizes.length === 4 && tabSizes.every((s) => s >= 44), JSON.stringify(tabSizes));
-    const moved = await page.evaluate(() => ['rec-btn', 'metro-btn', 'zoom-in', 'snap-sel', 'save-btn', 'export-btn', 'new-btn'].every((id) => document.getElementById(id).closest('#more')));
-    check('Seltene Deck-Knöpfe liegen unter „Mehr“', moved);
+    const moved = await page.evaluate(() => ({
+      pills: ['snap-sel', 'metro-btn', 'loop-btn'].every((id) => document.getElementById(id).closest('#arr-pills')),
+      song: ['project-name', 'save-btn', 'export-btn', 'open-btn', 'demo-btn', 'tips-reset', 'new-btn'].every((id) => document.getElementById(id).closest('#song')),
+      zoomGone: ['zoom-in', 'zoom-out', 'zoomy-in', 'zoomy-out'].every((id) => !document.getElementById(id).offsetParent),
+      noMore: !document.getElementById('more') && !document.getElementById('tab-more'),
+    }));
+    check('Knöpfe liegen an ihrem Ort: Raster/Klick/Loop über den Spuren, Name/Speichern/Export/Datei im Fach „Song“, Zoom-Knöpfe weg', moved.pills && moved.song && moved.zoomGone && moved.noMore, JSON.stringify(moved));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-start.png') });
 
     // ---------- Sounds: Fach öffnen, Akkordeon ----------
@@ -199,16 +204,12 @@ const { check, finish } = createChecker();
     await page.tap('#mixer .detail-back');
     check('Mixer: „Alle Kanäle“ führt zurück, Zusammenfassung zählt den Effekt', await page.locator('#fader-t1').isVisible() && (await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').textContent()) === '1 Effekt');
     await page.tap('#undo-btn');
-    await page.tap('#tab-more');
+    await page.tap('#tab-song');
     await page.waitForTimeout(400); // Mixer fährt hinaus
-    check('„Mehr“ ersetzt den Mixer', (await lw()).dock === 'more' && !(await page.locator('#mixer').isVisible()) && await page.locator('#more').isVisible());
-    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-mehr.png') });
-    const ppb = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
-    await page.tap('#zoom-in');
-    check('Zoom aus „Mehr“ wirkt', await page.evaluate(() => window.loopwerk.ui.pxPerBeat) > ppb);
-    await page.tap('#zoom-out');
+    check('„Song“ ersetzt den Mixer', (await lw()).dock === 'song' && !(await page.locator('#mixer').isVisible()) && await page.locator('#song').isVisible());
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-song.png') });
     await page.tap('#export-btn');
-    check('„Exportieren“ aus „Mehr“ öffnet den Export im Fach', (await lw()).dock === 'export' && await page.locator('#ex-go').isVisible());
+    check('„Exportieren“ aus „Song“ öffnet den Export im Fach', (await lw()).dock === 'export' && await page.locator('#ex-go').isVisible());
     await page.keyboard.press('Escape');
 
     // ---------- Beat-Editor ----------
@@ -323,7 +324,7 @@ const { check, finish } = createChecker();
     check('Offene Kategorie bleibt nach Neuladen erhalten', await expanded('bass') === 'true' && await expanded('drums') === 'false');
 
     // ---------- Desktop bleibt, wie er war ----------
-    await page.tap('#tab-more');
+    await page.tap('#tab-song');
     await page.setViewportSize({ width: 1400, height: 820 });
     await page.waitForTimeout(150);
     const desk = await page.evaluate(() => ({
@@ -335,7 +336,7 @@ const { check, finish } = createChecker();
       dock: window.loopwerk.ui.dock,
       order: [...document.querySelector('.deck .group[aria-label="Transport"]').children].map((b) => b.id).join(','),
     }));
-    check('Desktop: Knöpfe zurück im Deck, dieselbe Fachleiste ohne Sounds/Mehr, Regal sichtbar', desk.back && desk.tabs === 'flex' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
+    check('Desktop: Knöpfe zurück im Deck, dieselbe Fachleiste ohne Sounds/Song, Regal sichtbar', desk.back && desk.tabs === 'flex' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
     check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
     check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,metro-btn', desk.order);
     // Deck-Gruppen: Rückgängig/Wiederholen vor dem Projekt, Projekt-Menü und Export nebeneinander, Haarlinien dazwischen;

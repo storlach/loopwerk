@@ -1,17 +1,18 @@
-// Handy-Bedienung: Fachleiste unten (Sounds, Mixer, Editor, Mehr), darüber ein Fach für Regal oder Dock,
+// Handy-Bedienung: Fachleiste unten (Sounds, Mixer, Editor, Song), darüber ein Fach für Regal oder Dock,
 // Werkzeuge für den ausgewählten Clip. Auf breiten Bildschirmen bleibt alles, wie es ist.
 
 import { clipGain } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
 import { stepRun } from './inspector.js';
+import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
 
 import { narrow, touch } from './place.js';
 
 export { narrow };
 // Diese Fächer gibt es nur am Handy; Mixer, Editoren und Export sind die gewöhnlichen Docks.
-const PHONE_DOCKS = ['sounds', 'more', 'tempo'];
+const PHONE_DOCKS = ['sounds', 'song', 'tempo'];
 const TEMPO_PRESETS = [80, 90, 100, 120, 128, 140];
 
 const formatBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100).replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`);
@@ -19,9 +20,9 @@ const formatBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100
 export function mountMobile({ store, ui, tools, library }) {
   const $ = (id) => document.getElementById(id);
   const app = $('app');
-  const more = $('more');
+  const song = $('song');
 
-  // Die Deck-Knöpfe verteilt layout.js (am Handy ins Fach „Mehr“). Hier nur: Handy-Fächer am Desktop schließen.
+  // Die Knöpfe verteilt layout.js (am Handy Deck, Kopfzeile über den Spuren, Wunsch-Blatt, Fach „Song“). Hier nur: Handy-Fächer am Desktop schließen.
   function layout() {
     if (!narrow.matches && PHONE_DOCKS.includes(ui.dock)) ui.setDock(null);
   }
@@ -29,12 +30,12 @@ export function mountMobile({ store, ui, tools, library }) {
   // ---------- Leiste unten ----------
 
   // Mixer und Editor bedienen mixer.js und layout.js – dieselben Reiter wie am Desktop
-  const tabs = [['tab-sounds', 'sounds'], ['tab-more', 'more']];
+  const tabs = [['tab-sounds', 'sounds'], ['tab-song', 'song']];
   for (const [id, dock] of tabs) $(id).addEventListener('click', () => ui.setDock(ui.dock === dock ? null : dock));
 
   function syncTabs() {
     app.dataset.dock = ui.dock || '';
-    more.hidden = ui.dock !== 'more';
+    song.hidden = ui.dock !== 'song';
     for (const [id, dock] of tabs) $(id).setAttribute('aria-pressed', String(ui.dock === dock));
   }
 
@@ -182,6 +183,34 @@ export function mountMobile({ store, ui, tools, library }) {
     for (const b of presets.children) b.setAttribute('aria-pressed', String(Number(b.dataset.bpm) === v));
   }
 
+  // ---------- Fach „Song“: Tempo, Tonart, Länge ----------
+
+  const tempoOut = $('song-tempo-out');
+  const lenSel = $('song-length');
+  for (let b = 4; b <= 128; b += 4) lenSel.append(new Option(String(b), String(b)));
+  $('song-tempo').addEventListener('click', () => ui.setDock('tempo'));
+  bindKeySelect($('key-sel-song'), store, { short: true });
+  lenSel.addEventListener('change', () => {
+    const want = Number(lenSel.value);
+    store.setLength(want);
+    lenSel.blur();
+    showSong();
+    if (store.project.lengthBars !== want) ui.flash(`Kürzer geht es nicht: Der letzte Clip endet erst in Takt ${store.project.lengthBars}.`);
+  });
+  function showSong() {
+    const p = store.project;
+    tempoOut.textContent = String(pending ?? p.bpm);
+    // Längen, die nicht im Raster der Auswahl liegen (z. B. 33 oder 200), bekommen ihren eigenen Eintrag
+    const have = [...lenSel.options].find((o) => Number(o.value) === p.lengthBars);
+    if (!have) {
+      const o = new Option(String(p.lengthBars), String(p.lengthBars));
+      const next = [...lenSel.options].find((x) => Number(x.value) > p.lengthBars);
+      lenSel.insertBefore(o, next ?? null);
+    }
+    for (const o of [...lenSel.options]) if (Number(o.value) % 4 && Number(o.value) !== p.lengthBars) o.remove();
+    if (document.activeElement !== lenSel) lenSel.value = String(p.lengthBars);
+  }
+
   // ---------- Bildschirmtastatur ----------
 
   const isText = (n) => !!n && !n.readOnly && (n.tagName === 'TEXTAREA'
@@ -195,7 +224,7 @@ export function mountMobile({ store, ui, tools, library }) {
     if (!narrow.matches || !isText(e.target)) return;
     clearTimeout(kbdTimer);
     app.classList.add('kbd');
-    app.dataset.kbdIn = e.target.closest('.clipbar') ? 'clip' : e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : 'dock';
+    app.dataset.kbdIn = e.target.closest('.clipbar') ? 'clip' : e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : e.target.closest('.wish-sheet') ? 'wish' : 'dock';
     fitViewport();
     requestAnimationFrame(() => e.target.scrollIntoView({ block: 'nearest' }));
   });
@@ -216,7 +245,7 @@ export function mountMobile({ store, ui, tools, library }) {
   // Enter in der Suche schließt die Tastatur, die Treffer bleiben
   $('shelf-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.currentTarget.blur(); });
 
-  const sync = () => { syncTabs(); syncBar(); tempoPanel.hidden = ui.dock !== 'tempo'; if (!tempoPanel.hidden) showTempo(); };
+  const sync = () => { syncTabs(); syncBar(); showSong(); tempoPanel.hidden = ui.dock !== 'tempo'; if (!tempoPanel.hidden) showTempo(); };
   ui.on(sync);
   store.on(sync);
   narrow.addEventListener('change', () => { layout(); setInputMode(); });
