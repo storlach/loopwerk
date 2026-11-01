@@ -1,6 +1,6 @@
 // Aufteilung der Oberfläche: Desktop mit Deck in einer Zeile, Sounds|Erstellen links, Inspektor rechts,
 // Fachleiste unter dem Arranger; am Handy wandern dieselben Knöpfe an ihren Ort (Deck, Kopfzeile über den Spuren,
-// Wunsch-Blatt, Fach „Song“). Menüs, Reiter und Export-Klappfeld.
+// Fach „Song“). Menüs, Reiter und Export-Klappfeld.
 
 import { place, narrow } from './place.js';
 
@@ -31,8 +31,6 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('shelf-search'), { narrow: $('shelf-sticky') });
   place($('shelf-filter-btn'), { narrow: $('shelf-sticky') });
   place($('shelf-filters'), { narrow: $('shelf-sticky') });
-  // Wünschen: am Handy in einem Blatt, das der schwebende Knopf öffnet
-  place($('wish-form'), { narrow: $('wish-slot') });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
   const pops = [];
@@ -74,13 +72,6 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   $('open-btn').addEventListener('click', () => setProject(false));
   $('save-btn').addEventListener('click', () => setProject(false));
   $('project-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') setProject(false); });
-
-  // Wunsch-Blatt (Handy): Antippen öffnet es mit Tastatur; nach dem Umsetzen oder bei einem offenen Fach schließt es
-  const setWish = popup($('wish-fab'), $('wish-sheet'), { onOpen: () => $('wish-input').focus({ preventScroll: true }) });
-  $('wish-close').addEventListener('click', () => setWish(false));
-  $('wish-form').addEventListener('wish-done', () => setWish(false));
-  ui.on(() => { if (ui.dock) setWish(false); });
-  narrow.addEventListener('change', () => setWish(false));
 
   popup($('keys-btn'), $('keys-pop'));
   const setPatMore = popup($('pat-more-btn'), $('pat-more'));

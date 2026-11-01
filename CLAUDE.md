@@ -12,7 +12,6 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - `src/own-sounds.js`, `src/recorder.js` – eigene Sounds (IndexedDB, Projektdatei), Mikrofon- und Tab-Aufnahme; `src/ui/link-import.js` – Sounds per Link holen.
 - `src/instruments.js`, `src/patterns.js` – Beat-/Melodie-Patterns, als Sounds „pat-…“ gerendert.
 - `src/ai.js` – Melodie weiterführen, Klang aus Beschreibung: Claude über die Artifact-Capability `sample`, sonst Regeln.
-- `src/wish.js` + `src/ui/wish.js` – Wunsch-Agent: Satz → Plan (Claude oder Regeln) → `store.batch` (ein Rückgängig-Schritt).
 - `src/export.js`, `src/zip.js`, `src/wav.js`, `vendor/lamejs/` – Export WAV/MP3.
 - `src/ui/*` – Regal, Arranger, Deck, Docks (Mixer, Sample-Editor, Pattern-Editor, Export). Die UI liest aus dem Store und schreibt nur über Store-Aktionen. Docks über `ui.setDock(name)`.
   - `layout.js` + `place.js`: dieselben Knöpfe je Bildschirm an ihren Platz (Desktop: Deck/Menüs/Leisten, Handy: Fach „Mehr“).

@@ -22,7 +22,7 @@ export function mountMobile({ store, ui, tools, library }) {
   const app = $('app');
   const song = $('song');
 
-  // Die Knöpfe verteilt layout.js (am Handy Deck, Kopfzeile über den Spuren, Wunsch-Blatt, Fach „Song“). Hier nur: Handy-Fächer am Desktop schließen.
+  // Die Knöpfe verteilt layout.js (am Handy Deck, Kopfzeile über den Spuren, Fach „Song“). Hier nur: Handy-Fächer am Desktop schließen.
   function layout() {
     if (!narrow.matches && PHONE_DOCKS.includes(ui.dock)) ui.setDock(null);
   }
@@ -224,7 +224,7 @@ export function mountMobile({ store, ui, tools, library }) {
     if (!narrow.matches || !isText(e.target)) return;
     clearTimeout(kbdTimer);
     app.classList.add('kbd');
-    app.dataset.kbdIn = e.target.closest('.clipbar') ? 'clip' : e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : e.target.closest('.wish-sheet') ? 'wish' : 'dock';
+    app.dataset.kbdIn = e.target.closest('.clipbar') ? 'clip' : e.target.closest('.arranger') ? 'arr' : e.target.closest('.link-pop') ? 'pop' : 'dock';
     fitViewport();
     requestAnimationFrame(() => e.target.scrollIntoView({ block: 'nearest' }));
   });

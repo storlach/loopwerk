@@ -18,7 +18,6 @@ import { mountSheets } from './ui/sheets.js';
 import { mountTips } from './ui/tips.js';
 import { mountBrandMeter } from './ui/brand-meter.js';
 import { mountGlow } from './ui/glow.js';
-import { mountWish } from './ui/wish.js';
 import { mountKeySelects } from './ui/key-select.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
@@ -487,7 +486,6 @@ async function boot() {
       link: (t) => linkImport.open(t),
     },
   });
-  const wish = mountWish({ store, library, ui });
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
   const sheets = mountSheets({ ui, arranger });
@@ -555,7 +553,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, wish, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, ready: true };
 }
 
 boot().catch((err) => {

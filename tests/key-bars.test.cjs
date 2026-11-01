@@ -1,5 +1,5 @@
 // Tonart je Takt (2.6): Modell, Projektdatei, Klang (Offline gemessen), Realtime mit Live-Änderung, Zeile im Arranger
-// am Desktop, Tablet und Handy, Wunsch-Agent.  node tests/key-bars.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
+// am Desktop, Tablet und Handy.  node tests/key-bars.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -286,16 +286,6 @@ async function addTestTone() {
       return Math.round(document.querySelector('.loop-shade').getBoundingClientRect().top - document.querySelector('.key-strip').getBoundingClientRect().bottom);
     });
     check('Loop-Bereich beginnt unter der Tonart-Zeile', Math.abs(shade) <= 1, `${shade} px`);
-
-    // ---------- Wunsch-Agent ----------
-    const w = await page.evaluate(async () => {
-      const W = await import('./src/wish.js');
-      const { store, library } = window.loopwerk;
-      const plan = W.planByRules('ab Takt 9 in E-Moll', store.project, library);
-      const res = W.applyPlan(store, library, plan);
-      return { actions: plan.actions, summary: plan.summary, done: res.done.length, kc: JSON.stringify(store.project.keyChanges), plain: W.keyInText('Am Ende lauter') };
-    });
-    check('Wunsch „ab Takt 9 in E-Moll“ setzt den Wechsel', w.kc.includes('{"bar":9,"key":"Em"}') && w.done === 1 && w.plain === null, `${JSON.stringify(w.actions)} → ${w.kc} („${w.summary}“)`);
 
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
     await app.close();

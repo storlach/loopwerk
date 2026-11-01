@@ -1,5 +1,5 @@
 // Handy, Variante B: kein „Mehr“, alles an seinem Ort – Deck (Aufnahme, Wiederholen), Pillen über den Spuren (Raster,
-// Klick, Loop), schwebender Wünschen-Knopf mit Blatt, Fach „Song“. Breiten 360 und 390 px, nur Finger.
+// Klick, Loop), Fach „Song“. Breiten 360 und 390 px, nur Finger.
 // node tests/handy-b.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
 const { openApp, createChecker } = require('./harness.cjs');
@@ -62,8 +62,8 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       });
       check(`Handy ${w} px: „Raster“, „Klick“ und Loop sitzen über den Spuren, passen in die Breite`, pills.items.every((i) => i.inside && i.vis) && pills.aboveRuler && pills.maxRight <= w, JSON.stringify(pills));
       check(`Handy ${w} px: Raster-Pille zeigt „Raster: Schlag“; Zoom- und Spurhöhen-Knöpfe sind weg`, /Raster: Schlag/.test(pills.text) && pills.zoom.every((v) => !v), JSON.stringify(pills.zoom));
-      const targets = await page.evaluate(measureTargets, '#arr-pills select, #arr-pills button, #wish-fab, #rec-btn, #undo-btn, #redo-btn, #tab-song');
-      check(`Handy ${w} px: Tippflächen von Pillen, Aufnahme, Wiederholen, Wünschen und Reiter ≥ 44 px`, targets.length >= 6 && targets.every((t) => t.w >= 44 && t.h >= 44 && t.ok), JSON.stringify(targets));
+      const targets = await page.evaluate(measureTargets, '#arr-pills select, #arr-pills button, #rec-btn, #undo-btn, #redo-btn, #tab-song');
+      check(`Handy ${w} px: Tippflächen von Pillen, Aufnahme, Wiederholen und Reiter ≥ 44 px`, targets.length >= 5 && targets.every((t) => t.w >= 44 && t.h >= 44 && t.ok), JSON.stringify(targets));
       await page.selectOption('#snap-sel', '0.5');
       check(`Handy ${w} px: Raster-Pille ändert das Raster`, await page.evaluate(() => window.loopwerk.ui.snapBeats) === 0.5);
       await page.selectOption('#snap-sel', '1');
@@ -75,47 +75,6 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       check(`Handy ${w} px: Loop-Pille schaltet den Loop`, await page.evaluate(() => window.loopwerk.store.project.loop.on) === !loopBefore);
       await page.tap('#loop-btn');
       await shot('pills');
-
-      // ---------- Wünschen ----------
-      const fab = await page.evaluate(() => {
-        const f = document.getElementById('wish-fab').getBoundingClientRect();
-        const a = document.querySelector('.arranger').getBoundingClientRect();
-        return { vis: !!document.getElementById('wish-fab').offsetParent, right: f.right, bottom: f.bottom, aBottom: a.bottom, aRight: a.right, w: f.width, h: f.height, sheet: !document.getElementById('wish-sheet').hidden, label: document.getElementById('wish-fab').textContent.trim() };
-      });
-      check(`Handy ${w} px: schwebender „Wünschen“-Knopf unten rechts über dem Arranger`, fab.vis && fab.right > w * 0.7 && fab.bottom <= fab.aBottom + 0.5 && fab.bottom > fab.aBottom - 90 && !fab.sheet && /Wünschen/.test(fab.label), JSON.stringify(fab));
-      await page.tap('#wish-fab');
-      await page.waitForTimeout(250);
-      const sheet = await page.evaluate(() => {
-        const s = document.getElementById('wish-sheet');
-        const b = s.getBoundingClientRect();
-        const a = document.getElementById('app');
-        return { open: !s.hidden && !!s.offsetParent, formIn: !!s.querySelector('#wish-form'), focus: document.activeElement?.id, kbd: a.classList.contains('kbd'), kbdIn: a.dataset.kbdIn, left: b.left, right: b.right, top: b.top, fab: !!document.getElementById('wish-fab').offsetParent, inputH: document.getElementById('wish-input').getBoundingClientRect().height };
-      });
-      check(`Handy ${w} px: Antippen öffnet das Blatt mit dem Wunsch-Feld, Eingabe aktiv, Tastatur-Modus „wish“`, sheet.open && sheet.formIn && sheet.focus === 'wish-input' && sheet.kbd && sheet.kbdIn === 'wish' && sheet.left >= 0 && sheet.right <= w && !sheet.fab && sheet.inputH >= 44, JSON.stringify(sheet));
-      check(`Handy ${w} px: bei offenem Wunsch-Blatt kein Überlauf, Deck und Leiste weichen der Tastatur`, noOverflow(await overflow(page)) && await page.evaluate(() => getComputedStyle(document.querySelector('.deck')).display === 'none' && getComputedStyle(document.getElementById('tabbar')).display === 'none'));
-      await shot('wunsch');
-      const before = await page.evaluate(() => window.loopwerk.store.project.tracks.reduce((n, t) => n + t.clips.length, 0));
-      await page.fill('#wish-input', 'Techno-Beat ab Takt 9 bis 12');
-      await page.press('#wish-input', 'Enter');
-      await page.waitForFunction(() => !document.getElementById('wish-form').classList.contains('busy'), null, { timeout: 20000 });
-      await page.waitForTimeout(300);
-      const done = await page.evaluate(() => ({ hidden: document.getElementById('wish-sheet').hidden, clips: window.loopwerk.store.project.tracks.reduce((n, t) => n + t.clips.length, 0), fab: !!document.getElementById('wish-fab').offsetParent }));
-      check(`Handy ${w} px: Wunsch umsetzen schließt das Blatt, der Knopf ist wieder da`, done.hidden && done.clips > before && done.fab, JSON.stringify(done));
-      await page.tap('#undo-btn');
-      // schließen: Kreuz, Antippen daneben, offenes Fach
-      await page.tap('#wish-fab');
-      await page.tap('#wish-close');
-      check(`Handy ${w} px: Kreuz schließt das Wunsch-Blatt`, await page.evaluate(() => document.getElementById('wish-sheet').hidden));
-      await page.tap('#wish-fab');
-      await page.tap('.ruler');
-      check(`Handy ${w} px: Antippen daneben schließt das Wunsch-Blatt`, await page.evaluate(() => document.getElementById('wish-sheet').hidden));
-      await page.evaluate(() => document.activeElement?.blur());
-      await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
-      await page.waitForTimeout(300);
-      check(`Handy ${w} px: bei offenem Fach gibt es keinen Wünschen-Knopf`, await page.evaluate(() => !document.getElementById('wish-fab').offsetParent));
-      await page.evaluate(() => window.loopwerk.ui.setDock(null));
-      await page.waitForTimeout(400);
-      check(`Handy ${w} px: nach dem Schließen des Fachs ist er wieder da`, await page.evaluate(() => !!document.getElementById('wish-fab').offsetParent));
 
       // ---------- Fach „Song“ ----------
       const tabs = await page.evaluate(() => ({ ids: [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id), label: document.querySelector('#tab-song .tab-label').textContent, more: !!document.getElementById('more') || !!document.getElementById('tab-more') }));
@@ -180,16 +139,16 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
     }
   }
 
-  // Desktop bleibt: Knöpfe an ihren alten Plätzen, Wünschen-Knopf unsichtbar
+  // Desktop bleibt: Knöpfe an ihren alten Plätzen
   const desk = await openApp({ viewport: { width: 1400, height: 820 } });
   try {
     const d = await desk.page.evaluate(() => ({
-      fab: !!document.getElementById('wish-fab').offsetParent, sheet: !!document.getElementById('wish-sheet').offsetParent, pills: !!document.getElementById('arr-pills').offsetParent,
-      wish: !!document.getElementById('wish-form').closest('#create-panel'), undo: !!document.getElementById('undo-btn').closest('#deck-edit'), redo: !!document.getElementById('redo-btn').closest('#deck-edit'),
+      pills: !!document.getElementById('arr-pills').offsetParent,
+      undo: !!document.getElementById('undo-btn').closest('#deck-edit'), redo: !!document.getElementById('redo-btn').closest('#deck-edit'),
       snap: !!document.getElementById('snap-sel').closest('#arr-bar-view'), loop: !!document.getElementById('loop-btn').closest('.deck'), metro: !!document.getElementById('metro-btn').closest('.deck'),
       menu: ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).closest('#project-menu')), tips: getComputedStyle(document.querySelector('#tips-reset .lbl-short')).display + '/' + getComputedStyle(document.querySelector('#tips-reset .lbl-long')).display,
     }));
-    check('Desktop unverändert: Wünschen-Knopf und Pillen unsichtbar, alle Knöpfe an ihrem alten Platz', !d.fab && !d.sheet && !d.pills && d.wish && d.undo && d.redo && d.snap && d.loop && d.metro && d.menu && d.tips === 'none/inline', JSON.stringify(d));
+    check('Desktop unverändert: Pillen unsichtbar, alle Knöpfe an ihrem alten Platz', !d.pills && d.undo && d.redo && d.snap && d.loop && d.metro && d.menu && d.tips === 'none/inline', JSON.stringify(d));
     check('Keine Fehler in der Konsole (Desktop)', desk.errors.length === 0, desk.errors.join(' | '));
   } catch (e) {
     check('Desktop: Ablauf ohne Ausnahme', false, e.stack);

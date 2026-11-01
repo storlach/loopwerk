@@ -215,6 +215,9 @@
 - „Auf Tonleiter ziehen (n)“ rückt Fremdnoten auf den nächsten Ton, ein Rückgängig-Schritt; gespeichert am Pattern (`scaleLock`, `scaleKind`), alte Projekte laden mit „aus“, ändert den Klang nicht (kein Neu-Rendern)
 - Tests: `tests/scale-lock.test.cjs`
 
+## Entfernt
+- Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
+
 ## Als Nächstes
 - Aus dem Markt-Scout: Akkord-Streifen, Song-Starter, Effekt-Pad, Ein-Klick-Mastering
 

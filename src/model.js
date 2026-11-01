@@ -276,7 +276,7 @@ export class Store extends Emitter {
 
   // Jede Änderung läuft hier durch und landet im Rückgängig-Verlauf.
   // `coalesce` fasst schnelle Folgeänderungen (z. B. Lautstärke-Regler ziehen) zu einem Schritt zusammen.
-  // Mehrere Aktionen als ein Rückgängig-Schritt (z. B. ein Plan des Wunsch-Agenten); bei Fehler bleibt alles beim Alten
+  // Mehrere Aktionen als ein Rückgängig-Schritt (z. B. ein Song-Starter); bei Fehler bleibt alles beim Alten
   batch(label, fn) {
     if (this._batching) return fn();
     const before = JSON.stringify(this.project);

@@ -102,16 +102,13 @@
 <link rel="modulepreload" href="src/ui/tips.js">
 <link rel="modulepreload" href="src/ui/brand-meter.js">
 <link rel="modulepreload" href="src/ui/glow.js">
-<link rel="modulepreload" href="src/ui/wish.js">
-<link rel="modulepreload" href="src/wish.js">
-<link rel="modulepreload" href="src/ai.js">
-<link rel="modulepreload" href="src/dsp/pitch.js">
-<link rel="modulepreload" href="src/dsp/fft.js">
 <link rel="modulepreload" href="src/ui/editor.js">
 <link rel="modulepreload" href="src/dsp/edit.js">
 <link rel="modulepreload" href="src/dsp/run.js">
 <link rel="modulepreload" href="src/dsp/separate.js">
+<link rel="modulepreload" href="src/dsp/fft.js">
 <link rel="modulepreload" href="src/dsp/autotune.js">
+<link rel="modulepreload" href="src/dsp/pitch.js">
 <link rel="modulepreload" href="src/own-sounds.js">
 <link rel="modulepreload" href="src/ui/export-dock.js">
 <link rel="modulepreload" href="src/export.js">
@@ -122,6 +119,7 @@
 <link rel="modulepreload" href="src/instruments-shelf.js">
 <link rel="modulepreload" href="src/patterns.js">
 <link rel="modulepreload" href="src/recorder.js">
+<link rel="modulepreload" href="src/ai.js">
 <link rel="modulepreload" href="src/scale.js">
 <link rel="modulepreload" href="src/ui/mobile.js">
 <link rel="modulepreload" href="src/ui/link-import.js">
@@ -1675,21 +1673,6 @@
   .track-row.in-group .track-head { box-shadow: inset 3px 0 0 var(--line); }
   .track-row.in-group.selected .track-head { box-shadow: inset 3px 0 0 var(--amber); }
   .track-row[hidden], .group-row[hidden] { display: none; }
-  /* Wunsch-Agent */
-  .wish { display: grid; gap: 6px; padding: 8px; border-radius: 8px; background: var(--key-face); box-shadow: var(--key-shadow); }
-  .wish-input {
-    width: 100%; box-sizing: border-box; min-height: 52px; resize: vertical; padding: 8px 10px;
-    border: 0; border-radius: 6px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line);
-    color: var(--ink); font: 400 13px/1.4 var(--font-body); -webkit-user-select: text; user-select: text;
-  }
-  .wish-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-  .wish-row { display: flex; align-items: center; gap: 8px; }
-  .wish-state { flex: 1; min-width: 0; font: 500 10px/1.3 var(--font-mono); color: var(--muted); letter-spacing: 0.04em; }
-  .wish.busy .wish-state::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--amber); animation: wish-pulse 0.9s ease-in-out infinite; }
-  @keyframes wish-pulse { 50% { opacity: 0.25; } }
-  .wish-slot .wish { background: transparent; box-shadow: none; padding: 0; }
-  .wish-go { height: 30px; padding: 0 12px; font: 600 11px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
-  @media (max-width: 760px) { .wish-input { font-size: 16px; } .wish-go { height: 40px; } }
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-wrap { position: relative; z-index: 1; }
@@ -2143,26 +2126,7 @@
   .fxl-switch[aria-pressed="true"], .toggle[aria-pressed="true"] { background: var(--ink); }
   input[type="range"] { accent-color: var(--ink); }
 
-  /* Wunsch: Behälter; solange der Agent denkt, läuft ein Licht um das Feld */
-  @property --wish-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-  .wish { gap: 0; padding: 1px; border-radius: var(--radius-lg); background: var(--key-line); box-shadow: none; }
-  .wish > * { background: transparent; }
-  .wish-input { border-radius: 13px 13px 0 0; background: var(--well); box-shadow: none; font: 400 15px/1.42 var(--font-body); resize: none; height: 66px; transition: height 0.22s cubic-bezier(.2, .8, .2, 1); }
-  .wish.open .wish-input { height: 168px; }
-  .wish-row { padding: 6px 8px; border-radius: 0 0 13px 13px; background: var(--well); }
   /* Auf/Zu: Pfeil zeigt, ob das Feld groß ist; dreht sich beim Aufklappen */
-  .wish-toggle { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer; }
-  .wish-toggle svg { width: 14px; height: 14px; fill: currentColor; transition: transform 0.22s ease; }
-  .wish.open .wish-toggle svg { transform: rotate(180deg); }
-  .wish-toggle:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent); }
-  @media (max-width: 760px) { .wish-toggle { width: 44px; height: 40px; } }
-  @media (prefers-reduced-motion: reduce) { .wish-input, .wish-toggle svg { transition: none; } }
-  .wish-go { border-radius: 999px; background: var(--ink); color: var(--accent-ink); box-shadow: none; font: 600 10px/1 var(--font-mono); }
-  .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, rgb(255 255 255 / 0.25) 70%, #fff 76%, rgb(255 255 255 / 0.25) 80%, var(--key-line) 88%); animation: wish-run 1.6s linear infinite; }
-  .wish.busy .wish-state::after { background: var(--ink); }
-  @keyframes wish-run { to { --wish-a: 360deg; } }
-  .wish-slot .wish { padding: 1px; background: var(--key-line); }
-  .wish-slot .wish.busy { background: conic-gradient(from var(--wish-a), var(--key-line) 0 62%, #fff 76%, var(--key-line) 88%); }
 
   /* Handy: Tippflächen mindestens 44 px, Schrift mindestens 11 px */
   @media (max-width: 760px) {
@@ -2175,7 +2139,6 @@
     .lcd-input { height: 26px; }
     .key.play, .key.play[aria-pressed="true"] { width: 46px; min-width: 46px; height: 46px; }
   }
-  @media (prefers-reduced-motion: reduce) { .wish.busy { animation: none; } }
 
   /* ================= Finger statt Maus (Tablet): Desktop-Layout, fingergroß ================= */
   /* Grundlage ist die Eingabeart, nicht die Breite. Handy (≤ 760 px) hat eigene Regeln oben. */
@@ -2263,9 +2226,6 @@
     .loop-fav, .loop-del { width: 44px; height: 44px; }
     /* Karten lassen sich seitwärts auf eine Spur ziehen; senkrechtes Wischen scrollt die Liste */
     .ccard { touch-action: pan-y; }
-    .wish-input { font-size: 16px; }
-    .wish-toggle, .wish-go { height: 44px; }
-    .wish-toggle { width: 44px; }
 
     /* Inspektor */
     .insp .key, .insp-btns .key, .insp-run-btns .key { min-width: 44px; height: 44px; }
@@ -2334,7 +2294,7 @@
 
   /* Lesbarkeit: helle Knöpfe (dunkle Schrift) bleiben hell – auch bei Mauszeiger, Drücken und Fokus.
      Sonst setzt eine allgemeine Hover-Regel dunklen Grund unter dunkle Schrift. Geprüft in tests/contrast.test.cjs. */
-  :is(.dbtn.primary, .wish-go, #export-btn, .song-main .key, .wish-fab, .tip-ok, .hint-done, .key.play.on, .app.playing .key.play, .tbtn-solo[aria-pressed="true"],
+  :is(.dbtn.primary, #export-btn, .song-main .key, .tip-ok, .hint-done, .key.play.on, .app.playing .key.play, .tbtn-solo[aria-pressed="true"],
     .chip[aria-pressed="true"], .key-pop-key[aria-pressed="true"], .key-pop-same[aria-pressed="true"], .dbtn[aria-pressed="true"]):is(:hover, :active, :focus-visible):not(:disabled) {
     background: var(--ink); color: var(--accent-ink);
   }
@@ -2463,9 +2423,9 @@
     #pattern[data-type="synth"] .pat-glide-btn { min-width: 52px; padding: 0 6px; }
   }
   /* ================= Handy, Variante B (2.8): kein „Mehr“ – alles an seinem Ort =================
-     Deck: ▶ mit Aufnahme, Rückgängig mit Wiederholen. Über den Spuren: Raster und Klick. Unten rechts: Wünschen.
+     Deck: ▶ mit Aufnahme, Rückgängig mit Wiederholen. Über den Spuren: Raster und Klick.
      Fach „Song“: Name, Tempo, Tonart, Länge, Speichern, Exportieren. Zoomen mit zwei Fingern. */
-  .arr-pills, .wish-fab, .wish-sheet { display: none; }
+  .arr-pills { display: none; }
   @media (max-width: 760px) {
     /* Deck */
     .deck { gap: 4px; padding-left: max(6px, env(safe-area-inset-left, 0px)); padding-right: max(6px, env(safe-area-inset-right, 0px)); }
@@ -2500,28 +2460,6 @@
     }
     .arr-pills .snap option { background: var(--sheet-bg); color: var(--ink); font: 400 14px/1.4 var(--font-body); text-transform: none; }
 
-    /* Wünschen: schwebender Knopf, nicht über offenen Fächern oder bei offener Tastatur */
-    .wish-fab {
-      display: inline-flex; align-items: center; gap: 8px; grid-area: arr; align-self: end; justify-self: end; z-index: 15;
-      /* rechts bleibt der Streifen des senkrechten Rollbalkens (14 px + Greiffläche 30 px) frei */
-      margin: 0 calc(max(0px, env(safe-area-inset-right, 0px)) + 52px) 14px 0; height: 48px; padding: 0 18px 0 14px; border: 0; border-radius: 24px;
-      background: var(--ink); color: var(--accent-ink); cursor: pointer; font: 600 11px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
-      box-shadow: 0 6px 20px rgb(0 0 0 / 0.55), 0 0 22px -6px var(--amber);
-    }
-    .wish-fab svg { width: 18px; height: 18px; fill: currentColor; }
-    .wish-fab[aria-expanded="true"], .app:not([data-dock=""]) .wish-fab, .app.kbd .wish-fab { display: none; }
-    .app:has(.wish.busy) .wish-fab svg { animation: wish-pulse 0.9s ease-in-out infinite; }
-    .wish-sheet {
-      display: block; grid-area: arr; align-self: end; z-index: 25; min-height: 0;
-      margin: 0 max(8px, env(safe-area-inset-right, 0px)) 8px max(8px, env(safe-area-inset-left, 0px)); padding: 0 12px 12px;
-      border-radius: 14px; background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--key-line), 0 -12px 30px rgb(0 0 0 / 0.5);
-    }
-    .wish-sheet[hidden] { display: none; }
-    .wish-sheet-head { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
-    .wish-sheet-head h2 { margin: 0; font: 500 11px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-    .wish-sheet-close { width: 44px; height: 44px; margin-right: -12px; border: 0; background: transparent; color: var(--ink); font: 300 26px/1 var(--font-body); cursor: pointer; }
-    .wish-sheet .wish.open .wish-input { height: min(168px, calc(var(--vvh, 100dvh) * 0.34)); }
-    .app.kbd[data-kbd-in="wish"] { grid-template-rows: 0 minmax(0, 1fr) 0 0; }
 
     /* Fach „Song“ */
     .song-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 12px; align-content: start; padding: 8px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px)); }
@@ -2722,11 +2660,6 @@
     </div>
     <div class="shelf-list" id="library"></div>
     <div class="create-panel" id="create-panel" role="tabpanel" aria-label="Erstellen">
-      <h3 class="create-sec">Wünschen</h3>
-      <form class="wish" id="wish-form" autocomplete="off">
-        <textarea id="wish-input" class="wish-input" rows="2" maxlength="300" placeholder="z. B. Techno-Beat ab Takt 5, Bass dazu, Pad mit Hall" aria-label="Was soll passieren?"></textarea>
-        <div class="wish-row"><button class="wish-toggle" id="wish-toggle" type="button" aria-expanded="false" aria-controls="wish-input" title="Feld größer oder kleiner"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4z"/></svg></button><span class="wish-state" id="wish-state" aria-live="polite"></span><button class="key wish-go" id="wish-go" type="submit">Umsetzen</button></div>
-      </form>
       <h3 class="create-sec">Selbst spielen</h3>
       <button class="ccard cat-drums" type="button" data-create="beat"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 12h4v3H1zm5 0h4v3H6zm5 0h4v3h-4z"/></svg></span><span class="ccard-title">Beat bauen</span><span class="ccard-sub">Schlagzeug in Schritten oder auf Pads</span></button>
       <button class="ccard cat-synth" type="button" data-create="melody"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h14v12H1zm2 2v8h1.5V8H6v4h1V8h2v4h1V8h1.5v4H13V4h-1v4h-1V4H9v4H8V4H6v4H5V4z"/></svg></span><span class="ccard-title">Melodie schreiben</span><span class="ccard-sub">Noten setzen oder auf der Klaviatur spielen</span></button>
@@ -2755,16 +2688,6 @@
   </main>
 
   <aside class="insp" id="insp" aria-label="Eigenschaften"></aside>
-
-  <!-- Handy: schwebender Knopf über dem Arranger; das Wunsch-Feld (#wish-form) wandert dann in das Blatt -->
-  <button class="wish-fab" id="wish-fab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="wish-sheet">
-    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1l1.4 3.9L12 6.3 7.9 7.7 6.5 11.6 5.1 7.7 1 6.3l4.1-1.4zM12.5 8.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>
-    <span>Wünschen</span>
-  </button>
-  <section class="wish-sheet" id="wish-sheet" role="dialog" aria-label="Wünschen" hidden>
-    <div class="wish-sheet-head"><h2>Wünschen</h2><button class="wish-sheet-close" id="wish-close" type="button" aria-label="Schließen">×</button></div>
-    <div class="wish-slot" id="wish-slot"></div>
-  </section>
 
   <section class="dock" id="mixer" aria-label="Mixer" hidden>
     <div class="dock-head">

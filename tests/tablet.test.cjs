@@ -366,10 +366,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await page.tap('#editor-tab');
     await page.waitForTimeout(500);
 
-    // ---------- Wunsch, Projekt-Menü, Export, Gesten ----------
-    await page.locator('#wish-input').tap();
-    check('Wunsch-Feld lässt sich antippen', await page.evaluate(() => document.activeElement?.id === 'wish-input'));
-    await page.evaluate(() => document.activeElement.blur());
+    // ---------- Projekt-Menü, Export, Gesten ----------
     await targets('Erstellen');
     await page.tap('#ltab-sounds');
     await page.evaluate(() => window.loopwerk.engine.setPosition(8));
