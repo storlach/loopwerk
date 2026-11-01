@@ -55,7 +55,6 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     live = null;
     $('ed-autotune').setAttribute('aria-pressed', 'false');
     nameIn.value = sample.category === 'own' ? sample.name : `${sample.name} (bearbeitet)`;
-    $('editor-title').textContent = `Sample-Editor: ${sample.name}`;
     ui.setDock('editor');
     requestAnimationFrame(render);
   }
@@ -152,7 +151,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
       : `Länge ${fmtSec(dur)} · ziehe über die Wellenform, um einen Bereich auszuwählen`;
     for (const id of ['ed-crop', 'ed-cut', 'ed-silence']) $(id).disabled = !hasSel();
     $('ed-undo').disabled = !st.history.length;
-    loopIn.checked = st.kind === 'loop';
+    loopIn.setAttribute('aria-pressed', String(st.kind === 'loop'));
     beatsIn.disabled = st.kind !== 'loop';
     if (document.activeElement !== beatsIn) beatsIn.value = String(st.beats);
     bpmOut.textContent = st.kind === 'loop' ? `= ${(st.beats * 60 / dur).toFixed(1).replace('.', ',')} BPM` : 'One-Shot, wird nicht gestreckt';
@@ -200,7 +199,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   $('ed-pitch-down').addEventListener('click', () => setPitch((live?.pitch ?? 0) - 1));
   $('ed-pitch-up').addEventListener('click', () => setPitch((live?.pitch ?? 0) + 1));
   $('ed-pitch-apply').hidden = true;
-  loopIn.addEventListener('change', () => { st.kind = loopIn.checked ? 'loop' : 'oneshot'; render(); });
+  loopIn.addEventListener('click', () => { if (!st) return; st.kind = st.kind === 'loop' ? 'oneshot' : 'loop'; render(); });
   beatsIn.addEventListener('change', () => { st.beats = clamp(Math.round(Number(beatsIn.value) || 1), 1, 64); render(); });
 
   $('ed-undo').addEventListener('click', () => {
@@ -242,10 +241,9 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
 
   const atOpts = () => ({
     root: Number($('ed-at-root').value), scale: $('ed-at-scale').value,
-    strength: Number($('ed-at-strength').value), speed: $('ed-at-robot').checked ? 1 : 0.6,
+    strength: Number($('ed-at-strength').value), speed: $('ed-at-robot').getAttribute('aria-pressed') === 'true' ? 1 : 0.6,
   });
   const atBtn = $('ed-autotune');
-  atBtn.textContent = 'Autotune';
   atBtn.setAttribute('aria-pressed', 'false');
   atBtn.addEventListener('click', () => {
     if (!st) return;
@@ -255,9 +253,16 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     atBtn.setAttribute('aria-pressed', String(l.autotune));
     relive();
   });
-  for (const id of ['ed-at-root', 'ed-at-scale', 'ed-at-strength', 'ed-at-robot']) {
+  for (const id of ['ed-at-root', 'ed-at-scale', 'ed-at-strength']) {
     $(id).addEventListener(id === 'ed-at-strength' ? 'input' : 'change', () => { if (live?.autotune) relive(); });
   }
+  $('ed-at-robot').addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+    if (live?.autotune) relive();
+  });
+  // Schalter-Beschriftung ist mit klickbar
+  for (const id of ['ed-autotune', 'ed-at-robot', 'ed-loop']) $(`${id}-l`).addEventListener('click', () => $(id).click());
 
   const separateNow = () => work('Trenne Gesang, Drums, Bass und Instrumente … (dauert bei langen Songs etwas)', 'separate', { chs: st.chs, sampleRate: st.sr });
   $('ed-novocal').addEventListener('click', async () => {
@@ -293,7 +298,12 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   let previewing = null;
   const playBtn = $('ed-play');
   const isPlaying = () => !!previewing && engine.preview === previewing;
-  const syncPlay = () => { const on = isPlaying(); playBtn.textContent = on ? '■ Stopp' : '▶ Anhören'; playBtn.setAttribute('aria-pressed', String(on)); };
+  const syncPlay = () => {
+    const on = isPlaying();
+    playBtn.setAttribute('aria-pressed', String(on));
+    playBtn.setAttribute('aria-label', on ? 'Stopp' : 'Anhören');
+    playBtn.title = on ? 'Stopp' : 'Anhören (im Loop)';
+  };
   async function play(at = 0) {
     if (!st) return;
     const buffer = channelsToBuffer(st.chs, st.sr);

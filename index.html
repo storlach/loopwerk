@@ -2645,6 +2645,45 @@
     .mst-head .mst-ab-end { width: 44px; }
     .fxpad-target { height: 44px; }
   }
+
+  /* ---------- Clip-Editor: Kopf mit Name und Icons, Wellenform bleibt stehen, Schalter statt Häkchen ---------- */
+  #editor .ed-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 0 14px 8px; border-bottom: 1px solid var(--line); min-width: 0; }
+  #editor .ed-headrow { margin: 0 -14px; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+  .ed-title { display: flex; align-items: baseline; gap: 10px; flex: 1 1 auto; min-width: 0; }
+  .ed-title h2 { flex: none; color: var(--muted); }
+  #editor .ed-name {
+    flex: 1 1 auto; min-width: 0; width: auto; height: 32px; padding: 0 6px; margin-left: -6px;
+    border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--ink);
+    font: 400 18px/1 var(--font-display); text-overflow: ellipsis; cursor: text;
+  }
+  #editor .ed-name:hover { border-color: var(--key-line); }
+  #editor .ed-name:focus { outline: none; border-color: var(--ink); background: var(--well); }
+  .ed-actions { flex: none; flex-wrap: nowrap; }
+  .dbtn.ed-ico { width: 32px; min-width: 32px; padding: 0; display: inline-grid; place-items: center; }
+  .dbtn.ed-ico svg { width: 14px; height: 14px; fill: currentColor; }
+  #ed-play .ico-stop, #ed-play[aria-pressed="true"] .ico-play { display: none; }
+  #ed-play[aria-pressed="true"] .ico-stop { display: block; }
+  #editor .editor-body { padding-top: 8px; }
+  .ed-sw { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .ed-sw > span { font-size: 12px; color: var(--muted); }
+  .ed-sw > .fxl-switch[aria-pressed="true"] + span { color: var(--ink); }
+  .ed-group-label.ed-sw > span { font-size: inherit; }
+  @media (max-width: 760px), (hover: none) and (pointer: coarse) {
+    #editor .ed-headrow { padding-right: 4px; }
+    .dbtn.ed-ico { width: 44px; min-width: 44px; height: 44px; }
+    #ed-apply { min-height: 44px; }
+    .ed-sw .fxl-switch { width: 44px; height: 26px; }
+    .ed-sw .fxl-switch::after { width: 20px; height: 20px; top: 3px; left: 3px; }
+    .ed-sw .fxl-switch[aria-pressed="true"]::after { transform: translateX(18px); }
+    #editor .ed-name { height: 44px; font-size: 17px; }
+  }
+  @media (max-width: 760px) {
+    #editor .ed-top { padding: 0 12px 8px; }
+    #editor .ed-headrow { margin: 0 -12px; padding: 2px 4px 6px 12px; }
+    .ed-title h2 { display: none; }
+    #editor .ed-actions { order: 0; width: auto; margin-left: auto; gap: 4px; }
+    #ed-apply { padding: 0 10px; }
+  }
 </style>
 
 
@@ -2855,16 +2894,19 @@
   </section>
 
   <section class="dock" id="editor" aria-label="Sample-Editor" hidden>
-    <div class="dock-head">
-      <h2 id="editor-title">Sample-Editor</h2>
-      <div class="dock-actions">
-        <button class="dbtn" id="ed-play" type="button">▶ Anhören</button>
-        <button class="dbtn" id="ed-undo" type="button">Rückgängig</button>
-        <button class="dbtn" id="ed-cancel" type="button">Abbrechen</button>
-        <button class="dbtn primary" id="ed-apply" type="button">Übernehmen</button>
+    <div class="ed-top">
+      <div class="dock-head ed-headrow">
+        <div class="ed-title">
+          <h2 id="editor-title">Clip-Editor</h2>
+          <input class="ed-name" id="ed-name" type="text" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Name des Sounds" title="Name ändern">
+        </div>
+        <div class="dock-actions ed-actions">
+          <button class="dbtn ed-ico" id="ed-play" type="button" aria-label="Anhören" title="Anhören (im Loop)" aria-pressed="false"><svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg><svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5h9v9h-9z"/></svg></button>
+          <button class="dbtn ed-ico" id="ed-undo" type="button" aria-label="Rückgängig" title="Rückgängig"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3L1 7l5 4V8h4a3 3 0 010 6H8v2h2a5 5 0 000-10H6z"/></svg></button>
+          <button class="dbtn ed-ico" id="ed-cancel" type="button" aria-label="Abbrechen" title="Abbrechen – nichts ändern"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 2L2 3.4 6.6 8 2 12.6 3.4 14 8 9.4l4.6 4.6 1.4-1.4L9.4 8 14 3.4 12.6 2 8 6.6z"/></svg></button>
+          <button class="dbtn primary" id="ed-apply" type="button">Übernehmen</button>
+        </div>
       </div>
-    </div>
-    <div class="editor-body">
       <div class="ed-wave-wrap cat-own">
         <canvas id="ed-wave" aria-label="Wellenform – ziehen wählt einen Bereich aus"></canvas>
         <div class="ed-sel" hidden></div>
@@ -2872,12 +2914,14 @@
       </div>
       <p class="ed-info" id="ed-info"></p>
       <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
+    </div>
+    <div class="editor-body">
       <div class="ed-tabs" role="tablist" aria-label="Werkzeuge">
         <button class="ed-tab" type="button" role="tab" data-tab="schneiden" aria-selected="true">Schneiden</button>
         <button class="ed-tab" type="button" role="tab" data-tab="klang" aria-selected="false">Klang</button>
         <button class="ed-tab" type="button" role="tab" data-tab="tonhoehe" aria-selected="false">Tonhöhe &amp; Autotune</button>
         <button class="ed-tab" type="button" role="tab" data-tab="trennen" aria-selected="false">Trennen</button>
-        <button class="ed-tab" type="button" role="tab" data-tab="loop" aria-selected="false">Loop &amp; Name</button>
+        <button class="ed-tab" type="button" role="tab" data-tab="loop" aria-selected="false">Loop</button>
       </div>
       <div class="ed-tools" data-tab="schneiden">
         <div class="ed-group" role="group" aria-label="Auswahl" data-tab="schneiden">
@@ -2903,12 +2947,11 @@
           <button class="dbtn" id="ed-pitch-apply" type="button">Anwenden</button>
         </div>
         <div class="ed-group" role="group" aria-label="Autotune" data-tab="tonhoehe">
-          <span class="ed-group-label">Autotune</span>
+          <span class="ed-group-label ed-sw"><button class="fxl-switch" id="ed-autotune" type="button" aria-pressed="false" aria-labelledby="ed-autotune-l" title="Gesang auf die Töne der Tonleiter ziehen – sofort zu hören"></button><span id="ed-autotune-l">Autotune</span></span>
           <select class="ed-sel-small" id="ed-at-root" aria-label="Grundton"><option value="0">C</option><option value="1">C♯</option><option value="2">D</option><option value="3">D♯</option><option value="4">E</option><option value="5">F</option><option value="6">F♯</option><option value="7">G</option><option value="8">G♯</option><option value="9" selected>A</option><option value="10">A♯</option><option value="11">H</option></select>
           <select class="ed-sel-small" id="ed-at-scale" aria-label="Tonleiter"><option value="minor" selected>Moll</option><option value="major">Dur</option><option value="chromatic">Chromatisch</option></select>
           <label class="ed-inline">Stärke <input type="range" id="ed-at-strength" min="0" max="1" step="0.05" value="1"></label>
-          <label class="ed-inline"><input type="checkbox" id="ed-at-robot"> Roboter</label>
-          <button class="dbtn" id="ed-autotune" type="button" title="Gesang auf die Töne der Tonleiter ziehen">Anwenden</button>
+          <span class="ed-sw"><button class="fxl-switch" id="ed-at-robot" type="button" aria-pressed="false" aria-labelledby="ed-at-robot-l"></button><span id="ed-at-robot-l">Roboter</span></span>
         </div>
         <div class="ed-group" role="group" aria-label="Trennen" data-tab="trennen">
           <span class="ed-group-label">Trennen (Näherung)</span>
@@ -2917,14 +2960,10 @@
           <button class="dbtn" id="ed-stems" type="button" title="Gesang, Drums, Bass und Instrumente als eigene Spuren">In Ebenen zerlegen</button>
         </div>
         <div class="ed-group" role="group" aria-label="Loop" data-tab="loop">
-          <label class="ed-check"><input type="checkbox" id="ed-loop"> Als Loop</label>
+          <span class="ed-sw"><button class="fxl-switch" id="ed-loop" type="button" aria-pressed="false" aria-labelledby="ed-loop-l"></button><span id="ed-loop-l">Als Loop</span></span>
           <label class="ed-beats-label" for="ed-beats">Schläge</label>
           <input class="ed-beats" id="ed-beats" type="number" min="1" max="64" step="1">
           <span class="ed-bpm" id="ed-bpm"></span>
-        </div>
-        <div class="ed-group ed-name-group" data-tab="loop">
-          <label class="ed-group-label" for="ed-name">Name</label>
-          <input class="ed-name" id="ed-name" type="text" maxlength="40">
         </div>
       </div>
     </div>

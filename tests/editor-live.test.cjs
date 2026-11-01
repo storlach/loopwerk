@@ -21,7 +21,7 @@ const { check, finish } = createChecker();
     // ---------- Anhören im Loop ----------
     await page.click('#ed-play');
     await page.waitForTimeout(1600);
-    const p1 = await page.evaluate(() => ({ loop: !!window.loopwerk.engine.preview?.loop, label: document.getElementById('ed-play').textContent }));
+    const p1 = await page.evaluate(() => ({ loop: !!window.loopwerk.engine.preview?.loop, label: document.getElementById('ed-play').getAttribute('aria-label') }));
     check('Anhören läuft im Loop weiter (länger als der Clip)', p1.loop && /Stopp/.test(p1.label), JSON.stringify(p1));
     // ---------- Tonhöhe: sofort, ohne „Anwenden“ ----------
     const f0 = () => page.evaluate(() => {
