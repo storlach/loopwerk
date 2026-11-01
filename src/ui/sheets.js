@@ -145,8 +145,10 @@ export function mountSheets({ ui, arranger }) {
     s.style.transform = '';
     s.style.clipPath = '';
     lastAb = arr.getBoundingClientRect().bottom;
+    follow(lastAb);
     syncPad();
     reveal();
+    endFollow();
   }
 
   function toHidden(s, m) {
@@ -158,7 +160,9 @@ export function mountSheets({ ui, arranger }) {
     s.style.maxHeight = '';
     s.style.zIndex = '';
     s.style.removeProperty('--sheet-h');
+    follow();
     if (!busy()) syncPad();
+    endFollow();
   }
 
   // Ein Feder-Takt für alle bewegten Schubladen: erst messen, dann schreiben (kein Layout-Hin-und-Her)
@@ -216,6 +220,7 @@ export function mountSheets({ ui, arranger }) {
       // Beim Hochfahren schiebt die Kante den ausgewählten Clip mit nach oben
       if (m.open && m.v > 0 && m.target < h - 1 && s === current()) pushClip(ar.bottom - m.p);
     }
+    follow(ar.bottom);
     if (moving.some((s) => S(s).mode === 'spring')) raf = requestAnimationFrame(frame);
   }
 
@@ -228,6 +233,7 @@ export function mountSheets({ ui, arranger }) {
 
   function open(s) {
     const m = S(s);
+    beginFollow();
     s.classList.remove('leaving', 'dragging');
     s.classList.add('entering');
     for (const o of sheets) if (o !== s) o.style.zIndex = '';
@@ -251,6 +257,7 @@ export function mountSheets({ ui, arranger }) {
   function close(s, cover) {
     const m = S(s);
     if (!m.open) return;
+    beginFollow();
     m.open = false;
     m.drag = null; // ein laufendes Ziehen endet hier
     s.classList.remove('entering', 'dragging');
@@ -306,6 +313,8 @@ export function mountSheets({ ui, arranger }) {
       if (!m.open) return;
       e.preventDefault();
       const h = full();
+      beginFollow();
+      setPad(Math.max(pad, h)); // Platz zum Mitschieben, falls die Schublade höher gezogen wird
       if (m.mode === 'rest') {
         // Aus der Ruhe: aktuelle Lage übernehmen
         m.p = measure(sheet, m);
@@ -339,6 +348,7 @@ export function mountSheets({ ui, arranger }) {
         m.p = p0 - (ev.clientY - y0);
         if (autoHeight(sheet)) m.p = Math.min(m.p, m.H);
         apply(sheet, m, h);
+        follow();
       };
       sheet.classList.add('dragging');
       trackPointer(e, (ev) => {
@@ -389,6 +399,20 @@ export function mountSheets({ ui, arranger }) {
     grip.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
     head?.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.target === head || e.target.tagName === 'H2') startDrag(e); });
   }
+
+  // Die Ansicht geht mit: Oberkante der höchsten sichtbaren Schublade, beim Start einer Bewegung einmal gemerkt
+  let anchor = null;
+  const coverP = () => { let p = 0; for (const s of sheets) { const m = S(s); if (m.open || m.mode !== 'rest') p = Math.max(p, m.p); } return p; };
+  function beginFollow() {
+    if (anchor || ui.selectedClipId || !arranger.viewAnchor) return;
+    const ab = arr.getBoundingClientRect().bottom;
+    anchor = { a: arranger.viewAnchor(ab - coverP(), ui.selectedTrackId), ab };
+  }
+  function follow(ab = anchor?.ab) {
+    if (!anchor || ui.selectedClipId) return;
+    arranger.followView(anchor.a, ab - coverP());
+  }
+  function endFollow() { if (!busy()) anchor = null; }
 
   // Den ausgewählten Clip über der Schublade sichtbar halten
   function pushClip(limitTop) {

@@ -230,6 +230,7 @@
 - Handy: Loop-Bereich lässt sich auf der Taktleiste ziehen (vorher hat der Browser die Geste als Scrollen abgebrochen); Taktleiste fingerhoch, Einblender beim Einschalten des Loops
 - Fach „Song“ am Handy: Mastering dazu, Song-Starter als wischbare Reihe, damit alles ohne Scrollen passt
 - Piano-Roll: ein schneller Klick setzt die Note zuverlässig (vorher ging sie verloren, solange der Klang lud)
+- Schubladen schieben die Ansicht: beim Öffnen und Ziehen rücken die Spuren Bild für Bild mit nach oben (Mitte des sichtbaren Inhalts bleibt in der Mitte des freien Bereichs, eine ausgewählte Spur bleibt ganz sichtbar), beim Schließen zurück (`tests/sheet-follow.test.cjs`)
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

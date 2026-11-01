@@ -259,7 +259,8 @@ const { check, finish } = createChecker();
     check('Leiste unten zeigt „Editor · Beat 1“', tabLabel === 'Editor · Beat 1', tabLabel);
     await page.click('#editor-tab');
     check('Editor-Reiter schließt den offenen Editor', await page.evaluate(() => window.loopwerk.ui.dock === null));
-    // Karte auf eine Spur ziehen
+    // Karte auf eine Spur ziehen (erst wenn die Schublade weg ist – sie nimmt die Ansicht beim Schließen mit zurück)
+    await page.waitForTimeout(700);
     const card = await rect('.ccard[data-create="melody"]');
     const t8 = await rect('.lane[data-track-id="t8"]');
     const ppb = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);

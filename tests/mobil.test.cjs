@@ -93,6 +93,9 @@ const { check, finish } = createChecker();
     check('Hinweis erklärt den nächsten Schritt in Fingersprache', hint.includes('Tippe in eine Spur'), hint);
     check('„Fertig“ beendet das Einsetzen (statt Esc)', await page.locator('#hint-done').isVisible());
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-einsetzen.png') });
+    // Das offene Regal hat die Ansicht nach oben geschoben: zur Spur 2 zurückscrollen wie mit dem Finger
+    await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 0; });
+    await page.waitForTimeout(100);
     const lane = await box('.lane[data-track-id="t2"]');
     const head = await box('.track-row:nth-child(2) .track-head');
     await page.touchscreen.tap(head.x + head.width + 20, lane.y + lane.height / 2);

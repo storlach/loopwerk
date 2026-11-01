@@ -1145,6 +1145,37 @@ export function mountArranger({ root, store, engine, library, ui }) {
     else if (r.top < top) root.scrollTop -= top - r.top;
   }
 
+  // Schublade schiebt die Ansicht: beim Start einer Bewegung einmal messen, danach pro Bild nur scrollTop schreiben.
+  // Ohne Auswahl bleibt die Mitte des sichtbaren Inhalts in der Mitte des freien Bereichs über der Schublade,
+  // eine ausgewählte Spur bleibt ganz zu sehen. Beim Schließen kehrt die Ansicht so wieder zurück.
+  function viewAnchor(limitTop, trackId) {
+    const box = root.getBoundingClientRect();
+    const st = root.scrollTop;
+    const head = rowsEl.getBoundingClientRect().top - box.top + st; // klebende Kopfzeilen: Lineal, Tonart, Akkorde
+    const end = head + rowsEl.offsetHeight + addRow.offsetHeight;
+    const a = { boxTop: box.top, head, st };
+    const row = trackId && rowsEl.querySelector(`.lane[data-track-id="${trackId}"]`)?.closest('.track-row');
+    if (row && row.offsetHeight) {
+      const r = row.getBoundingClientRect();
+      a.track = { top: r.top - box.top + st, bottom: r.bottom - box.top + st };
+    } else {
+      const top = st + head;
+      const bottom = Math.min(st + (limitTop - box.top), end);
+      a.y = (top + Math.max(top, bottom)) / 2;
+    }
+    return a;
+  }
+  function followView(a, limitTop) {
+    const visH = Math.max(40, limitTop - a.boxTop - a.head);
+    let st;
+    if (a.track) {
+      st = a.st;
+      if (a.track.bottom > st + a.head + visH - 8) st = a.track.bottom - a.head - visH + 8;
+      if (a.track.top < st + a.head) st = a.track.top - a.head;
+    } else st = a.y - a.head - visH / 2;
+    root.scrollTop = Math.max(0, Math.round(st)); // oben begrenzt der Browser selbst
+  }
+
   // ---------- Zoom ----------
 
   // Zeile unter einer Höhe im Inhalt merken, damit sie nach dem Zoomen an derselben Stelle bleibt
@@ -1288,5 +1319,5 @@ export function mountArranger({ root, store, engine, library, ui }) {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
     markSelection();
   });
-  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, chordRow, get scissors() { return !!scissors; } };
+  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
 }

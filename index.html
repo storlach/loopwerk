@@ -1280,7 +1280,7 @@
     .arr-bar .key, .arr-bar .snap { height: 28px; min-width: 28px; background: var(--lane); color: var(--ink); border-color: var(--line); box-shadow: none; }
     .arr-bar-status { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .arr-wrap { flex: 1 1 auto; height: auto; min-height: 0; }
-    .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
+    .arr-grid { padding-bottom: var(--sheet-pad, 0px); } /* bleibt beim Schließen, bis die Schublade weg ist */
     .tbtn.tbtn-del { display: none; }
 
     /* Fächer (Mixer, Editoren): Schubladen über dem Arranger */
@@ -1363,7 +1363,7 @@
     }
     .left-tabs, .create-panel, .insp, .deck-right, .ed-tabs, .tabbar-end { display: none !important; }
     /* Am Handy unten im Arranger Platz lassen, damit die letzten Spuren über das offene Fach scrollen */
-    .app.dock-open .arr-grid { padding-bottom: var(--sheet-pad, 0px); }
+    .arr-grid { padding-bottom: var(--sheet-pad, 0px); } /* bleibt beim Schließen, bis die Schublade weg ist */
     /* Das Fach lässt dem Arranger immer mindestens gut 150 px */
     :root { --track-h: 62px; --rh-two: 56px; --rh-one: 36px; --zbar-b: 0px; --zbar-r: 0px; --fach-max: calc(100dvh - 320px); }
     button, .lane, .clip, .ruler { -webkit-tap-highlight-color: transparent; }
