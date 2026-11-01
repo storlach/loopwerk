@@ -79,6 +79,8 @@
 <link rel="modulepreload" href="src/model.js">
 <link rel="modulepreload" href="src/effects.js">
 <link rel="modulepreload" href="src/engine.js">
+<link rel="modulepreload" href="src/fxpad.js">
+<link rel="modulepreload" href="src/dsp/master-core.js">
 <link rel="modulepreload" href="src/wav.js">
 <link rel="modulepreload" href="src/ui/library.js">
 <link rel="modulepreload" href="src/ui/arranger.js">
@@ -97,6 +99,15 @@
 <link rel="modulepreload" href="src/ui/mixer.js">
 <link rel="modulepreload" href="src/ui/key-select.js">
 <link rel="modulepreload" href="src/ui/sound-tempo.js">
+<link rel="modulepreload" href="src/ui/mastering.js">
+<link rel="modulepreload" href="src/mastering.js">
+<link rel="modulepreload" href="src/dsp/loudness.js">
+<link rel="modulepreload" href="src/dsp/run.js">
+<link rel="modulepreload" href="src/dsp/separate.js">
+<link rel="modulepreload" href="src/dsp/fft.js">
+<link rel="modulepreload" href="src/dsp/autotune.js">
+<link rel="modulepreload" href="src/dsp/pitch.js">
+<link rel="modulepreload" href="src/dsp/master-search.js">
 <link rel="modulepreload" href="src/ui/create.js">
 <link rel="modulepreload" href="src/ui/sheets.js">
 <link rel="modulepreload" href="src/ui/tips.js">
@@ -104,14 +115,10 @@
 <link rel="modulepreload" href="src/ui/glow.js">
 <link rel="modulepreload" href="src/ui/editor.js">
 <link rel="modulepreload" href="src/dsp/edit.js">
-<link rel="modulepreload" href="src/dsp/run.js">
-<link rel="modulepreload" href="src/dsp/separate.js">
-<link rel="modulepreload" href="src/dsp/fft.js">
-<link rel="modulepreload" href="src/dsp/autotune.js">
-<link rel="modulepreload" href="src/dsp/pitch.js">
 <link rel="modulepreload" href="src/own-sounds.js">
 <link rel="modulepreload" href="src/ui/export-dock.js">
 <link rel="modulepreload" href="src/export.js">
+<link rel="modulepreload" href="src/ui/fxpad.js">
 <link rel="modulepreload" href="src/ui/pattern-editor.js">
 <link rel="modulepreload" href="src/instruments.js">
 <link rel="modulepreload" href="src/sampler.js">
@@ -2499,6 +2506,77 @@
     @media (max-width: 380px) { .deck .lcd-cell { padding: 1px 5px; } .deck .lcd-value { font-size: 20px; } }
     .song-private { margin: 0; font: 400 11px/1.4 var(--font-mono); letter-spacing: 0.04em; color: var(--muted); }
   }
+  /* ---------- Mastering der Summe (Inspektor „Song“, Export) ---------- */
+  .mst { display: grid; gap: 8px; }
+  .mst-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .mst-head .dbtn { height: 30px; padding: 0 12px; cursor: pointer; }
+  .mst-head .mst-ab-end { width: 30px; padding: 0; }
+  .mst-styles { display: flex; flex-wrap: wrap; gap: 4px; }
+  .mst-styles .chip { min-height: 28px; padding: 0 10px; cursor: pointer; }
+  .mst-meter { min-height: 13px; font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--muted); }
+  .mst.on .mst-meter { color: var(--ink); }
+  .insp-mst { margin: 2px 0 10px; }
+  .ex-master { min-width: 0; }
+
+  /* ---------- Effekt-Pad: Fläche als Mulde, der Finger ist ein Lichtpunkt ---------- */
+  #fxpad .fxpad-body { display: grid; min-height: 0; padding: 10px 12px 12px; }
+  .fxpad-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .fxpad-modes { display: flex; flex-wrap: wrap; gap: 4px; }
+  .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 30px; padding: 0 12px; cursor: pointer; }
+  .fxpad-target { height: 30px; max-width: 160px; background: var(--well); color: var(--ink); border: 1px solid var(--key-line); border-radius: var(--radius); }
+  .fxpad-area {
+    --px: 0.5; --py: 0.5;
+    position: relative; min-height: 140px; border-radius: var(--radius-lg); overflow: hidden;
+    background: var(--well); box-shadow: var(--well-shadow);
+    touch-action: none; cursor: crosshair; -webkit-user-select: none; user-select: none;
+  }
+  .fxpad-area::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.7;
+    background-image: radial-gradient(circle, var(--key-line) 1px, transparent 1.6px); background-size: 24px 24px;
+  }
+  .fxpad-grid { position: absolute; inset: 0; pointer-events: none; }
+  .fxpad-area.live .fxpad-grid {
+    background:
+      linear-gradient(var(--line), var(--line)) calc(var(--px) * 100%) 0 / 1px 100% no-repeat,
+      linear-gradient(var(--line), var(--line)) 0 calc((1 - var(--py)) * 100%) / 100% 1px no-repeat;
+  }
+  .fxpad-cell {
+    position: absolute; top: 0; bottom: 0; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 24px;
+    box-shadow: inset 1px 0 0 var(--lcd-sep); font: 500 10px/1 var(--font-mono); color: var(--muted);
+  }
+  .fxpad-cell:first-child { box-shadow: none; }
+  .fxpad-mid { position: absolute; top: 0; bottom: 0; left: 46%; width: 8%; box-shadow: inset 1px 0 0 var(--lcd-sep), inset -1px 0 0 var(--lcd-sep); }
+  .fxpad-side { position: absolute; top: 10px; font: 500 10px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .fxpad-side-l { left: 30px; }
+  .fxpad-side-r { right: 12px; }
+  .fxpad-axis { position: absolute; pointer-events: none; font: 500 10px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .fxpad-axis-x { left: 50%; bottom: 8px; transform: translateX(-50%); }
+  .fxpad-axis-y { left: 8px; top: 50%; writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
+  .fxpad-value { position: absolute; left: 50%; top: 28px; transform: translateX(-50%); pointer-events: none; font: 500 11px/1 var(--font-mono); color: var(--ink); text-shadow: var(--glow-ink); white-space: nowrap; }
+  .fxpad-dot {
+    position: absolute; left: calc(var(--px) * 100%); top: calc((1 - var(--py)) * 100%);
+    width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; pointer-events: none;
+    box-shadow: inset 0 0 0 1px var(--muted);
+  }
+  .fxpad-area.live .fxpad-dot { background: var(--beam); box-shadow: var(--beam-glow); }
+  .fxpad-area.live::after {
+    content: ""; position: absolute; left: calc(var(--px) * 100%); top: calc((1 - var(--py)) * 100%);
+    width: 260px; height: 260px; margin: -130px 0 0 -130px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle, color-mix(in srgb, var(--beam) 20%, transparent), transparent 65%);
+  }
+  #mixer-fxpad { display: none; }
+  @media (max-width: 760px) {
+    #fxpad-btn { display: none; }
+    #mixer .mixer-actions { order: 0; width: auto; margin-left: auto; padding-right: 8px; }
+    #mixer-fxpad { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; }
+    #fxpad .fxpad-body { padding: 4px 10px 10px; }
+    .fxpad-area { min-height: 180px; }
+  }
+  @media (max-width: 760px), (hover: none) and (pointer: coarse) {
+    .mst-head .dbtn, .mst-styles .chip, .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 44px; height: 44px; }
+    .mst-head .mst-ab-end { width: 44px; }
+    .fxpad-target { height: 44px; }
+  }
 </style>
 
 
@@ -2692,6 +2770,9 @@
   <section class="dock" id="mixer" aria-label="Mixer" hidden>
     <div class="dock-head">
       <h2>Mixer</h2>
+      <div class="dock-actions mixer-actions">
+        <button class="dbtn" id="mixer-fxpad" type="button" aria-pressed="false" title="Effekt-Pad: live auf Summe oder Spur einwirken">FX-Pad</button>
+      </div>
     </div>
     <div class="dock-body">
       <div class="mixer-strips" id="mixer-strips"></div>
@@ -2791,6 +2872,11 @@
         <label><input type="radio" name="ex-range" id="ex-range-loop" value="loop"> <span id="ex-range-loop-label">Loop-Bereich</span></label>
         <label><input type="checkbox" id="ex-tail" checked> Hall und Echo ausklingen lassen (+2,5 s)</label>
       </fieldset>
+      <fieldset class="ex-set ex-master" id="ex-master-set">
+        <legend>Mastering</legend>
+        <div class="ex-master-ctl" id="ex-master-ctl"></div>
+        <label><input type="checkbox" id="ex-mastering"> Mit Mastering</label>
+      </fieldset>
       <div class="ex-go">
         <button class="dbtn primary" id="ex-go" type="button">Exportieren</button>
         <progress id="ex-progress" max="1" value="0" hidden></progress>
@@ -2865,6 +2951,16 @@
         <button type="button" class="dbtn pat-oct" id="pat-oct-up" aria-label="Oktave höher">▶</button>
       </div>
       <p class="pat-hint" id="pat-hint"></p>
+    </div>
+  </section>
+
+  <section class="dock" id="fxpad" aria-label="Effekt-Pad" hidden>
+    <div class="dock-head">
+      <h2>FX-Pad</h2>
+      <div class="dock-actions fxpad-actions"></div>
+    </div>
+    <div class="fxpad-body">
+      <div class="fxpad-area" id="fxpad-area" aria-label="Effekt-Pad: drücken und ziehen" data-mode="filter"></div>
     </div>
   </section>
 
@@ -2959,6 +3055,9 @@
     </button>
     <button class="tab" id="mixer-btn" type="button" title="Mixer und Effekte" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg><span class="tab-label">Mixer</span>
+    </button>
+    <button class="tab" id="fxpad-btn" type="button" title="Effekt-Pad: live auf Summe oder Spur einwirken" aria-pressed="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1h14v14H1zm1.5 1.5v11h11v-11zM9 5a2 2 0 110 4 2 2 0 010-4z"/></svg><span class="tab-label">FX-Pad</span>
     </button>
     <button class="tab" id="editor-tab" type="button" aria-pressed="false" disabled>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h3l2-5 4 10 2-5h3v1.5h-2l-3 6.5-4-10-1 2.5H1z"/></svg><span class="tab-label" id="editor-tab-label">Editor</span>

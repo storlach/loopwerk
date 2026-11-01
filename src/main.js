@@ -22,6 +22,8 @@ import { mountKeySelects } from './ui/key-select.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
+import { mountMasteringAnalysis } from './mastering.js';
+import { mountFxPad } from './ui/fxpad.js';
 import { mountPatternEditor } from './ui/pattern-editor.js';
 import { mountMobile, narrow } from './ui/mobile.js';
 import { Patterns, patternSampleId } from './patterns.js';
@@ -462,11 +464,13 @@ async function boot() {
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountSampleTempo({ store, engine, library, ui, arranger });
-  mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo });
+  const mastering = mountMasteringAnalysis({ store, engine, library });
+  mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering });
+  const fxpad = mountFxPad({ root: document.getElementById('fxpad'), store, engine, ui });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
   if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
-  const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools });
+  const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools, engine, mastering });
   const layout = mountLayout({
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
@@ -553,7 +557,7 @@ async function boot() {
   document.getElementById('app').classList.add('ready');
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, ready: true };
+  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, ready: true };
 }
 
 boot().catch((err) => {

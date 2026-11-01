@@ -63,7 +63,7 @@ const { check, finish } = createChecker();
     const insp = await rect('#insp');
     check('Desktop: Fachleiste genau unter dem Arranger, nicht unter den Seitenspalten', Math.abs(bar.x - arr.x) < 1 && Math.abs(bar.w - arr.w) < 1 && Math.abs(bar.y - arr.b) < 2 && shelf.b > bar.y && insp.b > bar.y, JSON.stringify({ bar, arr, shelf: shelf.b, insp: insp.b }));
     const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
-    check('Desktop: Reiter Mixer und Editor (Sounds stehen links)', JSON.stringify(tabs) === '["mixer-btn","editor-tab"]', JSON.stringify(tabs));
+    check('Desktop: Reiter Mixer, FX-Pad und Editor (Sounds stehen links)', JSON.stringify(tabs) === '["mixer-btn","fxpad-btn","editor-tab"]', JSON.stringify(tabs));
     check('Desktop: kein Hinweistext, solange es nichts zu melden gibt', !(await visible('#hint')));
     await page.click('#mixer-btn');
     await page.waitForTimeout(550);

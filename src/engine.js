@@ -3,7 +3,9 @@
 
 import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, keyChangesOf, keySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
+import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
+import { styleOf, masterLatency } from './dsp/master-core.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 const TICK_MS = 25;
@@ -15,19 +17,37 @@ export function trackLevel(track, anySolo) {
   return track.volume;
 }
 
-// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Panorama → Ziel
+// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Einschleifpunkt
+// fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel dazu) → Panorama → Ziel
 function createStrip(ctx, dest, { pan = true } = {}) {
   const input = ctx.createGain();
   const out = pan ? ctx.createStereoPanner() : ctx.createGain();
+  const pre = ctx.createGain();
+  const dry = ctx.createGain();
+  pre.connect(dry).connect(out);
   out.connect(dest);
-  return { input, gain: input, pan: pan ? out : null, out, chain: null, xf: null };
+  return { input, gain: input, pan: pan ? out : null, out, pre, dry, chain: null, xf: null };
 }
+
+// AudioWorklet-Modul (Mastering, Lo-Fi) einmal je Kontext laden; false, wenn es nicht geht
+const FX_WORKLET = new URL('./dsp/fx-worklet.js', import.meta.url);
+const workletLoads = new WeakMap();
+export function loadFxWorklet(ctx) {
+  if (!ctx.audioWorklet) return Promise.resolve(false);
+  if (!workletLoads.has(ctx)) workletLoads.set(ctx, ctx.audioWorklet.addModule(FX_WORKLET).then(() => true, () => false));
+  return workletLoads.get(ctx);
+}
+
+export const masteringOf = (project) => ({ on: false, style: 'balanced', ...(project.master?.mastering || {}) });
+const dbGain = (db) => Math.pow(10, db / 20);
+// Verstärkungen fürs Mastering, solange die Analyse des Songs noch fehlt („Vorhalt“)
+export const defaultMasterGains = (style) => ({ pre: 0, drive: styleOf(style).drive });
 
 // Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet.
 function installChain(ctx, strip, fx, spb, live, grid) {
   const chain = buildFxChain(ctx, fx, spb, grid);
   const xf = ctx.createGain();
-  chain.output.connect(xf).connect(strip.out);
+  chain.output.connect(xf).connect(strip.pre);
   strip.input.connect(chain.input);
   const old = strip.chain;
   const oldXf = strip.xf;
@@ -88,19 +108,87 @@ export async function limiterLatency(sampleRate) {
 }
 
 // grid: Kontextzeit, zu der Schlag 0 des Songs läge – Bezug für taktsynchrone Effekte (Filter-LFO, Pumpen)
-export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.destination } = {}) {
+// Summe: post → A (ohne Mastering: Schutz-Limiter) bzw. B (Mastering-Kette mit eigenem Limiter) → final → Ziel.
+// worklets: das Worklet-Modul ist geladen (sonst kein Mastering); mastering: false = nie, { pre, drive } in dB.
+// monitor: { ab: null | 'A' | 'B', aDb, bDb } – A/B-Vergleich mit Lautheitsausgleich (nur zum Abhören).
+export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.destination, worklets = false, mastering, monitor = null } = {}) {
   const post = ctx.createGain();
-  let output = post;
-  if (limiter) {
-    const comp = createLimiter(ctx);
-    post.connect(comp);
-    output = comp;
-  }
-  output.connect(dest);
+  const final = ctx.createGain();
+  const aGain = ctx.createGain();
+  const bBus = ctx.createGain();
+  post.connect(aGain);
+  if (limiter) aGain.connect(createLimiter(ctx)).connect(final);
+  else aGain.connect(final);
+  bBus.connect(final);
+  final.connect(dest);
   const masterStrip = createStrip(ctx, post, { pan: false });
-  const mix = { master: masterStrip.input, masterStrip, output, tracks: new Map(), grid };
+  const style = masteringOf(project).style;
+  const mix = {
+    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, tracks: new Map(), grid,
+    canMaster: worklets && mastering !== false, mst: null,
+    gains: mastering && typeof mastering === 'object' ? { ...mastering } : defaultMasterGains(style),
+    monitor: { ab: null, aDb: 0, bDb: 0, ...(monitor || {}) },
+  };
   syncMix(ctx, project, mix, 60 / project.bpm, false);
   return mix;
+}
+
+export function mixLatency(sampleRate, mix) {
+  return mix?.mst ? masterLatency(sampleRate) : 0;
+}
+
+// Mastering-Knoten einsetzen, Stil wechseln (live mit Überblendung), A/B-Pegel setzen
+function syncMastering(ctx, project, mix, live) {
+  const m = masteringOf(project);
+  const want = mix.canMaster && !!m.on;
+  const t = ctx.currentTime;
+  const fade = (param, v) => { if (live) param.setTargetAtTime(v, t, 0.012); else param.value = v; };
+  const drop = (old) => {
+    if (!old) return;
+    if (live) {
+      fade(old.g.gain, 0);
+      setTimeout(() => { try { mix.post.disconnect(old.node); } catch { /* schon getrennt */ } old.g.disconnect(); }, 200);
+    } else {
+      mix.post.disconnect(old.node);
+      old.g.disconnect();
+    }
+  };
+  if (want && mix.mst?.style !== m.style) {
+    let node = null;
+    try {
+      node = new AudioWorkletNode(ctx, 'loopwerk-master', {
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit',
+        processorOptions: { style: m.style },
+      });
+    } catch { mix.canMaster = false; }
+    if (node) {
+      const g = ctx.createGain();
+      node.parameters.get('pre').value = dbGain(mix.gains.pre);
+      node.parameters.get('drive').value = dbGain(mix.gains.drive);
+      mix.post.connect(node);
+      node.connect(g).connect(mix.bBus);
+      if (live && mix.mst) { g.gain.value = 0; g.gain.setTargetAtTime(1, t, 0.012); }
+      drop(mix.mst);
+      mix.mst = { node, g, style: m.style };
+    }
+  } else if (!want && mix.mst) {
+    drop(mix.mst);
+    mix.mst = null;
+  }
+  const on = !!mix.mst;
+  const ab = on ? mix.monitor.ab : null;
+  fade(mix.aGain.gain, !on || ab === 'A' ? dbGain(ab === 'A' ? mix.monitor.aDb : 0) : 0);
+  fade(mix.bBus.gain, on && ab !== 'A' ? dbGain(ab === 'B' ? mix.monitor.bDb : 0) : 0);
+}
+
+// Verstärkungen aus der Analyse übernehmen (live in einer halben Sekunde)
+export function setMasterGains(ctx, mix, gains, live = true) {
+  mix.gains = { ...mix.gains, ...gains };
+  if (!mix.mst) return;
+  for (const k of ['pre', 'drive']) {
+    const p = mix.mst.node.parameters.get(k);
+    if (live) p.setTargetAtTime(dbGain(mix.gains[k]), ctx.currentTime, 0.15); else p.value = dbGain(mix.gains[k]);
+  }
 }
 
 // Bringt Pegel, Panorama und Effekte aller Kanäle auf den Stand des Projekts.
@@ -121,6 +209,8 @@ export function syncMix(ctx, project, mix, spb, live = true) {
   }
   const m = masterOf(project);
   syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);
+  syncMastering(ctx, project, mix, live && mix.masterStrip.chain != null && mix.synced === true);
+  mix.synced = true;
 }
 
 // Automation der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat] ab Kontextzeit `when`:
@@ -239,16 +329,42 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) 
 // Rendert das Projekt offline (Tests, Export). Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
 // onProgress(0…1) wird etwa alle 2 s Audio gemeldet.
 // compensate: Limiter-Verzögerung herausrechnen (für Export, damit Loops exakt am Dateianfang beginnen).
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false } = {}) {
+// mastering: false = ohne Mastering, { pre, drive } = Verstärkungen aus der Analyse (sonst Vorhalt des Stils).
+// analysis: Kanäle für die Mastering-Analyse – { x: Summe vor dem Mastering, a: Ausgang ohne Mastering }.
+// monitor: A/B-Abhörzustand wie in der Wiedergabe (Tests). pad(ctx, mix): Effekt-Pad einplanen (Tests).
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null } = {}) {
   const spb = 60 / project.bpm;
   const end = toBeat ?? totalBeats(project);
   const duration = (end - fromBeat) * spb + tailSeconds;
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
-  const lat = limiter && compensate ? await limiterLatency(sampleRate) : 0;
+  const wantMaster = !analysis && mastering !== false && masteringOf(project).on;
   // Tonart je Takt: umgestimmte Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
   if (keyChangesOf(project).length) await library.ensureKeyVariants?.(project);
-  const ctx = new OfflineAudioContext(2, frames + lat, sampleRate);
-  const mix = buildMix(ctx, project, { limiter, grid: -fromBeat * spb });
+  const lat = !compensate ? 0 : wantMaster ? masterLatency(sampleRate) : limiter ? await limiterLatency(sampleRate) : 0;
+  const ctx = new OfflineAudioContext(analysis ? 4 : 2, frames + lat, sampleRate);
+  const worklets = wantMaster || pad ? await loadFxWorklet(ctx) : false;
+  let dest = ctx.destination;
+  let taps = null;
+  if (analysis) {
+    ctx.destination.channelInterpretation = 'discrete';
+    const merger = ctx.createChannelMerger(4);
+    merger.connect(ctx.destination);
+    dest = ctx.createGain();
+    taps = merger;
+  }
+  const mix = buildMix(ctx, project, { limiter, grid: -fromBeat * spb, dest, worklets, mastering: wantMaster ? mastering : false, monitor });
+  if (analysis) {
+    const sx = ctx.createChannelSplitter(2);
+    const sa = ctx.createChannelSplitter(2);
+    for (const [node, sp, base] of [[mix.post, sx, 0], [dest, sa, 2]]) {
+      sp.channelCount = 2;
+      sp.channelCountMode = 'explicit';
+      node.connect(sp);
+      sp.connect(taps, 0, base);
+      sp.connect(taps, 1, base + 1);
+    }
+  }
+  if (pad) pad(ctx, mix, { worklets, loopExtra: await measureLoopExtra(sampleRate) });
   const audible = audibleMap(project);
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
@@ -266,6 +382,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     }
   }
   let out = await ctx.startRendering();
+  if (analysis) return { x: [out.getChannelData(0), out.getChannelData(1)], a: [out.getChannelData(2), out.getChannelData(3)], sampleRate };
   if (lat) {
     const trimmed = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate });
     for (let c = 0; c < 2; c++) trimmed.copyToChannel(out.getChannelData(c).subarray(lat, lat + frames), c);
@@ -316,9 +433,23 @@ export class Engine extends Emitter {
   get project() { return this.store.project; }
   get spb() { return 60 / this.project.bpm; }
 
+  // Ton-Kontext einmal aufbauen; gleichzeitige Aufrufe warten auf denselben Aufbau (Worklet laden ist asynchron)
   async _ensure() {
-    if (!this.ctx) {
-      this.ctx = new AudioContext({ latencyHint: 'interactive' });
+    if (!this._building) this._building = this._build();
+    await this._building;
+    if (this.ctx.state !== 'running') await this.ctx.resume();
+  }
+
+  async _build() {
+    {
+      // Erst laden, dann alles auf einmal setzen: wer this.ctx sieht, findet auch Mischung und Pad vor
+      const ctx = new AudioContext({ latencyHint: 'interactive' });
+      // Noch innerhalb der Geste starten (iOS), bevor das Laden wartet
+      ctx.resume().catch(() => {});
+      const worklets = await loadFxWorklet(ctx);
+      const loopExtra = await measureLoopExtra(ctx.sampleRate);
+      this.ctx = ctx;
+      this.worklets = worklets;
       // Gemeinsamer Ausgang für alles Hörbare (Song, Vorhören, Pads, Klick) – dort misst die Bildmarke den Pegel
       this.out = this.ctx.createGain();
       this.out.connect(this.ctx.destination);
@@ -328,7 +459,8 @@ export class Engine extends Emitter {
       this.outAnalyser.minDecibels = -78;
       this.outAnalyser.maxDecibels = -18;
       this.out.connect(this.outAnalyser);
-      this.mix = buildMix(this.ctx, this.project, { limiter: true, dest: this.out });
+      this.mix = buildMix(this.ctx, this.project, { limiter: true, dest: this.out, worklets: this.worklets, mastering: this.masterGains, monitor: this.monitor });
+      this.pad = new FxPad(this.ctx, this.mix, { spb: () => this.spb, worklets: this.worklets, loopExtra });
       // Pegelmesser je Kanal für den Mixer
       this.meters = new Map();
       const tapStrip = (id, strip) => {
@@ -344,7 +476,6 @@ export class Engine extends Emitter {
       this.mix.output.connect(this.analyser);
       this.meterData = new Float32Array(this.analyser.fftSize);
     }
-    if (this.ctx.state !== 'running') await this.ctx.resume();
   }
 
   // ---------- Transport ----------
@@ -614,6 +745,42 @@ export class Engine extends Emitter {
       t = tEnd;
       i++;
     }
+  }
+
+  // ---------- Mastering ----------
+
+  // Verstärkungen aus der Analyse des Songs ({ pre, drive } in dB); gelten auch für später gebaute Mischungen
+  setMasterGains(gains) {
+    this.masterGains = { ...(this.masterGains || {}), ...gains };
+    if (this.mix) setMasterGains(this.ctx, this.mix, this.masterGains, true);
+  }
+
+  // A/B-Vergleich: ab = null (normal), 'A' (vorher) oder 'B' (nachher); beide gleich laut (aDb/bDb ≤ 0)
+  setMonitor(monitor) {
+    this.monitor = { ab: null, aDb: 0, bDb: 0, ...(this.monitor || {}), ...monitor };
+    if (this.mix) { Object.assign(this.mix.monitor, this.monitor); syncMix(this.ctx, this.project, this.mix, this.spb, true); }
+    this.emit('monitor');
+  }
+
+  get masteringActive() { return !!this.mix?.mst; }
+
+  // ---------- Effekt-Pad (live, nicht im Projekt) ----------
+
+  // target: Spur-ID oder 'master'. Kommt das Loslassen, bevor der Ton-Kontext bereit ist, wird es nachgeholt.
+  async padDown(target, mode, x, y) {
+    const token = (this._padToken = {});
+    await this._ensure();
+    if (this._padToken !== token) return null;
+    return this.pad.engage(target, mode, x, y, this.ctx.currentTime + 0.005);
+  }
+
+  padMove(x, y) {
+    if (this.pad?.active) this.pad.move(x, y, this.ctx.currentTime);
+  }
+
+  padUp(opts = {}) {
+    this._padToken = null;
+    if (this.pad?.active) this.pad.release(this.ctx.currentTime + 0.005, opts);
   }
 
   // ---------- Vorhören und Pegel ----------

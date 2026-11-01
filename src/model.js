@@ -768,6 +768,17 @@ export class Store extends Emitter {
     this.dispatch('master', (p) => { p.master = { volume: 0.85, fx: null, ...(p.master || {}), ...patch }; }, { coalesce });
   }
 
+  // Mastering der Summe: { on, style } – ein Rückgängig-Schritt, im Projekt gespeichert
+  setMastering(patch) {
+    const cur = { on: false, style: 'balanced', ...(this.project.master?.mastering || {}) };
+    const next = { ...cur, ...patch };
+    if (next.on === cur.on && next.style === cur.style) return;
+    this.dispatch('mastering', (p) => {
+      p.master = { volume: 0.85, fx: null, ...(p.master || {}) };
+      p.master.mastering = { on: !!next.on, style: next.style };
+    });
+  }
+
   setMasterFx(fxId, patch, coalesce) {
     this.dispatch('fx', (p) => {
       p.master = { volume: 0.85, ...(p.master || {}) };
