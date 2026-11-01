@@ -23,6 +23,7 @@ import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
 import { mountMasteringAnalysis } from './mastering.js';
+import { mountMasteringControls } from './ui/mastering.js';
 import { mountFxPad } from './ui/fxpad.js';
 import { mountPatternEditor } from './ui/pattern-editor.js';
 import { mountMobile, narrow } from './ui/mobile.js';
@@ -470,6 +471,7 @@ async function boot() {
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
   if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
+  mountMasteringControls(document.getElementById('song-mst-slot'), { store, engine, analysis: mastering, prefix: 'song-mst' });
   const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools, engine, mastering });
   const layout = mountLayout({
     store, ui, library,
