@@ -1197,6 +1197,16 @@
   /* Begleitung: am Desktop als Karte unter „Selbst spielen“, am Handy (kein Fach „Erstellen“) hier als Knopf */
   .starter-accomp { display: none; height: 32px; font: 600 10px/1 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
   @media (max-width: 760px) { .starter-accomp { display: block; } .starter-genres { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  /* Handy, Fach „Song“: Genres als eine wischbare Reihe, „Nochmal“ und „Begleitung“ nebeneinander – das Fach bleibt kurz */
+  @media (max-width: 760px) {
+    .song-starter .starter { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .song-starter .starter-genres {
+      grid-column: 1 / -1; display: flex; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; touch-action: pan-x;
+      scrollbar-width: none; scroll-snap-type: x proximity;
+    }
+    .song-starter .starter-genres::-webkit-scrollbar { display: none; }
+    .song-starter .starter-genre { flex: none; min-width: 84px; padding: 0 14px; scroll-snap-align: start; }
+  }
 
   /* ---------- Tipps (Tutorial) ---------- */
   .tip {
@@ -2486,6 +2496,11 @@
      Fach „Song“: Name, Tempo, Tonart, Länge, Speichern, Exportieren. Zoomen mit zwei Fingern. */
   .arr-pills { display: none; }
   @media (max-width: 760px) {
+    /* Lineal fingerhoch: Ziehen markiert den Loop, statt zu scrollen */
+    .ruler { touch-action: none; }
+    .ruler-row { height: 44px; }
+    .arr-grid { --ruler-h: 44px; }
+    .bar-mark { top: 8px; }
     /* Deck */
     .deck { gap: 4px; padding-left: max(6px, env(safe-area-inset-left, 0px)); padding-right: max(6px, env(safe-area-inset-right, 0px)); }
     .deck .group { gap: 4px; }

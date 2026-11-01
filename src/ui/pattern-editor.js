@@ -500,11 +500,11 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     // Lange drücken und ziehen: Note verschieben, am rechten Ende verlängern – auf freier Fläche eine Note aufziehen.
     if (e.pointerType === 'touch') {
       pressHold(e, {
-        onTap: async () => {
+        onTap: () => {
           if (hit >= 0) notes.splice(hit, 1);
           else {
             notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 });
-            previewNote(await audio(), engine.mix.master, p.preset, pitch);
+            audio().then((a) => previewNote(a, engine.mix.master, p.preset, pitch));
           }
           update((q) => { q.notes = notes; });
         },
@@ -563,13 +563,14 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const len = Math.min(Number(lenSel.value), total - beat);
     const note = { pitch, start: beat, len, vel: 1 };
     notes.push(note);
-    previewNote(await audio(), engine.mix.master, p.preset, pitch);
     drawRoll(p, notes);
+    // Erst das Loslassen abonnieren, dann vorhören – sonst geht ein schneller Klick verloren, solange der Klang lädt
     trackPointer(e, (ev) => {
       const end = (stepAt(ev.clientX) + 1) / STEPS_PER_BEAT;
       note.len = clamp(Math.max(len, end - note.start), 0.25, total - note.start);
       drawRoll(p, notes);
     }, () => update((q) => { q.notes = notes; }), () => render());
+    audio().then((a) => previewNote(a, engine.mix.master, p.preset, pitch));
   });
 
   // ---------- Tastatur und MIDI ----------

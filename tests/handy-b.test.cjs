@@ -9,7 +9,14 @@ const SHOT_DIR = process.env.SHOT_DIR || '.';
 const { check, finish } = createChecker();
 // Tippfläche = Kasten des Elements (bei Pillen samt unsichtbarem Rand); die Mitte und die Mitten der Kanten müssen es treffen.
 // (touch-targets.cjs prüft die Ecken und verwirft runde Knöpfe, deren Ecken leer sind.)
-const measureTargets = (sel) => [...document.querySelectorAll(sel)].filter((n) => n.offsetParent && !n.disabled).map((n) => {
+// Knöpfe in einer waagrecht wischbaren Reihe zählen nur, solange sie in der Reihe sichtbar sind
+const measureTargets = (sel) => [...document.querySelectorAll(sel)].filter((n) => {
+  if (!n.offsetParent || n.disabled) return false;
+  const row = n.parentElement?.closest('.starter-genres');
+  if (!row || getComputedStyle(row).overflowX !== 'auto') return true;
+  const b = n.getBoundingClientRect(); const r = row.getBoundingClientRect();
+  return b.left >= r.left - 1 && b.right <= r.right + 1;
+}).map((n) => {
   const b = n.getBoundingClientRect();
   const hit = (x, y) => { const h = document.elementFromPoint(x, y); return !!h && (h === n || n.contains(h) || [...(n.labels || [])].some((l) => l.contains(h))); };
   const cx = b.left + b.width / 2; const cy = b.top + b.height / 2;
@@ -73,7 +80,20 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       const loopBefore = await page.evaluate(() => window.loopwerk.store.project.loop.on);
       await page.tap('#loop-btn');
       check(`Handy ${w} px: Loop-Pille schaltet den Loop`, await page.evaluate(() => window.loopwerk.store.project.loop.on) === !loopBefore);
+      if (!loopBefore) check(`Handy ${w} px: Einblender sagt, wo der Loop gezogen wird`, /Taktleiste ziehen/.test(await page.evaluate(() => document.getElementById('hint')?.textContent || '')), await page.evaluate(() => document.getElementById('hint')?.textContent));
       await page.tap('#loop-btn');
+      // Loop-Bereich mit dem Finger auf der Taktleiste ziehen (Lineal darf dabei nicht scrollen)
+      const rr = await page.locator('.ruler-row').boundingBox();
+      const cdp = await page.context().newCDPSession(page);
+      const rl = await page.locator(".ruler").boundingBox();
+      const ty = rr.y + rr.height / 2, tx0 = rl.x + 100, tx1 = w - 12;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: tx0, y: ty }] });
+      for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: tx0 + (tx1 - tx0) * i / 10, y: ty }] }); await page.waitForTimeout(16); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForTimeout(200);
+      const lp = await page.evaluate(() => window.loopwerk.store.project.loop);
+      check(`Handy ${w} px: Loop mit dem Finger auf der Taktleiste ziehen, Taktleiste ≥ 44 px`, lp.on && lp.endBeat - lp.startBeat >= 4 && rr.height >= 44, JSON.stringify({ lp, h: rr.height }));
+      await page.evaluate(() => window.loopwerk.store.undo());
       await shot('pills');
 
       // ---------- Fach „Song“ ----------
@@ -89,7 +109,7 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
         return {
           open: !q('#song').hidden && !!q('#song').offsetParent, name: rect('#project-name'), nameIn: !!q('#song-name #project-name'), tiles, links,
           main: [...q('#song-main').children].map((n) => ({ id: n.id, h: Math.round(n.getBoundingClientRect().height), bg: getComputedStyle(n).backgroundColor })),
-          foot: q('#song-foot').textContent.replace(/\s+/g, ' ').trim(), sheetBottom: q('#song').getBoundingClientRect().bottom, tabTop: q('#tabbar').getBoundingClientRect().top, sheetTop: q('#song').getBoundingClientRect().top,
+          foot: q('#song-foot').textContent.replace(/\s+/g, ' ').trim(), sheetBottom: q('#song').getBoundingClientRect().bottom, tabTop: q('#tabbar').getBoundingClientRect().top, sheetTop: q('#song').getBoundingClientRect().top, deckBottom: q('.deck').getBoundingClientRect().bottom,
           tempo: q('#song-tempo-out').textContent, key: q('#key-sel-song').value, len: q('#song-length').value,
           newColor: getComputedStyle(q('#new-btn')).color,
         };
@@ -98,7 +118,7 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       check(`Handy ${w} px: Speichern und Exportieren sind helle Hauptknöpfe`, JSON.stringify(song.main.map((m) => m.id)) === '["save-btn","export-btn"]' && song.main.every((m) => m.h >= 44 && /^rgb\((24\d|2[0-5]\d), /.test(m.bg)), JSON.stringify(song.main));
       check(`Handy ${w} px: Textzeile Öffnen · Beispiel · Tipps · Leeren`, JSON.stringify(song.links) === '["Öffnen","Beispiel","Tipps","Leeren"]', JSON.stringify(song.links));
       check(`Handy ${w} px: Fuß mit Marke, Version 2.8 und „Private use only“`, /Loopwerk/i.test(song.foot) && /Version 2\.8/i.test(song.foot) && /Private use only/.test(song.foot), song.foot);
-      check(`Handy ${w} px: Fach liegt über der Leiste, ohne Überlauf`, song.sheetBottom <= song.tabTop + 1 && song.sheetTop > 100 && noOverflow(await overflow(page)), JSON.stringify(await overflow(page)));
+      check(`Handy ${w} px: Fach liegt zwischen Deck und Leiste, ohne Überlauf`, song.sheetBottom <= song.tabTop + 2 && song.sheetTop >= song.deckBottom - 1 && noOverflow(await overflow(page)), JSON.stringify({ o: await overflow(page), b: song.sheetBottom, tab: song.tabTop, top: song.sheetTop }));
       const songTargets = await page.evaluate(measureTargets, '#song button, #song select, #song input');
       check(`Handy ${w} px: alle Tippflächen im Fach „Song“ ≥ 44 px`, songTargets.length >= 10 && songTargets.every((t) => t.w >= 44 && t.h >= 44 && t.ok), JSON.stringify(songTargets));
       await shot('song');

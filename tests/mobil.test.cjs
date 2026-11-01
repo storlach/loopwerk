@@ -139,9 +139,9 @@ const { check, finish } = createChecker();
     check('Wischen über einen Clip scrollt den Arranger', scroll1 > scroll0 + 50, `${scroll0} → ${scroll1}`);
 
     // ---------- Clip antippen → Werkzeuge ----------
-    await page.evaluate(() => { document.getElementById('arr-scroll').scrollLeft = 0; });
+    await page.evaluate(() => { const sc = document.getElementById('arr-scroll'); sc.scrollLeft = 0; document.querySelector('.lane[data-track-id="t7"]').scrollIntoView({ block: 'center', inline: 'nearest' }); sc.scrollLeft = 0; });
     const riser = await box('.lane[data-track-id="t7"] .clip');
-    await page.touchscreen.tap(Math.max(riser.x, 140) + 40, riser.y + 8);
+    await page.touchscreen.tap(Math.max(riser.x, 140) + 14, riser.y + 8); // rechts davon liegt die senkrechte Zoom-Leiste
     s = await lw();
     const riserId = s.tracks[6][0].id;
     check('Antippen wählt den Clip aus', s.sel === riserId, s.sel);

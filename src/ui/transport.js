@@ -25,7 +25,16 @@ export function mountTransport({ store, engine, ui, arranger }) {
 
   play.addEventListener('click', () => (engine.playing ? engine.pause() : engine.play()));
   $('home-btn').addEventListener('click', () => engine.setPosition(0));
-  loopBtn.addEventListener('click', () => store.setLoop({ on: !store.project.loop.on }));
+  const touchy = matchMedia('(max-width: 760px), (hover: none) and (pointer: coarse)');
+  loopBtn.addEventListener('click', () => {
+    const on = !store.project.loop.on;
+    store.setLoop({ on });
+    if (on && touchy.matches) {
+      const { startBeat, endBeat } = store.project.loop;
+      const bpb = store.project.beatsPerBar;
+      ui.flash(`Loop Takt ${startBeat / bpb + 1}–${endBeat / bpb} · auf der Taktleiste ziehen, um ihn zu ändern`);
+    }
+  });
   metro.addEventListener('click', () => { engine.metronome = !engine.metronome; sync(); });
   undo.addEventListener('click', () => store.undo());
   redo.addEventListener('click', () => store.redo());

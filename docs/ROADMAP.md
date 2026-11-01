@@ -226,6 +226,11 @@
 - Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
 - Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
 
+## Korrekturen nach 2.11
+- Handy: Loop-Bereich lässt sich auf der Taktleiste ziehen (vorher hat der Browser die Geste als Scrollen abgebrochen); Taktleiste fingerhoch, Einblender beim Einschalten des Loops
+- Fach „Song“ am Handy: Mastering dazu, Song-Starter als wischbare Reihe, damit alles ohne Scrollen passt
+- Piano-Roll: ein schneller Klick setzt die Note zuverlässig (vorher ging sie verloren, solange der Klang lud)
+
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
 
