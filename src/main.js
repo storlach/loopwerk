@@ -561,7 +561,8 @@ async function boot() {
   const sheets = mountSheets({ ui, arranger });
   // Ruhige Dichte: Tonart- und Akkordzeile am Handy erst bei Wechseln – oder auf Wunsch über das Song-Fach (gemerkt)
   if (EDITION.density === 'calm') {
-    const btn = document.getElementById('harm-btn');
+    const btn = document.getElementById('harm-tpl').content.firstElementChild.cloneNode(true);
+    document.getElementById('song-links').prepend(btn);
     const app = document.getElementById('app');
     const set = (on) => {
       app.classList.toggle('harmony-on', on);
@@ -569,7 +570,6 @@ async function boot() {
       try { localStorage.setItem(lsKey('loopwerk.harmony'), on ? '1' : '0'); } catch { /* egal */ }
       arranger.render();
     };
-    btn.hidden = false;
     btn.addEventListener('click', () => set(!app.classList.contains('harmony-on')));
     let on = false;
     try { on = localStorage.getItem(lsKey('loopwerk.harmony')) === '1'; } catch { /* Standard */ }
