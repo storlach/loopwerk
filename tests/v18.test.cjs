@@ -107,7 +107,7 @@ const { check, finish } = createChecker();
     const pad = page.locator('.clip', { hasText: 'Pad Am–F–C–G' });
     await pad.click({ position: { x: 60, y: 45 } });
     const ci = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, title: document.querySelector('#insp .insp-sec:not([hidden]) .insp-title span:last-child').textContent, meta: document.querySelector('#insp .insp-meta').textContent, btns: ['edit-btn', 'split-btn', 'dup-btn', 'del-btn'].every((id) => document.getElementById(id).closest('#insp') && document.getElementById(id).offsetParent) }));
-    check('Clip auswählen: Inspektor zeigt Clip mit Werkzeugen', ci.mode === 'clip' && ci.title === 'Pad Am–F–C–G' && /Spur „Pad“ · Takt 1–16/.test(ci.meta) && ci.btns, JSON.stringify(ci));
+    check('Clip auswählen: Inspektor zeigt Clip mit Werkzeugen', ci.mode === 'clip' && ci.title === 'Pad Am–F–C–G' && /^Takt 1–16/.test(ci.meta) && ci.btns, JSON.stringify(ci));
     await page.locator('#insp-gain').fill('0.5');
     const g = await page.evaluate(() => window.loopwerk.store.findClip(window.loopwerk.ui.selectedClipId).clip.gain);
     check('Lautstärke im Inspektor ändert den Clip', g === 0.5, String(g));
@@ -353,14 +353,14 @@ const { check, finish } = createChecker();
     const parts = await page.evaluate(() => window.loopwerk.store.track('t7').clips.filter((c) => c.sampleId === 'fx-riser').map((c) => [c.startBeat, c.lengthBeats]));
     check('Klick mit der Schere teilt an der Stelle (im Raster)', JSON.stringify(parts) === '[[8,3],[11,5]]', JSON.stringify(parts));
 
-    // ---------- Sample-Editor: Reiter ----------
+    // ---------- Sample-Editor: alle Werkzeuge in einer Ansicht ----------
     await page.evaluate(() => { const { store, editor } = window.loopwerk; editor.open(store.track('t4').clips[0].id); });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
-    const vis = () => page.evaluate(() => [...document.querySelectorAll('#editor .ed-group')].filter((g) => g.offsetParent).map((g) => g.dataset.tab));
-    const v1 = await vis();
-    await page.click('.ed-tab[data-tab="trennen"]');
-    const v2 = await vis();
-    check('Sample-Editor: Werkzeuge in Reitern, eine Gruppe sichtbar', v1.every((t) => t === 'schneiden') && v2.every((t) => t === 'trennen') && v2.length === 1, JSON.stringify({ v1, v2 }));
+    const edv = await page.evaluate(() => ({
+      groups: [...document.querySelectorAll('#editor .ed-group')].filter((g) => g.offsetParent).map((g) => g.getAttribute('aria-label')),
+      tabs: document.querySelectorAll('#editor .ed-tab, #editor [role="tab"]').length,
+    }));
+    check('Sample-Editor: keine Reiter, alle Werkzeug-Gruppen sichtbar', edv.tabs === 0 && JSON.stringify(edv.groups) === '["Auswahl","Bearbeiten","Tonhöhe","Autotune","Trennen","Loop"]', JSON.stringify(edv));
     await page.keyboard.press('Escape');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v18-desktop.png') });
 
