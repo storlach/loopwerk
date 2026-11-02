@@ -391,6 +391,10 @@ async function seedPadWall() {
         if (sc === 'clip') await addBumm(page);
         await scene(page, sc);
         counts[`${dev}-${sc}`] = await countUi(page);
+        if (sc === 'start') bench[`empty-${dev}`] = await page.evaluate(() => ({
+          hint: getComputedStyle(document.querySelector('.track-row .lane'), '::after').content,
+          kiste: document.querySelector('#library .shelf-empty')?.textContent,
+        }));
         if (SHOTS) await page.screenshot({ path: path.join(DIR, `kw-${sc}-${dev}.png`) });
       }
       if (dev === 'handy') {
@@ -416,21 +420,37 @@ async function seedPadWall() {
             floatBtns: [...fl.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect().height),
             floatIn: fl.closest('#arr-wrap') === document.getElementById('arr-wrap'),
             floatHidden: fl.hidden, floatBottom: flr.bottom,
+            floatRight: flr.right,
+            order: [...fl.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.textContent),
+            headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(flr.right <= r.left || flr.left >= r.right || flr.bottom <= r.top || flr.top >= r.bottom); }),
+            rowsGone: ['.key-row', '.chord-row'].map((q) => document.querySelector(q).getClientRects().length === 0),
           };
         });
         // Deck antippen öffnet das Song-Fach, dort stehen „Mischen“ und „FX-Pad“
         await page.tap('.deck-name');
         await page.waitForTimeout(900);
         bench.songLinks = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, links: [...document.querySelectorAll('#song-links .tab')].map((b) => b.textContent.trim()), metro: !!document.querySelector('#song-links #metro-btn') }));
+        // Zwilling der Tonart-/Akkordzeile: Schalter im Song-Fach blendet beide wieder ein (Wechsel lassen sich anlegen)
+        await page.tap('#harm-btn');
+        await page.waitForTimeout(200);
+        bench.harmony = await page.evaluate(() => ({ pressed: document.getElementById('harm-btn').getAttribute('aria-pressed'), rows: ['.key-row', '.chord-row'].map((q) => document.querySelector(q).getClientRects().length > 0) }));
+        await page.tap('#harm-btn');
         await page.evaluate(() => window.loopwerk.ui.setDock(null));
       } else {
         // Werkbank: 36 % bei Auswahl, ⤢ macht 60 %, bleibt nach dem Neuladen; ohne Auswahl 24 px
-        const wid = () => page.evaluate(() => ({ insp: document.getElementById('insp').getBoundingClientRect().width, app: document.getElementById('app').getBoundingClientRect().width }));
+        const wid = () => page.evaluate(() => ({ insp: document.getElementById('insp').getBoundingClientRect().width, app: document.getElementById('app').getBoundingClientRect().width, shelf: document.querySelector('.shelf').getBoundingClientRect().width }));
         const pct = (w) => (w.insp / w.app) * 100;
+        const pctRest = (w) => (w.insp / (w.app - w.shelf)) * 100;
         const open = await wid();
         await page.click('#wb-wide');
         await page.waitForTimeout(300);
         const wide = await wid();
+        bench.wideState = await page.evaluate(() => {
+          const fl = document.getElementById('clip-float').getBoundingClientRect();
+          const sc = document.getElementById('arr-scroll').getBoundingClientRect();
+          const bars = [...document.querySelectorAll('.bar-mark')].filter((m) => { const r = m.getBoundingClientRect(); return r.right <= sc.right && r.left >= sc.left; }).map((m) => parseInt(m.textContent, 10));
+          return { headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(fl.right <= r.left || fl.left >= r.right || fl.bottom <= r.top || fl.top >= r.bottom); }), bars: [1, 2, 3, 4].every((b) => bars.includes(b)), barsSeen: bars.join(',') };
+        });
         if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-breit-desktop.png') });
         await page.reload();
         await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
@@ -441,10 +461,11 @@ async function seedPadWall() {
         await page.evaluate(() => window.loopwerk.ui.select(null));
         await page.waitForTimeout(400);
         const shut = await wid();
-        bench.wb = { open: pct(open), wide: pct(wide), again: pct(again), shut: shut.insp };
+        bench.wb = { open: pct(open), wide: pctRest(wide), again: pctRest(again), shut: shut.insp, shelfWide: wide.shelf };
         // Werkzeug am Clip: innerhalb von #arr-wrap, deckt den Clip nicht ab; Kopie und Löschen je ein Undo-Schritt
         await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
         await page.waitForTimeout(400);
+        bench.stempo = await page.evaluate(() => ({ block: !!document.querySelector('.insp-stempo')?.offsetParent, off: [...document.querySelectorAll('#insp :disabled')].filter((b) => b.offsetParent).length }));
         bench.float = await page.evaluate(() => {
           const fl = document.getElementById('clip-float').getBoundingClientRect();
           const w = document.getElementById('arr-wrap').getBoundingClientRect();
@@ -509,7 +530,12 @@ async function seedPadWall() {
       check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'}: ≤ ${b.sizes} Schriftgrößen, kleinste ≥ 11 px`, c.sizes <= b.sizes && c.minFont >= 11, `${c.sizes} Größen, kleinste ${c.minFont}`);
     }
     const w = bench.wb;
-    check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
+    check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % des Raums rechts der Kiste (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
+    check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 Takte, Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
+    check('Werkbank: Sound-Tempo-Block bei Einzelklang und gesperrte Knöpfe nicht sichtbar', !bench.stempo.block && bench.stempo.off === 0, JSON.stringify(bench.stempo));
+    check('Leerer Start: Hinweis in Spur 1 („● tippen …“), Kiste „Noch nichts aufgenommen“ (Handy und Desktop)', ['desktop', 'handy'].every((d) => /tippen/.test(bench[`empty-${d}`].hint) && bench[`empty-${d}`].kiste === 'Noch nichts aufgenommen'), JSON.stringify([bench['empty-desktop'], bench['empty-handy']]));
+    check('Handy: „Tonart und Akkorde“ im Song-Fach blendet beide Zeilen wieder ein', bench.harmony?.pressed === 'true' && bench.harmony.rows.every(Boolean), JSON.stringify(bench.harmony));
+    check('Handy: Werkzeug am Clip deckt keinen Spurkopf ab, Reihenfolge Werkbank · Teilen · Kopie · Löschen; Tonart- und Akkordzeile ohne Wechsel weg', !bench.phone.headsHit && bench.phone.floatRight <= 390 && bench.phone.order.join() === 'Werkbank,Teilen,Kopie,Löschen' && bench.phone.rowsGone.every(Boolean), JSON.stringify([bench.phone.headsHit, bench.phone.order, bench.phone.rowsGone]));
     check('Werkbank Desktop: ohne Auswahl eingeklappt (≤ 26 px)', w.shut <= 26, `${w.shut.toFixed(1)} px`);
     const ws = bench.wbSheet;
     check('Werkbank Handy: öffnet auf Mitte, 2 Spuren und die Marke bleiben sichtbar', Math.abs(ws.frac - 0.5) < 0.06 && ws.rowsAbove && ws.markVisible, JSON.stringify(ws));

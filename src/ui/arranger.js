@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
+import { anySoloOf, audibleRanges, chordsOf, keyChangesOf, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { AUTO_PARAMS, laneOf } from '../automation.js';
 import { makeKnob } from './knob.js';
@@ -740,6 +740,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
     renderRuler();
     keyRow.render();
     chordRow.render();
+    // Stufe 3 (calm, Handy), solange es keine Tonart- bzw. Akkordwechsel gibt; Zwilling: Song-Fach
+    for (const [r, has] of [[keyRow.row, keyChangesOf(p).length], [chordRow.row, chordsOf(p).length]]) {
+      if (has || root.closest('#app')?.classList.contains('harmony-on')) { delete r.dataset.tier; delete r.dataset.tierOnly; } else { r.dataset.tier = '3'; r.dataset.tierOnly = 'narrow'; }
+    }
     syncRows();
     for (const t of p.tracks) renderLane(rows.get(t.id), t);
     autoLanes.render();

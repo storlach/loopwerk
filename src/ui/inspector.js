@@ -365,6 +365,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const own = hasOwnTempo(s);
       stIn.hidden = !own;
       stBtns.hidden = !own;
+      stempo.hidden = calm && !(own && soundBpm(s)); // Einzelklang hat kein Sound-Tempo: Block weglassen
       const sb = own ? soundBpm(s) : null;
       const fixed = store.project.sampleTempo?.[s?.id] != null;
       stOut.textContent = !s ? '' : !own ? (s.def || s.make ? 'folgt dem Song' : '–') : sb ? `${fmtBpm(sb)} BPM · ${fmtBeats(s.beats)}` : 'Einzelklang · Tempo eingeben';

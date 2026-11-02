@@ -2851,7 +2851,7 @@
   /* Schrift: nur die Skala, Sans; Mono nur für Zahlen; Etiketten ohne Versalien */
   #app[data-density="calm"] * { font-family: var(--font-body); font-size: var(--fs-13); letter-spacing: 0; text-transform: none; }
   #app[data-density="calm"] :is(.lcd-label, .insp-kind, .insp-meta, .insp-sub, .create-sec, .shelf-count, .shelf-total, .tab, .tab-label, .ccard-sub, .bar-mark, .hint-text, .fxl-sum, .fx-param, .insp-row, .insp-row output) { font-size: var(--fs-11); }
-  #app[data-density="calm"] :is(.lcd-value, .shelf-count, .shelf-total, output, .bar-mark, .insp-tempo output, input[type="number"]) { font-family: var(--font-mono); }
+  #app[data-density="calm"] :is(.lcd-value, .shelf-count, .shelf-total, .bar-mark, .insp-tempo output, input[type="number"]) { font-family: var(--font-mono); }
   #app[data-density="calm"] :is(.insp-title, .left-title, .deck-name, .dock-head h2, .brand-name) { font-family: var(--font-display); font-size: var(--fs-15); }
   #app[data-density="calm"] .lcd-value { font-size: var(--fs-24); }
   /* Rahmen nur an Tasten: Flächen, Abschnitte, Regler, Felder und Etiketten verlieren Rahmen und Ring */
@@ -2862,10 +2862,16 @@
   #app[data-density="calm"].playing .key.play, #app[data-density="calm"] .key.play.on { background: var(--amber); color: var(--accent-ink); }
   /* Werkzeug am Clip (src/ui/clip-float.js) */
   #app[data-density="calm"] .clip-float { position: absolute; z-index: 8; display: flex; gap: 2px; padding: 4px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow); }
-  #app[data-density="calm"] .cf-btn { min-width: 64px; height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); cursor: pointer; }
+  #app[data-density="calm"] .cf-btn { min-width: 44px; height: 44px; padding: 0 6px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); cursor: pointer; }
   #app[data-density="calm"] .cf-btn:hover:not(:disabled) { background: var(--deck-2); }
   #app[data-density="calm"] .cf-btn:disabled { opacity: 0.4; cursor: default; }
-  #app[data-density="calm"] .cf-del { color: var(--danger); }
+  #app[data-density="calm"] .cf-del { color: var(--danger); margin-left: 6px; }
+  /* Werkbank: nichts Gesperrtes zeigen; Wörter in Sans (Zahlen bleiben tabellarisch) */
+  #app[data-density="calm"] .insp :is(button, input):disabled { display: none; }
+  #app[data-density="calm"] output { font-variant-numeric: tabular-nums; }
+  #app[data-density="calm"] :is(.brand-name, .brand-name b) { font-family: var(--font-display); font-size: var(--fs-15); }
+  /* Leerer Song: leise Zeile in Spur 1 */
+  #app[data-density="calm"].song-empty .track-row:first-child .lane::after { content: "● tippen, dann ein Geräusch machen"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 1; color: var(--muted); font-size: var(--fs-13); pointer-events: none; white-space: nowrap; }
   /* Werkbank: Spur stumm/solo */
   #app[data-density="calm"] .insp-ms { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   #app[data-density="calm"] .insp-ms .key { width: 100%; height: 44px; }
@@ -2876,7 +2882,7 @@
   @media (min-width: 761px) {
     #app[data-density="calm"] { --insp-w: 24px; --kiste-w: 240px; grid-template-columns: var(--kiste-w) minmax(0, 1fr) var(--insp-w); }
     #app[data-density="calm"].insp-open { --insp-w: 36%; }
-    #app[data-density="calm"].insp-open.wb-wide { --insp-w: 60%; }
+    #app[data-density="calm"].insp-open.wb-wide { --kiste-w: 24px; --insp-w: calc((100% - var(--kiste-w)) * 0.6); }
     #app[data-density="calm"].kiste-zu { --kiste-w: 24px; }
     #app[data-density="calm"] .insp { position: relative; inset: auto; width: auto; z-index: auto; box-shadow: none; }
     #app[data-density="calm"]:not(.insp-open) .insp > :not(.insp-toggle) { display: none; }
@@ -2885,12 +2891,13 @@
     #app[data-density="calm"] .insp-wide { position: absolute; top: 4px; right: 6px; z-index: 2; width: 44px; height: 44px; border: 0; background: transparent; color: var(--muted); font-size: var(--fs-15); cursor: pointer; }
     #app[data-density="calm"] .insp-wide:hover, #app[data-density="calm"] .insp-wide[aria-pressed="true"] { color: var(--ink); }
     #app[data-density="calm"] .tabbar { overflow: hidden; white-space: nowrap; }
+    #app[data-density="calm"] #loop-btn { padding: 0 12px; margin-left: 8px; }
     #app[data-density="calm"] .left-tabs { display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px 14px; }
     #app[data-density="calm"] .left-title { margin: 0 auto 0 0; }
     #app[data-density="calm"] .kiste-btn { display: inline-flex; align-items: center; justify-content: center; height: 32px; min-width: 32px; padding: 0 10px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer; }
     #app[data-density="calm"] .kiste-fold { box-shadow: none; color: var(--muted); }
-    #app[data-density="calm"].kiste-zu .shelf > :not(.left-tabs), #app[data-density="calm"].kiste-zu .left-tabs > :not(.kiste-fold) { display: none; }
-    #app[data-density="calm"].kiste-zu .left-tabs { padding: 10px 0 0; justify-content: center; }
+    #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .shelf > :not(.left-tabs), #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .left-tabs > :not(.kiste-fold) { display: none; }
+    #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .left-tabs { padding: 10px 0 0; justify-content: center; }
   }
   /* Schmal: Werkbank als Schublade, Daumenleiste (Kiste · ▶ · ● · Werkbank), Deck als Lesezeile */
   @media (max-width: 760px) {
@@ -3351,7 +3358,7 @@
       </div>
       <div class="song-mst" id="song-mst-slot"></div>
       <div class="song-main" id="song-main"></div>
-      <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
+      <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"><button class="key" id="harm-btn" type="button" aria-pressed="false" hidden>Tonart und Akkorde</button></div>
       <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>
     </div>
   </section>

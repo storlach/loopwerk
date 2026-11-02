@@ -22,6 +22,7 @@ export const EDITIONS = {
       'zoom-in': 'Strg+Rad, zwei Finger', 'zoom-out': 'Strg+Rad, zwei Finger', 'zoomy-in': 'Alt+Rad, zwei Finger', 'zoomy-out': 'Alt+Rad, zwei Finger',
       'select-btn': 'lange drücken', 'select-all-btn': 'Strg+A', '.ltab': '+ Neu in der Kiste',
       '.tbtn-mute': 'Werkbank Spur (M)', '.tbtn-solo': 'Werkbank Spur (S)', '.track-vol-wrap': 'Werkbank Spur (Lautstärke)',
+      '.key-row': 'Song-Fach (Tonart und Akkorde)', '.chord-row': 'Song-Fach (Tonart und Akkorde)',
       'clipbar': 'Werkzeug am Clip', 'split-btn': 'Werkzeug am Clip', 'dup-btn': 'Werkzeug am Clip', 'del-btn': 'Werkzeug am Clip',
       'mixer-btn': 'Song-Fach (Mischen)', 'fxpad-btn': 'Song-Fach (FX-Pad)', 'editor-tab': 'Werkbank (Bearbeiten)', 'tab-song': 'Tipp auf das Deck',
     },

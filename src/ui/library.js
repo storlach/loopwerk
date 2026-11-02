@@ -221,7 +221,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {
-      root.append(el('p', 'shelf-empty', filter === 'fav' && !q
+      root.append(el('p', 'shelf-empty', groupBy && !q && filter === 'all' ? 'Noch nichts aufgenommen' : filter === 'fav' && !q
         ? 'Noch keine Favoriten. Markiere Sounds mit dem Stern.'
         : `Keine Sounds gefunden${q ? ` für „${search.value.trim()}“` : ''}.`));
       return;

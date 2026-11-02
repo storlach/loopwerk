@@ -25,10 +25,10 @@ export function mountClipFloat({ store, ui, tools }) {
     bar.append(b);
     return b;
   };
+  const wbBtn = add('cf-werkbank', 'Werkbank', 'Werkbank für diesen Clip öffnen', () => ui.setDock('werkbank'));
   const splitBtn = add('cf-split', 'Teilen', 'Clip an der Abspielmarke teilen (T)', () => tools.split());
   add('cf-dup', 'Kopie', 'Kopie direkt dahinter legen (Strg+D)', () => tools.duplicate());
   add('cf-del', 'Löschen', 'Clip löschen (Entf) – Rückgängig holt ihn zurück', () => tools.remove(), 'cf-del');
-  const wbBtn = add('cf-werkbank', 'Werkbank', 'Werkbank für diesen Clip öffnen', () => ui.setDock('werkbank'));
   wrap.append(bar);
 
   let raf = 0;
@@ -55,10 +55,9 @@ export function mountClipFloat({ store, ui, tools }) {
     let y = c.top - bh - GAP;
     if (y < top + 2) y = c.bottom + GAP;
     if (outside || y + bh > w.bottom - 2) { bar.hidden = true; return; }
-    // Möglichst rechts von den Spurköpfen, sonst bündig am rechten Rand
-    const maxX = w.right - bw - 4;
-    const minX = Math.max(w.left + 4, scroll.querySelector('.corner')?.getBoundingClientRect().right + 4 || 0);
-    const x = Math.max(w.left + 4, Math.max(Math.min(c.left, maxX), Math.min(minX, maxX)));
+    // Nur im Spurbereich: nie links der Kante der Spurköpfe; passt es nicht, bündig am rechten Rand
+    const minX = Math.max(w.left + 4, (scroll.querySelector('.corner')?.getBoundingClientRect().right ?? 0) + 2);
+    const x = Math.max(minX, Math.min(c.left, w.right - bw - 4));
     bar.style.left = `${Math.round(x - w.left)}px`;
     bar.style.top = `${Math.round(y - w.top)}px`;
   }

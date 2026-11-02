@@ -74,6 +74,10 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   const setProject = popup($('project-menu-btn'), $('project-menu'), { onOpen: () => requestAnimationFrame(() => $('project-name').select?.()) });
   const showName = () => { $('project-menu-name').textContent = store.project.name || 'Projekt'; $('deck-name').textContent = store.project.name || 'Song'; };
   store.on(showName);
+  // Leere Spuren: leise Zeile in Spur 1 (CSS, nur calm)
+  const syncEmpty = () => app.classList.toggle('song-empty', store.project.tracks.every((t) => !t.clips.length));
+  store.on(syncEmpty);
+  syncEmpty();
   showName();
   // Öffnen, Beispiel und Leeren schließen das Menü (Leeren erst nach der Bestätigung)
   $('open-btn').addEventListener('click', () => setProject(false));
