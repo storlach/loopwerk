@@ -2813,6 +2813,17 @@
   .auto-tpl-menu { padding: 4px 6px 6px; }
   .auto-tpl-menu .auto-tpl-btns { display: grid; gap: 2px; margin: 0 -6px; }
   .auto-menu-back { color: var(--muted); }
+  /* Summen-Zeile (Ziel 'master'): Beschriftung vor dem Chip; Leuchtpunkt am Inspektor-Link, wenn die Summe Kurven hat */
+  .auto-sum { flex: none; font: 600 9px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .insp-link.lit::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: var(--amber); box-shadow: var(--beam-glow); }
+  /* Handy, Fach „Song“: Einblenden · Ausblenden der Summe */
+  .song-auto { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+  .song-auto-label { font: 500 11px/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--lcd-label); }
+  .song-auto .auto-tpl-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .song-auto .key { min-height: 44px; }
+  /* Platz im Fach: ohne Mastering bleibt die Messzeile leer und fällt weg; die Summen-Zeile rückt an das Mastering heran */
+  .song-mst .mst-meter:empty { display: none; }
+  .song-mst + .song-auto { margin-top: -4px; }
   @media (hover: none) and (pointer: coarse) {
     .auto-head { padding-left: 10px; }
     .auto-close { width: 44px; height: 48px; margin-right: -4px; }
@@ -2828,6 +2839,9 @@
     .strip-pan-wrap .auto-lock { width: 48px; height: 48px; }
   }
   @media (max-width: 760px) {
+    /* schmaler Kopf: „Summe“ steht in der Zeile statt vor dem Chip */
+    .auto-sum { display: none; }
+    .auto-master .auto-body::before { content: "Summe"; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font: 600 9px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
     .auto-head { padding-left: 6px; gap: 2px; }
     .auto-chip { padding: 5px 4px; font-size: 10px; letter-spacing: 0; }
     .auto-close { margin-right: -2px; }
@@ -3269,6 +3283,7 @@
         </label>
       </div>
       <div class="song-mst" id="song-mst-slot"></div>
+      <div class="song-auto" id="song-auto-slot" role="group" aria-label="Verlauf der Summe"><span class="song-auto-label">Summe</span></div>
       <div class="song-main" id="song-main"></div>
       <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
       <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>
@@ -3344,7 +3359,7 @@
           <dt>Lineal</dt><dd>Antippen setzt die Marke, Ziehen markiert den Loop</dd>
           <dt>Spurname antippen</dt><dd>Umbenennen</dd>
           <dt>Piano-Roll</dt><dd>Antippen setzt oder löscht eine Note, lange drücken und ziehen verschiebt sie</dd>
-          <dt>Kurve</dt><dd>Spur-Menü ⋯ → Kurve: Antippen setzt einen Punkt, einen Punkt ziehen verschiebt ihn, Halten löscht ihn</dd>
+          <dt>Kurve</dt><dd>Spur-Menü ⋯ → Kurve: Antippen setzt einen Punkt, einen Punkt ziehen verschiebt ihn, Halten löscht ihn. Summe: Fach „Song“ → Einblenden/Ausblenden</dd>
         </dl>
         <dl class="keys-list for-mouse">
           <dt>Leertaste</dt><dd>Abspielen / Pause</dd>
@@ -3352,7 +3367,7 @@
           <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
           <dt>Strg+Z / Strg+Umschalt+Z</dt><dd>Rückgängig / Wiederholen</dd>
           <dt>T</dt><dd>Clip an der Abspielmarke teilen</dd>
-          <dt>A</dt><dd>Lautstärke-Kurve der gewählten Spur öffnen oder schließen (Klick setzt einen Punkt, Doppelklick löscht)</dd>
+          <dt>A</dt><dd>Kurve der gewählten Spur öffnen oder schließen, ohne Auswahl die Summen-Kurve (Klick setzt einen Punkt, Doppelklick löscht)</dd>
           <dt>Rahmen ziehen</dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
           <dt>Umschalt+Klick</dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>
           <dt>Strg+A</dt><dd>Alle Clips auswählen</dd>

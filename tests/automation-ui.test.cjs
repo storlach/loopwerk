@@ -1,7 +1,8 @@
-// Automation Scheibe 1–3, Bedienung (Spec v2.12, Testplan 11): Kurvenzeile unter der Spur am Desktop (Maus, Tastatur) und
+// Automation Scheibe 1–4, Bedienung (Spec v2.12, Testplan 11): Kurvenzeile unter der Spur am Desktop (Maus, Tastatur) und
 // am Handy/Tablet (Finger), Vorlagen Einblenden/Ausblenden/Filter öffnen/Filter schließen, Parameter Lautstärke, Panorama und
 // Effekt-Werte, Mini-Leiste Linear/Stufe/Löschen, gesperrte Regler (Panorama, Effekte; Mixer, Inspektor), gestrichelte
-// Kurve bei ausgeschaltetem Effekt, Tippflächen, keine Konsolenfehler.
+// Kurve bei ausgeschaltetem Effekt, Summen-Zeile (A ohne Auswahl, Vorlagen im Inspektor „Song“ und im Handy-Fach „Song“),
+// Tippflächen, keine Konsolenfehler.
 // node tests/automation-ui.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
 const { openApp, createChecker } = require('./harness.cjs');
@@ -52,7 +53,9 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     // ---------- Öffnen: Taste A, Spur-Menü ----------
     await page.evaluate(() => window.loopwerk.ui.selectTrack(null));
     await page.keyboard.press('a');
-    check('A ohne Auswahl: keine Zeile, Einblender sagt, was zu tun ist', await page.evaluate(() => !document.querySelector('.auto-row') && /Spur/.test(window.loopwerk.ui.flashText || '')));
+    check('A ohne Auswahl öffnet die Summen-Zeile (keine Spur-Zeile)', await page.evaluate(() => document.querySelectorAll('.auto-row').length === 1 && !!document.querySelector('.auto-row.auto-master')));
+    await page.keyboard.press('a');
+    check('A ohne Auswahl schließt die Summen-Zeile wieder', await page.evaluate(() => !document.querySelector('.auto-row')));
     await page.evaluate((id) => window.loopwerk.ui.selectTrack(id), t);
     await page.keyboard.press('a');
     await page.waitForSelector('.auto-row');
@@ -354,7 +357,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     if (await page.evaluate(() => !!document.querySelector('.auto-row'))) await page.click('.auto-close');
     // Vorlage „Filter öffnen“ im Inspektor: ein Klick, ab Takt der Marke 8 Takte 0,25 → 1, Filter an (Tiefpass)
     let f0 = await fxState();
-    check('Inspektor „Verlauf“: Einblenden · Ausblenden · Filter öffnen · Filter schließen', await page.evaluate(() => [...document.querySelectorAll('#insp .auto-tpl [data-template]')].map((b) => b.textContent).join(' · ')) === 'Einblenden · Ausblenden · Filter öffnen · Filter schließen');
+    check('Inspektor „Verlauf“: Einblenden · Ausblenden · Filter öffnen · Filter schließen', await page.evaluate(() => [...document.querySelectorAll('#insp .insp-auto:not(#insp-master-auto) .auto-tpl [data-template]')].map((b) => b.textContent).join(' · ')) === 'Einblenden · Ausblenden · Filter öffnen · Filter schließen');
     await page.click('#insp [data-template="filterOpen"]');
     let f1 = await fxState();
     check('Vorlage „Filter öffnen“: 0,25 → 1 über 8 Takte ab der Marke, Filter an als Tiefpass, ein Schritt',
@@ -421,6 +424,57 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     check('Fähnchen der Hall-Kurve zeigt „… % · Takt …“', /^\d+ % · Takt \d+/.test(hFlag), hFlag);
     check('Inspektor: Hall-Anteil gesperrt, Raumgröße frei', await page.evaluate(() => document.getElementById('fx-hall-mix').disabled && !document.getElementById('fx-hall-size').disabled));
     await page.click('.auto-close');
+
+    // ================= Scheibe 4: Summen-Zeile =================
+    await setup(page);
+    await page.evaluate(() => { const { ui } = window.loopwerk; ui.select(null); ui.selectTrack(null); });
+    const mst = () => page.evaluate(() => { const { store } = window.loopwerk; return { vol: store.project.master?.automation?.volume ?? null, cut: store.project.master?.automation?.['filter.cutoff'] ?? null, filterOn: !!store.project.master?.fx?.filter?.on, steps: store.undoStack.length, mode: document.getElementById('insp').dataset.mode }; });
+    const mBody = () => page.evaluate(() => { const r = document.querySelector('.auto-master .auto-body').getBoundingClientRect(); return { x: r.left, y: r.top, h: r.height, ppb: window.loopwerk.ui.pxPerBeat }; });
+    await page.keyboard.press('a');
+    await page.waitForSelector('.auto-row.auto-master');
+    check('Summen-Zeile liegt unter allen Spuren, Kopf „Summe“ + Chip „Lautstärke“', await page.evaluate(() => {
+      const r = document.querySelector('.auto-row.auto-master');
+      return r.parentElement.lastElementChild === r && r.previousElementSibling?.classList.contains('track-row') && r.querySelector('.auto-sum')?.textContent === 'Summe' && r.querySelector('.auto-chip').textContent === 'Lautstärke';
+    }));
+    await page.click('.auto-master .auto-chip');
+    const mkeys = await page.evaluate(() => [...document.querySelectorAll('.auto-keys .auto-key[data-key]')].map((b) => b.dataset.key));
+    check('Summen-Chip: Lautstärke und Master-Effekte, kein Panorama', mkeys.join() === 'volume,filter.cutoff,hall.mix,echo.mix,drive.mix', mkeys.join());
+    await page.keyboard.press('Escape');
+    let gm = await mBody();
+    let m0 = await mst();
+    await page.mouse.click(gm.x + gm.ppb * 6.2, gm.y + gm.h / 2);
+    let m1 = await mst();
+    check('Summe: Klick setzt einen Punkt auf das Raster (6,2 → 6), ein Schritt, Inspektor zeigt den Song', m1.vol?.length === 1 && m1.vol[0].beat === 6 && near(m1.vol[0].value, valueAt(gm.h, gm.h / 2), 0.02) && m1.steps === m0.steps + 1 && m1.mode === 'song', JSON.stringify(m1));
+    check('Summe: Punkt gewählt', await page.evaluate(() => window.loopwerk.arranger.autoLanes.selected?.target === 'master' && !!document.querySelector('.auto-master .auto-pt.sel')));
+    await page.keyboard.press('Control+z');
+    check('Summe: Rückgängig entfernt die Kurve', (await mst()).vol === null);
+    // Vorlagen im Inspektor „Song“ unter Master
+    check('Inspektor „Song“: Verlauf der Summe mit Einblenden · Ausblenden', await page.evaluate(() => [...document.querySelectorAll('#insp-master-auto [data-template]')].map((b) => b.dataset.template).join() === 'fadeIn,fadeOut'));
+    m0 = await mst();
+    await page.click('#insp-master-auto .auto-bars [data-bars="2"]');
+    await page.click('#insp-master-auto [data-template="fadeOut"]');
+    m1 = await mst();
+    check('Inspektor: Summe ausblenden über 2 Takte endet am letzten Clip (Schlag 4 → 12), ein Schritt, Zeile offen', JSON.stringify(m1.vol) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && m1.steps === m0.steps + 1 && await page.evaluate(() => !!document.querySelector('.auto-row.auto-master')), JSON.stringify(m1));
+    check('Inspektor: Link „Summen-Kurve“ leuchtet, solange die Summe Kurven hat', await page.evaluate(() => document.getElementById('insp-master-curve').classList.contains('lit') && /schließen/.test(document.getElementById('insp-master-curve').textContent)));
+    await page.click('#insp-master-auto [data-template="fadeIn"]');
+    m1 = await mst();
+    check('Inspektor: Summe einblenden ab dem ersten Clip (0 → 8), Ausblenden bleibt', m1.vol?.[0]?.beat === 0 && m1.vol[0].value === 0 && m1.vol[1]?.beat === 8 && m1.vol[1].value === 1 && m1.vol.at(-1).beat === 12 && m1.vol.at(-1).value === 0, JSON.stringify(m1.vol));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-master-desktop.png') });
+    // Master-Effekt-Kurve: erster Punkt schaltet den Master-Filter ein, Regler im Inspektor gesperrt, Klick öffnet die Zeile
+    await page.click('.auto-master .auto-chip');
+    await page.click('.auto-key[data-key="filter.cutoff"]');
+    gm = await mBody();
+    await page.mouse.click(gm.x + gm.ppb * 2, gm.y + PAD + 0.5 * (gm.h - 2 * PAD));
+    m1 = await mst();
+    check('Summe: Filter-Kurve – erster Punkt schaltet den Master-Filter ein', m1.cut?.length === 1 && m1.filterOn, JSON.stringify(m1));
+    await page.click('.auto-master .auto-close');
+    await page.evaluate(() => { const { ui } = window.loopwerk; ui.select(null); ui.selectTrack(null); });
+    await page.waitForTimeout(100);
+    const lockM = await page.evaluate(() => { const i = document.getElementById('fx-filter-cutoff'); return { dis: i?.disabled, dim: i?.closest('.fx-param-box')?.classList.contains('auto-locked'), mode: document.getElementById('insp').dataset.mode }; });
+    check('Inspektor „Song“: Master-Frequenz folgt der Kurve (gesperrt)', lockM.dis && lockM.dim && lockM.mode === 'song', JSON.stringify(lockM));
+    await page.click('#insp .fx-param-box:has(#fx-filter-cutoff) .auto-lock');
+    check('Klick auf den gesperrten Master-Regler öffnet die Summen-Zeile mit Filter-Frequenz', await page.evaluate(() => document.querySelector('.auto-row.auto-master')?.dataset.key === 'filter.cutoff'));
+    await page.click('.auto-master .auto-close');
 
     check('Desktop: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
@@ -601,6 +655,30 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.tap('#mixer .fx-param-box:has(#fx-filter-cutoff) .auto-lock');
     await page.waitForTimeout(200);
     check('Handy: Antippen öffnet die Zeile mit Filter-Frequenz, Mixer zu', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'filter.cutoff' && window.loopwerk.ui.dock !== 'mixer'));
+    await page.tap('.auto-close');
+
+    // ---------- Scheibe 4 am Finger: Fach „Song“ → Ausblenden der Summe (zwei Tipps) ----------
+    await setup(page);
+    await page.evaluate(() => { const { ui } = window.loopwerk; ui.select(null); ui.selectTrack(null); ui.autoBars = 2; });
+    const sm0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+    await page.tap('#tab-song');
+    await page.waitForTimeout(350);
+    await page.evaluate(() => document.getElementById('song-auto-slot').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(150);
+    const sa = await page.evaluate(measureTargets, '#song-auto-slot button');
+    check('Handy, Fach „Song“: Einblenden · Ausblenden der Summe, Tippflächen ≥ 44 px', sa.length === 2 && sa.every((x) => x.w >= 44 && x.h >= 44), JSON.stringify(sa));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-master-phone-song.png') });
+    await page.tap('#song-auto-slot [data-template="fadeOut"]');
+    await page.waitForTimeout(300);
+    const sm = await page.evaluate(() => { const { store, ui } = window.loopwerk; const r = document.querySelector('.auto-row.auto-master'); const b = r?.getBoundingClientRect(); return { vol: store.project.master?.automation?.volume, steps: store.undoStack.length, dock: ui.dock, open: !!r, inView: !!b && b.top >= 0 && b.bottom <= innerHeight }; });
+    check('Handy: Song → Ausblenden = ein Schritt, endet am letzten Clip (4 → 12), Fach zu, Summen-Zeile offen und im Bild', JSON.stringify(sm.vol) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && sm.steps === sm0 + 1 && !sm.dock && sm.open && sm.inView, JSON.stringify(sm));
+    // Einblender abwarten (liegt kurz über der untersten Zeile)
+    await page.waitForFunction(() => !window.loopwerk.ui.flashText, null, { timeout: 6000 });
+    await page.waitForTimeout(400);
+    const sl = (await page.evaluate(measureTargets)).filter((x) => /auto-(pt|close|chip)/.test(x.label));
+    check('Handy: Summen-Zeile – Punkte, Chip und Schließen ≥ 44 px', sl.length >= 3 && sl.every((x) => x.w >= 44 && x.h >= 44), JSON.stringify(sl));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-master-phone.png') });
+    await page.tap('.auto-master .auto-close');
     check('Handy: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
     check('Handy-Ablauf ohne Ausnahme', false, err.message);

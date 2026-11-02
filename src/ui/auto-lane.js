@@ -4,9 +4,11 @@
 // Punkt oder Rechtsklick zeigt die Mini-Leiste „Linear · Stufe · Löschen“. Finger: Antippen setzt, Antippen eines Punkts zeigt die Mini-Leiste, Ziehen nur auf einem Punkt (sonst scrollt
 // Wischen), Halten löscht. Geschlossen liegt die Kurve als dünne Linie über den Clips.
 // Alle Änderungen laufen über Store-Aktionen; die Knoten der Punkte bleiben beim Ziehen stehen (Abgleich nach Index).
+// Summen-Zeile (Ziel 'master'): unter allen Spuren, Lautstärke und Master-Effekte; Taste A ohne Spurauswahl öffnet sie.
 
 import { AUTO_PARAMS, AUTO_TEMPLATES, TEMPLATE_BARS, autoActive, autoBreaks, autoKeys, autoRest, autoValueAt, formatAutoValue, laneOf } from '../automation.js';
 import { totalBeats } from '../model.js';
+import { masterOf } from '../engine.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
@@ -31,7 +33,8 @@ function curvePath(points, key, total, ppb, yOf) {
 
 // ---------- Gesperrte Regler (Mixer, Inspektor) ----------
 // Ein Regler, dessen Wert eine Kurve bestimmt (Panorama, Effekt-Werte), ist gedimmt; darüber liegt ein Knopf mit
-// Kurven-Zeichen, der die Kurvenzeile mit diesem Parameter öffnet. update(track) zeigt/verbirgt die Sperre und liefert, ob gesperrt ist.
+// Kurven-Zeichen, der die Kurvenzeile mit diesem Parameter öffnet. update(owner) zeigt/verbirgt die Sperre und liefert,
+// ob gesperrt ist (owner = Spur oder masterOf(project); getTrackId liefert die Spur-ID bzw. 'master').
 export function autoLock({ ui, key, wrap, input, getTrackId, onOpen }) {
   const btn = el('button', 'auto-lock');
   btn.type = 'button';
@@ -66,33 +69,36 @@ export const lockedValue = (track, key, engine) => autoValueAt(laneOf(track, key
 // ---------- Vorlagen-Knöpfe (Inspektor „Spur“ und Spur-Menü am Handy) ----------
 
 // Vorlage anwenden (Länge: zuletzt gewählte Takte, sonst die Vorgabe der Vorlage – 4, „Filter öffnen“ 8), Zeile öffnen,
-// Einblender; auch direkt aus dem Spur-Menü
+// Einblender; auch direkt aus dem Spur-Menü. id = Spur-ID oder 'master' (Summe: Ein-/Ausblenden über alle Clips)
 export function applyTemplate({ store, ui, engine, id, name }) {
-  if (!id || id === 'master') return false;
+  if (!id) return false;
   const res = store.applyAutoTemplate(id, name, { bars: ui.autoBars ?? AUTO_TEMPLATES[name].bars, playheadBeat: engine?.heardBeat?.() ?? 0 });
   if (!res) { ui.flash?.('Hier ist kein Platz für diesen Verlauf.'); return false; }
   ui.autoLane?.open(id, res.key);
   const n = Math.round(((res.toBeat - res.fromBeat) / store.project.beatsPerBar) * 10) / 10;
-  ui.flash?.(`${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
+  ui.flash?.(`${id === 'master' ? 'Summe: ' : ''}${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
   return true;
 }
 
 export const TEMPLATE_ORDER = ['fadeIn', 'fadeOut', 'filterOpen', 'filterClose'];
+export const MASTER_TEMPLATES = ['fadeIn', 'fadeOut'];
 
-// getTarget() liefert die Spur-ID (oder null); onDone() läuft nach einer Vorlage (z. B. Menü schließen)
-export function templateControls({ store, ui, engine, getTarget, onDone, variant = 'insp' }) {
+// getTarget() liefert die Spur-ID, 'master' oder null; onDone() läuft nach einer Vorlage (z. B. Menü schließen).
+// names: welche Vorlagen (Summe: Ein-/Ausblenden); bars = false: ohne Längen-Chips (Handy-Fach „Song“, zwei Tipps)
+export function templateControls({ store, ui, engine, getTarget, onDone, variant = 'insp', names = TEMPLATE_ORDER, bars: withBars = true }) {
   const node = el('div', `auto-tpl auto-tpl-${variant}`);
-  const btns = el('div', variant === 'menu' ? 'auto-tpl-btns' : 'insp-btns');
+  const btns = el('div', variant === 'insp' ? 'insp-btns' : 'auto-tpl-btns');
   const bars = el('div', 'insp-run-btns auto-bars');
   bars.setAttribute('role', 'group');
   bars.setAttribute('aria-label', 'Länge in Takten');
   const cap = el('span', 'auto-cap', 'Länge in Takten');
-  node.append(btns, cap, bars);
+  node.append(btns);
+  if (withBars) node.append(cap, bars);
 
   function apply(name) {
     if (applyTemplate({ store, ui, engine, id: getTarget(), name })) onDone?.();
   }
-  for (const name of TEMPLATE_ORDER) {
+  for (const name of names) {
     const b = el('button', variant === 'menu' ? 'track-menu-item' : 'key', AUTO_TEMPLATES[name].label);
     b.type = 'button';
     b.dataset.template = name;
@@ -129,7 +135,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
   let lastType = 'mouse';
   let flagTimer = null;
 
-  const ownerOf = (t) => (t === 'master' ? store.project.master : store.track(t));
+  const ownerOf = (t) => (t === 'master' ? masterOf(store.project) : store.track(t));
   const pointsOf = (L) => laneOf(ownerOf(L.target), L.key);
   const spanOf = (L) => AUTO_PARAMS[L.key].max - AUTO_PARAMS[L.key].min;
   const yOf = (L, v) => PAD + (1 - (v - AUTO_PARAMS[L.key].min) / spanOf(L)) * (L.h - 2 * PAD);
@@ -144,7 +150,10 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     if (L) return L;
     const row = el('div', 'auto-row');
     row.dataset.trackId = target;
+    if (target === 'master') row.classList.add('auto-master');
     const head = el('div', 'auto-head');
+    // Summe: Beschriftung vor dem Chip (am Handy nur als Leuchtstrich, die Beschriftung trägt aria-label)
+    if (target === 'master') head.append(el('span', 'auto-sum', 'Summe'));
     const chip = el('button', 'auto-chip');
     chip.type = 'button';
     chip.setAttribute('aria-haspopup', 'menu');
@@ -216,7 +225,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     L.svg.setAttribute('height', String(L.h));
     L.chipLabel.textContent = spec.label;
     L.chip.title = 'Parameter der Kurve wählen';
-    L.chip.setAttribute('aria-label', `Kurve: ${spec.label} – Parameter wählen`);
+    L.chip.setAttribute('aria-label', `${L.target === 'master' ? 'Summen-Kurve' : 'Kurve'}: ${spec.label} – Parameter wählen`);
     L.chip.classList.toggle('lit', lit.length > 0);
     L.row.dataset.key = L.key;
     // Effekt aus: die Kurve wirkt nicht und ist gestrichelt (der erste Punkt schaltet den Effekt ein)
@@ -304,7 +313,9 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
   function setSel(L, i) {
     if (!sel || !L || sel.target !== L.target || sel.key !== L.key || sel.i !== i) hideBar();
     sel = i == null ? null : { target: L.target, key: L.key, i };
-    if (sel) ui.selectTrack?.(L.target); // wählt die Spur (hebt die Clip-Auswahl auf); sel steht schon, bleibt also erhalten
+    // wählt die Spur (hebt die Clip-Auswahl auf); Summe: nichts gewählt = Inspektor „Song“ mit Master. sel steht schon,
+    // bleibt also erhalten
+    if (sel && L.target === 'master') { ui.select?.(null); ui.selectTrack?.(null); } else if (sel) ui.selectTrack?.(L.target);
     paintSel();
   }
 
@@ -510,7 +521,8 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
   });
 
   ui.on(() => {
-    if (sel && (ui.selectedClipId || ui.selectedTrackId !== sel.target)) { sel = null; paintSel(); hideBar(); }
+    const other = sel && (sel.target === 'master' ? !!ui.selectedTrackId : ui.selectedTrackId !== sel.target);
+    if (sel && (ui.selectedClipId || other)) { sel = null; paintSel(); hideBar(); }
   });
   store.on((_, reason) => { if (sel && (reason === 'undo' || reason === 'redo' || reason === 'replace')) { sel = null; paintSel(); hideBar(); } });
 
@@ -649,6 +661,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     const L = ensure(target);
     L.key = key;
     view.relayout();
+    view.reveal(L.row);
     requestAnimationFrame(() => view.reveal(L.row));
     ui.emit?.();
     return true;
@@ -669,11 +682,11 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
 
   const toggle = (target, key) => (openKeys.has(target) ? (closeLane(target), false) : open(target, key));
 
-  // Taste A: Kurve der gewählten Spur (oder der Spur des gewählten Clips) auf- oder zuklappen
+  // Taste A: Kurve der gewählten Spur (oder der Spur des gewählten Clips) auf- oder zuklappen; ohne Auswahl die Summe
   function toggleSelected() {
     const c = ui.selectedClipId && store.findClip(ui.selectedClipId);
     const id = c?.track.id ?? ui.selectedTrackId;
-    if (!id || !store.track(id)) { ui.flash?.('Wähle erst eine Spur aus – dann zeigt A ihre Kurve.'); return false; }
+    if (!id || !store.track(id)) return toggle('master');
     return toggle(id);
   }
 
