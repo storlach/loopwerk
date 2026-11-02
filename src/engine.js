@@ -397,22 +397,36 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
 }
 
 // Takt-Geber in einem Worker, damit er in Hintergrund-Tabs nicht gedrosselt wird.
+// Wächter: meldet sich der Worker nicht (manche Browser/Seiten blockieren Blob-Worker still, ohne Fehler),
+// übernimmt nach kurzer Zeit ein Intervall im Haupt-Thread – sonst liefe die Marke, aber nichts klänge.
 function createTicker(fn) {
   let interval = null;
   let worker = null;
   let running = false;
-  const fallback = () => { worker = null; if (running) { clearInterval(interval); interval = setInterval(fn, TICK_MS); } };
+  let heard = false;
+  let watchdog = null;
+  const fallback = () => {
+    worker?.terminate?.();
+    worker = null;
+    if (running) { clearInterval(interval); interval = setInterval(fn, TICK_MS); }
+  };
   try {
     const code = `let id=null;onmessage=(e)=>{clearInterval(id);if(e.data==='start')id=setInterval(()=>postMessage(0),${TICK_MS});};`;
     worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-    worker.onmessage = fn;
+    worker.onmessage = () => { heard = true; fn(); };
     worker.onerror = fallback;
   } catch {
     worker = null;
   }
   return {
-    start() { running = true; if (worker) worker.postMessage('start'); else fallback(); },
-    stop() { running = false; worker?.postMessage('stop'); clearInterval(interval); },
+    start() {
+      running = true;
+      if (!worker) { fallback(); return; }
+      worker.postMessage('start');
+      clearTimeout(watchdog);
+      if (!heard) watchdog = setTimeout(() => { if (running && !heard) fallback(); }, 8 * TICK_MS);
+    },
+    stop() { running = false; clearTimeout(watchdog); worker?.postMessage('stop'); clearInterval(interval); },
   };
 }
 
@@ -430,7 +444,12 @@ export class Engine extends Emitter {
     this.anchors = [];
     this.knownSigs = new Map();
     this.preview = null;
-    this.ticker = createTicker(() => this._tick());
+    // Fehler beim Einplanen nicht still schlucken: einmal je Start melden (Einblender), damit man sieht, warum es stumm bleibt
+    this.ticker = createTicker(() => {
+      try { this._tick(); } catch (err) {
+        if (!this._tickErr) { this._tickErr = true; console.error('Wiedergabe:', err); this.emit('error', err); }
+      }
+    });
     store.on((project, reason) => this._onChange(reason));
   }
 
@@ -508,6 +527,7 @@ export class Engine extends Emitter {
     this.cursorTime = t0;
     this.knownSigs = this._signatures();
     this._scheduleActiveAt(fromBeat, t0, this._limitFor(fromBeat));
+    this._tickErr = false;
     this._tick();
     this.ticker.start();
     this.emit('state');
