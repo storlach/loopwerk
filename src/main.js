@@ -35,6 +35,7 @@ import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
 import { touch } from './ui/place.js';
+import { templateControls, MASTER_TEMPLATES } from './ui/auto-lane.js';
 import { doubleTapRanges } from './ui/touch.js';
 import { EDITION, lsKey } from './edition.js';
 import { applySurfaces } from './ui/surfaces.js';
@@ -525,6 +526,9 @@ async function boot() {
   if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
   mountMasteringControls(document.getElementById('song-mst-slot'), { store, engine, analysis: mastering, prefix: 'song-mst' });
+  // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
+  const songAuto = templateControls({ store, ui, engine, getTarget: () => 'master', names: MASTER_TEMPLATES, bars: false, variant: 'song', onDone: () => ui.setDock(null) });
+  document.getElementById('song-auto-slot').append(songAuto.node);
   const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools, engine, mastering });
   const layout = mountLayout({
     store, ui, library,

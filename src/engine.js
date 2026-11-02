@@ -9,6 +9,9 @@ import { styleOf, masterLatency } from './dsp/master-core.js';
 import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
+// Stillstand mit ausgeblendeter Summe: so lange hält die Master-Kurve, damit Hall-/Echo-Fahnen nicht wieder aufleben
+// (Hall klingt nach höchstens 4 s auf −60 dB aus); Vorhören, Pads und Pattern-Vorhören heben sie sofort auf 1
+const MASTER_REST = 4;
 const TICK_MS = 25;
 const START_DELAY = 0.05;
 
@@ -57,6 +60,15 @@ function stripLanes(strip, owner, target) {
     const to = laneTarget(strip, key);
     if (to) out.push({ key, param: to.param, map: to.map, points: laneOf(owner, key), def: autoRest(owner, key), absolute: spec.owner === 'absolute' });
   }
+  return out;
+}
+
+// Kanalzüge mit Kurven: [Ziel, Besitzer, Kanalzug] – Spuren und die Summe ('master', ohne Panorama)
+export const MASTER_TARGET = 'master';
+function autoStrips(project, mix) {
+  const out = [];
+  for (const t of project.tracks) { const s = mix.tracks.get(t.id); if (s) out.push([t.id, t, s]); }
+  out.push([MASTER_TARGET, masterOf(project), mix.masterStrip]);
   return out;
 }
 
@@ -252,7 +264,7 @@ export function syncMix(ctx, project, mix, spb, live = true) {
     syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid, skipOf(track));
   }
   const m = masterOf(project);
-  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);
+  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid, skipOf(m));
   syncMastering(ctx, project, mix, live && mix.masterStrip.chain != null && mix.synced === true);
   mix.synced = true;
 }
@@ -380,7 +392,11 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) 
 // mastering: false = ohne Mastering, { pre, drive } = Verstärkungen aus der Analyse (sonst Vorhalt des Stils).
 // analysis: Kanäle für die Mastering-Analyse – { x: Summe vor dem Mastering, a: Ausgang ohne Mastering }.
 // monitor: A/B-Abhörzustand wie in der Wiedergabe (Tests). pad(ctx, mix): Effekt-Pad einplanen (Tests).
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null } = {}) {
+// onlyTrack: nur diese Spur (Einzelspur-Export), Solo zählt dann nicht. master: false = Summe ohne Master-Kette
+// (keine Master-Effekte, Fader 1, keine Summen-Kurve, kein Mastering, kein Limiter) – so addieren sich Einzelspuren zum Mix.
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true } = {}) {
+  if (onlyTrack != null || master === false) project = renderView(project, { onlyTrack, master });
+  if (master === false) limiter = false;
   const spb = 60 / project.bpm;
   const end = toBeat ?? totalBeats(project);
   const duration = (end - fromBeat) * spb + tailSeconds;
@@ -413,9 +429,10 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     }
   }
   if (pad) pad(ctx, mix, { worklets, loopExtra: await measureLoopExtra(sampleRate) });
-  // Kurven: dieselbe Planung wie in der Wiedergabe, in einem Stück
-  for (const track of project.tracks) {
-    for (const l of stripLanes(mix.tracks.get(track.id), track, track.id)) {
+  // Kurven: dieselbe Planung wie in der Wiedergabe, in einem Stück (Spuren und Summe; die Summen-Kurve liegt vor
+  // Mastering und Limiter, die Mastering-Analyse rendert sie also mit)
+  for (const [id, owner, strip] of autoStrips(project, mix)) {
+    for (const l of stripLanes(strip, owner, id)) {
       if (l.points.length) planLane(l.param, l.map, l.points, fromBeat, end, 0, spb, 'set');
     }
   }
@@ -444,6 +461,17 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   }
   onProgress?.(1);
   return out;
+}
+
+// Projekt-Ansicht fürs Rendern einer Einzelspur bzw. ohne Master-Kette (das Projekt selbst bleibt unverändert)
+function renderView(project, { onlyTrack, master }) {
+  const view = { ...project };
+  if (onlyTrack != null) {
+    view.tracks = project.tracks.filter((t) => t.id === onlyTrack).map((t) => ({ ...t, solo: false }));
+    view.groups = (project.groups || []).map((g) => ({ ...g, solo: false }));
+  }
+  if (master === false) view.master = { ...masterOf(project), volume: 1, fx: null, automation: null, mastering: { ...masteringOf(project), on: false } };
+  return view;
 }
 
 // Takt-Geber in einem Worker, damit er in Hintergrund-Tabs nicht gedrosselt wird.
@@ -513,6 +541,8 @@ export class Engine extends Emitter {
     if (!this._building) this._building = this._build();
     await this._building;
     if (this.ctx.state !== 'running') await this.ctx.resume();
+    // Wer jetzt etwas hören will (Vorhören, Pad, Pattern, Start), bekommt die Summe wieder auf 1
+    this._wakeMaster();
   }
 
   async _build() {
@@ -564,7 +594,7 @@ export class Engine extends Emitter {
   // countIn: Vorzähler in Schlägen (Metronom-Klicks vor dem eigentlichen Start, z. B. für Aufnahmen)
   async play(fromBeat = this.positionBeat, { countIn = 0 } = {}) {
     await this._ensure();
-    if (this.playing) this._halt();
+    if (this.playing) this._halt(true);
     const pre = this.ctx.currentTime + START_DELAY;
     if (countIn > 0) this._metronome(0, countIn, pre, true);
     const t0 = pre + countIn * this.spb;
@@ -647,18 +677,26 @@ export class Engine extends Emitter {
     return a.time + (beat - a.beat) * this.spb;
   }
 
-  _halt() {
+  // restart: play() setzt gleich neu an – die Summe nur festhalten
+  _halt(restart = false) {
     this.ticker.stop();
     const t = this.ctx.currentTime;
     // Spur-Kurven halten ihren Wert: im Stillstand läuft nichts durch die Spur außer Hall-/Echo-Fahnen, und die sollen
     // nach einer Ausblendung nicht wieder aufleben. Der nächste Start setzt neu an (auch auf 1, wenn die Kurve weg ist).
-    // Master (Scheibe 4) muss dagegen auf 1 zurück, weil das Vorhören über ihn läuft.
+    // Die Summen-Lautstärke muss dagegen auf 1 zurück, weil Vorhören und Pads über sie laufen: sie hält, bis die Fahnen
+    // ausgeklungen sind (MASTER_REST), und rampt dann auf 1 – oder sofort, sobald etwas vorgehört wird (_wakeMaster).
     const beat = this.currentBeat(t);
+    this._masterRest = null;
     this._eachLane((l, strip) => {
       if (!strip.autoOn.has(l.key)) return;
       const v = l.map(autoValueAt(l.points, beat, l.def));
       handover(l.param, t, v);
       (strip.autoHeld ||= {})[l.key] = v;
+      if (restart || strip !== this.mix.masterStrip || l.key !== 'volume' || v > 1 - 1e-6) return;
+      const until = t + MASTER_REST;
+      l.param.setValueAtTime(v, until);
+      l.param.linearRampToValueAtTime(1, until + 0.02);
+      this._masterRest = { v, until };
     });
     for (const v of this.voices) this._kill(v, t);
     this.voices.clear();
@@ -707,14 +745,23 @@ export class Engine extends Emitter {
 
   // ---------- Automation ----------
 
+  // Summe im Stillstand sofort auf 1 (statt nach MASTER_REST)
+  _wakeMaster() {
+    const r = this._masterRest;
+    if (!r || this.playing || !this.mix) return;
+    this._masterRest = null;
+    const t = this.ctx.currentTime;
+    if (t < r.until) handover(this.mix.masterStrip.auto.gain, t, r.v, 1);
+  }
+
   _eachLane(fn) {
     if (!this._lanes || this._lanesFor !== this.project) {
-      this._lanes = this.project.tracks.map((t) => [t.id, t]);
+      this._lanes = [...this.project.tracks.map((t) => [t.id, t]), [MASTER_TARGET, masterOf(this.project)]];
       this._lanesFor = this.project;
       this._laneCache = new Map();
     }
     for (const [id, track] of this._lanes) {
-      const strip = this.mix.tracks.get(id);
+      const strip = id === MASTER_TARGET ? this.mix.masterStrip : this.mix.tracks.get(id);
       if (!strip) continue;
       let lanes = this._laneCache.get(id);
       if (!lanes || lanes.strip !== strip || lanes.chain !== strip.chain) {
@@ -756,10 +803,10 @@ export class Engine extends Emitter {
     if (!this.mix) return;
     const t = this.ctx.currentTime;
     const beat = this.currentBeat(t);
-    for (const [id, strip] of this.mix.tracks) {
+    for (const [id, strip] of this._strips()) {
       for (const key of [...strip.autoOn]) {
         if (AUTO_PARAMS[key]?.owner !== 'absolute') continue;
-        const track = this.project.tracks.find((x) => x.id === id);
+        const track = this._autoOwner(id);
         if (track && laneOf(track, key).length) continue;
         const to = laneTarget(strip, key);
         const pts = strip.autoPts?.[key];
@@ -778,7 +825,7 @@ export class Engine extends Emitter {
   // mit dem Wert auf der Rampe), im Stillstand den Wert an der Marke setzen. plan = false: nur merken (play plant gleich).
   _syncAutoChains(plan = true) {
     if (!this.mix) return;
-    for (const [id, strip] of this.mix.tracks) {
+    for (const [id, strip] of this._strips()) {
       if (strip.autoChain === strip.chain) continue;
       strip.autoChain = strip.chain;
       for (const key of [...strip.autoOn]) {
@@ -786,12 +833,16 @@ export class Engine extends Emitter {
         strip.autoOn.delete(key);
         if (strip.autoHeld) delete strip.autoHeld[key];
       }
-      const track = this.project.tracks.find((x) => x.id === id);
+      const track = this._autoOwner(id);
       if (!plan || !track) continue;
       const lanes = stripLanes(strip, track, id).filter((l) => fxOfKey(l.key) && l.points.length);
       if (lanes.length) this._planNow(strip, lanes);
     }
   }
+
+  // Kanalzüge mit ihrem Ziel (Spur-ID bzw. 'master') und Besitzer der Kurven
+  _strips() { return [...this.mix.tracks, [MASTER_TARGET, this.mix.masterStrip]]; }
+  _autoOwner(id) { return id === MASTER_TARGET ? masterOf(this.project) : this.project.tracks.find((x) => x.id === id); }
 
   _planNow(strip, lanes) {
     const now = this.ctx.currentTime;

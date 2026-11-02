@@ -83,13 +83,15 @@ export function mountArranger({ root, store, engine, library, ui }) {
   const snapDown = (b, ev) => Math.floor(b / step(ev) + 1e-9) * step(ev);
 
   // Kurvenzeilen (Automation) unter den Spuren
+  let revealed = null;
   const autoLanes = mountAutoLanes({
     rowsEl, store, ui, engine,
     view: {
       ppb, rowH, snap, step,
       formatPos: (b) => formatPos(b, store.project.beatsPerBar),
       relayout: () => render(),
-      reveal: (node) => revealNode(node),
+      // gemerkt: schließt gleich ein Fach (Vorlage im Fach „Song“), bleibt die Zeile beim Zurückgleiten im Bild
+      reveal: (node) => { revealed = { node, at: performance.now() }; revealNode(node); },
     },
   });
 
@@ -317,6 +319,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
       const ar = autoLanes.rowNode(t.id);
       if (ar) { ar.hidden = !!g?.collapsed; seq.push(ar); }
     }
+    // Summen-Zeile unter allen Spuren (wie der Master rechts im Mixer); belegt nur Platz, solange sie offen ist
+    const sum = autoLanes.rowNode('master');
+    if (sum) seq.push(sum);
     // Nur umhängen, wenn nötig – sonst verliert ein gerade gezogener Regler den Fokus.
     seq.forEach((n, i) => { if (rowsEl.children[i] !== n) rowsEl.insertBefore(n, rowsEl.children[i] || null); });
     tracks.forEach((t) => {
@@ -1217,7 +1222,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const head = rowsEl.getBoundingClientRect().top - box.top + st; // klebende Kopfzeilen: Lineal, Tonart, Akkorde
     const end = head + rowsEl.offsetHeight + addRow.offsetHeight;
     const a = { boxTop: box.top, head, st };
-    const row = trackId && rowsEl.querySelector(`.lane[data-track-id="${trackId}"]`)?.closest('.track-row');
+    const recent = revealed && performance.now() - revealed.at < 1000 && revealed.node.isConnected ? revealed.node : null;
+    const row = (trackId && rowsEl.querySelector(`.lane[data-track-id="${trackId}"]`)?.closest('.track-row')) || recent;
     if (row && row.offsetHeight) {
       const r = row.getBoundingClientRect();
       a.track = { top: r.top - box.top + st, bottom: r.bottom - box.top + st };

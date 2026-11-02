@@ -1,6 +1,7 @@
-// Automation Scheibe 1–3 (Spec v2.12, Testplan 1–10): Spur-Lautstärke, Panorama und Effekt-Werte (Filter-Frequenz über
+// Automation Scheibe 1–4 (Spec v2.12, Testplan 1–10): Spur-Lautstärke, Panorama und Effekt-Werte (Filter-Frequenz über
 // detune, Hall-/Echo-/Verzerrer-Anteil) als Kurve, Stufen, Besitz je AudioParam, neue Effektkette im Lauf, samplegenau
-// gemessen, plus Kurven wandern mit Clips (Zusatz von Martin).
+// gemessen, plus Kurven wandern mit Clips (Zusatz von Martin); Scheibe 4: Summe (Master-Lautstärke vor Mastering/Limiter,
+// Master-Effekt-Kurven, Stillstand, clearSong).
 // node tests/automation.test.cjs
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -799,6 +800,223 @@ async function pureTests() {
     const offBy = (b) => rt9.offline.find((x) => x.beat === b)?.v;
     const dRO = Math.max(...rt9.samples.map((x) => Math.abs(x.got - offBy(x.beat))));
     check('9 Filter-Kurve realtime = offline an denselben Schlägen', rt9.samples.length >= 8 && rt9.offline.length >= 8 && dRO < 0.02, `max. Abweichung ${dRO.toFixed(4)} bei ${rt9.samples.length} Proben`);
+
+    // ================= Scheibe 4: Summe (Master-Lautstärke, Master-Effekte, Mastering, clearSong, Rückgängig) =================
+    const ms = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const M = await import('./src/model.js');
+      const A = await import('./src/automation.js');
+      const MS = await import('./src/mastering.js');
+      const sr = 44100;
+      const idx = (b) => Math.round(b * 0.5 * sr);
+      const proj = (master, { sample = 'test-dc', bars = 4, clipBeats } = {}) => ({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: bars, loop: { on: false, startBeat: 0, endBeat: 16 }, master: { volume: 1, ...master },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0, mute: false, solo: false, clips: [{ id: 'c1', sampleId: sample, startBeat: 0, lengthBeats: clipBeats ?? bars * 4, offsetBeats: 0 }] }],
+      });
+      const render = async (p, opts = {}) => renderProject(p, library, { limiter: false, ...opts });
+      const ch0 = async (p, opts) => (await render(p, opts)).getChannelData(0);
+      const rmsDb = (d, b0, b1) => { let e = 0; const i0 = idx(b0); const i1 = idx(b1); for (let i = i0; i < i1; i++) e += d[i] * d[i]; return 10 * Math.log10(e / (i1 - i0) + 1e-30); };
+      const out = {};
+      // Sinus 1 kHz, Amplitude 0,5, 4 Schläge (ganze Perioden, nahtlos wiederholbar)
+      const tone = new AudioBuffer({ numberOfChannels: 2, length: 2 * sr, sampleRate: sr });
+      for (let c = 0; c < 2; c++) { const d = tone.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = 0.5 * Math.sin((2 * Math.PI * 1000 * i) / sr); }
+      library.register({ id: 'test-tone', name: 'Sinus', category: 'fx', lengthBeats: 4, bpm: 120, buffer: tone });
+      const pts = [{ beat: 4, value: 0 }, { beat: 8, value: 1 }, { beat: 12, value: 0.25, curve: 'step' }, { beat: 14, value: 0.6 }];
+
+      // a) Pegel an Punkten (offline), Fader × Kurve
+      const ref = await ch0(proj({}), { toBeat: 16 });
+      const dc = await ch0(proj({ automation: { volume: pts } }), { toBeat: 16 });
+      out.points = [2, 4, 5, 6, 8, 10, 12, 13, 14, 15].map((b) => ({ b, got: dc[idx(b)], want: ref[idx(b)] * A.autoValueAt(pts, b) }));
+      let lin = 0;
+      for (let i = idx(4); i <= idx(8); i++) lin = Math.max(lin, Math.abs(dc[i] - ref[i] * ((i / (0.5 * sr) - 4) / 4)));
+      out.lin = lin;
+      const half = await ch0(proj({ volume: 0.5, automation: { volume: pts } }), { toBeat: 16 });
+      out.half = [6, 10].map((b) => ({ b, got: half[idx(b)], want: 0.5 * ref[idx(b)] * A.autoValueAt(pts, b) }));
+      // Clip beginnt an Schlag 6 (kein Einstieg mitten im Sample, dessen Überblendung die erste Probe formen würde)
+      const p6 = proj({ automation: { volume: pts } });
+      p6.tracks[0].clips = [{ id: 'c1', sampleId: 'test-dc', startBeat: 6, lengthBeats: 10, offsetBeats: 0 }];
+      const mid = await ch0(p6, { fromBeat: 6, toBeat: 16 });
+      out.mid = { first: mid[0], want: ref[0] * 0.5, at7: mid[idx(1)], want7: ref[0] * 0.75 };
+
+      // b) Null-Test: ohne Feld = leeres Feld = leere Kurve (mit Limiter, Master-Effekt)
+      const nul = (automation) => { const p = proj({ volume: 0.85, fx: { echo: { on: true } }, ...(automation ? { automation } : {}) }, { sample: 'test-click' }); return p; };
+      const bits = async (a, b) => { const x = await renderProject(a, library, { limiter: true }); const y = await renderProject(b, library, { limiter: true }); let n = 0; let e = 0; for (let c = 0; c < 2; c++) { const u = x.getChannelData(c); const v = y.getChannelData(c); for (let i = 0; i < u.length; i++) { if (u[i] !== v[i]) n++; e += u[i] * u[i]; } } return { n, e }; };
+      out.nullTest = [await bits(nul(null), nul({})), await bits(nul(null), nul({ volume: [], 'hall.mix': [] }))];
+
+      // c) Master-Effekt-Kurve: Filterfahrt über die Summe (Rauschen), Regler gesperrt, Effekt aus = keine Wirkung
+      const ffx = (cutoff) => ({ filter: { on: true, type: 'lowpass', cutoff, reso: 0.4, lfo: 'off', depth: 0.5 } });
+      const fahrt = [{ beat: 0, value: 0.25 }, { beat: 16, value: 1 }];
+      const curve = await ch0(proj({ fx: ffx(0.9), automation: { 'filter.cutoff': fahrt } }, { sample: 'test-noise' }), { toBeat: 16 });
+      out.fbars = [0, 1, 2, 3].map((k) => rmsDb(curve, k * 4, k * 4 + 4));
+      const one = await ch0(proj({ fx: ffx(0.9), automation: { 'filter.cutoff': [{ beat: 0, value: 0.4 }] } }, { sample: 'test-noise' }), { toBeat: 8 });
+      const stat = await ch0(proj({ fx: ffx(0.4) }, { sample: 'test-noise' }), { toBeat: 8 });
+      let fd = 0;
+      for (let i = 0; i < one.length; i++) fd = Math.max(fd, Math.abs(one[i] - stat[i]));
+      out.fixed = fd;
+      const offFx = await ch0(proj({ fx: { filter: { ...ffx(0.9).filter, on: false } }, automation: { 'filter.cutoff': fahrt } }, { sample: 'test-noise' }), { toBeat: 8 });
+      const plain = await ch0(proj({}, { sample: 'test-noise' }), { toBeat: 8 });
+      let od = 0;
+      for (let i = 0; i < offFx.length; i++) od = Math.max(od, Math.abs(offFx[i] - plain[i]));
+      out.offFx = od;
+      // Hall-Anteil der Summe: Kurve 0 → 1, Fahne nach dem Klick wächst mit dem Anteil
+      const hallP = (automation) => ({ ...proj({ fx: { hall: { on: true, mix: 0.5, size: 0.3 } }, automation }, { sample: 'test-click' }) });
+      const hall0 = await ch0(hallP({ 'hall.mix': [{ beat: 0, value: 0 }] }), { toBeat: 4 });
+      const hall1 = await ch0(hallP({ 'hall.mix': [{ beat: 0, value: 1 }] }), { toBeat: 4 });
+      out.hall = { dry: rmsDb(hall0, 0.5, 1.5), wet: rmsDb(hall1, 0.5, 1.5) };
+
+      // d) Mastering an + Ausblenden der Summe: endet in Stille, Anfang unverändert; die Analyse sieht die Kurve
+      const fade = [{ beat: 8, value: 1 }, { beat: 16, value: 0 }];
+      const mp = (automation) => proj({ volume: 0.85, mastering: { on: true, style: 'loud' }, ...(automation ? { automation } : {}) }, { sample: 'test-tone' });
+      const gains = { pre: 6, drive: 4 };
+      const mA = await renderProject(mp({ volume: fade }), library, { mastering: gains, toBeat: 16, tailSeconds: 0.3, compensate: true });
+      const mB = await renderProject(mp(null), library, { mastering: gains, toBeat: 16, tailSeconds: 0.3, compensate: true });
+      const a0 = mA.getChannelData(0);
+      const b0 = mB.getChannelData(0);
+      let head = 0;
+      for (let i = idx(0.5); i < idx(7.5); i++) head = Math.max(head, Math.abs(a0[i] - b0[i]));
+      let tail = 0;
+      for (let i = idx(16) + 64; i < a0.length; i++) tail = Math.max(tail, Math.abs(a0[i]));
+      out.mst = { head, tail, bars: [8, 10, 12, 14, 15].map((b) => rmsDb(a0, b, b + 1)), ref: rmsDb(b0, 8, 9), on: true };
+      const an = await renderProject(mp({ volume: fade }), library, { toBeat: 16, analysis: true });
+      const anRef = await renderProject(mp(null), library, { toBeat: 16, analysis: true });
+      const rmsOf = (d, b0, b1) => { let e = 0; for (let i = idx(b0); i < idx(b1); i++) e += d[i] * d[i]; return Math.sqrt(e / (idx(b1) - idx(b0))); };
+      out.analysis = { ratio: rmsOf(an.x[0], 11.9, 12.1) / rmsOf(anRef.x[0], 11.9, 12.1), end: Math.max(...Array.from(an.x[0].subarray(idx(15.95), idx(16)), Math.abs)) };
+      const az = await MS.analyzeMastering(mp({ volume: fade }), library);
+      const azRef = await MS.analyzeMastering(mp(null), library);
+      out.analyze = { inLufs: az?.inLufs, refLufs: azRef?.inLufs };
+
+      // e) Store: erster Effekt-Punkt schaltet den Master-Effekt ein; Vorlagen; clearSong; Rückgängig; Datei
+      const s = new M.Store(proj({}, { clipBeats: 12 }), { sampleBeats: () => 4 });
+      const n0 = s.undoStack.length;
+      s.addAutoPoint('master', 'hall.mix', 0, 0.3);
+      out.fxOn = { on: !!s.project.master.fx?.hall?.on, steps: s.undoStack.length - n0 };
+      s.undo();
+      out.fxOn.undo = !s.project.master.automation && !s.project.master.fx?.hall?.on;
+      out.panKey = s.addAutoPoint('master', 'pan', 0, 0.5);
+      const r1 = s.applyAutoTemplate('master', 'fadeOut', { bars: 2 });
+      out.fadeOut = { r: r1, lane: A.laneOf(s.project.master, 'volume'), steps: s.undoStack.length - n0 };
+      const r2 = s.applyAutoTemplate('master', 'fadeIn', { bars: 1 });
+      out.fadeIn = { r: r2, lane: A.laneOf(s.project.master, 'volume') };
+      // Clip über das Songende hinaus: Ausblenden endet am Songende
+      const s2 = new M.Store(proj({}, { clipBeats: 24 }), { sampleBeats: () => 4 });
+      out.capped = s2.applyAutoTemplate('master', 'fadeOut', { bars: 1 });
+      const json = JSON.stringify(s.project);
+      out.file = { same: JSON.stringify(JSON.parse(json)) === json, valid: M.isValidProject(JSON.parse(json)), bad: M.isValidProject({ ...proj({ automation: [] }) }), kept: JSON.parse(json).master.automation?.volume?.length };
+      const before = s.undoStack.length;
+      s.clearSong();
+      out.clear = { gone: !s.project.master.automation, volume: s.project.master.volume, steps: s.undoStack.length - before };
+      s.undo();
+      out.clear.back = A.laneOf(s.project.master, 'volume').length;
+      return out;
+    });
+    for (const p of ms.points) check(`S4 Summen-Pegel an Schlag ${p.b}`, Math.abs(p.got - p.want) < 1e-4, `gemessen ${p.got.toFixed(6)}, erwartet ${p.want.toFixed(6)}`);
+    check('S4 Summen-Rampe zwischen Schlag 4 und 8 linear', ms.lin < 1e-4, `max. Abweichung ${ms.lin.toExponential(2)}`);
+    check('S4 Master-Fader 0,5 × Summen-Kurve', ms.half.every((x) => Math.abs(x.got - x.want) < 1e-4), JSON.stringify(ms.half));
+    check('S4 Start mitten (Schlag 6): erste Probe auf der Summen-Kurve', Math.abs(ms.mid.first - ms.mid.want) < 1e-4 && Math.abs(ms.mid.at7 - ms.mid.want7) < 1e-4, JSON.stringify(ms.mid));
+    check('S4 Null-Test: Summe ohne Feld = leeres Feld = leere Kurven, bitgleich', ms.nullTest.every((x) => x.n === 0 && x.e > 1), JSON.stringify(ms.nullTest));
+    check('S4 Master-Filterfahrt: RMS steigt je Takt', ms.fbars.every((v, i) => i === 0 || v > ms.fbars[i - 1] + 0.5), ms.fbars.map((v) => v.toFixed(2)).join(' < '));
+    check('S4 Master-Filter mit Kurve: Kurvenwert klingt, nicht der Regler (= statisch 0,4)', ms.fixed < 1e-4, `max. Abweichung ${ms.fixed.toExponential(2)}`);
+    check('S4 Master-Filter aus: Kurve wirkt nicht', ms.offFx < 1e-6, `max. Abweichung ${ms.offFx.toExponential(2)}`);
+    check('S4 Master-Hall-Anteil: Kurve 1 statt 0 bringt die Fahne (≥ 20 dB mehr)', ms.hall.wet - ms.hall.dry >= 20, `trocken ${ms.hall.dry.toFixed(1)} dB, nass ${ms.hall.wet.toFixed(1)} dB`);
+    check('S4 Mastering an + Ausblenden: vor der Kurve gleich wie ohne Kurve', ms.mst.head < 1e-4, `max. Abweichung ${ms.mst.head.toExponential(2)}`);
+    check('S4 Mastering an + Ausblenden: Pegel fällt je Schlag, am Ende Stille (< 1e-4)', ms.mst.bars.every((v, i) => i === 0 || v < ms.mst.bars[i - 1] - 1) && ms.mst.tail < 1e-4, `${ms.mst.bars.map((v) => v.toFixed(1)).join(' > ')} dB, Rest ${ms.mst.tail.toExponential(2)}`);
+    check('S4 Mastering-Analyse rendert mit der Summen-Kurve (Summe vor dem Mastering bei Schlag 12 = 50 %)', Math.abs(ms.analysis.ratio - 0.5) < 2e-3 && ms.analysis.end < 0.01 && ms.analyze.inLufs < ms.analyze.refLufs, JSON.stringify({ ...ms.analysis, ...ms.analyze }));
+    check('S4 Erster Hall-Punkt der Summe schaltet den Master-Hall ein (ein Schritt, Rückgängig)', ms.fxOn.on && ms.fxOn.steps === 1 && ms.fxOn.undo, JSON.stringify(ms.fxOn));
+    check('S4 Summe hat kein Panorama', ms.panKey === -1);
+    check('S4 Vorlage Ausblenden (2 Takte) endet am letzten Clip, ein Schritt', ms.fadeOut.r?.fromBeat === 4 && ms.fadeOut.r.toBeat === 12 && JSON.stringify(ms.fadeOut.lane) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && ms.fadeOut.steps === 1, JSON.stringify(ms.fadeOut));
+    check('S4 Vorlage Einblenden (1 Takt) ab dem ersten Clip, Ausblenden bleibt', JSON.stringify(ms.fadeIn.lane) === JSON.stringify([{ beat: 0, value: 0 }, { beat: 4, value: 1 }, { beat: 12, value: 0 }]), JSON.stringify(ms.fadeIn));
+    check('S4 Ausblenden endet spätestens am Songende', ms.capped?.toBeat === 16 && ms.capped.fromBeat === 12, JSON.stringify(ms.capped));
+    check('S4 Datei: Summen-Kurve hin und zurück gleich, Validierung', ms.file.same && ms.file.valid && !ms.file.bad && ms.file.kept === 3, JSON.stringify(ms.file));
+    check('S4 clearSong löscht die Summen-Kurven (ein Schritt, Master bleibt), Rückgängig stellt her', ms.clear.gone && ms.clear.volume === 1 && ms.clear.steps === 1 && ms.clear.back === 3, JSON.stringify(ms.clear));
+
+    // Realtime: Summen-Kurve folgt, Loop-Sprung, Export = Realtime, Live-Änderung, neue Master-Kette, Stillstand
+    const mrt = await page.evaluate(async () => {
+      const { store, engine, library, renderProject } = window.loopwerk;
+      const A = await import('./src/automation.js');
+      const pts = [{ beat: 0, value: 0 }, { beat: 4, value: 1 }, { beat: 8, value: 0.2 }];
+      const cut = [{ beat: 0, value: 0.2 }, { beat: 8, value: 0.9 }];
+      store.replace({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: 4, loop: { on: true, startBeat: 0, endBeat: 8 },
+        master: { volume: 1, fx: { filter: { on: true, type: 'lowpass', cutoff: 0.7, reso: 0.3 } }, automation: { volume: pts, 'filter.cutoff': cut } },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0, mute: false, solo: false, clips: [{ id: 'c1', sampleId: 'test-dc', startBeat: 0, lengthBeats: 16, offsetBeats: 0 }] }],
+      });
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const ms = () => engine.mix.masterStrip;
+      const vol = () => ms().auto.gain.value;
+      const fc = () => ms().chain.units.filter.auto.cutoff.param.value / (8.81 * 1200);
+      await engine.play(3);
+      const out = { samples: [], cuts: [] };
+      let jumped = false;
+      let last = 3;
+      for (let k = 0; k < 40 && out.samples.filter((x) => x.jumped).length < 4; k++) {
+        await wait(170);
+        const beat = engine.currentBeat();
+        if (beat < last) jumped = true;
+        last = beat;
+        if (beat < 0.15 || beat > 7.85) continue;
+        out.samples.push({ beat, got: vol(), want: A.autoValueAt(pts, beat), jumped });
+        out.cuts.push({ beat, got: fc(), want: A.autoValueAt(cut, beat) });
+      }
+      // Neue Master-Kette (EQ an): Filter-Kurve bleibt nach 20 ms auf der Kurve
+      const chain0 = ms().chain;
+      store.setMasterFx('eq', { on: true });
+      out.rebuilt = ms().chain !== chain0;
+      await wait(25);
+      { const beat = engine.currentBeat(); out.afterChain = { beat, got: fc(), want: A.autoValueAt(cut, beat) }; }
+      // Regler gesperrt: Master-Frequenz ziehen ändert nichts
+      store.setMasterFx('filter', { cutoff: 0.05 }, 'mfx');
+      await wait(30);
+      { const beat = engine.currentBeat(); out.locked = { beat, got: fc(), want: A.autoValueAt(cut, beat) }; }
+      // Live: Punkt verschieben → nach 300 ms auf der neuen Kurve
+      store.moveAutoPoint('master', 'volume', 1, 4, 0.5);
+      await wait(300);
+      { const beat = engine.currentBeat(); out.live = { beat, got: vol(), want: A.autoValueAt(A.laneOf(store.project.master, 'volume'), beat), playing: engine.playing }; }
+      // Stillstand: kurz halten (Fahnen bleiben ausgeblendet), Vorhören hebt die Summe sofort auf 1. Eine Gleichspannung hält
+      // die Kette in Gang, damit .value den Zeitplan zeigt.
+      const keep = engine.ctx.createConstantSource();
+      keep.offset.value = 1e-3;
+      keep.connect(ms().input);
+      keep.start();
+      await wait(40);
+      const stopBeat = engine.currentBeat();
+      engine.stop();
+      out.stop = { want: A.autoValueAt(A.laneOf(store.project.master, 'volume'), stopBeat) };
+      await wait(150);
+      out.stop.held = vol();
+      await engine.previewSample('test-click');
+      await wait(80);
+      out.stop.woke = vol();
+      engine.stopPreview();
+      // Ohne Vorhören: nach dem Ausklingen (4 s) von selbst auf 1
+      await engine.play(7.9);
+      await wait(150);
+      engine.stop();
+      await wait(120);
+      out.stop.held2 = vol();
+      await wait(4100);
+      out.stop.rest = vol();
+      keep.stop();
+      keep.disconnect();
+      // Export = Realtime an denselben Schlägen (Gleichspannung 1 → Ausgang = Summen-Kurve)
+      store.undo(); // Live-Verschiebung zurück
+      store.undo(); // Regler-Verschiebung zurück
+      store.undo(); // EQ wieder aus
+      const off = (await renderProject(store.project, library, { limiter: false, toBeat: 16 })).getChannelData(0);
+      for (const s of out.samples) s.export = off[Math.round(s.beat * 22050)];
+      return out;
+    });
+    const dM = Math.max(...mrt.samples.map((s) => Math.abs(s.got - s.want)));
+    const dMx = Math.max(...mrt.samples.map((s) => Math.abs(s.export - s.got)));
+    const dC = Math.max(...mrt.cuts.map((s) => Math.abs(s.got - s.want)));
+    check('S4 Realtime: Summen-Lautstärke folgt der Kurve (≥ 10 Zeitpunkte)', mrt.samples.length >= 10 && dM < 0.02, `max. Abweichung ${dM.toFixed(4)} bei ${mrt.samples.length} Proben`);
+    check('S4 Realtime: nach dem Loop-Sprung wieder Werte vom Anfang', mrt.samples.filter((s) => s.jumped).length >= 2 && mrt.samples.filter((s) => s.jumped).every((s) => Math.abs(s.got - s.want) < 0.02), JSON.stringify(mrt.samples.filter((s) => s.jumped).map((s) => [s.beat.toFixed(2), s.got.toFixed(3)])));
+    check('S4 Export = Realtime (Summen-Lautstärke)', dMx < 0.02, `max. Abweichung ${dMx.toFixed(4)}`);
+    check('S4 Realtime: Master-Filter folgt der Kurve', dC < 0.02, `max. Abweichung ${dC.toFixed(4)}`);
+    check('S4 Neue Master-Kette (EQ an): Filter bleibt auf der Kurve, schon nach 25 ms', mrt.rebuilt && Math.abs(mrt.afterChain.got - mrt.afterChain.want) < 0.02, JSON.stringify(mrt.afterChain));
+    check('S4 Master-Regler gesperrt: Frequenz ziehen ändert den Filter nicht', Math.abs(mrt.locked.got - mrt.locked.want) < 0.02, JSON.stringify(mrt.locked));
+    check('S4 Live: Summen-Punkt verschieben → nach 300 ms auf der neuen Kurve, Wiedergabe läuft', Math.abs(mrt.live.got - mrt.live.want) < 0.02 && mrt.live.playing, JSON.stringify(mrt.live));
+    check('S4 Stillstand: Summe hält kurz (keine aufblühende Fahne), Vorhören hebt sie sofort auf 1', mrt.stop.want < 0.9 && Math.abs(mrt.stop.held - mrt.stop.want) < 0.03 && Math.abs(mrt.stop.woke - 1) < 1e-3, JSON.stringify(mrt.stop));
+    check('S4 Stillstand ohne Vorhören: nach dem Ausklingen (4 s) von selbst auf 1', mrt.stop.held2 < 0.5 && Math.abs(mrt.stop.rest - 1) < 1e-3, JSON.stringify(mrt.stop));
 
     check('Keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {

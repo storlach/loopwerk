@@ -119,6 +119,9 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       check(`Handy ${w} px: Textzeile Öffnen · Beispiel · Tipps · Leeren`, JSON.stringify(song.links) === '["Öffnen","Beispiel","Tipps","Leeren"]', JSON.stringify(song.links));
       check(`Handy ${w} px: Fuß mit Marke, Version 2.8 und „Private use only“`, /Loopwerk/i.test(song.foot) && /Version 2\.8/i.test(song.foot) && /Private use only/.test(song.foot), song.foot);
       check(`Handy ${w} px: Fach liegt zwischen Deck und Leiste, ohne Überlauf`, song.sheetBottom <= song.tabTop + 2 && song.sheetTop >= song.deckBottom - 1 && noOverflow(await overflow(page)), JSON.stringify({ o: await overflow(page), b: song.sheetBottom, tab: song.tabTop, top: song.sheetTop }));
+      // Einblender aus dem Loop-Schritt davor abwarten (liegt kurz über dem unteren Rand des Fachs)
+      await page.waitForFunction(() => !window.loopwerk.ui.flashText, null, { timeout: 6000 });
+      await page.waitForTimeout(400);
       const songTargets = await page.evaluate(measureTargets, '#song button, #song select, #song input');
       check(`Handy ${w} px: alle Tippflächen im Fach „Song“ ≥ 44 px`, songTargets.length >= 10 && songTargets.every((t) => t.w >= 44 && t.h >= 44 && t.ok), JSON.stringify(songTargets));
       await shot('song');

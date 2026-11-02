@@ -90,6 +90,7 @@
 <link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/engine.js">
 <link rel="modulepreload" href="src/fxpad.js">
+<link rel="modulepreload" href="src/fxpad-record.js">
 <link rel="modulepreload" href="src/dsp/master-core.js">
 <link rel="modulepreload" href="src/wav.js">
 <link rel="modulepreload" href="src/ui/library.js">
@@ -912,6 +913,7 @@
   .ex-set { border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px 10px; margin: 0; display: grid; gap: 6px; min-width: 0; }
   .ex-set legend { padding: 0 4px; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .ex-set label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ex-set label:has(input:disabled) { color: var(--muted); }
   .ex-go { display: grid; gap: 8px; align-content: start; min-width: 240px; flex: 1; }
   .ex-go .dbtn { justify-self: start; height: 34px; padding: 0 18px; }
   .ex-go progress { width: 100%; max-width: 360px; accent-color: var(--amber); }
@@ -2646,6 +2648,13 @@
     width: 260px; height: 260px; margin: -130px 0 0 -130px; border-radius: 50%; pointer-events: none;
     background: radial-gradient(circle, color-mix(in srgb, var(--beam) 20%, transparent), transparent 65%);
   }
+  /* Kurve aufnehmen: Aufnahme-Rot nur hier; an = rote Linie, während eine Geste schreibt = rot gefüllt. Trefferfläche 44 px */
+  .fxpad-rec { position: relative; }
+  .fxpad-rec::after { content: ""; position: absolute; inset: -7px -3px; }
+  #fxpad-rec[aria-pressed="true"], #fxpad-rec[aria-pressed="true"]:is(:hover, :active, :focus-visible):not(:disabled) {
+    background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent);
+  }
+  #fxpad-rec.writing[aria-pressed="true"], #fxpad-rec.writing[aria-pressed="true"]:is(:hover, :active, :focus-visible):not(:disabled) { background: var(--meter-hot); color: var(--accent-ink); }
   #mixer-fxpad { display: none; }
   @media (max-width: 760px) {
     #fxpad-btn { display: none; }
@@ -2658,6 +2667,7 @@
     .mst-head .dbtn, .mst-styles .chip, .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 44px; height: 44px; }
     .mst-head .mst-ab-end { width: 44px; }
     .fxpad-target { height: 44px; }
+    .fxpad-rec::after { inset: 0; }
   }
 
   /* ---------- Clip-Editor: Kopf mit Name und Icons, Wellenform bleibt stehen, Schalter statt Häkchen ---------- */
@@ -2822,6 +2832,17 @@
   .auto-tpl-menu { padding: 4px 6px 6px; }
   .auto-tpl-menu .auto-tpl-btns { display: grid; gap: 2px; margin: 0 -6px; }
   .auto-menu-back { color: var(--muted); }
+  /* Summen-Zeile (Ziel 'master'): Beschriftung vor dem Chip; Leuchtpunkt am Inspektor-Link, wenn die Summe Kurven hat */
+  .auto-sum { flex: none; font: 600 9px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .insp-link.lit::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: var(--amber); box-shadow: var(--beam-glow); }
+  /* Handy, Fach „Song“: Einblenden · Ausblenden der Summe */
+  .song-auto { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+  .song-auto-label { font: 500 11px/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--lcd-label); }
+  .song-auto .auto-tpl-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .song-auto .key { min-height: 44px; }
+  /* Platz im Fach: ohne Mastering bleibt die Messzeile leer und fällt weg; die Summen-Zeile rückt an das Mastering heran */
+  .song-mst .mst-meter:empty { display: none; }
+  .song-mst + .song-auto { margin-top: -4px; }
   @media (hover: none) and (pointer: coarse) {
     .auto-head { padding-left: 10px; }
     .auto-close { width: 44px; height: 48px; margin-right: -4px; }
@@ -2837,6 +2858,9 @@
     .strip-pan-wrap .auto-lock { width: 48px; height: 48px; }
   }
   @media (max-width: 760px) {
+    /* schmaler Kopf: „Summe“ steht in der Zeile statt vor dem Chip */
+    .auto-sum { display: none; }
+    .auto-master .auto-body::before { content: "Summe"; position: absolute; left: 6px; top: 50%; transform: translateY(-50%); font: 600 9px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
     .auto-head { padding-left: 6px; gap: 2px; }
     .auto-chip { padding: 5px 4px; font-size: 10px; letter-spacing: 0; }
     .auto-close { margin-right: -2px; }
@@ -3221,6 +3245,11 @@
         <label><input type="radio" name="ex-range" id="ex-range-loop" value="loop"> <span id="ex-range-loop-label">Loop-Bereich</span></label>
         <label><input type="checkbox" id="ex-tail" checked> Hall und Echo ausklingen lassen (+2,5 s)</label>
       </fieldset>
+      <fieldset class="ex-set" id="ex-stems-set">
+        <legend>Einzelspuren</legend>
+        <label><input type="checkbox" id="ex-stems"> <span id="ex-stems-label">Einzelspuren (Stems)</span></label>
+        <label title="Jede Spur läuft durch Master-Effekte, Fader und Mastering – die Spuren ergeben zusammen dann nicht mehr genau den Mix."><input type="checkbox" id="ex-stems-master" disabled> Mit Summe (Master-Effekte, Mastering)</label>
+      </fieldset>
       <fieldset class="ex-set ex-master" id="ex-master-set">
         <legend>Mastering</legend>
         <div class="ex-master-ctl" id="ex-master-ctl"></div>
@@ -3255,6 +3284,7 @@
         </label>
         <label class="pat-field" id="pat-glide-field" title="Töne, die direkt aufeinander folgen, gleiten ineinander statt zu springen">Gleiten <select id="pat-glide"></select></label>
         <button class="dbtn pat-glide-btn" id="pat-glide-btn" type="button" title="Gleiten zwischen Tönen: antippen wechselt Aus, Kurz, Lang">∿ Aus</button>
+        <label class="pat-field" id="pat-chord-field" title="Eine Taste setzt und spielt einen ganzen Akkord: beim Klick in die Piano-Roll, auf der Klaviatur, mit der Computertastatur und am MIDI-Keyboard">Akkord <select id="pat-chord"></select></label>
         <label class="pat-field" id="pat-len-field">Notenlänge
           <select id="pat-len"><option value="0.25">1/16</option><option value="0.5">1/8</option><option value="1" selected>1/4</option><option value="2">1/2</option><option value="4">1/1</option></select>
         </label>
@@ -3268,6 +3298,7 @@
         <label class="pat-field" id="pat-quant-field">Einrasten
           <select id="pat-quant"><option value="1" selected>1/16</option><option value="2">1/8</option></select>
         </label>
+        <button class="dbtn" id="pat-quantize" type="button" title="Rückt Noten bzw. Schläge auf das Raster aus „Einrasten“. Rückgängig macht es wieder">Quantisieren</button>
         <button class="dbtn" id="pat-play" type="button">▶ Anhören</button>
         <div class="menu-wrap pat-more-wrap">
           <button class="dbtn" id="pat-more-btn" type="button" aria-haspopup="true" aria-expanded="false">Mehr ▾</button>
@@ -3357,6 +3388,7 @@
         </label>
       </div>
       <div class="song-mst" id="song-mst-slot"></div>
+      <div class="song-auto" id="song-auto-slot" role="group" aria-label="Verlauf der Summe"><span class="song-auto-label">Summe</span></div>
       <div class="song-main" id="song-main"></div>
       <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
       <template id="harm-tpl"><button class="key" id="harm-btn" type="button" aria-pressed="false">Tonart und Akkorde</button></template>
@@ -3443,7 +3475,7 @@
           <dt>Lineal</dt><dd>Antippen setzt die Marke, Ziehen markiert den Loop</dd>
           <dt>Spurname antippen</dt><dd>Umbenennen</dd>
           <dt>Piano-Roll</dt><dd>Antippen setzt oder löscht eine Note, lange drücken und ziehen verschiebt sie</dd>
-          <dt>Kurve</dt><dd>Spur-Menü ⋯ → Kurve: Antippen setzt einen Punkt, einen Punkt ziehen verschiebt ihn, Halten löscht ihn</dd>
+          <dt>Kurve</dt><dd>Spur-Menü ⋯ → Kurve: Antippen setzt einen Punkt, einen Punkt ziehen verschiebt ihn, Halten löscht ihn. Summe: Fach „Song“ → Einblenden/Ausblenden</dd>
         </dl>
         <dl class="keys-list for-mouse">
           <dt>Leertaste</dt><dd>Abspielen / Pause</dd>
@@ -3451,7 +3483,7 @@
           <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
           <dt>Strg+Z / Strg+Umschalt+Z</dt><dd>Rückgängig / Wiederholen</dd>
           <dt>T</dt><dd>Clip an der Abspielmarke teilen</dd>
-          <dt>A</dt><dd>Lautstärke-Kurve der gewählten Spur öffnen oder schließen (Klick setzt einen Punkt, Doppelklick löscht)</dd>
+          <dt>A</dt><dd>Kurve der gewählten Spur öffnen oder schließen, ohne Auswahl die Summen-Kurve (Klick setzt einen Punkt, Doppelklick löscht)</dd>
           <dt>Rahmen ziehen</dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
           <dt>Umschalt+Klick</dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>
           <dt>Strg+A</dt><dd>Alle Clips auswählen</dd>

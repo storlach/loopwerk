@@ -1,6 +1,6 @@
-// Export-Dock: Format, Bereich, Ausklang wählen; Fortschritt anzeigen; Datei speichern.
+// Export-Dock: Format, Bereich, Ausklang wählen; Fortschritt anzeigen; Datei speichern. Wahlweise Einzelspuren (Stems) als ZIP.
 
-import { exportSong, exportRange } from '../export.js';
+import { exportSong, exportRange, exportStems, stemTracks } from '../export.js';
 import { saveFile, safeName } from './save-file.js';
 import { formatDb } from './arranger.js';
 import { masteringOf } from '../engine.js';
@@ -13,7 +13,10 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
   const bar = $('ex-progress');
   const status = $('ex-status');
   const loopLabel = $('ex-range-loop-label');
+  const stems = $('ex-stems');
+  const stemsMaster = $('ex-stems-master');
   let busy = false;
+  let abort = null;
 
   const value = (name) => root.querySelector(`input[name="${name}"]:checked`)?.value;
 
@@ -21,12 +24,17 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
   const withMaster = $('ex-mastering');
   if (mastering) mountMasteringControls($('ex-master-ctl'), { store, engine, analysis: mastering, prefix: 'ex-mst' });
   let lastOn = null;
+  // Stems ohne Summe kennen kein Mastering – dann ist der Haken abgeschaltet
   const syncMaster = () => {
     const on = !!masteringOf(store.project).on;
     if (on !== lastOn) { withMaster.checked = on; lastOn = on; }
-    withMaster.disabled = !on;
+    withMaster.disabled = !on || (stems.checked && !stemsMaster.checked);
+    stemsMaster.disabled = !stems.checked;
+    go.textContent = busy && abort ? 'Abbrechen' : stems.checked ? 'Spuren exportieren' : 'Exportieren';
   };
   store.on(syncMaster);
+  stems.addEventListener('change', () => { syncMaster(); describe(); });
+  stemsMaster.addEventListener('change', syncMaster);
   syncMaster();
 
   function describe() {
@@ -40,10 +48,41 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     loopLabel.textContent = hasLoop ? `Loop-Bereich (Takt ${first === last ? first : `${first}–${last}`})` : 'Loop-Bereich (keiner gesetzt)';
     $('ex-range-loop').disabled = !hasLoop;
     if (!hasLoop && value('ex-range') === 'loop') $('ex-range-song').checked = true;
+    const [s0, s1] = exportRange(p, value('ex-range'));
+    const n = s1 > s0 ? stemTracks(p, s0, s1).length : 0;
+    $('ex-stems-label').textContent = `Einzelspuren (Stems) – ${n === 1 ? '1 Spur' : `${n} Spuren`} als ZIP`;
+  }
+  root.querySelectorAll('input[name="ex-range"]').forEach((r) => r.addEventListener('change', describe));
+
+  const num = (v, d = 1) => v.toFixed(d).replace('.', ',');
+
+  async function runStems(format) {
+    abort = new AbortController();
+    go.disabled = false;
+    syncMaster();
+    const res = await exportStems(store.project, library, {
+      format,
+      range: value('ex-range'),
+      tail: $('ex-tail').checked,
+      withMaster: stemsMaster.checked,
+      mastering: withMaster.checked && !withMaster.disabled,
+      signal: abort.signal,
+      onProgress: (p, info) => {
+        bar.value = p;
+        status.textContent = info.phase === 'analyze' ? `Mastering wird vorbereitet … ${Math.round(p * 100)} %`
+          : info.phase === 'done' ? 'ZIP wird geschrieben …'
+          : `Spur ${info.index + 1} von ${info.count} (${info.name}) … ${Math.round(p * 100)} %`;
+      },
+    });
+    const saved = await saveFile(`${safeName(store.project.name)} Stems.zip`, res.blob);
+    const mb = num(res.blob.size / 1048576);
+    const n = res.stems.length;
+    status.textContent = `Fertig: ${saved.filename} (${n === 1 ? '1 Spur' : `${n} Spuren`}, ${mb} MB, je ${num(res.duration)} s, Spitze ${formatDb(res.peak)})${res.peak > 1 ? ' – übersteuert, Fader der lautesten Spur senken' : ''}.`;
+    ui.flash(`Exportiert: ${saved.filename}`);
   }
 
   go.addEventListener('click', async () => {
-    if (busy) return;
+    if (busy) { abort?.abort(); status.textContent = 'Wird abgebrochen …'; return; }
     if (tempo.busy) { ui.flash('Einen Moment – die Sounds werden noch an das Tempo angepasst.'); return; }
     busy = true;
     go.disabled = true;
@@ -53,6 +92,7 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     status.textContent = 'Song wird gerendert …';
     try {
       engine.stop();
+      if (stems.checked) { await runStems(format); return; }
       const res = await exportSong(store.project, library, {
         format,
         range: value('ex-range'),
@@ -71,10 +111,13 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
       ui.flash(`Exportiert: ${saved.filename}`);
     } catch (err) {
       if (err?.code === 'declined') status.textContent = 'Speichern abgebrochen.';
+      else if (err?.code === 'aborted') { status.textContent = 'Export abgebrochen.'; bar.hidden = true; }
       else status.textContent = err?.message || 'Export fehlgeschlagen.';
     } finally {
       busy = false;
+      abort = null;
       go.disabled = false;
+      syncMaster();
     }
   });
 

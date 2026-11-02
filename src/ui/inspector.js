@@ -13,8 +13,8 @@ import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
 import { mountMasteringControls } from './mastering.js';
-import { autoLock, lockedValue, templateControls } from './auto-lane.js';
-import { AUTO_PARAMS, isAutomated } from '../automation.js';
+import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
+import { AUTO_PARAMS, autoKeys, isAutomated, laneOf } from '../automation.js';
 import { lsKey } from '../edition.js';
 
 // Laufzeit-Stufen für − und +
@@ -242,7 +242,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (AUTO_PARAMS[key]?.fx) {
         const box = el('div', 'fx-param-box');
         box.append(row);
-        lock = autoLock({ ui, key, wrap: box, input, getTrackId: () => (trackId && trackId !== MASTER ? trackId : null) });
+        lock = autoLock({ ui, key, wrap: box, input, getTrackId: () => (trackId === MASTER ? 'master' : trackId) });
         params.append(box);
       } else params.append(row);
       ctl.set(k, { input, out, key, lock });
@@ -313,6 +313,15 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   lenIn.addEventListener('input', () => { lenOut.textContent = `${lenIn.value} Takte`; });
   lenRow.append(el('span', null, 'Länge'), lenOut, lenIn);
   const masterSub = el('p', 'insp-sub', 'Master');
+  // Verlauf der Summe: Ein-/Ausblenden über alle Clips (Ausblenden endet am letzten Clip bzw. Songende), Summen-Zeile
+  const masterAuto = el('div', 'insp-auto');
+  masterAuto.id = 'insp-master-auto';
+  const masterTpl = templateControls({ store, ui, engine, getTarget: () => 'master', names: MASTER_TEMPLATES });
+  const masterCurve = el('button', 'insp-link', 'Summen-Kurve zeigen (A)');
+  masterCurve.type = 'button';
+  masterCurve.id = 'insp-master-curve';
+  masterCurve.addEventListener('click', () => ui.autoLane?.toggle('master'));
+  masterAuto.append(el('span', 'insp-kind', 'Verlauf der Summe'), masterTpl.node, masterCurve);
   songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools, masterSub);
   // Mastering der Summe: direkt unter „Master“, vor Lautstärke und Effekten
   const mstSlot = el('div', 'insp-mst');
@@ -405,7 +414,12 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       lenOut.textContent = `${store.project.lengthBars} Takte`;
       // Master-Lautstärke und Master-Effekte unter „Master“
       const m = masterOf(store.project);
-      if (vol.row.parentElement !== songSec) songSec.append(vol.row, fxl);
+      if (vol.row.parentElement !== songSec) songSec.append(vol.row, masterAuto, fxl);
+      masterTpl.update();
+      const open = !!ui.autoLane?.isOpen('master');
+      const has = autoKeys('master').some((k) => laneOf(m, k).length);
+      masterCurve.textContent = open ? 'Summen-Kurve schließen (A)' : 'Summen-Kurve zeigen (A)';
+      masterCurve.classList.toggle('lit', has);
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
     }
@@ -427,10 +441,15 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     if (!follow && anyLocked()) follow = requestAnimationFrame(followLocked);
   }
 
-  // Gesperrte Regler (Panorama, Effekt-Werte mit Kurve) zeigen den Kurvenwert an der hörbaren Marke
-  const lockTrack = () => (trackId && trackId !== MASTER && root.dataset.mode !== 'song' ? store.track(trackId) : null);
+  // Gesperrte Regler (Panorama, Effekt-Werte mit Kurve) zeigen den Kurvenwert an der hörbaren Marke; im Song die Summe
+  const songMode = () => root.dataset.mode === 'song';
+  const lockTrack = () => (songMode() ? (trackId === MASTER ? masterOf(store.project) : null) : trackId && trackId !== MASTER ? store.track(trackId) : null);
   const fxCtl = () => EFFECTS.flatMap((e) => [...items.get(e.id).ctl].filter(([, c]) => c.lock).map(([k, c]) => [c, e.params[k]]));
-  const anyLocked = () => !!lockTrack() && !trackSec.hidden && (!panLock.btn.hidden || fxCtl().some(([c]) => !c.lock.btn.hidden));
+  const anyLocked = () => {
+    if (!lockTrack()) return false;
+    const fx = fxCtl().some(([c]) => !c.lock.btn.hidden);
+    return songMode() ? !songSec.hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx);
+  };
   function showFx(c, p) {
     const track = lockTrack();
     if (!track) return;
@@ -451,7 +470,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   function followLocked() {
     const track = lockTrack();
     if (!track || !anyLocked()) { follow = 0; return; }
-    if (panLock.update(track)) showPan(track);
+    if (!songMode() && panLock.update(track)) showPan(track);
     for (const [c, p] of fxCtl()) if (c.lock.update(track)) showFx(c, p);
     const fx = fxOf();
     for (const e of EFFECTS) {

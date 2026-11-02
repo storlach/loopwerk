@@ -1046,6 +1046,19 @@ export class Store extends Emitter {
     this.dispatch('auto-delete', () => setLane(this._autoOwner(target), key, lane));
   }
 
+  // Effekt-Pad-Aufnahme (src/fxpad-record.js): ganze Punktliste einer Geste auf einmal = ein Rückgängig-Schritt. fx: Einstellungen
+  // des Effekts, wenn er dabei eingeschaltet wird (sonst schaltet ihn wie beim ersten Punkt _autoFxOn ein)
+  recordAutoLane(target, key, points, fx = null) {
+    if (!this._autoOk(target, key) || !Array.isArray(points) || !points.length) return false;
+    const id = fxOfKey(key);
+    this.dispatch('auto-record', () => {
+      const o = this._autoOwner(target, true);
+      setLane(o, key, points);
+      if (id && fx) { o.fx = withFx(o.fx); Object.assign(o.fx[id], fx); } else this._autoFxOn(o, key);
+    });
+    return true;
+  }
+
   // Ohne key: alle Kurven des Ziels
   clearAutomation(target, key) {
     const owner = this._autoOwner(target);

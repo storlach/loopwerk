@@ -4,7 +4,8 @@
 // API (Auszug für die Oberfläche):
 //   AUTO_PARAMS[key]                     { key, label, min, max, def, owner: 'relative'|'absolute', target, track, master, format(v), rest?,
 //                                          fx?, param? } – Effekt-Kurven (target 'fx:<id>.<param>') wirken über u.auto der Einheit
-//   autoKeys(target)                     Schlüssel, die eine Spur (target = Spur-ID) bzw. 'master' kennt
+//   autoKeys(target)                     Schlüssel, die eine Spur (target = Spur-ID) bzw. 'master' kennt (Summe: Lautstärke
+//                                        und Master-Effekte, kein Panorama)
 //   laneOf(owner, key)                   Punkte [{ beat, value, curve? }] einer Spur/des Masters: sortiert, geklemmt, ein Punkt je Schlag
 //   autoRest(owner, key)                 Wert ohne Kurve: Lautstärke 1, absolute Parameter der Regler (Panorama: track.pan)
 //   autoValueAt(points, beat, def)       Wert der Kurve an einem Schlag (ohne Punkte: def)
@@ -43,12 +44,13 @@ export const AUTO_PARAMS = {
 };
 
 // Effekt-Kurven: der Wert ist der Regler selbst (absolut). Ohne Kurve gilt der Reglerwert im Projekt (fx.<id>.<param>).
+// Die Summe kennt dieselben Effekte (Master-Rack), aber kein Panorama.
 const pct = (v) => `${Math.round(v * 100)} %`;
 const fxDefault = (id, param) => EFFECTS.find((e) => e.id === id).params[param].default;
 const fxParam = (key, label, id, param, format) => {
   const def = fxDefault(id, param);
   AUTO_PARAMS[key] = {
-    key, label, min: 0, max: 1, def, owner: 'absolute', target: `fx:${id}.${param}`, track: true, master: false, fx: id, param, format,
+    key, label, min: 0, max: 1, def, owner: 'absolute', target: `fx:${id}.${param}`, track: true, master: true, fx: id, param, format,
     rest: (owner) => { const v = owner?.fx?.[id]?.[param]; return Number.isFinite(v) ? clamp(v, 0, 1) : def; },
   };
 };
@@ -196,7 +198,7 @@ export const templateRest = (owner, key) => (key === 'filter.cutoff' && !owner?.
 const clipsOf = (project, target) => (target === 'master' ? project.tracks : project.tracks.filter((t) => t.id === target)).flatMap((t) => t.clips);
 
 // Bereich einer Vorlage: Loop-Bereich, wenn aktiv; sonst ab dem ersten Clip / bis zum Ende des letzten Clips / ab dem
-// Takt der Abspielmarke, jeweils `bars` Takte lang
+// Takt der Abspielmarke, jeweils `bars` Takte lang. Summe: alle Clips; Ausblenden endet spätestens am Songende.
 export function templateRange(project, target, name, { bars, playheadBeat = 0 } = {}) {
   const tpl = AUTO_TEMPLATES[name];
   if (!tpl) return null;
@@ -207,7 +209,8 @@ export function templateRange(project, target, name, { bars, playheadBeat = 0 } 
   const song = project.lengthBars * project.beatsPerBar;
   let fromBeat;
   if (tpl.anchor === 'end') {
-    const end = clips.length ? Math.max(...clips.map((c) => c.startBeat + c.lengthBeats)) : song;
+    let end = clips.length ? Math.max(...clips.map((c) => c.startBeat + c.lengthBeats)) : song;
+    if (target === 'master') end = Math.min(end, song);
     fromBeat = Math.max(0, end - len);
     return end > fromBeat ? { fromBeat, toBeat: end } : null;
   }

@@ -17,7 +17,7 @@
 - Spec: `docs/specs/stufe-2-arranger-komfort.md`, Tests: `tests/stufe2.test.cjs`
 
 ### Offen aus Stufe 2
-- Mehrfachauswahl (mehrere Clips gemeinsam verschieben/löschen)
+- ~~Mehrfachauswahl~~ (erledigt in 2.1)
 - Clip-Lautstärke über 0 dB
 
 ## ✅ Stufe 3 – Bibliothek und Tempo (0.3)
@@ -27,9 +27,9 @@
 - Spec: `docs/specs/stufe-3-bibliothek-tempo.md`, Tests: `tests/stufe3.test.cjs`
 
 ### Offen aus Stufe 3
-- VCSL (echte Instrumente) – aus der Arbeitsumgebung nicht erreichbar
+- ~~VCSL (echte Instrumente)~~ (erledigt in 2.4)
 - Tempowechsel schneller (Worker, benutzte Sounds zuerst)
-- Tonart wählbar (Loops transponieren)
+- ~~Tonart wählbar~~ (erledigt, auch je Takt)
 
 ## ✅ Stufe 4 – Mixer und Effekte (0.4)
 - Mixer-Dock: Kanalzug je Spur plus Master mit Fader, Panorama, M/S, Pegelanzeige
@@ -38,7 +38,7 @@
 - Spec: `docs/specs/stufe-4-mixer-effekte.md`, Tests: `tests/stufe4.test.cjs`
 
 ### Offen aus Stufe 4
-- Freie Effekt-Slots, Send-Effekte, Automation
+- Freie Effekt-Slots, Send-Effekte (Automation: erledigt in 2.12)
 
 ## ✅ Stufe 5 – Eigene Sounds (0.5)
 - Import per Knopf oder Datei auf eine Spur ziehen; eigene Sounds bleiben im Browser gespeichert und werden in Projektdateien eingebettet
@@ -47,15 +47,16 @@
 - Spec: `docs/specs/stufe-5-aufnahme-editor.md`, Tests: `tests/stufe5.test.cjs`
 
 ### Offen aus Stufe 5
-- Manuelle Latenz-Korrektur, Mehrspur-Aufnahme, Aufnahme im Loop (Takes)
+- Manuelle Latenz-Korrektur bzw. Einmessen per Klick, Mehrspur-Aufnahme, Aufnahme im Loop (Takes)
 
 ## ✅ Stufe 6 – Export (0.6)
 - WAV (verlustfrei) und MP3 (192 kBit/s, LAME/lamejs) aus dem ganzen Song oder dem Loop-Bereich, mit Ausklang für Hall und Echo
 - Im Artifact als ZIP gespeichert (dort dürfen Audiodateien nur verpackt gespeichert werden)
 - Spec: `docs/specs/stufe-6-export.md`, ADR 002, Tests: `tests/stufe6.test.cjs`
+- Einzelspuren (Stems): Haken im Export-Fach → ZIP mit „01 Drums.wav“ usw. je hörbarer Spur (gemutet/leer übersprungen, Solo ignoriert), Spur mit Effekten, Fader, Panorama, Kurven, Fades; ohne Master-Kette addieren sie sich exakt zum Mix, „Mit Summe“ schickt jede durch Master und Mastering; Fortschritt je Spur, abbrechbar (`renderProject` mit `onlyTrack`, `master: false`; `tests/stems.test.cjs`)
 
 ### Offen aus Stufe 6
-- Einzelspuren (Stems) exportieren, Normalisieren beim Export
+- ~~Einzelspuren (Stems)~~ (erledigt) – Normalisieren beim Export: durch Mastering (2.10) abgedeckt; offen: Stems als 24/32-Bit-WAV (trockene Stems können ohne Master-Fader über 0 dBFS gehen)
 
 ## ✅ Stufe 7 – Instrumente (1.0)
 - Beat-Editor (Stepsequencer, 8 Instrumente, zwei Kits) und Melodie-Editor (Piano-Roll, vier Klänge)
@@ -64,7 +65,7 @@
 - Spec: `docs/specs/stufe-7-instrumente.md`, Tests: `tests/stufe7.test.cjs`
 
 ### Offen aus Stufe 7
-- Akkord-Eingabe, Echtzeit-Aufnahme von MIDI (Anschlag und Swing: erledigt)
+- ~~Akkord-Eingabe, Echtzeit-Aufnahme von MIDI~~ (Anschlag, Swing, MIDI-Anschlag, MIDI-Drums, Akkord-Eingabe, Quantisieren: erledigt, siehe „Editor: MIDI, Akkorde, Quantisieren“)
 
 ## ✅ 1.1 – Handy-Bedienung
 - Sound-Regal als Akkordeon: Kategorien auf- und zuklappen, am Handy immer nur eine offen, kein eigener Scrollbereich mehr, größere Tippziele
@@ -78,7 +79,7 @@
 - Spec: `docs/specs/mobil-ux.md`, Tests: `tests/mobil.test.cjs`
 
 ### Offen aus 1.2
-- Pinch-Zoom im Arranger, Notenlänge per Finger ziehen, Prüfung im Rahmen der Claude-App auf echten Geräten
+- ~~Pinch-Zoom im Arranger, Notenlänge per Finger ziehen~~ (erledigt: Zoomen mit zwei Fingern, Halten-und-Ziehen in der Piano-Roll) – Prüfung auf echten Geräten bleibt Martins Ohr-/Hand-Test
 
 ## ✅ 1.3 – Beat-Editor und Bildschirmtastatur
 - Beat-Editor am Handy mit Umschalter für die Takthälften (und Wischen), Tempo-Fach ohne Tastatur, Tastatur-Modus für Suche und Namen
@@ -226,13 +227,22 @@
 - Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
 - Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
 
-## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven)
+## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven, Scheibe 4: Summe, Scheibe 6: Effekt-Pad aufnehmen)
 - Lautstärke-Kurve je Spur, linear: Modell und Engine (`src/automation.js`, `tests/automation.test.cjs`), Kurven wandern mit Clips
 - Kurvenzeile unter der Spur (`src/ui/auto-lane.js`): Spur-Menü „Kurve“ oder Taste A; Maus: Klick setzt, Ziehen verschiebt (Raster, Umschalt frei), Doppelklick/Entf löscht, Fähnchen mit Wert und Position; Finger: Antippen setzt, Punkt ziehen, Halten löscht, Wischen scrollt; geschlossen als dünne Linie über den Clips
 - Vorlagen Einblenden/Ausblenden (1 · 2 · 4 · 8 Takte): Inspektor „Spur“, am Handy Spur-Menü → „Verlauf“; Tests: `tests/automation-ui.test.cjs`
 - Scheibe 2: Panorama-Kurve (absolut, ein Besitzer je AudioParam: mit Kurve lässt `syncStrip` das Panorama aus; Kurve löschen gibt den Regler mit seinem Wert zurück, auch ohne `cancelAndHoldAtTime`), Stufe (Sprung in 1/128 Schlag); Parameter-Chip als Auswahl mit Leuchtpunkt, Mittellinie, Fähnchen „L 40 %“/„Mitte“; Mini-Leiste „Linear · Stufe · Löschen“ (Klick auf gewählten Punkt, Rechtsklick, Enter; Finger: Antippen); Panorama-Regler in Mixer und Inspektor folgen der Kurve, gedimmt mit Kurven-Zeichen, Klick öffnet die Zeile; Spur-Menü „…-Kurve löschen“ für den gewählten Parameter
 - Scheibe 3: Effekt-Kurven Filter-Frequenz, Hall-, Echo- und Verzerrer-Anteil (Einheiten liefern `u.auto`, `updateFxParams` lässt automatisierte Parameter aus). Filter-Frequenz läuft immer über `detune` (40 Hz · 2^(Regler · 8,81)), Null-Test alter Projekte < −88 dB; Verzerrer-Anteil als ein gemeinsamer Parameter für trocken/nass (auch Amp). Neue Effektkette im Lauf plant die Kurven sofort nach; Effekt aus = Kurve wirkt nicht, gestrichelt. Erster Punkt und Vorlagen schalten den Effekt ein (Filter: Tiefpass). Vorlagen „Filter öffnen“ (0,25 → 1, 8 Takte) und „Filter schließen“ (Wert → 0,25) im Inspektor und im Spur-Menü; gesperrte Effekt-Regler in Inspektor und Mixer-Effektseite
-- Offen: Summe (4), Effekt-Pad als Kurve aufnehmen; Spec: `docs/specs/v2.12-automation.md`
+- Scheibe 4: Summe – `masterStrip.auto` (Lautstärke-Anteil vom Master-Fader) und Kurven für die Master-Effekte (Filter-Frequenz, Hall-, Echo-, Verzerrer-Anteil; kein Panorama), vor Mastering und Limiter: Mastering-Analyse und Export rechnen die Kurve mit. Stillstand: Summe hält 4 s (Fahnen bleiben ausgeblendet) und geht dann auf 1, Vorhören/Pads/Pattern-Vorhören heben sie sofort. Summen-Zeile unter allen Spuren (Taste A ohne Spurauswahl, „Summe“ im Kopf), Vorlagen Einblenden · Ausblenden im Inspektor „Song“ unter Master und im Handy-Fach „Song“ (zwei Tipps); gesperrte Master-Effekt-Regler (Inspektor, Mixer); `clearSong` löscht die Summen-Kurven
+- Scheibe 6: Effekt-Pad als Kurve aufnehmen – Schalter „● Kurve aufnehmen“ im Pad-Fach (Desktop und Handy). Während der Wiedergabe schreibt Filter → `filter.cutoff` (Tiefpass/Hochpass nach Seite bzw. Filter am Ziel; ausgeschalteter Filter wird offen und ohne Resonanz eingeschaltet), Echo → `echo.mix` (100 % gedrückt, ½ Schlag zurück; Notenwert/Rückkopplung beim Einschalten). Stutter, Lo-Fi, Bandstopp und Resonanz haben keine passende Kurve und wirken nur live (Einblender). Höchstens 1 Punkt je 1/16 Schlag, beim Loslassen Ramer-Douglas-Peucker (0,01), Überschreiben mit Haltepunkten davor/danach, über die Loop-Grenze weiter am Loop-Anfang. Übernahme erst beim Loslassen (kein Doppeln mit dem Pad), ein Rückgängig-Schritt, dann öffnet sich die Kurvenzeile. `src/fxpad-record.js`, `store.recordAutoLane`, Test `tests/fxpad-record.test.cjs`
+- Spec: `docs/specs/v2.12-automation.md`
+
+## ✅ Editor: MIDI, Akkorde, Quantisieren
+- MIDI-Anschlag: Velocity 1–127 wird zum Anschlag (v/127)^0,8, mindestens 0,1 – bei Live-Aufnahme, Schritt-Eingabe und Vorhören (leiser Ton ist leiser, auch Lead und Pad, live wie beim Rendern); Maus, Klaviatur und Computertastatur nutzen den Anschlag-Pinsel (auch Live und Pad-Antippen)
+- MIDI im Beat-Editor: Pads nach General-MIDI-Belegung (35/36 Kick, 37/38/40 Snare, 39 Clap, 42/44 Hi-Hat zu, 46 offen, 41/43/45 Tom tief, 47/48/50 Tom hoch, 49/51/52/55/57/59 Becken), Kanal egal, andere Noten werden ignoriert; bei Live-Aufnahme quantisiert mit Anschlag
+- Akkord-Eingabe im Melodie-Editor: Feld „Akkord“ (Aus, Dur, Moll, Tonleiter, Power, Sept; Kopfzeile, am Handy unter „Mehr“) gilt für Klick/Antippen in der Piano-Roll, Klaviatur, Computertastatur, MIDI und Live; „Tonleiter“ = leitereigener Dreiklang der Songtonart; mit Tonleiter-Sperre rasten die Töne ein; Töne außerhalb C2–C6 entfallen; ein Akkord = ein Rückgängig-Schritt, einzelne Noten bleiben einzeln editierbar (`src/scale.js`)
+- Quantisieren (Kopfzeile, am Handy unter „Mehr“): Noten (Start, Länge mindestens ein Raster) bzw. Beat-Schläge auf das Raster aus „Einrasten“, Einblender „n Noten gerückt“, ein Rückgängig-Schritt; Beat: Schläge auf ungeraden Sechzehnteln wandern zur nächsten Achtel, bei Kollision gewinnt der lautere
+- Tests: `tests/editor-midi.test.cjs` (MIDI-Attrappe über `page.addInitScript`, `openApp({ init })`)
 
 ## Korrekturen nach 2.11
 - Handy: Loop-Bereich lässt sich auf der Taktleiste ziehen (vorher hat der Browser die Geste als Scrollen abgebrochen); Taktleiste fingerhoch, Einblender beim Einschalten des Loops
