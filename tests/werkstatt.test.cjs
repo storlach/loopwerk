@@ -186,6 +186,73 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     await page.click('#wgroove');
     check('Groove stoppt per Knopf', await page.evaluate(() => !window.werkstatt.groove.playing && document.querySelector('#wgroove').getAttribute('aria-pressed') === 'false'));
 
+    // ---------- Festhalten (Resampling) und Schleifen ----------
+    await page.click('#wgroove');
+    await page.waitForTimeout(300);
+    await page.click('#wfreeze');
+    await page.waitForFunction(() => window.werkstatt.pads[8], null, { timeout: 5000 });
+    const fz = await page.evaluate(() => {
+      const b = window.werkstatt.padBuffer(8);
+      let peak = 0;
+      for (let c = 0; c < b.numberOfChannels; c++) for (const v of b.getChannelData(c)) peak = Math.max(peak, Math.abs(v));
+      return { pad: window.werkstatt.pads[8], peak, sr: b.sampleRate };
+    });
+    const barFrames = Math.round((60 / 90) * 4 * fz.sr);
+    check('Festhalten: Groove wird neue Schleife auf dem nächsten freien Pad (1 Takt, samplegenau)', fz.pad?.cls === 'loop' && fz.pad.bars === 1 && Math.abs(fz.pad.length - barFrames) <= 1, `${fz.pad?.name}, ${fz.pad?.length} / ${barFrames} Frames`);
+    check('Festhalten: hörbar und ohne Übersteuern', fz.peak > 0.1 && fz.peak <= 0.8901, fz.peak.toFixed(3));
+    // Am nächsten Taktanfang ersetzt die Schleife, was lief (Original-Pads bleiben)
+    await page.waitForFunction(() => window.werkstatt.live.includes(8), null, { timeout: 4000 });
+    const swap = await page.evaluate(() => ({ drums: window.werkstatt.groove.drums, playing: window.werkstatt.groove.playing, btn: document.getElementById('wgroove').getAttribute('aria-pressed'), live: document.querySelector('.wpad[data-pad="8"]').classList.contains('live'), kit: window.werkstatt.pads.slice(0, 8).every(Boolean) }));
+    check('Festhalten: am nächsten Takt läuft die Schleife statt des Grooves, Kit bleibt', swap.playing && !swap.drums && swap.btn === 'false' && swap.live && swap.kit);
+    // Ebene drauf: Groove wieder an, zusammen festhalten
+    await page.click('#wagain');
+    await page.waitForTimeout(200);
+    await page.click('#wfreeze');
+    await page.waitForFunction(() => window.werkstatt.pads[9], null, { timeout: 5000 });
+    check('Festhalten mit Schleife + Groove → „Schleife 2“', await page.evaluate(() => window.werkstatt.pads[9].name === 'Schleife 2' && window.werkstatt.pads[9].cls === 'loop'));
+    await page.waitForFunction(() => window.werkstatt.live.includes(9) && !window.werkstatt.live.includes(8), null, { timeout: 4000 });
+    await page.tap('.wpad[data-pad="9"]');
+    check('Schleife antippen stoppt sie, ohne anderes läuft nichts mehr', await page.evaluate(() => !window.werkstatt.live.length && !window.werkstatt.groove.playing));
+    await page.tap('.wpad[data-pad="8"]');
+    check('Schleife antippen startet sie im Takt (ohne Schlagzeug)', await page.evaluate(() => window.werkstatt.live.includes(8) && window.werkstatt.groove.playing && !window.werkstatt.groove.drums));
+    await page.tap('.wpad[data-pad="8"]');
+
+    // ---------- Tastenleiste: jeder Klang wird Instrument ----------
+    await page.evaluate(async () => {
+      const sr = 48000;
+      const n = sr * 0.6;
+      const d = new Float32Array(sr);
+      const f = 440 * 2 ** (0.3 / 12); // 30 Cent zu hoch gesungen
+      for (let i = 0; i < n; i++) d[sr * 0.2 + i] = 0.5 * Math.sin(2 * Math.PI * f * i / sr) * Math.min(1, i / 240, (n - i) / 2400);
+      await window.werkstatt.ingestPad(10, [d], sr);
+    });
+    const ton = await page.evaluate(() => window.werkstatt.pads[10]);
+    check('Tonaler Klang: Grundton A4 erkannt, Feinstimmung auf den Halbton (−0,3)', ton.cls === 'ton' && ton.root === 69 && Math.abs(ton.tune + 0.3) < 0.03, `${ton.name}, Stimmung ${ton.tune?.toFixed(3)}`);
+    await page.tap('#wkeys-btn');
+    const keysUi = await page.evaluate(() => ({ shown: !document.getElementById('wkeys').hidden, name: document.getElementById('wkeys-name').textContent, keys: document.querySelectorAll('.wkey').length, sel: document.querySelector('.wpad[data-pad="10"]').classList.contains('sel'), scroll: document.documentElement.scrollWidth - innerWidth }));
+    check('Tasten: Leiste mit 8 Tönen spielt das zuletzt gespielte Pad', keysUi.shown && keysUi.name === ton.name && keysUi.keys === 8 && keysUi.sel, keysUi.name);
+    check('Tasten: Handy ohne seitliches Scrollen', keysUi.scroll <= 0);
+    await page.tap('.wkey[data-midi="64"]');
+    const e4 = await page.evaluate(async () => {
+      const v = await window.werkstatt.playKey(64);
+      const rate = v.src.playbackRate.value;
+      const buf = window.werkstatt.padBuffer(10);
+      const off = new OfflineAudioContext(1, Math.ceil(buf.length / rate), buf.sampleRate);
+      const s = off.createBufferSource();
+      s.buffer = buf;
+      s.playbackRate.value = rate;
+      s.connect(off.destination);
+      s.start();
+      const r = await off.startRendering();
+      const { detectPitch } = await import('./src/dsp/pitch.js');
+      const { f0, conf } = detectPitch(r.getChannelData(0), r.sampleRate);
+      const voiced = [...f0].filter((_, i) => conf[i] > 0.85).sort((a, b) => a - b);
+      return voiced[voiced.length >> 1];
+    });
+    check('Tasten: Taste E4 klingt E4 (329,6 Hz ± 1 %), obwohl zu hoch gesungen', Math.abs(e4 / 329.63 - 1) < 0.01, `${e4?.toFixed(1)} Hz`);
+    if (SHOTS) await page.screenshot({ path: path.join(DIR, 'werkstatt-tasten-handy.png') });
+    await page.tap('#wkeys-btn');
+
     // ---------- Pad-Wand: leeres Pad antippen nimmt auf (Fake-Mikrofon) ----------
     await page.tap('.wpad[data-pad="12"]');
     await page.waitForFunction(() => document.querySelector('.wpad[data-pad="12"]').classList.contains('rec'), null, { timeout: 5000 });
@@ -218,9 +285,12 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     await page.tap('#warm-clear');
     await page.tap('.wpad[data-pad="0"]');
     check('„Leeren“ + Pad → Pad leer, Schalter wieder aus', await page.evaluate(() => !window.werkstatt.pads[0] && document.getElementById('warm-clear').getAttribute('aria-pressed') === 'false'));
+    const freeBefore = await page.evaluate(() => window.werkstatt.pads.filter((p) => !p).length);
     await page.tap('#wsynth');
     const synth = await page.evaluate(() => window.werkstatt.pads.map((p) => p?.kind || null));
-    check('Synth-Kit füllt die freien Pads mit erzeugten Klängen', synth.filter((k) => k === 'synth').length === 8 && synth.every(Boolean), synth.join(','));
+    check('Synth-Kit füllt die freien Pads mit erzeugten Klängen', synth.filter((k) => k === 'synth').length === freeBefore && synth.every(Boolean), synth.join(','));
+    await page.waitForTimeout(300);
+    check('Synth-Pads sind vorgerechnet (spielbar auf Tasten und beim Festhalten)', await page.evaluate(() => window.werkstatt.pads.filter((p) => p.kind === 'synth').every((p) => p.length > 0)));
     await page.tap('.wpad[data-pad="0"]');
     check('Synth-Pad spielt ohne Fehler', A.errors.length === 0, A.errors.join(' | '));
     if (SHOTS) await page.screenshot({ path: path.join(DIR, 'werkstatt-voll-handy.png') });
@@ -255,6 +325,13 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     }));
     check('Desktop: Taste 1 spielt Pad 1, Tastenbeschriftung sichtbar', desk.hit && desk.key !== 'none');
     check('Desktop: Spalte bleibt schmal (≤ 560 px)', desk.w <= 560, `${desk.w}px`);
+    const lay = await D.page.evaluate(() => {
+      const h = document.getElementById('whint').getBoundingClientRect();
+      const p = document.querySelector('.wpad').getBoundingClientRect();
+      const bar = document.querySelector('.wbar').getBoundingClientRect();
+      return { hintBottom: h.bottom, padTop: p.top, barBottom: bar.bottom, vh: innerHeight };
+    });
+    check('Desktop: Einblender verdeckt keine Pads, alles ohne Scrollen im Bild', lay.hintBottom <= lay.padTop && lay.barBottom <= lay.vh, JSON.stringify(lay));
     if (SHOTS) await D.page.screenshot({ path: path.join(DIR, 'werkstatt-desktop.png') });
     check('Desktop: keine Konsolenfehler', D.errors.length === 0, D.errors.join(' | '));
     await D.context.close();

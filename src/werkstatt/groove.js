@@ -1,7 +1,8 @@
 // Groove aus den eigenen Pads: Rollen (Kick/Snare/Hi-Hat/Extra) aus den Klassen wählen und ein Taktmuster
 // in einer Schleife spielen. Geplant wird über ctx.currentTime mit Vorlauf; der Intervall-Takt weckt nur.
+// stepHits/stepOffset gelten für Echtzeit und Festhalten (Offline) gleich.
 
-const STEPS = 16;
+export const STEPS = 16;
 const LOOKAHEAD = 0.15;
 const TICK_MS = 25;
 
@@ -15,7 +16,8 @@ export const GROOVES = [
 
 const ROLE_CLS = { kick: ['tief'], snare: ['mittel', 'lang'], hat: ['hell'] };
 
-// pads: [{ index, cls, centroid }] (nur gefüllte). rng: () => 0…1. Rückgabe { kick, snare, hat, extra } als Pad-Indizes.
+// pads: [{ index, cls, centroid }] (nur gefüllte, ohne Schleifen). rng: () => 0…1.
+// Rückgabe { kick, snare, hat, extra } als Pad-Indizes oder null.
 export function chooseRoles(pads, rng = Math.random) {
   if (!pads.length) return null;
   const pick = (list) => list[Math.floor(rng() * list.length)];
@@ -36,12 +38,28 @@ export function chooseRoles(pads, rng = Math.random) {
   return { kick, snare, hat, extra };
 }
 
+// Schläge eines Schritts: [{ pad, vel }]
+export function stepHits(pattern, roles, s) {
+  const out = [];
+  if (!roles) return out;
+  for (const role of ['kick', 'snare', 'hat', 'extra']) {
+    const v = pattern[role][s % STEPS];
+    if (v && roles[role] != null) out.push({ pad: roles[role], vel: v });
+  }
+  return out;
+}
+
+// Swing: jede zweite 16tel nach hinten (Sekunden)
+export const stepOffset = (pattern, s, stepDur) => (s % 2 ? (pattern.swing - 0.5) * 2 * stepDur : 0);
+
 export class Groove {
-  // trigger(padIndex, when, velocity) spielt ein Pad zur Kontextzeit when
+  // trigger(padIndex, when, velocity) spielt ein Pad; onBar(when, barNo) kommt vor den Schlägen jedes Taktanfangs
   constructor(ctx, trigger) {
     this.ctx = ctx;
     this.trigger = trigger;
+    this.onBar = null;
     this.playing = false;
+    this.drums = true;
     this.bpm = 90;
     this.variant = 0;
     this.roles = null;
@@ -53,11 +71,14 @@ export class Groove {
   emit() { for (const fn of this.listeners) fn(this); }
 
   get pattern() { return GROOVES[this.variant % GROOVES.length]; }
+  get stepDur() { return 60 / this.bpm / 4; }
+  get barDur() { return this.stepDur * STEPS; }
 
   start() {
-    if (this.playing || !this.roles) return;
+    if (this.playing) return;
     this.playing = true;
     this.step = 0;
+    this.bar = 0;
     this.nextTime = this.ctx.currentTime + 0.06;
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.tick();
@@ -73,18 +94,15 @@ export class Groove {
   }
 
   tick() {
-    const spb = 60 / this.bpm;
-    const step = spb / 4;
-    const p = this.pattern;
+    const step = this.stepDur;
     const horizon = this.ctx.currentTime + LOOKAHEAD;
-    while (this.nextTime < horizon) {
+    while (this.playing && this.nextTime < horizon) {
       const s = this.step % STEPS;
-      // Swing: jede zweite 16tel nach hinten
-      const when = this.nextTime + (s % 2 ? (p.swing - 0.5) * 2 * step : 0);
-      for (const role of ['kick', 'snare', 'hat', 'extra']) {
-        const v = p[role][s];
-        const pad = this.roles[role];
-        if (v && pad != null) this.trigger(pad, when, v);
+      if (s === 0) this.onBar?.(this.nextTime, this.bar++);
+      if (this.drums) {
+        const p = this.pattern;
+        const when = this.nextTime + stepOffset(p, s, step);
+        for (const h of stepHits(p, this.roles, s)) this.trigger(h.pad, when, h.vel);
       }
       this.nextTime += step;
       this.step++;
