@@ -11,6 +11,15 @@ function start(port = 0) {
   const server = http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (p === '/') p = '/index.html';
+    if (p === '/werkstatt') { res.writeHead(301, { location: '/werkstatt/' }); res.end(); return; }
+    if (p.startsWith('/werkstatt/')) {
+      const name = p.slice('/werkstatt/'.length) || 'index.html';
+      const file = require('../tools/werkstatt-page.cjs').werkstattFiles(SKELETON_HEAD)[name];
+      if (!file) { res.writeHead(404); res.end('not found'); return; }
+      res.writeHead(200, { 'content-type': file[1] });
+      res.end(file[0]);
+      return;
+    }
     const file = path.join(ROOT, p);
     if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); res.end('not found'); return; }
     let body = fs.readFileSync(file);

@@ -245,6 +245,13 @@
 - Swing (Aus, Leicht, Mittel, Triole, Stark) und Anschlag (Laut, Mittel, Leise) im Beat- und Melodie-Editor: Swing verschiebt Offbeat-Sechzehntel beim Rendern; Anschlag ist ein Pinsel – neue Schritte/Noten bekommen ihn, Antippen mit anderem Anschlag ändert, mit gleichem löscht; leise Schritte leuchten schwächer (`tests/swing-vel.test.cjs`)
 - Robustheit eigener Sounds: beim Start nur Name und Länge (aus dem WAV-Kopf), dekodiert wird beim ersten Gebrauch; Clips mit vom Browser gelöschtem Sound bleiben als „Sound fehlt“ erhalten (Hinweis, Projektdatei holt den Klang zurück); dauerhafter Speicher wird beim ersten eigenen Sound erbeten; eigene Sounds im Projekt werden direkt nach dem Start bereitgestellt (`tests/robust.test.cjs`)
 
+## 🧪 Krachwerk – Ableger „Selbermachen“ (Prototyp, Branch `werkstatt`, noch nicht auf `main`)
+- Edition `make` im selben Repo unter `/werkstatt/` (Spec `docs/specs/ableger-selbermachen.md`): nur Selbstgemachtes, Synth-Kits als Klangerzeuger, eigener Speicher
+- Pad-Wand mit Aufnahme und Auto-Säubern, „Klatsch dein Kit“ mit sofortigem Groove, Festhalten (Resampling) mit Schleifen im Takt, Tastenleiste in der Song-Tonart, Tempo und Tonart, „roh → geformt“
+- Als App: Manifest, Service Worker (offline), dauerhafter Speicher, eigenes Icon (`assets/icons/krachwerk.svg`, PNG über `tools/krachwerk-icons.cjs`)
+- Mitnehmen: Loopwerk-Projektdatei (Schleifen als Clips, alle Pads unter „Eigene“) oder Schleife als WAV; am Handy über das Teilen-Menü
+- Test: `tests/werkstatt.test.cjs`
+
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
 
