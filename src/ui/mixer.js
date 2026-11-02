@@ -32,6 +32,8 @@ export function mountMixer({ root, store, engine, ui }) {
   const fxOf = (id) => (id === MASTER ? withFx(masterOf(store.project).fx) : withFx(store.track(id)?.fx));
   const setFx = (id, fxId, patch, key) => (id === MASTER ? store.setMasterFx(fxId, patch, key) : store.setTrackFx(id, fxId, patch, key));
   const nameOf = (id) => (id === MASTER ? 'Master' : store.track(id)?.name ?? '');
+  // Besitzer der Kurven eines Kanals (Master: Summen-Kurven, Ziel 'master')
+  const ownerOf = (id) => (id === MASTER ? masterOf(store.project) : store.track(id));
 
   function makeStrip(id) {
     const strip = el('div', `strip${id === MASTER ? ' strip-master' : ''}`);
@@ -175,7 +177,7 @@ export function mountMixer({ root, store, engine, ui }) {
       c.card.classList.toggle('off', !fx[e.id].on);
       for (const [k, p] of Object.entries(e.params)) {
         const ctl = c.params.get(k);
-        if (ctl.lock && ctl.lock.update(selected === MASTER ? null : store.track(selected))) { showFx(ctl, p); continue; }
+        if (ctl.lock && ctl.lock.update(ownerOf(selected))) { showFx(ctl, p); continue; }
         if (document.activeElement !== ctl.input) ctl.input.value = String(fx[e.id][k]);
         if (ctl.out) ctl.out.textContent = formatParam(p, fx[e.id][k]);
       }
@@ -225,13 +227,14 @@ export function mountMixer({ root, store, engine, ui }) {
         input.id = `fx-${e.id}-${k}`;
         row.append(lab, input);
         if (out) row.append(out);
-        // Effekt-Wert mit Kurve: gedimmt, folgt der Kurve; Antippen öffnet die Kurvenzeile (der Mixer macht Platz)
+        // Effekt-Wert mit Kurve: gedimmt, folgt der Kurve; Antippen öffnet die Kurvenzeile (der Mixer macht Platz).
+        // Master: Summen-Kurve
         const key = `${e.id}.${k}`;
         let lock = null;
-        if (AUTO_PARAMS[key]?.fx && id !== MASTER) {
+        if (AUTO_PARAMS[key]?.fx) {
           const box = el('div', 'fx-param-box');
           box.append(row);
-          lock = autoLock({ ui, key, wrap: box, input, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } });
+          lock = autoLock({ ui, key, wrap: box, input, getTrackId: () => (id === MASTER ? 'master' : id), onOpen: () => { if (narrow.matches) ui.setDock(null); } });
           card.append(box);
         } else card.append(row);
         params.set(k, { input, out, key, lock });
@@ -244,7 +247,7 @@ export function mountMixer({ root, store, engine, ui }) {
 
   // Gesperrter Effekt-Regler: Wert der Kurve an der Marke
   function showFx(ctl, p) {
-    const t = store.track(detailFor);
+    const t = ownerOf(detailFor);
     if (!t) return;
     const v = Math.round(lockedValue(t, ctl.key, engine) / p.step) * p.step;
     if (Math.abs(Number(ctl.input.value) - v) > 1e-9) ctl.input.value = String(v);
@@ -276,7 +279,7 @@ export function mountMixer({ root, store, engine, ui }) {
         g.fillRect(0, top, w, h - top);
         if (s.locked) { const t = store.track(id); if (t) showPan(s, t); }
       }
-      if (detailFor && detailFor !== MASTER) {
+      if (detailFor) {
         for (const e of EFFECTS) {
           for (const [k, ctl] of detailControls.get(e.id)?.params ?? []) if (ctl.lock && !ctl.lock.btn.hidden) showFx(ctl, e.params[k]);
         }
