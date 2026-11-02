@@ -12,6 +12,8 @@ import { GUITAR_CATALOG } from './catalog-guitar.js';
 import { timeStretch } from './dsp/stretch.js';
 import { keyChangesOf, keySpans, keyDelta, harmonySpans, tapeRate } from './model.js';
 import { DEGREE_IDS, REST } from './harmony.js';
+import { normalizeRecipe, recipeKey, soundFields, materialOf, suggestMaterial, RECIPE } from './recipe.js';
+import { cookRecipe, peakOfChannels } from './dsp/recipe.js';
 
 export const CATEGORIES = [
   { id: 'drums', label: 'Drums' },
@@ -1510,18 +1512,30 @@ export class Library extends Emitter {
     this.pending = new Map(); // id → laufendes Laden auf Abruf
     this.keyedVariants = new Map(); // „id~delta“ → Fassung in einer anderen Tonart (Tonartwechsel ab einem Takt)
     this.variantRev = 0;
+    this._recipesJson = null; // zuletzt übernommene project.recipes (applyRecipes)
+    this._recipeRun = Promise.resolve();
+    this.materialColors = false; // Krachwerk: colorCat aus dem Material (Kiste und Song gleich gefärbt)
+  }
+
+  // Klang, aus dem die Fassungen entstehen: gebackenes Rezept, sonst das Original
+  source(id) {
+    const s = typeof id === 'string' ? this.samples.get(id) : id;
+    return s ? s.cooked ?? s.orig ?? null : null;
   }
 
   // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
   // Gilt nur, solange der Grund-Sound unverändert ist (gleiche rev, z. B. nach Tempowechsel neu).
-  stretched(id, factor) {
-    return this._stretchedOf(this.samples.get(id), factor);
+  // stale: solange die neue Fassung rechnet, gilt die vom vorigen Stand, wenn sie gleich lang ist (z. B. Filter ziehen)
+  stretched(id, factor, opts) {
+    return this._stretchedOf(this.samples.get(id), factor, opts);
   }
 
-  _stretchedOf(base, factor) {
+  _stretchedOf(base, factor, { stale = false } = {}) {
     if (!base || !factor || factor === 1) return base;
     const v = this.variants.get(`${base.id}@${factor}`);
-    return v && v.baseRev === base.rev ? v : null;
+    if (!v) return null;
+    if (v.baseRev === base.rev) return v;
+    return stale && base.buffer && v.baseFrames === base.buffer.length && Math.abs(v.lengthBeats - base.lengthBeats * factor) < 1e-9 ? v : null;
   }
 
   ensureStretched(id, factor) {
@@ -1630,20 +1644,24 @@ export class Library extends Emitter {
     const rerender = this._renderAt(base);
     const bpm = this.bpm;
     const job = this._queueStretch(key, async () => {
+      // Stand des Grund-Sounds zu Beginn: ändert er sich während der Rechnung, gilt die Fassung als veraltet
+      const baseRev = base.rev;
+      const baseBuf = base.buffer;
+      const baseBeats = base.lengthBeats;
       let buffer;
       if (rerender) {
         // Erzeugte Loops und Patterns: im passenden Tempo neu rendern – verlustfrei wie beim Tempowechsel (ADR 001)
         buffer = (await rerender(bpm / factor)).buffer;
       } else {
         const { runJob } = await import('./dsp/run.js');
-        const chs = Array.from({ length: base.buffer.numberOfChannels }, (_, c) => base.buffer.getChannelData(c));
-        const out = await runJob('stretch', { chs, sampleRate: base.buffer.sampleRate, ratio: factor, loop: base.kind === 'loop' });
-        buffer = new AudioBuffer({ numberOfChannels: out.length, length: out[0].length, sampleRate: base.buffer.sampleRate });
+        const chs = Array.from({ length: baseBuf.numberOfChannels }, (_, c) => baseBuf.getChannelData(c));
+        const out = await runJob('stretch', { chs, sampleRate: baseBuf.sampleRate, ratio: factor, loop: base.kind === 'loop' });
+        buffer = new AudioBuffer({ numberOfChannels: out.length, length: out[0].length, sampleRate: baseBuf.sampleRate });
         out.forEach((d, c) => buffer.copyToChannel(d, c));
       }
-      const lengthBeats = base.lengthBeats * factor;
+      const lengthBeats = baseBeats * factor;
       const v = {
-        id: key, baseId: id, factor, baseRev: base.rev, rev: ++this.variantRev,
+        id: key, baseId: id, factor, baseRev, baseFrames: baseBuf.length, rev: ++this.variantRev,
         name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
         buffer, lengthBeats, peaks: computePeaks(buffer, lengthBeats),
       };
@@ -1735,6 +1753,7 @@ export class Library extends Emitter {
 
   // Sound mit Original-Puffer aufnehmen; Länge in Schlägen ergibt sich aus dem aktuellen Tempo.
   async add(sample) {
+    this._recipesJson = null;
     this.samples.set(sample.id, sample);
     await this._prepare(sample, this.bpm);
     this.emit();
@@ -1744,6 +1763,7 @@ export class Library extends Emitter {
   // Sound auf Abruf: steht sofort mit Name und Länge im Regal, der Klang wird erst beim ersten Gebrauch
   // geladen (Katalog-Datei) bzw. erzeugt (synthetischer Loop) – so bleibt der Start schnell, egal wie groß die Bibliothek ist
   stub(sample, load = null) {
+    this._recipesJson = null;
     sample.lazy = true;
     sample._load = load;
     sample.lengthBeats ??= sample.beats ?? 4;
@@ -1758,6 +1778,7 @@ export class Library extends Emitter {
       this.pending.set(id, (async () => {
         try {
           if (s._load) await s._load(s);
+          await this._bakeLoop(s); // Rezept vor der ersten Fassung backen
           await this._prepare(s, this.bpm);
           // Tempo oder Tonart haben sich währenddessen geändert: gleich passend nachziehen
           if (this.prepared.get(id) !== this._tag(s, this.bpm)) await this._prepare(s, this.bpm);
@@ -1780,7 +1801,10 @@ export class Library extends Emitter {
   }
 
   // Tonale synthetische Loops hängen auch von der Tonart ab
-  _tag(s, bpm) { return s.def && s.key ? `${bpm}|${this.semis}` : bpm; }
+  _tag(s, bpm) {
+    const t = s.def && s.key ? `${bpm}|${this.semis}` : bpm;
+    return s.recipeKey ? `${t}|${s.recipeKey}` : t;
+  }
 
   async _prepare(s, bpm) {
     const tag = this._tag(s, bpm);
@@ -1788,8 +1812,8 @@ export class Library extends Emitter {
     let r;
     if (s.def) r = await renderLoop(s.def, bpm, this.semis);
     else if (s.make) r = await s.make(bpm);
-    else if (s.kind === 'loop' && s.orig) r = { buffer: stretchLoop(s.orig, s.beats, bpm), lengthBeats: s.beats };
-    else if (s.orig) r = padOneShot(s.orig, bpm);
+    else if (s.kind === 'loop' && s.orig) r = { buffer: stretchLoop(this.source(s), s.beats, bpm), lengthBeats: s.beats };
+    else if (s.orig) r = padOneShot(this.source(s), bpm);
     else return; // fester Puffer ohne Original (z. B. Testsignal)
     s.buffer = r.buffer;
     s.lengthBeats = r.lengthBeats;
@@ -1821,7 +1845,7 @@ export class Library extends Emitter {
       if (!s.orig) continue;
       const beats = map[id] ?? null;
       s.tempoBase ??= { kind: s.kind, beats: s.beats, bpm: s.bpm };
-      const want = beats == null ? s.tempoBase : { kind: 'loop', beats, bpm: Math.round((beats * 60 / s.orig.duration) * 100) / 100 };
+      const want = beats == null ? s.tempoBase : { kind: 'loop', beats, bpm: Math.round((beats * 60 / this.source(s).duration) * 100) / 100 };
       if (s.kind === want.kind && s.beats === want.beats) { if (beats == null) delete s.tempoBase; continue; }
       Object.assign(s, want);
       if (beats == null) delete s.tempoBase;
@@ -1831,6 +1855,143 @@ export class Library extends Emitter {
     }
     if (changed) this.emit();
     return changed;
+  }
+
+  // ---------- Klang-Rezepte (ADR 008) ----------
+  // Rezepte des Projekts übernehmen: Varianten anlegen bzw. entfernen, geänderte Sounds neu backen und ihre Fassung
+  // neu vorbereiten (neues rev → die Engine plant live neu). Gleicher Stand → sofort fertig (wartet nur auf laufendes
+  // Backen). Rückgabe: true, wenn sich ein Klang geändert hat.
+  applyRecipes(project) {
+    const map = project?.recipes && typeof project.recipes === 'object' ? project.recipes : {};
+    const json = JSON.stringify(map);
+    if (json === this._recipesJson) return this._recipeRun.then(() => false);
+    this._recipesJson = json;
+    const run = this._applyRecipes(map);
+    this._recipeRun = run.catch(() => false);
+    return run;
+  }
+
+  // Varianten sofort eintragen (vor dem Platzhalter-Check beim Laden); gebacken wird in applyRecipes
+  syncVariants(project) {
+    const map = project?.recipes && typeof project.recipes === 'object' ? project.recipes : {};
+    let changed = false;
+    for (const [id, raw] of Object.entries(map)) {
+      const r = normalizeRecipe(raw);
+      if (!r?.parent) continue;
+      const parent = this.samples.get(r.parent);
+      if (!parent || parent.missing || parent.parentId) continue;
+      const v = this.samples.get(id);
+      if (v && !v.missing && v.parentId === parent.id) { if (r.name && v.name !== r.name) { v.name = r.name; changed = true; } continue; }
+      this._registerVariant(id, parent, r);
+      changed = true;
+    }
+    for (const s of [...this.samples.values()]) {
+      if (!s.parentId || normalizeRecipe(map[s.id])?.parent === s.parentId) continue;
+      this.samples.delete(s.id);
+      this.prepared.delete(s.id);
+      changed = true;
+    }
+    return changed;
+  }
+
+  // Variante: kein eigenes Audio, Original des Eltern-Sounds (derselbe Puffer), eigenes Rezept
+  _registerVariant(id, parent, r) {
+    const tb = parent.tempoBase ?? parent;
+    const v = {
+      id, name: r.name || `${parent.name} b`, category: 'own', origin: 'Eigene', kind: tb.kind ?? 'oneshot', beats: tb.beats ?? null, bpm: tb.bpm ?? null,
+      made: parent.made, parentId: parent.id, source: parent.source, license: parent.license ?? null, created: parent.created,
+      orig: null, duration: parent.duration ?? parent.orig?.duration, lengthBeats: parent.tempoBase ? undefined : parent.lengthBeats,
+    };
+    if (!v.beats) delete v.bpm;
+    const was = this._recipesJson;
+    this.stub(v, async (x) => {
+      const p = await this.ensure(parent.id);
+      if (!p?.orig) throw new Error('Eltern-Sound fehlt');
+      x.orig = p.orig;
+      x.duration = p.orig.duration;
+    });
+    this._recipesJson = was;
+    return v;
+  }
+
+  async _applyRecipes(map) {
+    let changed = this.syncVariants({ recipes: map });
+    const jobs = [];
+    for (const s of this.samples.values()) {
+      if (s.def || s.make || s.missing) continue;
+      const r = normalizeRecipe(map[s.id]);
+      const key = recipeKey(r);
+      // Umbenennen ohne IndexedDB (Wurzel-Sounds; Varianten heißen immer nach ihrem Rezept)
+      if (!s.parentId) {
+        if (r?.name) { s._baseName ??= s.name; if (s.name !== r.name) { s.name = r.name; changed = true; } } else if (s._baseName != null) { s.name = s._baseName; delete s._baseName; changed = true; }
+      }
+      if (this.materialColors && s.category === 'own') {
+        const cat = materialOf(r?.material ?? s.material)?.cat ?? materialOf(suggestMaterial(s)).cat;
+        if (s.colorCat !== cat) { s.colorCat = cat; changed = true; }
+      }
+      const needLoad = s.lazy && !!map[s.id];
+      if (!needLoad && key === (s.recipeKey ?? '') && (s._want?.key ?? '') === key) continue;
+      if (!needLoad && !key && !s.cooked && !s._want) continue; // nie gebacken
+      s._want = { key, r: soundFields(r) };
+      jobs.push(this._applyOne(s).catch((err) => { console.warn(`Rezept ${s.id}: ${err?.message || err}`); return false; }));
+    }
+    const done = await Promise.all(jobs);
+    return changed || done.some(Boolean);
+  }
+
+  async _applyOne(s) {
+    if (s.lazy) await this.ensure(s.id);
+    if (!s.orig) return false;
+    const changed = await this._bakeLoop(s);
+    if (this.prepared.get(s.id) !== this._tag(s, this.bpm)) { await this._prepare(s, this.bpm); return true; }
+    return changed;
+  }
+
+  // Je Sound höchstens ein Backauftrag; kommt währenddessen ein neuer Wunsch, gilt nur der jüngste
+  _bakeLoop(s) {
+    if (s._baking) return s._baking;
+    const due = () => !!s.orig && (s._want?.key ?? '') !== (s.recipeKey ?? '');
+    if (!due()) return Promise.resolve(false);
+    const run = async () => {
+      let changed = false;
+      while (due()) {
+        const want = s._want;
+        const cooked = want.key ? await this._cook(s.orig, want.r) : null;
+        if ((s._want?.key ?? '') !== want.key) continue;
+        s.cooked = cooked;
+        s.recipeKey = want.key;
+        changed = true;
+      }
+      return changed;
+    };
+    s._baking = run().finally(() => { s._baking = null; });
+    return s._baking;
+  }
+
+  // Kurze Klänge ohne Dehnen im Hauptthread, sonst im Rechen-Worker
+  async _cook(orig, r) {
+    const chs = Array.from({ length: orig.numberOfChannels }, (_, c) => orig.getChannelData(c));
+    const long = (r.stretch ?? 1) !== 1 || orig.duration * orig.numberOfChannels > 40;
+    let out;
+    if (long) {
+      const { runJob } = await import('./dsp/run.js');
+      out = await runJob('recipe', { chs, sampleRate: orig.sampleRate, recipe: r });
+    } else out = cookRecipe(chs, orig.sampleRate, r);
+    const b = new AudioBuffer({ numberOfChannels: out.length, length: Math.max(1, out[0].length), sampleRate: orig.sampleRate });
+    out.forEach((d, c) => b.copyToChannel(d, c));
+    return b;
+  }
+
+  // „Auf Spitze“: Lautstärke (dB) für −1 dBFS Spitze beim jetzigen Rezept (gain wirkt linear nach den anderen Stufen)
+  peakGainDb(id, target = -1) {
+    const s = this.samples.get(id);
+    const src = s && this.source(s);
+    if (!src) return 0;
+    const p = peakOfChannels(Array.from({ length: src.numberOfChannels }, (_, c) => src.getChannelData(c)));
+    if (!(p > 0)) return 0;
+    const g = s.cooked ? s._want?.r?.gain ?? 0 : 0;
+    const v = g + target - 20 * Math.log10(p);
+    return Math.round(Math.min(RECIPE.gain.max, Math.max(RECIPE.gain.min, v)) * 10) / 10;
   }
 
   async setTempo(bpm) {
@@ -1844,6 +2005,7 @@ export class Library extends Emitter {
   }
 
   remove(id) {
+    this._recipesJson = null;
     this.samples.delete(id);
     this.prepared.delete(id);
     this.emit();

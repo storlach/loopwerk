@@ -68,6 +68,7 @@ async function loadSaved(library, patterns) {
     const p = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!isValidProject(p)) return null;
     await patterns.sync(p);
+    library.syncVariants(p); // Varianten (Klang-Rezept) vor dem Platzhalter-Check
     // Fehlt ein Sound (z. B. vom Browser gelöscht), bleibt der Clip als stummer Platzhalter „Sound fehlt“ –
     // sonst wäre das Arrangement beim nächsten Speichern für immer weg. Eine Projektdatei bringt den Klang zurück.
     for (const t of p.tracks) for (const c of t.clips) if (!library.get(c.sampleId)) missingSound(library, c);
@@ -270,11 +271,21 @@ function mountTempo({ store, engine, library, ui, arranger }) {
   return { apply, get busy() { return !!running; } };
 }
 
-// Tempo einzelner Sounds (Inspektor): Aufnahme neu einpassen, Wiedergabe an derselben Stelle fortsetzen
-function mountSampleTempo({ store, engine, library, ui, arranger }) {
+// Klang eines Sounds aus dem Projekt, in einer Kette: erst Klang-Rezepte (ADR 008: backen, live ohne Stopp neu einplanen),
+// dann Sound-Tempo (Aufnahme neu einpassen, Wiedergabe an derselben Stelle fortsetzen)
+function mountSoundState({ store, engine, library, ui, arranger }) {
   let last = '';
   let chain = Promise.resolve();
-  store.on(() => {
+  const run = (initial = false) => {
+    chain = chain.then(async () => {
+      if (await library.applyRecipes(store.project)) {
+        library.emit();
+        arranger.render();
+        engine.refresh();
+        ui.emit?.();
+      }
+    }).catch((err) => console.warn('Klang-Rezept:', err?.message || err));
+    if (initial === true) return; // Sound-Tempo wie bisher erst ab der ersten Änderung
     const map = store.project.sampleTempo || {};
     const key = JSON.stringify(map);
     if (key === last) return;
@@ -286,7 +297,9 @@ function mountSampleTempo({ store, engine, library, ui, arranger }) {
       if (engine.playing) { const pos = engine.heardBeat(); engine.stop(); engine.play(pos); }
       ui.emit?.();
     }).catch((err) => console.warn('Sound-Tempo:', err?.message || err));
-  });
+  };
+  store.on(() => run());
+  run(true);
 }
 
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
@@ -432,6 +445,7 @@ async function boot() {
   const store = new Store((await loadSaved(library, patterns)) ?? startProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
     sampleName: (id) => library.get(id)?.name,
+    soundDuration: (id) => library.get(id)?.orig?.duration ?? library.get(id)?.duration ?? null,
   });
   const engine = new Engine(store, library);
   const ui = createUi();
@@ -518,7 +532,7 @@ async function boot() {
   doubleTapRanges();
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
-  mountSampleTempo({ store, engine, library, ui, arranger });
+  mountSoundState({ store, engine, library, ui, arranger });
   const mastering = mountMasteringAnalysis({ store, engine, library });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering });
   const fxpad = mountFxPad({ root: document.getElementById('fxpad'), store, engine, ui });

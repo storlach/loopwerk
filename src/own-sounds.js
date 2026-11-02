@@ -170,9 +170,12 @@ export class OwnSounds {
     if (this.available) { try { await this.tx('readwrite', (s) => s.delete(id)); } catch { /* egal */ } }
   }
 
-  // Für die Projektdatei: alle im Projekt benutzten eigenen Sounds als Base64-WAV
+  // Für die Projektdatei: alle im Projekt benutzten eigenen Sounds als Base64-WAV, dazu die Eltern-Sounds benutzter
+  // Varianten (Klang-Rezept, ADR 008) – die haben kein eigenes Audio
   async embed(project) {
-    const used = new Set(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)).filter(isOwnId));
+    const ids = project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId));
+    const parents = ids.map((id) => project.recipes?.[id]?.parent).filter(Boolean);
+    const used = new Set([...ids, ...parents].filter(isOwnId));
     const out = [];
     for (const id of used) {
       const s = await this.library.ensure(id).catch(() => null);
@@ -180,7 +183,7 @@ export class OwnSounds {
       const wav = new Uint8Array(await encodeWav(s.orig).arrayBuffer());
       let bin = '';
       for (let i = 0; i < wav.length; i += 0x8000) bin += String.fromCharCode.apply(null, wav.subarray(i, i + 0x8000));
-      const e = { id, name: s.name, kind: s.kind, beats: s.beats, source: s.source, wav: btoa(bin) };
+      const e = { id, name: s._baseName ?? s.name, kind: s.kind, beats: s.beats, source: s.source, wav: btoa(bin) };
       if (s.made?.cls != null) e.cls = s.made.cls;
       if (s.made?.tags?.length) e.tags = s.made.tags;
       if (s.made?.from) e.from = s.made.from;

@@ -4,6 +4,7 @@ import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
 import { timeStretch } from './stretch.js';
 import { searchMaster } from './master-search.js';
+import { cookRecipe } from './recipe.js';
 
 let worker = null;
 let nextId = 1;
@@ -39,6 +40,7 @@ const LOCAL = {
   pitch: ({ chs, sampleRate }) => detectPitch(toMono(chs), sampleRate),
   stretch: ({ chs, sampleRate, ratio, loop }) => timeStretch(chs, ratio, sampleRate, Math.round(chs[0].length * ratio), { loop }),
   master: ({ chs, sampleRate, style, target }) => searchMaster(chs, sampleRate, style, target),
+  recipe: ({ chs, sampleRate, recipe }) => cookRecipe(chs, sampleRate, recipe),
 };
 
 export function runJob(job, args, { onProgress } = {}) {
