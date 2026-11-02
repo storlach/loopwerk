@@ -26,6 +26,7 @@ button { font: inherit; color: inherit; }
 .wmic { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; color: var(--ink); min-height: 44px; padding: 0 4px; border: 0; background: transparent; cursor: pointer; }
 .wmic::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: var(--glow-ink); }
 .wmic[hidden] { display: none; }
+.winstall { min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); font: 600 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); cursor: pointer; }
 .wbpm { color: var(--muted); font-size: 18px; color: var(--display-ink); letter-spacing: 0; }
 .wbpm small { font-size: 9px; color: var(--lcd-label); margin-left: 4px; letter-spacing: 0.1em; }
 

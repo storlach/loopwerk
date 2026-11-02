@@ -335,6 +335,73 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     if (SHOTS) await D.page.screenshot({ path: path.join(DIR, 'werkstatt-desktop.png') });
     check('Desktop: keine Konsolenfehler', D.errors.length === 0, D.errors.join(' | '));
     await D.context.close();
+
+    // ---------- Als App: Manifest, Offline-Start, dauerhafter Speicher, Home-Bildschirm-Tipp ----------
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const P = await browser.newContext(PHONE);
+    await P.addInitScript(() => {
+      window.__persist = 0;
+      if (navigator.storage) navigator.storage.persist = async () => { window.__persist++; return true; };
+    });
+    const pg = await P.newPage();
+    const pErrors = [];
+    pg.on('pageerror', (e) => pErrors.push(e.message));
+    await pg.goto(`${base}/werkstatt/`);
+    await pg.waitForFunction(() => window.werkstatt?.ready);
+    const man = await pg.evaluate(async () => {
+      const link = document.querySelector('head link[rel="manifest"]');
+      const res = await fetch(link.href);
+      const m = await res.json();
+      const icons = await Promise.all(m.icons.map(async (i) => (await fetch(new URL(i.src, link.href))).status));
+      return { href: link.href, type: res.headers.get('content-type'), m, icons, start: new URL(m.start_url, link.href).pathname, scope: new URL(m.scope, link.href).pathname };
+    });
+    check('Manifest im Kopf: Krachwerk, Vollbild, Start und Bereich /werkstatt/', man.m.name === 'Krachwerk' && man.m.display === 'standalone' && man.start === '/werkstatt/' && man.scope === '/werkstatt/' && /manifest\+json/.test(man.type), `${man.start} ${man.scope}`);
+    check('Manifest: Icons erreichbar, Farbe = Token --bg', man.icons.every((x) => x === 200) && man.m.background_color === '#16171A', man.icons.join(','));
+    const reg = await pg.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    check('Service Worker aktiv, nur für /werkstatt/ (Loopwerk unberührt)', reg === `${base}/werkstatt/`, reg);
+    await pg.reload();
+    await pg.waitForFunction(() => window.werkstatt?.ready && navigator.serviceWorker.controller);
+    await pg.evaluate(async () => {
+      const sr = 48000, d = new Float32Array(sr);
+      for (let i = 0; i < 9600; i++) d[4800 + i] = 0.5 * Math.sin(2 * Math.PI * 60 * i / sr) * Math.exp(-i / 2000);
+      await window.werkstatt.ingestPad(3, [d], sr);
+    });
+    const kept = await pg.evaluate(() => ({ calls: window.__persist, persisted: window.werkstatt.app.persisted }));
+    check('Erster eigener Klang: Speicher dauerhaft angefragt (einmal)', kept.calls === 1 && kept.persisted === true, JSON.stringify(kept));
+    await P.setOffline(true);
+    await pg.reload();
+    const offline = await pg.waitForFunction(() => window.werkstatt?.ready, null, { timeout: 10000 }).then(() => true, () => false);
+    const offPad = offline && await pg.evaluate(() => window.werkstatt.pads[3]?.name);
+    check('Ohne Netz: Krachwerk startet aus dem Zwischenspeicher, Pads sind da', offline && /^Bumm/.test(offPad || ''), String(offPad));
+    await P.setOffline(false);
+    check('App-Modus: keine Programmfehler', pErrors.length === 0, pErrors.join(' | '));
+    await P.close();
+
+    // iPhone-Safari ohne Home-Bildschirm: einmal der Tipp
+    const I = await browser.newContext({ ...PHONE, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+    const ip = await I.newPage();
+    await ip.goto(`${base}/werkstatt/`);
+    await ip.waitForFunction(() => window.werkstatt?.ready);
+    const ingest = () => ip.evaluate(async () => {
+      const sr = 48000, d = new Float32Array(sr);
+      for (let i = 0; i < 4800; i++) d[4800 + i] = (Math.random() - 0.5) * Math.exp(-i / 500);
+      await window.werkstatt.ingestPad(window.werkstatt.pads.findIndex((p) => !p), [d], sr);
+    });
+    await ingest();
+    const tip = await ip.waitForFunction(() => /Home-Bildschirm/.test(document.getElementById('whint').textContent) && !document.getElementById('whint').classList.contains('off'), null, { timeout: 5000 }).then(() => true, () => false);
+    check('iPhone im Browser: Tipp „Zum Home-Bildschirm“ nach dem ersten Klang', tip);
+    await ip.reload();
+    await ip.waitForFunction(() => window.werkstatt?.ready);
+    await ingest();
+    await ip.waitForTimeout(3200);
+    check('Tipp kommt nur einmal', await ip.evaluate(() => !/Home-Bildschirm/.test(document.getElementById('whint').textContent)));
+    await I.close();
+
+    // GitHub-Pages-Build liefert dieselben Dateien unter werkstatt/
+    require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });
+    const site = path.join(__dirname, '..', '_site', 'werkstatt');
+    const built = ['index.html', 'manifest.webmanifest', 'sw.js'].every((f) => fs.existsSync(path.join(site, f)));
+    check('Pages-Build: werkstatt/index.html, manifest.webmanifest, sw.js', built && JSON.parse(fs.readFileSync(path.join(site, 'manifest.webmanifest'), 'utf8')).name === 'Krachwerk');
   } catch (err) {
     check('Ablauf ohne Ausnahme', false, err.stack || err.message);
   } finally {

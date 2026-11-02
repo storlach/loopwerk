@@ -16,6 +16,8 @@ Status: Brainstorming für Martin, keine Entscheidung, keine ADR. Arbeitstitel �
 - Synth-Kits (elektro, 909) als „◇ Synth“ auf freie Pads, einmal offline vorgerechnet (Stärke, Tasten, Festhalten wie bei Aufnahmen). Keine Anfrage unter `assets/` (außer Icons).
 - **Festhalten** (Resampling): rechnet Groove + laufende Schleifen offline mit derselben Summenkette (`makeBus`, `voice`, `stepHits`) als Schleife (1 Takt bzw. Länge der längsten Schleife, Ausklang an den Anfang gefaltet) aufs nächste freie Pad. Am nächsten passenden Taktanfang ersetzt sie, was lief; Quell-Pads bleiben. Schleifen-Pads antippen = im Takt an/aus; „▶ Groove“ schaltet nur das Schlagzeug.
 - **Tasten**: Leiste mit A-Moll (A3–A4) spielt das zuletzt gespielte Pad. Tonale Klänge: Grundton per YIN, Feinstimmung auf den nächsten Halbton (auch beim normalen Antippen); Klänge ohne Tonhöhe liegen auf A3.
+- **Als App (PWA)**: Manifest und Service Worker unter `/werkstatt/` (erzeugt von `tools/werkstatt-page.cjs`, Bereich nur `/werkstatt/`). Netz zuerst, ohne Netz aus dem Zwischenspeicher → Start auch offline. Beim ersten eigenen Klang `navigator.storage.persist()`; iPhone im Browser bekommt einmal den Tipp „Zum Home-Bildschirm“ (iOS räumt sonst Seiten-Speicher nach Tagen ohne Besuch), Android/Chrome einen Knopf „Installieren“. Icon vorerst das von Loopwerk.
+- Flutter geprüft (02.11.2026): vorerst nein – kein Web Audio, DSP und Tonkern müssten neu, zwei Codebasen (Option b). Reihenfolge: PWA → bei Bedarf Capacitor (gleicher Code) → Flutter nur mit eigenem C++-Tonkern (auch als WASM im Browser).
 - Noch nicht drin: Tonart wählbar, Arranger/Song, Weg nach Loopwerk, Lichtwolke roh → geformt, Tempo änderbar.
 
 ## Ziel aus Nutzersicht

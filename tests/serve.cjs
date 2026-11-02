@@ -12,9 +12,12 @@ function start(port = 0) {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     if (p === '/') p = '/index.html';
     if (p === '/werkstatt') { res.writeHead(301, { location: '/werkstatt/' }); res.end(); return; }
-    if (p === '/werkstatt/' || p === '/werkstatt/index.html') {
-      res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(require('../tools/werkstatt-page.cjs').werkstattPage(SKELETON_HEAD));
+    if (p.startsWith('/werkstatt/')) {
+      const name = p.slice('/werkstatt/'.length) || 'index.html';
+      const file = require('../tools/werkstatt-page.cjs').werkstattFiles(SKELETON_HEAD)[name];
+      if (!file) { res.writeHead(404); res.end('not found'); return; }
+      res.writeHead(200, { 'content-type': file[1] });
+      res.end(file[0]);
       return;
     }
     const file = path.join(ROOT, p);

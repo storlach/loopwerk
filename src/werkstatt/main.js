@@ -208,6 +208,7 @@ async function freeze() {
   const name = `Schleife ${n}`;
   const tags = [`${bars} ${bars === 1 ? 'takt' : 'takte'}`];
   const rec = await bank.put(chs, sampleRate, { name, tags, cls: 'loop', bars, centroid: 0, source: 'Festhalten' });
+  keepSafe();
   pads[free] = { kind: 'own', id: rec.id, name, tags, cls: 'loop', bars, centroid: 0, buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
   savePads();
   renderAll();
@@ -287,6 +288,7 @@ async function storeOnPad(i, chs, sampleRate, source, f = null) {
   const cls = classify(f);
   const { name, tags } = describe(f, cls, namesInUse());
   const rec = await bank.put(chs, sampleRate, { name, tags, cls, centroid: f.centroid, pitch: f.pitch, source });
+  keepSafe();
   pads[i] = { kind: 'own', id: rec.id, name, tags, cls, centroid: f.centroid, ...tuning(f.pitch), buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
   selected = i;
   renderPad(i);
@@ -463,12 +465,52 @@ function setArm(mode) {
   $('app').dataset.arm = arm || '';
 }
 
-function hint(text) {
+function hint(text, ms = 2600) {
   const h = $('whint');
   h.textContent = text;
   h.classList.remove('off');
   clearTimeout(hint.t);
-  hint.t = setTimeout(() => h.classList.add('off'), 2600);
+  hint.t = setTimeout(() => h.classList.add('off'), ms);
+}
+
+// ---------- Als App am Handy: Offline-Start, dauerhafter Speicher, Home-Bildschirm ----------
+
+const TIP_KEY = 'loopwerk.make.tips.v1';
+const app = { persisted: null, installable: false };
+let installEvt = null;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIos = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function setupApp() {
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('werkstatt/sw.js', { scope: 'werkstatt/' })
+      .catch((err) => console.warn('Offline-Start nicht verfügbar:', err?.message || err));
+  }
+  // Android/Chrome: eigener Knopf statt Browser-Leiste
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; app.installable = true; $('winstall').hidden = false; });
+  addEventListener('appinstalled', () => { installEvt = null; app.installable = false; $('winstall').hidden = true; });
+  $('winstall').addEventListener('click', async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch { /* abgebrochen */ }
+    installEvt = null;
+    $('winstall').hidden = true;
+  });
+}
+
+// Beim ersten eigenen Klang: Speicher dauerhaft anfragen; iOS räumt Seiten-Speicher sonst nach Tagen ohne Besuch,
+// Apps auf dem Home-Bildschirm nicht – daher dort einmal der Tipp.
+async function keepSafe() {
+  if (app.persisted !== null) return;
+  app.persisted = false;
+  try { app.persisted = !!(await navigator.storage?.persist?.()); } catch { /* nicht unterstützt */ }
+  let tips = {};
+  try { tips = JSON.parse(localStorage.getItem(TIP_KEY) || '{}'); } catch { /* leer */ }
+  if (!tips.home && !standalone() && isIos()) {
+    tips.home = true;
+    try { localStorage.setItem(TIP_KEY, JSON.stringify(tips)); } catch { /* egal */ }
+    setTimeout(() => hint('Tipp: Teilen → „Zum Home-Bildschirm“ – dann bleiben deine Klänge sicher', 5000), 2700);
+  }
 }
 
 async function padDown(i) {
@@ -579,6 +621,7 @@ function buildUi() {
     <header class="wtop">
       <h1 class="wmark"><span>Krach</span><b>werk</b></h1>
       <button class="wmic" id="wmic" type="button" hidden aria-label="Mikrofon schließen">Mikro offen</button>
+      <button class="winstall" id="winstall" type="button" hidden>Installieren</button>
       <span class="wbpm" aria-label="Tempo">${EDITION.bpm}<small>BPM</small></span>
     </header>
     <main class="wmain">
@@ -653,11 +696,12 @@ async function restore() {
 async function boot() {
   document.title = EDITION.title;
   buildUi();
+  setupApp();
   await restore();
   renderAll();
   if (!pads.some(Boolean)) hint('Tippe ein Pad und mach ein Geräusch');
   window.werkstatt = {
-    ready: true, edition: EDITION, bank, timing, mic,
+    ready: true, edition: EDITION, bank, timing, mic, app,
     get pads() { return pads.map((p) => p && { kind: p.kind, name: p.name, tags: p.tags, cls: p.cls, bars: p.bars, root: p.root, tune: p.tune, length: p.buffer?.length ?? 0, sampleRate: p.buffer?.sampleRate ?? 0, channels: p.buffer?.numberOfChannels ?? 0 }); },
     get groove() { return groove.g; },
     get live() { return [...live.keys()]; },
