@@ -574,6 +574,10 @@ async function boot() {
       // Alle Clips auswählen
       e.preventDefault();
       tools.selectAll();
+    } else if (!mod && !e.altKey && !e.shiftKey && key === 'a' && ui.dock !== 'pattern') {
+      // Kurve (Automation) der gewählten Spur auf- oder zuklappen
+      e.preventDefault();
+      arranger.autoLanes.toggleSelected();
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();
