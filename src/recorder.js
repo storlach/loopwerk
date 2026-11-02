@@ -3,6 +3,10 @@
 
 import { Emitter } from './util.js';
 import { channelsToBuffer } from './own-sounds.js';
+import { cleanTake, features, classify, describe, mixMono } from './dsp/clean.js';
+
+// Modus „sound“ (Krachwerk): ohne Vorzähler und ohne Song-Mitlauf; endet von selbst nach 1,2 s Stille nach dem Klang
+const SOUND_SILENCE = 1.2, SOUND_MAX = 10, SOUND_WAIT = 8;
 
 export class RecorderError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -16,15 +20,17 @@ export class Recorder extends Emitter {
     this.own = own;
     this.state = 'idle'; // idle | arming | recording | saving
     this.workletLoaded = false;
-    engine.on((what) => { if (what === 'state' && !engine.playing && this.state === 'recording') this.finish(); });
+    engine.on((what) => { if (what === 'state' && !engine.playing && this.state === 'recording' && this.mode === 'song') this.finish(); });
   }
 
   get supported() {
     return !!(navigator.mediaDevices?.getUserMedia && window.AudioWorkletNode);
   }
 
-  async start({ trackId, startBeat }) {
+  // mode: 'song' (Loopwerk: Vorzähler, Song läuft mit, Clip an der Marke) oder 'sound' (Krachwerk, s. o.)
+  async start({ trackId, startBeat, mode = 'song' }) {
     if (this.state !== 'idle') return;
+    this.mode = mode;
     if (!this.supported) throw new RecorderError('unavailable', 'Aufnahmen gehen in dieser Ansicht nicht.');
     this.state = 'arming';
     this.emit('state');
@@ -52,24 +58,41 @@ export class Recorder extends Emitter {
     this.sink = ctx.createGain();
     this.sink.gain.value = 0;
     this.source.connect(this.node).connect(this.sink).connect(ctx.destination);
+    const auto = { heard: false, loudest: 0, quiet: 0, total: 0 };
     this.node.port.onmessage = (e) => {
       if (e.data.done) { this._done?.(); return; }
       this.chunks.push(e.data);
+      if (this.mode !== 'sound' || this.state !== 'recording') return;
+      // Reaktion auf Daten (Pegel je Block), kein Timing: Stille nach dem Klang beendet die Aufnahme
+      const c = e.data;
+      let p = 0;
+      for (let i = 0; i < c.l.length; i++) { const v = Math.abs(c.l[i]); if (v > p) p = v; }
+      const dt = c.l.length / ctx.sampleRate;
+      auto.total += dt;
+      auto.loudest = Math.max(auto.loudest, p);
+      if (p > 0.03) auto.heard = true;
+      auto.quiet = auto.heard && p < Math.max(0.012, auto.loudest * 0.06) ? auto.quiet + dt : 0;
+      this.emit('level', p);
+      if ((auto.heard && auto.quiet >= SOUND_SILENCE) || auto.total >= SOUND_MAX || (!auto.heard && auto.total >= SOUND_WAIT)) this.finish();
     };
     // Latenz: Ausgabe (bis der Klick zu hören ist) plus Eingabe (bis das Mikrofon-Signal ankommt)
     const inputLatency = this.stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
     this.latency = (ctx.outputLatency || 0) + (ctx.baseLatency || 0) + inputLatency;
-    await engine.play(startBeat, { countIn: this.store.project.beatsPerBar });
-    this.songStartTime = engine.anchors[0].time;
+    if (mode === 'song') {
+      await engine.play(startBeat, { countIn: this.store.project.beatsPerBar });
+      this.songStartTime = engine.anchors[0].time;
+    }
     this.state = 'recording';
     this.emit('state');
   }
 
   stop() {
-    if (this.state === 'recording') this.engine.stop();
+    if (this.state !== 'recording') return;
+    if (this.mode === 'sound') this.finish(); else this.engine.stop();
   }
 
   async finish() {
+    if (this.state !== 'recording') return null;
     this.state = 'saving';
     this.emit('state');
     const ctx = this.engine.ctx;
@@ -86,6 +109,7 @@ export class Recorder extends Emitter {
       const r = new Float32Array(total);
       let o = 0;
       for (const c of this.chunks) { l.set(c.l, o); r.set(c.r, o); o += c.l.length; }
+      if (this.mode === 'sound') return this._finishSound([l, r], sr);
       // Ab dem Song-Start (nach dem Vorzähler) plus Latenz behalten
       const from = Math.max(0, Math.round((this.songStartTime + this.latency) * sr) - first);
       if (total - from < sr * 0.1) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
@@ -103,6 +127,23 @@ export class Recorder extends Emitter {
       this.emit('error', err);
       return null;
     }
+  }
+
+  // Krachwerk: säubern (Stille weg, Start auf dem Anschlag, Pegel), einordnen, benennen. Platzieren macht die UI.
+  async _finishSound(chs, sr) {
+    const t0 = performance.now();
+    const c = cleanTake(chs, sr, { maxSeconds: SOUND_MAX });
+    if (!c) throw new RecorderError('silent', 'Nichts gehört – nochmal?');
+    const f = features(mixMono(c.chs), sr);
+    const cls = classify(f);
+    const taken = this.own.library.list().filter((s) => s.category === 'own').map((s) => s.name);
+    const { name, tags } = describe(f, cls, taken);
+    this.cleanMs = performance.now() - t0;
+    const sample = await this.own.create({ name, buffer: channelsToBuffer(c.chs, sr), source: 'Aufnahme', cls, tags, from: 'mic' });
+    this.state = 'idle';
+    this.emit('state');
+    this.emit('recorded', { sample, clipId: null, mode: 'sound' });
+    return { sample, clipId: null };
   }
 }
 

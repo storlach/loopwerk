@@ -15,6 +15,7 @@ import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongT
 import { mountMasteringControls } from './mastering.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
 import { AUTO_PARAMS, autoKeys, isAutomated, laneOf } from '../automation.js';
+import { lsKey } from '../edition.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -40,11 +41,38 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const app = document.getElementById('app');
   root.innerHTML = '';
 
+  // Dichte „calm“ (Werkbank): Desktop rechts, ohne Auswahl eingeklappt; Handy als Schublade #werkbank
+  const calm = app.dataset.density === 'calm';
+  let pinned = false; // Song zeigen, obwohl nichts gewählt ist (Klick auf den Streifen)
+  const WIDE_KEY = lsKey('loopwerk.wbWide');
+  place(root, { calm: { narrow: document.getElementById('werkbank-body') } });
+
   // Eingeklappt (kleinere Laptops): senkrechter Knopf, klappt über den Arranger auf
-  const toggle = el('button', 'insp-toggle', 'Eigenschaften');
+  const toggle = el('button', 'insp-toggle', calm ? 'Werkbank' : 'Eigenschaften');
   toggle.type = 'button';
-  toggle.addEventListener('click', () => app.classList.toggle('insp-open'));
+  toggle.addEventListener('click', () => {
+    if (!calm) { app.classList.toggle('insp-open'); return; }
+    // Offen: schließen (Auswahl aufheben); zu: den Song zeigen
+    pinned = !app.classList.contains('insp-open');
+    if (!pinned) { ui.select(null); ui.selectTrack(null); }
+    render();
+  });
   root.append(toggle);
+  if (calm) {
+    const wide = el('button', 'insp-wide', '⤢');
+    wide.type = 'button';
+    wide.id = 'wb-wide';
+    wide.title = 'Werkbank breiter oder schmaler';
+    wide.setAttribute('aria-label', 'Werkbank breiter');
+    const setWide = (on) => { app.classList.toggle('wb-wide', on); wide.setAttribute('aria-pressed', String(on)); wide.setAttribute('aria-label', on ? 'Werkbank schmaler' : 'Werkbank breiter'); };
+    try { setWide(localStorage.getItem(WIDE_KEY) === '1'); } catch { setWide(false); }
+    wide.addEventListener('click', () => {
+      const on = !app.classList.contains('wb-wide');
+      setWide(on);
+      try { localStorage.setItem(WIDE_KEY, on ? '1' : '0'); } catch { /* egal */ }
+    });
+    root.append(wide);
+  }
 
   // ---------- Clip ----------
   const clipSec = el('section', 'insp-sec');
@@ -118,7 +146,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
   // Die Clip-Knöpfe (Bearbeiten, Teilen, Duplizieren, Löschen) ziehen vom Deck hierher
   const clipGroup = document.querySelector('.deck .group[aria-label="Clip"]');
-  for (const id of ['edit-btn', 'split-btn', 'dup-btn', 'del-btn']) place(document.getElementById(id), { wide: btns });
+  for (const id of ['edit-btn', 'split-btn', 'dup-btn', 'del-btn']) place(document.getElementById(id), { wide: btns, calm: id === 'edit-btn' ? { narrow: btns } : null });
   void clipGroup;
 
   // ---------- Spur ----------
@@ -148,6 +176,22 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   curveBtn.addEventListener('click', () => { if (trackId && trackId !== MASTER) ui.autoLane?.toggle(trackId); });
   autoBlock.append(el('span', 'insp-kind', 'Verlauf'), tpl.node, curveBtn);
   trackSec.append(trackKind, trackTitle, trackSub, vol.row, panBox, autoBlock);
+  // Stumm und Solo der Spur (in „calm“ am Handy nicht mehr im Spurkopf)
+  let msBtns = null;
+  if (calm) {
+    const ms = el('div', 'insp-ms');
+    msBtns = ['mute', 'solo'].map((k) => {
+      const b = el('button', 'key', k === 'mute' ? 'M' : 'S');
+      b.type = 'button';
+      b.id = `insp-${k}`;
+      b.title = k === 'mute' ? 'Spur stumm schalten' : 'Spur solo hören';
+      b.setAttribute('aria-label', k === 'mute' ? 'Stumm' : 'Solo');
+      b.addEventListener('click', () => { const t = store.track(trackId); if (t && trackId !== MASTER) store.setTrack(t.id, { [k]: !t[k] }); });
+      ms.append(b);
+      return [k, b];
+    });
+    trackSec.insertBefore(ms, vol.row);
+  }
 
   let trackId = null; // Spur, deren Einstellungen gerade gezeigt werden
   vol.input.addEventListener('input', () => {
@@ -259,6 +303,8 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       return row;
     }));
   }
+  const songTools = el('div', 'insp-song-tools'); // Klick (Metronom) in „calm“: layout.js bringt den Knopf hierher
+  songTools.id = 'insp-song-tools';
   const lenRow = el('label', 'insp-row');
   const lenOut = el('output');
   const lenIn = document.createElement('input');
@@ -276,7 +322,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   masterCurve.id = 'insp-master-curve';
   masterCurve.addEventListener('click', () => ui.autoLane?.toggle('master'));
   masterAuto.append(el('span', 'insp-kind', 'Verlauf der Summe'), masterTpl.node, masterCurve);
-  songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, masterSub);
+  songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools, masterSub);
   // Mastering der Summe: direkt unter „Master“, vor Lautstärke und Effekten
   const mstSlot = el('div', 'insp-mst');
   songSec.append(mstSlot);
@@ -296,6 +342,11 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     songSec.hidden = mode !== 'song';
     hintSec.hidden = mode !== 'song';
     root.dataset.mode = mode;
+    if (calm) {
+      if (mode !== 'song') pinned = false;
+      app.classList.toggle('insp-open', mode !== 'song' || pinned);
+      toggle.setAttribute('aria-expanded', String(app.classList.contains('insp-open')));
+    }
 
     if (found) {
       const { clip } = found;
@@ -323,6 +374,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const own = hasOwnTempo(s);
       stIn.hidden = !own;
       stBtns.hidden = !own;
+      stempo.hidden = calm && !(own && soundBpm(s)); // Einzelklang hat kein Sound-Tempo: Block weglassen
       const sb = own ? soundBpm(s) : null;
       const fixed = store.project.sampleTempo?.[s?.id] != null;
       stOut.textContent = !s ? '' : !own ? (s.def || s.make ? 'folgt dem Song' : '–') : sb ? `${fmtBpm(sb)} BPM · ${fmtBeats(s.beats)}` : 'Einzelklang · Tempo eingeben';
@@ -341,6 +393,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       trackSub.textContent = mode === 'clip' ? `Spur „${track.name}“ · Klang` : 'Klang';
       if (document.activeElement !== vol.input) vol.input.value = String(track.volume);
       vol.out.textContent = formatDb(track.volume);
+      for (const [k, b] of msBtns || []) b.setAttribute('aria-pressed', String(!!track[k]));
       pan.row.hidden = false;
       autoBlock.hidden = false;
       tpl.update();

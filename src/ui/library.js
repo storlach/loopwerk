@@ -2,11 +2,12 @@
 
 import { CATEGORIES, GENRES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
+import { lsKey } from '../edition.js';
 
-const FAV_KEY = 'loopwerk.favs';
-const OPEN_KEY = 'loopwerk.shelfOpen';
-const SORT_KEY = 'loopwerk.shelfSort';
-const LEN_KEY = 'loopwerk.shelfLen';
+const FAV_KEY = lsKey('loopwerk.favs');
+const OPEN_KEY = lsKey('loopwerk.shelfOpen');
+const SORT_KEY = lsKey('loopwerk.shelfSort');
+const LEN_KEY = lsKey('loopwerk.shelfLen');
 // Längen-Filter: Loops nach Takten, Einzelklänge als One-Shot
 const lenBucket = (s) => {
   if (s.kind !== 'loop') return 'shot';
@@ -16,9 +17,9 @@ const lenBucket = (s) => {
 // Auf schmalen Bildschirmen ist immer nur eine Kategorie offen (Akkordeon)
 const narrow = window.matchMedia('(max-width: 760px)');
 
-function loadOpen() {
+function loadOpen(groupBy) {
   try { const v = JSON.parse(localStorage.getItem(OPEN_KEY)); if (Array.isArray(v)) return new Set(v); } catch { /* Standard */ }
-  return new Set(['drums']);
+  return new Set(groupBy ? groupBy.map((g) => g.id) : ['drums']);
 }
 function saveOpen(open) {
   try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* Speicher nicht verfügbar */ }
@@ -46,19 +47,34 @@ const describe = (s) => {
   return parts.join(' · ');
 };
 
-export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn }) {
+// Herkunftsgruppen der Kiste (Edition mit shelfGroups): Aufnahme, Datei, Schleife, Strom (Pattern)
+const FROM = {
+  mic: (s) => s.category === 'own' && !isStrom(s) && (s.made?.from ?? 'mic') === 'mic',
+  file: (s) => s.category === 'own' && !isStrom(s) && s.made?.from === 'file',
+  loop: (s) => s.category === 'own' && !isStrom(s) && s.made?.from === 'loop',
+  pat: (s) => isStrom(s),
+};
+const isStrom = (s) => /^pat-/.test(s.id);
+// Farbe des Punkts: Ton → Stimme, sonst Dinge; Schleife und Strom haben eigene
+const originCat = (s, g) => (g.id === 'loop' || g.id === 'pat' ? g.cat : s.made?.cls === 'ton' ? 'synth' : g.cat);
+
+export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null }) {
   const search = document.getElementById('shelf-search');
   const chipsEl = document.getElementById('shelf-chips');
   const totalEl = document.getElementById('shelf-total');
   const favs = loadFavs();
-  const open = loadOpen();
+  const open = loadOpen(groupBy);
+  // Akkordeon (immer nur eine Gruppe offen) nur im großen Regal am Handy; wenige Herkunftsgruppen dürfen alle offen sein
+  const accordion = () => narrow.matches && !groupBy;
   let filter = 'all';
   const items = new Map();
 
   // Gruppen im Regal: nach Kategorie oder nach Genre (ein Sound kann in mehreren Genres stehen)
   let sort = 'cat';
   try { if (localStorage.getItem(SORT_KEY) === 'genre') sort = 'genre'; } catch { /* Standard */ }
-  const groupsFor = (mode) => (mode === 'genre'
+  const groupsFor = (mode) => (groupBy
+    ? groupBy.map((g) => ({ ...g, cls: `cat-${g.cat}`, has: FROM[g.id] ?? (() => false) }))
+    : mode === 'genre'
     ? [
       // Sounds, deren Hauptgenre das ist, stehen oben
       ...GENRES.map((g) => ({ id: 'g-' + g.id, label: g.label, cls: 'genre', has: (s) => !!s.genres?.includes(g.id), rank: (s) => (s.genres[0] === g.id ? 0 : 1) })),
@@ -87,7 +103,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       groups = groupsFor(sort);
       if (filter !== 'all' && filter !== 'fav') filter = 'all';
       // Erste Gruppe öffnen, damit gleich etwas zu sehen ist
-      if (!groups.some((g) => open.has(g.id))) { if (narrow.matches) open.clear(); open.add(groups[0].id); saveOpen(open); }
+      if (!groups.some((g) => open.has(g.id))) { if (accordion()) open.clear(); open.add(groups[0].id); saveOpen(open); }
       buildChips();
       render();
     });
@@ -148,8 +164,8 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     }
   }
 
-  function makeItem(s) {
-    const row = el('div', `loop-row cat-${s.category}`);
+  function makeItem(s, cat = s.category) {
+    const row = el('div', `loop-row cat-${cat}`);
     const item = el('button', 'loop-item');
     item.type = 'button';
     item.dataset.sampleId = s.id;
@@ -205,7 +221,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {
-      root.append(el('p', 'shelf-empty', filter === 'fav' && !q
+      root.append(el('p', 'shelf-empty', groupBy && !q && filter === 'all' ? 'Noch nichts aufgenommen' : filter === 'fav' && !q
         ? 'Noch keine Favoriten. Markiere Sounds mit dem Stern.'
         : `Keine Sounds gefunden${q ? ` für „${search.value.trim()}“` : ''}.`));
       return;
@@ -243,7 +259,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
           lastSection = section(s);
           list.append(el('div', 'shelf-sub', `${lastSection} · ${samples.filter((x) => section(x) === lastSection).length}`));
         }
-        const { row, star } = makeItem(s);
+        const { row, star } = makeItem(s, groupBy ? originCat(s, cat) : s.category);
         if (!items.has(s.id)) items.set(s.id, []);
         items.get(s.id).push(row);
         const fav = favs.has(s.id);
@@ -261,12 +277,12 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   function toggle(catId) {
     if (open.has(catId)) open.delete(catId);
     else {
-      if (narrow.matches) open.clear();
+      if (accordion()) open.clear();
       open.add(catId);
     }
     saveOpen(open);
     render();
-    if (narrow.matches && open.has(catId)) document.getElementById(`shelf-cat-${catId}`)?.scrollIntoView({ block: 'nearest' });
+    if (accordion() && open.has(catId)) document.getElementById(`shelf-cat-${catId}`)?.scrollIntoView({ block: 'nearest' });
   }
 
   function bindItem(item, sample) {
@@ -315,10 +331,10 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   engine.on(sync);
   library.on?.(render);
   narrow.addEventListener('change', () => {
-    if (narrow.matches && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); saveOpen(open); }
+    if (accordion() && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); saveOpen(open); }
     render();
   });
-  if (narrow.matches && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); }
+  if (accordion() && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); }
   render();
   // Sound sichtbar machen: Gruppe öffnen (Filter/Suche lösen, falls sie ihn verbergen), hinscrollen, kurz aufleuchten
   function reveal(sampleId) {
@@ -330,7 +346,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     if (q && !s.name.toLowerCase().includes(q)) search.value = '';
     if (filter !== 'all' && filter !== group.id && !(filter === 'fav' && favs.has(s.id))) filter = 'all';
     if (len !== 'all' && lenBucket(s) !== len) len = 'all';
-    if (narrow.matches) open.clear();
+    if (accordion()) open.clear();
     open.add(group.id);
     saveOpen(open);
     render();

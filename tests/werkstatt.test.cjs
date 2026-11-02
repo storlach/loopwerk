@@ -1,5 +1,5 @@
-// Krachwerk (Edition „make“, Adresse /werkstatt/): Pad-Wand mit Aufnahme + Auto-Säubern, „Klatsch dein Kit“, eigener Speicher,
-// keine mitgelieferten Samples. Handy zuerst (390 × 844, Touch), dazu Desktop.
+// Krachwerk Scheibe 1a und 1b (Spec docs/specs/krachwerk-1-geruest.md §7): die volle App unter /werkstatt/ als Edition „make“ –
+// ohne mitgelieferte Sounds, leerer Song, eigener Speicher, ● → säubern → Clip im Loop, PWA. Loopwerk bleibt unverändert.
 // node tests/werkstatt.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const fs = require('fs');
 const os = require('os');
@@ -7,10 +7,13 @@ const path = require('path');
 const { chromium } = require('playwright');
 const { start } = require('./serve.cjs');
 const { createChecker } = require('./harness.cjs');
+const { countUi, scene } = require('./count.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const DIR = process.env.SHOT_DIR || '/tmp';
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+const DESK = { viewport: { width: 1400, height: 820 } };
+const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
 // Testsignale im Browser: Kick (Abwärtsschwung), Snare-artig (Rauschen um 1,5 kHz), Hi-Hat (helles Rauschen), Ton A4
 function signals() {
@@ -23,7 +26,6 @@ function signals() {
     return d;
   };
   const snare = (n, sr) => {
-    // Resonator (2 Pole) bei 1,5 kHz auf Rauschen
     const d = new Float32Array(n);
     const r = 0.97, w = 2 * Math.PI * 1500 / sr, a1 = 2 * r * Math.cos(w), a2 = -r * r;
     let y1 = 0, y2 = 0;
@@ -41,7 +43,6 @@ function signals() {
     for (let i = 0; i < n; i++) d[i] = 0.5 * Math.sin(2 * Math.PI * 440 * i / sr) * Math.min(1, i / (sr * 0.005)) * Math.min(1, (n - i) / (sr * 0.05));
     return d;
   };
-  // Aufnahme: Rauschen −60 dB, Klänge an Positionen (Sekunden) mit Pegel
   const take = (sr, seconds, parts) => {
     const d = new Float32Array(Math.round(sr * seconds));
     for (let i = 0; i < d.length; i++) d[i] = 0.001 * rnd();
@@ -55,9 +56,9 @@ function signals() {
   window.sig = { kick, snare, hat, tone, take };
 }
 
-// Fixture fürs Fake-Mikrofon: 1 s Stille, dann ein „Bumm“ (Kick), dann Stille
+// Fixture fürs Fake-Mikrofon: 1 s Stille, dann ein „Bumm“ (Kick, 0,4 s), dann Stille
 function micWav(file) {
-  const sr = 48000, n = sr * 4;
+  const sr = 48000, n = sr * 5;
   const buf = Buffer.alloc(44 + n * 2);
   buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
   buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(sr, 24);
@@ -65,476 +66,526 @@ function micWav(file) {
   let ph = 0;
   for (let i = 0; i < n; i++) {
     let v = 0;
-    const k = i - sr; // Kick ab 1,0 s
+    const k = i - sr;
     if (k >= 0 && k < sr * 0.4) { const f = 46 + 119 * Math.exp(-k / (sr * 0.03)); ph += 2 * Math.PI * f / sr; v = 0.3 * Math.sin(ph) * Math.exp(-k / (sr * 0.09)); }
     buf.writeInt16LE(Math.round(v * 32767), 44 + i * 2);
   }
   fs.writeFileSync(file, buf);
 }
 
-async function open(server, browser, ctxOpts = PHONE, ctx = null) {
-  const context = ctx || await browser.newContext(ctxOpts);
+async function openKw(base, context, { init } = {}) {
   const page = await context.newPage();
   const errors = [];
   const requests = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('request', (r) => requests.push(new URL(r.url()).pathname));
-  await page.goto(`http://127.0.0.1:${server.address().port}/werkstatt/`);
-  await page.waitForFunction(() => window.werkstatt?.ready, null, { timeout: 15000 });
+  if (init) {
+    await page.goto(`${base}/werkstatt/manifest.webmanifest`); // gleicher Ursprung, App läuft noch nicht
+    await page.evaluate(init);
+  }
+  const t0 = Date.now();
+  await page.goto(`${base}/werkstatt/`);
+  await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+  const startMs = Date.now() - t0;
   await page.evaluate(signals);
-  return { page, context, errors, requests };
+  return { page, errors, requests, startMs };
+}
+
+// Datensätze im Format der früheren Pad-Wand (src/werkstatt/bank.js) in „loopwerk-make“ schreiben
+async function seedPadWall() {
+  const { encodeWav } = await import('/src/wav.js');
+  const sr = 44100;
+  const mk = (fill, secs) => {
+    const n = Math.round(sr * secs);
+    const d = new Float32Array(n);
+    fill(d);
+    const wav = encodeWav({ numberOfChannels: 1, length: n, sampleRate: sr, getChannelData: () => d });
+    return wav.arrayBuffer();
+  };
+  const bumm = await mk((d) => { for (let i = 0; i < d.length; i++) d[i] = 0.8 * Math.sin(2 * Math.PI * 60 * i / sr) * Math.exp(-i / 4000); }, 0.4);
+  const ton = await mk((d) => { for (let i = 0; i < d.length; i++) d[i] = 0.5 * Math.sin(2 * Math.PI * 440 * i / sr); }, 0.6);
+  const loop = await mk((d) => { for (let b = 0; b < 4; b++) for (let i = 0; i < 3000; i++) d[Math.round(b * sr * 2 / 3) + i] = 0.7 * Math.exp(-i / 500) * Math.sin(i / 3); }, (60 / 90) * 4);
+  const recs = [
+    { id: 'mk-test1', name: 'Bumm 1', tags: ['kurz', 'tief'], cls: 'tief', centroid: 90, source: 'Mikrofon', sampleRate: sr, wav: bumm, created: 1 },
+    { id: 'mk-test2', name: 'Ton A4 1', tags: ['lang', 'tonal', 'A4'], cls: 'ton', pitch: 440, source: 'Mikrofon', sampleRate: sr, wav: ton, created: 2 },
+    { id: 'mk-test3', name: 'Schleife 1', tags: ['1 takt'], cls: 'loop', bars: 1, bpm: 90, source: 'Festhalten', sampleRate: sr, wav: loop, created: 3 },
+  ];
+  await new Promise((resolve, reject) => {
+    const req = indexedDB.open('loopwerk-make', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('sounds', { keyPath: 'id' });
+    req.onsuccess = () => {
+      const t = req.result.transaction('sounds', 'readwrite');
+      for (const r of recs) t.objectStore('sounds').put(r);
+      t.oncomplete = () => { req.result.close(); resolve(); };
+      t.onerror = () => reject(t.error);
+    };
+    req.onerror = () => reject(req.error);
+  });
 }
 
 (async () => {
   const { check, finish } = createChecker();
   const server = await start();
-  const wav = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'werkstatt-')), 'bumm.wav');
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'krachwerk-'));
+  const wav = path.join(tmp, 'bumm.wav');
   micWav(wav);
   const browser = await chromium.launch({
     args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wav}%noloop`],
   });
   try {
-    // ---------- Start: leer, eigene Edition, nichts Mitgeliefertes ----------
-    const A = await open(server, browser);
+    // ---------- 1–3: Start, Anfragen, Flächen ----------
+    const C = await browser.newContext({ ...PHONE, acceptDownloads: true });
+    await C.addInitScript(() => {
+      window.__persist = 0;
+      if (navigator.storage) { navigator.storage.persist = async () => { window.__persist++; return true; }; navigator.storage.persisted = async () => false; }
+    });
+    const A = await openKw(base, C, { init: seedPadWall });
     const { page } = A;
-    const first = await page.evaluate(() => ({
-      edition: window.werkstatt.edition.id, title: document.title, mark: document.querySelector('.wmark').textContent,
-      pads: document.querySelectorAll('.wpad').length, free: document.querySelectorAll('.wpad.free').length,
-      scroll: document.documentElement.scrollWidth - innerWidth,
-      bar: document.querySelector('.wbar').getBoundingClientRect().bottom,
-    }));
-    check('Krachwerk öffnet unter /werkstatt/ als Edition „make“', first.edition === 'make' && first.title === 'Krachwerk' && first.mark === 'Krachwerk');
-    check('16 Pads, alle leer', first.pads === 16 && first.free === 16, `${first.free}/${first.pads}`);
-    check('Handy: kein seitliches Scrollen, Werkzeugleiste im Bild', first.scroll <= 0 && first.bar <= 844, `bar ${Math.round(first.bar)}`);
-    const sounds = A.requests.filter((p) => /\/assets\//.test(p) && !/\/assets\/icons\//.test(p));
-    check('Keine mitgelieferten Samples geladen (keine Anfrage unter assets/)', sounds.length === 0, sounds.slice(0, 3).join(', '));
+    const s1 = await page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const { sampledInstruments } = await import('./src/sampler.js');
+      return {
+        ed: lw.edition.id, title: document.title, mark: document.querySelector('.brand-name')?.textContent,
+        tracks: lw.store.project.tracks.length, bpm: lw.store.project.bpm, clips: lw.store.project.tracks.flatMap((t) => t.clips).length,
+        foreign: lw.library.list().filter((s) => s.category !== 'own' && !String(s.id).startsWith('pat-')).length,
+        inst: sampledInstruments().length,
+        kits: [...document.querySelectorAll('#pat-kit option')].map((o) => o.value).join(','),
+        scroll: document.documentElement.scrollWidth - innerWidth,
+        dataEd: document.getElementById('app').dataset.edition,
+      };
+    });
+    check('Start: Edition „make“, Titel und Marke „Krachwerk“', s1.ed === 'make' && /Krachwerk$/.test(s1.title) && s1.mark === 'Krachwerk' && s1.dataEd === 'make', `${s1.title} / ${s1.mark}`);
+    check('Start: leerer Song mit 2 Spuren, 90 BPM', s1.tracks === 2 && s1.bpm === 90 && s1.clips === 0, `${s1.tracks} Spuren, ${s1.bpm} BPM, ${s1.clips} Clips`);
+    check('Bibliothek: nur eigene Sounds, keine Sampler-Instrumente', s1.foreign === 0 && s1.inst === 0, `${s1.foreign} fremde, ${s1.inst} Instrumente`);
+    check('Beat-Kits: nur die Synth-Kits elektro und techno', s1.kits === 'elektro,techno', s1.kits);
+    check('Handy: kein seitliches Scrollen', s1.scroll <= 0);
+    const assets = A.requests.filter((p) => /\/assets\//.test(p) && !/\/assets\/icons\//.test(p));
+    const proto = A.requests.filter((p) => /\/src\/werkstatt\//.test(p));
+    check('Keine mitgelieferten Samples geladen (unter assets/ nur Icons)', assets.length === 0, assets.slice(0, 3).join(', '));
+    check('Kein Code der alten Pad-Wand geladen', proto.length === 0, proto.join(', '));
+    console.log(`   Startzeit bis „ready“ (Handy, lokal): ${A.startMs} ms`);
+    const surf = await page.evaluate(() => {
+      const sel = ['#starter', '.ccard[data-create="accomp"]', '#pat-continue', '.sing-desc-field', '#sing-sound', '[data-link-open]', '.ccard[data-create="link"]', '#link-pop', '#tab-capture', '.shelf-sort', '.shelf-credit', '#pop-about', '#demo-btn', '#tips-reset', '#shelf-filter-btn', '#shelf-chips'];
+      const off = sel.filter((q) => { const n = document.querySelector(q); return n && n.hasAttribute('data-off') && getComputedStyle(n).display === 'none'; });
+      const keep = ['#import-btn', '.ccard[data-create="beat"]', '.ccard[data-create="melody"]', '.ccard[data-create="sing"]', '#rec-btn'].filter((q) => document.querySelector(q) && !document.querySelector(q).closest('[data-off]'));
+      return { off: off.length, all: sel.length, missing: sel.filter((q) => !off.includes(q)), keep: keep.length };
+    });
+    check('Flächen aus: Song-Starter, Begleitung, KI, Link/Tab, Katalog, Beispiel, Tipps', surf.off === surf.all, surf.missing.join(', '));
+    check('Flächen da: Import, Beat, Melodie, Einsingen, Aufnahme', surf.keep === 5, `${surf.keep}/5`);
 
-    // ---------- Säubern ----------
+    // ---------- 4: Klänge aus der Pad-Wand ----------
+    const mig = await page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const ids = ['mk-test1', 'mk-test2', 'mk-test3'];
+      const got = ids.map((id) => lw.library.get(id));
+      const loop = got[2];
+      lw.store.addClip(lw.store.project.tracks[0].id, 'mk-test1', 0, 4);
+      await lw.library.ensureProject(lw.store.project);
+      const buf = await lw.renderProject(lw.store.project, lw.library, { fromBeat: 0, toBeat: 4, limiter: false });
+      const d = buf.getChannelData(0);
+      let peak = 0, at = 0;
+      for (let i = 0; i < Math.round(buf.sampleRate * 0.05); i++) if (Math.abs(d[i]) > peak) { peak = Math.abs(d[i]); at = i; }
+      return { all: got.every((s) => s && s.category === 'own'), names: got.map((s) => s?.name).join(','), loopKind: loop?.kind, loopBeats: loop?.beats, from: got.map((s) => s?.made?.from).join(','), peak, atMs: at / buf.sampleRate * 1000 };
+    });
+    check('Pad-Wand-Klänge stehen unter „Eigene“ (gleiche Datenbank, keine Kopie)', mig.all, mig.names);
+    check('Schleife aus der Pad-Wand: Loop mit 4 Schlägen, Herkunft gelesen', mig.loopKind === 'loop' && mig.loopBeats === 4 && mig.from === 'mic,mic,loop', `${mig.loopKind}, ${mig.loopBeats}, ${mig.from}`);
+    check('Pad-Wand-Klang als Clip klingt am Clipanfang', mig.peak > 0.1, `Spitze ${mig.peak.toFixed(2)} bei ${mig.atMs.toFixed(1)} ms`);
+    await page.evaluate(() => window.loopwerk.store.undo());
+
+    // ---------- 5: ● → säubern → Clip im Loop ----------
+    await page.tap('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 8000 });
+    let playedDuring = false;
+    const poll = setInterval(async () => { try { if (await page.evaluate(() => window.loopwerk.recorder.state === 'recording' && window.loopwerk.engine.playing)) playedDuring = true; } catch { /* Seite beschäftigt */ } }, 150);
+    await page.waitForFunction(() => window.loopwerk.store.project.tracks.some((t) => t.clips.length), null, { timeout: 15000 });
+    clearInterval(poll);
+    check('Aufnahme ohne Vorzähler: Song läuft während der Aufnahme nicht', !playedDuring);
+    const rec = await page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const t = lw.store.project.tracks.find((x) => x.clips.length);
+      const clip = t.clips[0];
+      const s = lw.library.get(clip.sampleId);
+      const o = s.orig;
+      const d = o.getChannelData(0);
+      let peak = 0;
+      for (let c = 0; c < o.numberOfChannels; c++) for (const v of o.getChannelData(c)) peak = Math.max(peak, Math.abs(v));
+      let first = 0;
+      while (first < d.length && Math.abs(d[first]) < 0.05) first++;
+      return {
+        name: s.name, ch: o.numberOfChannels, peak, firstMs: first / o.sampleRate * 1000, cleanMs: lw.recorder.cleanMs, cls: s.made?.cls, from: s.made?.from,
+        track: t.id, start: clip.startBeat, len: clip.lengthBeats, loop: { ...lw.store.project.loop }, playing: lw.engine.playing, selected: lw.ui.selectedClipId === clip.id,
+      };
+    });
+    check('Aufgenommen und benannt: „Bumm …“, Herkunft Mikrofon', /^Bumm \d+$/.test(rec.name) && rec.cls === 'tief' && rec.from === 'mic', `${rec.name} (${rec.cls}, ${rec.from})`);
+    check('Gesäubert: mono, Klang ab ≤ 10 ms, Pegel −1 dB', rec.ch === 1 && rec.firstMs <= 10 && Math.abs(rec.peak - 0.89) < 0.02, `${rec.ch} Kanal, ${rec.firstMs.toFixed(1)} ms, Spitze ${rec.peak.toFixed(3)}`);
+    check('Säubern dauert < 300 ms', rec.cleanMs < 300, `${rec.cleanMs?.toFixed(0)} ms`);
+    check('Clip auf Spur 1 ab Schlag 0, ein Takt, Loop darum, spielt, gewählt', rec.track === 't1' && rec.start === 0 && rec.len === 4 && rec.loop.on && rec.loop.startBeat === 0 && rec.loop.endBeat === 4 && rec.playing && rec.selected, JSON.stringify(rec.loop));
+    const onsets = await page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const { detectOnsets } = await import('./src/dsp/slice.js');
+      const buf = await lw.renderProject(lw.store.project, lw.library, { fromBeat: 0, toBeat: 4, limiter: false });
+      return detectOnsets(buf.getChannelData(0), buf.sampleRate).map((f) => f / buf.sampleRate);
+    });
+    const spb = 60 / 90;
+    // Säubern lässt 2 ms vor dem Anschlag stehen (gegen Klicks): alle Anschläge gleich spät, Abstände genau ein Schlag
+    const lead = onsets[0] * 1000;
+    const gapErr = onsets.length === 4 ? Math.max(...onsets.slice(1).map((t, k) => Math.abs(t - onsets[k] - spb) * 1000)) : Infinity;
+    check('Im Loop: 4 Anschläge pro Takt, Abstand genau ein Schlag (± 1 ms), erster ≤ 5 ms nach dem Takt', gapErr <= 1 && lead >= 0 && lead <= 5, `${onsets.length} Anschläge, Abstand max ± ${gapErr.toFixed(2)} ms, erster ${lead.toFixed(2)} ms`);
+    if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-clip-handy.png') });
+    const undo = await page.evaluate(() => {
+      const lw = window.loopwerk;
+      lw.engine.stop();
+      lw.store.undo();
+      const r = { clips: lw.store.project.tracks.flatMap((t) => t.clips).length, loop: lw.store.project.loop.on };
+      lw.store.redo();
+      return r;
+    });
+    check('Ein Rückgängig entfernt Clip und Loop zusammen', undo.clips === 0 && !undo.loop, JSON.stringify(undo));
+    const silent = await page.evaluate(async () => {
+      try { await window.loopwerk.recorder._finishSound([new Float32Array(48000), new Float32Array(48000)], 48000); return 'kein Fehler'; } catch (e) { return `${e.code}: ${e.message}`; }
+    });
+    check('Stille → „Nichts gehört“, kein neuer Sound', /^silent: Nichts gehört/.test(silent), silent);
+    const kept = await page.evaluate(() => ({ calls: window.__persist }));
+    check('Dauerhafter Speicher angefragt', kept.calls >= 1, `${kept.calls}×`);
+
+    // ---------- 6: DSP (src/dsp/clean.js, slice.js) ----------
     const clean = await page.evaluate(async () => {
-      const { cleanTake } = await import('./src/werkstatt/clean.js');
+      const { cleanTake, features, classify, describe } = await import('./src/dsp/clean.js');
       const sr = 48000;
       const raw = window.sig.take(sr, 2, [[window.sig.snare, 0.731, 0.3, 0.3]]);
-      const onset = Math.round(sr * 0.731);
       const c = cleanTake([raw, raw.slice()], sr);
       let peak = 0;
       for (const v of c.chs[0]) peak = Math.max(peak, Math.abs(v));
-      const silent = cleanTake([window.sig.take(sr, 1, []), window.sig.take(sr, 1, [])], sr);
-      return { start: c.start, onset, end: c.end, channels: c.chs.length, peak, len: c.chs[0].length / sr, silent };
-    });
-    const lead = (clean.onset - clean.start) / 48;
-    check('Säubern: Start auf dem Anschlag (0–5 ms davor)', lead >= 0 && lead <= 5, `${lead.toFixed(2)} ms vorher`);
-    check('Säubern: Stille hinten weg (Klang 0,3 s → höchstens 0,45 s)', clean.len > 0.1 && clean.len < 0.45, `${clean.len.toFixed(3)} s`);
-    check('Säubern: Pegel auf −1 dB angeglichen', Math.abs(clean.peak - 0.89) < 0.01, clean.peak.toFixed(3));
-    check('Säubern: Doppel-Mono wird mono gespeichert', clean.channels === 1);
-    check('Säubern: reine Stille ergibt keinen Klang', clean.silent === null);
-
-    // ---------- Einordnen und Benennen ----------
-    const cls = await page.evaluate(async () => {
-      const { cleanTake, features, classify, describe } = await import('./src/werkstatt/clean.js');
-      const sr = 48000;
       const out = {};
       for (const [k, gen, len] of [['kick', window.sig.kick, 0.4], ['snare', window.sig.snare, 0.3], ['hat', window.sig.hat, 0.15], ['tone', window.sig.tone, 0.6]]) {
-        const raw = window.sig.take(sr, 1.2, [[gen, 0.2, len, 0.5]]);
-        const c = cleanTake([raw], sr);
-        const f = features(c.chs[0], sr);
-        const cl = classify(f);
-        out[k] = { cls: cl, ...describe(f, cl, ['Bumm 1']), centroid: Math.round(f.centroid) };
+        const r = window.sig.take(sr, 1.2, [[gen, 0.2, len, 0.5]]);
+        const cc = cleanTake([r], sr);
+        const f = features(cc.chs[0], sr);
+        out[k] = { cls: classify(f), ...describe(f, classify(f), ['Bumm 1']) };
       }
-      return out;
+      return { lead: (Math.round(sr * 0.731) - c.start) / 48, len: c.chs[0].length / sr, peak, ch: c.chs.length, silent: cleanTake([window.sig.take(sr, 1, [])], sr), out };
     });
-    check('Einordnen: Kick → tief', cls.kick.cls === 'tief', JSON.stringify(cls.kick));
-    check('Einordnen: Rauschen um 1,5 kHz → mittel', cls.snare.cls === 'mittel', JSON.stringify(cls.snare));
-    check('Einordnen: helles Rauschen → hell', cls.hat.cls === 'hell', JSON.stringify(cls.hat));
-    check('Einordnen: 440 Hz → Ton A4', cls.tone.cls === 'ton' && cls.tone.name === 'Ton A4 1' && cls.tone.tags.includes('A4'), JSON.stringify(cls.tone));
-    check('Benennen: Name eindeutig (Bumm 1 vergeben → Bumm 2), Etiketten kurz · tief', cls.kick.name === 'Bumm 2' && cls.kick.tags.join() === 'kurz,tief', cls.kick.name);
-
-    // ---------- Anschläge ----------
+    check('Säubern: Start 0–5 ms vor dem Anschlag, Stille hinten weg, −1 dB, mono', clean.lead >= 0 && clean.lead <= 5 && clean.len < 0.45 && Math.abs(clean.peak - 0.89) < 0.01 && clean.ch === 1 && clean.silent === null, `${clean.lead.toFixed(2)} ms, ${clean.len.toFixed(3)} s`);
+    check('Einordnen: Kick tief, 1,5-kHz-Rauschen mittel, Rauschen hell, 440 Hz Ton A4', clean.out.kick.cls === 'tief' && clean.out.snare.cls === 'mittel' && clean.out.hat.cls === 'hell' && clean.out.tone.cls === 'ton' && clean.out.tone.name === 'Ton A4 1', Object.values(clean.out).map((o) => o.name).join(', '));
+    check('Benennen: eindeutig (Bumm 1 vergeben → Bumm 2)', clean.out.kick.name === 'Bumm 2');
     const on = await page.evaluate(async () => {
-      const { detectOnsets } = await import('./src/werkstatt/slice.js');
+      const { detectOnsets } = await import('./src/dsp/slice.js');
       const sr = 48000;
       const gens = [window.sig.kick, window.sig.snare, window.sig.hat];
       const at = [0.25, 0.61, 0.9, 1.33, 1.58, 2.02, 2.31, 2.77];
       const raw = window.sig.take(sr, 3.3, at.map((t, k) => [gens[k % 3], t, 0.25, k % 2 ? 0.25 : 0.6]));
       return { found: detectOnsets(raw, sr).map((f) => f / sr), at };
     });
-    const errMs = on.found.length === on.at.length ? Math.max(...on.at.map((t, k) => Math.abs(on.found[k] - t) * 1000)) : Infinity;
-    check('Anschläge: 8 Schläge (laut und leise) → 8 Stücke, je ±5 ms', on.found.length === 8 && errMs <= 5, `${on.found.length} gefunden, max ${errMs.toFixed(2)} ms`);
+    const oErr = on.found.length === 8 ? Math.max(...on.at.map((t, k) => Math.abs(on.found[k] - t) * 1000)) : Infinity;
+    check('Anschläge: 8 Schläge laut und leise → 8, je ± 5 ms', oErr <= 5, `${on.found.length}, max ${oErr.toFixed(2)} ms`);
 
-    // ---------- Klatsch dein Kit ----------
-    const kit = await page.evaluate(async () => {
-      const sr = 48000;
-      const s = window.sig;
-      const raw = s.take(sr, 4, [[s.kick, 0.3, 0.3, 0.6], [s.hat, 0.7, 0.15, 0.4], [s.snare, 1.1, 0.3, 0.5], [s.hat, 1.5, 0.15, 0.4],
-        [s.kick, 1.9, 0.3, 0.6], [s.hat, 2.3, 0.15, 0.3], [s.snare, 2.7, 0.3, 0.5], [s.hat, 3.1, 0.15, 0.4]]);
-      const used = await window.werkstatt.ingestKit([raw, raw.slice()], sr);
-      const g = window.werkstatt.groove;
-      return { used, pads: window.werkstatt.pads, playing: g?.playing, roles: g?.roles };
+    // ---------- 7: Speicher ----------
+    await page.waitForTimeout(500);
+    const page2 = await C.newPage();
+    await page2.goto(`${base}/werkstatt/`);
+    await page2.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    const st = await page2.evaluate(async () => {
+      const lw = window.loopwerk;
+      const c = lw.store.project.tracks.flatMap((t) => t.clips)[0];
+      return { clip: !!c, sound: !!(c && lw.library.get(c.sampleId) && !lw.library.get(c.sampleId).missing), dbs: (await indexedDB.databases()).map((d) => d.name), keys: Object.keys(localStorage) };
     });
-    const kitPads = kit.pads.filter(Boolean);
-    const classes = new Set(kitPads.map((p) => p.cls));
-    check('Klatsch-Kit: 8 Schläge → 8 Pads belegt', kit.used.length === 8 && kitPads.length === 8, `${kit.used.length}`);
-    check('Klatsch-Kit: Stücke nach Klang sortiert (tief, mittel, hell)', ['tief', 'mittel', 'hell'].every((c) => classes.has(c)) && kitPads[0].cls === 'tief' && kitPads[7].cls === 'hell', kitPads.map((p) => p.name).join(', '));
-    check('Klatsch-Kit: Groove läuft sofort mit Kick = tief, Snare = mittel, Hi-Hat = hell', kit.playing && kit.pads[kit.roles.kick].cls === 'tief' && kit.pads[kit.roles.snare].cls === 'mittel' && kit.pads[kit.roles.hat].cls === 'hell', JSON.stringify(kit.roles));
-    await page.waitForTimeout(600);
-    const lit = await page.evaluate(() => document.querySelectorAll('.wpad.hit').length);
-    check('Groove: Pads leuchten im Takt', lit > 0);
-    if (SHOTS) await page.screenshot({ path: path.join(DIR, 'werkstatt-kit-handy.png') });
-    await page.click('#wagain');
-    const again = await page.evaluate(() => ({ v: window.werkstatt.groove.variant, playing: window.werkstatt.groove.playing }));
-    check('„Nochmal“ wechselt den Groove', again.v === 1 && again.playing);
-    await page.click('#wgroove');
-    check('Groove stoppt per Knopf', await page.evaluate(() => !window.werkstatt.groove.playing && document.querySelector('#wgroove').getAttribute('aria-pressed') === 'false'));
-
-    // ---------- Festhalten (Resampling) und Schleifen ----------
-    await page.click('#wgroove');
-    await page.waitForTimeout(300);
-    await page.click('#wfreeze');
-    await page.waitForFunction(() => window.werkstatt.pads[8], null, { timeout: 5000 });
-    const fz = await page.evaluate(() => {
-      const b = window.werkstatt.padBuffer(8);
-      let peak = 0;
-      for (let c = 0; c < b.numberOfChannels; c++) for (const v of b.getChannelData(c)) peak = Math.max(peak, Math.abs(v));
-      return { pad: window.werkstatt.pads[8], peak, sr: b.sampleRate };
-    });
-    const barFrames = Math.round((60 / 90) * 4 * fz.sr);
-    check('Festhalten: Groove wird neue Schleife auf dem nächsten freien Pad (1 Takt, samplegenau)', fz.pad?.cls === 'loop' && fz.pad.bars === 1 && Math.abs(fz.pad.length - barFrames) <= 1, `${fz.pad?.name}, ${fz.pad?.length} / ${barFrames} Frames`);
-    check('Festhalten: hörbar und ohne Übersteuern', fz.peak > 0.1 && fz.peak <= 0.8901, fz.peak.toFixed(3));
-    // Am nächsten Taktanfang ersetzt die Schleife, was lief (Original-Pads bleiben)
-    await page.waitForFunction(() => window.werkstatt.live.includes(8), null, { timeout: 4000 });
-    const swap = await page.evaluate(() => ({ drums: window.werkstatt.groove.drums, playing: window.werkstatt.groove.playing, btn: document.getElementById('wgroove').getAttribute('aria-pressed'), live: document.querySelector('.wpad[data-pad="8"]').classList.contains('live'), kit: window.werkstatt.pads.slice(0, 8).every(Boolean) }));
-    check('Festhalten: am nächsten Takt läuft die Schleife statt des Grooves, Kit bleibt', swap.playing && !swap.drums && swap.btn === 'false' && swap.live && swap.kit);
-    // Ebene drauf: Groove wieder an, zusammen festhalten
-    await page.click('#wagain');
-    await page.waitForTimeout(200);
-    await page.click('#wfreeze');
-    await page.waitForFunction(() => window.werkstatt.pads[9], null, { timeout: 5000 });
-    check('Festhalten mit Schleife + Groove → „Schleife 2“', await page.evaluate(() => window.werkstatt.pads[9].name === 'Schleife 2' && window.werkstatt.pads[9].cls === 'loop'));
-    await page.waitForFunction(() => window.werkstatt.live.includes(9) && !window.werkstatt.live.includes(8), null, { timeout: 4000 });
-    await page.tap('.wpad[data-pad="9"]');
-    check('Schleife antippen stoppt sie, ohne anderes läuft nichts mehr', await page.evaluate(() => !window.werkstatt.live.length && !window.werkstatt.groove.playing));
-    await page.tap('.wpad[data-pad="8"]');
-    check('Schleife antippen startet sie im Takt (ohne Schlagzeug)', await page.evaluate(() => window.werkstatt.live.includes(8) && window.werkstatt.groove.playing && !window.werkstatt.groove.drums));
-    await page.tap('.wpad[data-pad="8"]');
-
-    // ---------- Tastenleiste: jeder Klang wird Instrument ----------
-    await page.evaluate(async () => {
-      const sr = 48000;
-      const n = sr * 0.6;
-      const d = new Float32Array(sr);
-      const f = 440 * 2 ** (0.3 / 12); // 30 Cent zu hoch gesungen
-      for (let i = 0; i < n; i++) d[sr * 0.2 + i] = 0.5 * Math.sin(2 * Math.PI * f * i / sr) * Math.min(1, i / 240, (n - i) / 2400);
-      await window.werkstatt.ingestPad(10, [d], sr);
-    });
-    const ton = await page.evaluate(() => window.werkstatt.pads[10]);
-    check('Tonaler Klang: Grundton A4 erkannt, Feinstimmung auf den Halbton (−0,3)', ton.cls === 'ton' && ton.root === 69 && Math.abs(ton.tune + 0.3) < 0.03, `${ton.name}, Stimmung ${ton.tune?.toFixed(3)}`);
-    await page.tap('#wkeys-btn');
-    const keysUi = await page.evaluate(() => ({ shown: !document.getElementById('wkeys').hidden, name: document.getElementById('wkeys-name').textContent, keys: document.querySelectorAll('.wkey').length, sel: document.querySelector('.wpad[data-pad="10"]').classList.contains('sel'), scroll: document.documentElement.scrollWidth - innerWidth }));
-    check('Tasten: Leiste mit 8 Tönen spielt das zuletzt gespielte Pad', keysUi.shown && keysUi.name === `${ton.name} · A-Moll` && keysUi.keys === 8 && keysUi.sel, keysUi.name);
-    check('Tasten: Handy ohne seitliches Scrollen', keysUi.scroll <= 0);
-    await page.tap('.wkey[data-midi="64"]');
-    const e4 = await page.evaluate(async () => {
-      const v = await window.werkstatt.playKey(64);
-      const rate = v.src.playbackRate.value;
-      const buf = window.werkstatt.padBuffer(10);
-      const off = new OfflineAudioContext(1, Math.ceil(buf.length / rate), buf.sampleRate);
-      const s = off.createBufferSource();
-      s.buffer = buf;
-      s.playbackRate.value = rate;
-      s.connect(off.destination);
-      s.start();
-      const r = await off.startRendering();
-      const { detectPitch } = await import('./src/dsp/pitch.js');
-      const { f0, conf } = detectPitch(r.getChannelData(0), r.sampleRate);
-      const voiced = [...f0].filter((_, i) => conf[i] > 0.85).sort((a, b) => a - b);
-      return voiced[voiced.length >> 1];
-    });
-    check('Tasten: Taste E4 klingt E4 (329,6 Hz ± 1 %), obwohl zu hoch gesungen', Math.abs(e4 / 329.63 - 1) < 0.01, `${e4?.toFixed(1)} Hz`);
-    if (SHOTS) await page.screenshot({ path: path.join(DIR, 'werkstatt-tasten-handy.png') });
-    await page.tap('#wkeys-btn');
-
-    // ---------- Pad-Wand: leeres Pad antippen nimmt auf (Fake-Mikrofon) ----------
-    await page.tap('.wpad[data-pad="12"]');
-    await page.waitForFunction(() => document.querySelector('.wpad[data-pad="12"]').classList.contains('rec'), null, { timeout: 5000 });
-    const micShown = await page.waitForFunction(() => !document.getElementById('wmic').hidden, null, { timeout: 5000 }).then(() => true, () => false);
-    check('Leeres Pad antippen → nimmt auf (rote Form, Mikro offen sichtbar)', micShown);
-    await page.waitForFunction(() => window.werkstatt.pads[12], null, { timeout: 12000 });
-    const rec = await page.evaluate(() => {
-      const b = window.werkstatt.padBuffer(12);
-      const d = b.getChannelData(0);
-      let peak = 0, at = 0;
-      for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > peak) { peak = Math.abs(d[i]); at = i; }
-      let first = 0;
-      while (first < d.length && Math.abs(d[first]) < 0.05) first++;
-      return { pad: window.werkstatt.pads[12], peak, firstMs: first / b.sampleRate * 1000, ms: window.werkstatt.timing.cleanMs.at(-1), rec: document.querySelector('.wpad[data-pad="12"]').classList.contains('rec') };
-    });
-    check('Aufnahme endet von selbst nach der Stille, Pad ist gefüllt', !!rec.pad && !rec.rec, rec.pad?.name);
-    check('Aufnahme gesäubert: Stille vorn weg (Klang ab ≤ 10 ms), Pegel −1 dB', rec.firstMs <= 10 && Math.abs(rec.peak - 0.89) < 0.02, `${rec.firstMs.toFixed(1)} ms, Spitze ${rec.peak.toFixed(3)}`);
-    check('Aufnahme benannt und etikettiert (Bumm · tief)', /^Bumm \d+$/.test(rec.pad?.name) && rec.pad.tags.includes('tief'), `${rec.pad?.name} – ${rec.pad?.tags}`);
-    check('Säubern dauert < 300 ms', rec.ms < 300, `${rec.ms?.toFixed(0)} ms`);
-
-    // Volles Pad antippen spielt nur (keine neue Aufnahme)
-    await page.tap('.wpad[data-pad="12"]');
-    await page.waitForTimeout(150);
-    check('Volles Pad antippen → spielt, nimmt nicht auf', await page.evaluate(() => !document.querySelector('.wpad[data-pad="12"]').classList.contains('rec')));
-
-    await page.tap('#wmic');
-    check('„Mikro offen“ antippen schließt das Mikrofon', await page.evaluate(() => document.getElementById('wmic').hidden && !window.werkstatt.mic.open));
-
-    // ---------- Leeren, Synth-Kit ----------
-    await page.tap('#warm-clear');
-    await page.tap('.wpad[data-pad="0"]');
-    check('„Leeren“ + Pad → Pad leer, Schalter wieder aus', await page.evaluate(() => !window.werkstatt.pads[0] && document.getElementById('warm-clear').getAttribute('aria-pressed') === 'false'));
-    const freeBefore = await page.evaluate(() => window.werkstatt.pads.filter((p) => !p).length);
-    await page.tap('#wsynth');
-    const synth = await page.evaluate(() => window.werkstatt.pads.map((p) => p?.kind || null));
-    check('Synth-Kit füllt die freien Pads mit erzeugten Klängen', synth.filter((k) => k === 'synth').length === freeBefore && synth.every(Boolean), synth.join(','));
-    await page.waitForTimeout(300);
-    check('Synth-Pads sind vorgerechnet (spielbar auf Tasten und beim Festhalten)', await page.evaluate(() => window.werkstatt.pads.filter((p) => p.kind === 'synth').every((p) => p.length > 0)));
-    await page.tap('.wpad[data-pad="0"]');
-    check('Synth-Pad spielt ohne Fehler', A.errors.length === 0, A.errors.join(' | '));
-    if (SHOTS) await page.screenshot({ path: path.join(DIR, 'werkstatt-voll-handy.png') });
-
-    // ---------- Eigener Speicher, Wiederherstellen ----------
-    const names = await page.evaluate(() => window.werkstatt.pads.map((p) => p?.name ?? null));
-    const page2 = await A.context.newPage();
-    await page2.goto(page.url());
-    await page2.waitForFunction(() => window.werkstatt?.ready, null, { timeout: 15000 });
-    await page2.waitForTimeout(200);
-    const after = await page2.evaluate(async () => ({
-      names: window.werkstatt.pads.map((p) => p?.name ?? null),
-      dbs: (await indexedDB.databases()).map((d) => d.name),
-      keys: Object.keys(localStorage),
-    }));
-    check('Neu laden: alle Pads wiederhergestellt', JSON.stringify(after.names) === JSON.stringify(names), after.names.filter(Boolean).length + ' Pads');
-    check('Eigener Speicher: IndexedDB „loopwerk-make“, nicht „loopwerk“', after.dbs.includes('loopwerk-make') && !after.dbs.includes('loopwerk'), after.dbs.join(','));
-    check('Eigener Speicher: nur Schlüssel „loopwerk.make.*“ in localStorage', after.keys.length > 0 && after.keys.every((k) => k.startsWith('loopwerk.make.')), after.keys.join(','));
+    check('Neu laden: Clip und Sound sind wieder da', st.clip && st.sound);
+    check('Eigener Speicher: IndexedDB „loopwerk-make“, nicht „loopwerk“', st.dbs.includes('loopwerk-make') && !st.dbs.includes('loopwerk'), st.dbs.join(','));
+    check('Alle Speicher-Schlüssel beginnen mit „loopwerk.make.“', st.keys.length > 0 && st.keys.every((k) => k.startsWith('loopwerk.make.')), st.keys.join(','));
     await page2.close();
-    check('Handy: keine Konsolenfehler', A.errors.length === 0, A.errors.join(' | '));
-    await A.context.close();
 
-    // ---------- Desktop ----------
-    const D = await open(server, browser, { viewport: { width: 1280, height: 800 } });
-    await D.page.click('#wsynth');
-    await D.page.keyboard.press('Digit1');
-    await D.page.waitForTimeout(80);
-    const desk = await D.page.evaluate(() => ({
-      hit: document.querySelector('.wpad[data-pad="0"]').classList.contains('hit'),
-      key: getComputedStyle(document.querySelector('.wpad-key')).display,
-      w: document.getElementById('app').getBoundingClientRect().width,
-    }));
-    check('Desktop: Taste 1 spielt Pad 1, Tastenbeschriftung sichtbar', desk.hit && desk.key !== 'none');
-    check('Desktop: Spalte bleibt schmal (≤ 560 px)', desk.w <= 560, `${desk.w}px`);
-    const lay = await D.page.evaluate(() => {
-      const h = document.getElementById('whint').getBoundingClientRect();
-      const p = document.querySelector('.wpad').getBoundingClientRect();
-      const bar = document.querySelector('.wbar').getBoundingClientRect();
-      return { hintBottom: h.bottom, padTop: p.top, barBottom: bar.bottom, vh: innerHeight };
+    // ---------- 8: Datei hin und zurück ----------
+    await page.evaluate(() => { const lw = window.loopwerk; lw.store.addClip('t2', 'mk-test3', 4, 8); });
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => document.getElementById('save-btn').click())]);
+    const kwFile = path.join(tmp, 'krachwerk.json');
+    await dl.saveAs(kwFile);
+    const kw = JSON.parse(fs.readFileSync(kwFile, 'utf8'));
+    const embedded = kw.ownSounds.map((o) => o.id);
+    check('Krachwerk speichert Loopwerk-Format mit eigenen Sounds (own- und mk-)', kw.version === 1 && embedded.some((i) => i.startsWith('own-')) && embedded.includes('mk-test3'), embedded.join(','));
+    const LW = await browser.newContext(DESK);
+    const lp = await LW.newPage();
+    const lErrors = [];
+    lp.on('pageerror', (e) => lErrors.push(e.message));
+    await lp.goto(`${base}/`);
+    await lp.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    await lp.setInputFiles('#open-input', kwFile);
+    await lp.waitForFunction((n) => window.loopwerk.store.project.name === n, kw.name, { timeout: 10000 });
+    const inLw = await lp.evaluate((ids) => ({ clips: window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length, sounds: ids.every((id) => window.loopwerk.library.get(id) && !window.loopwerk.library.get(id).missing) }), embedded);
+    check('Loopwerk öffnet die Krachwerk-Datei: Clips und Sounds da', inLw.clips === 2 && inLw.sounds, JSON.stringify(inLw));
+    // Loopwerk-Beispiel in Krachwerk
+    await lp.evaluate(() => document.getElementById('demo-btn').click());
+    await lp.evaluate(() => document.getElementById('demo-btn').click());
+    await lp.waitForFunction(() => window.loopwerk.store.project.name === 'Beispiel-Arrangement');
+    const [dl2] = await Promise.all([lp.waitForEvent('download'), lp.evaluate(() => document.getElementById('save-btn').click())]);
+    const lwFile = path.join(tmp, 'loopwerk.json');
+    await dl2.saveAs(lwFile);
+    const demo = JSON.parse(fs.readFileSync(lwFile, 'utf8'));
+    const demoClips = demo.tracks.flatMap((t) => t.clips).map((c) => c.sampleId);
+    check('Loopwerk: keine Programmfehler', lErrors.length === 0, lErrors.join(' | '));
+    await LW.close();
+    await page.setInputFiles('#open-input', lwFile);
+    await page.waitForFunction(() => window.loopwerk.store.project.name === 'Beispiel-Arrangement', null, { timeout: 10000 });
+    const inKw = await page.evaluate(() => {
+      const lw = window.loopwerk;
+      const clips = lw.store.project.tracks.flatMap((t) => t.clips);
+      return { n: clips.length, missing: clips.filter((c) => lw.library.get(c.sampleId)?.missing).length };
     });
-    check('Desktop: Einblender verdeckt keine Pads, alles ohne Scrollen im Bild', lay.hintBottom <= lay.padTop && lay.barBottom <= lay.vh, JSON.stringify(lay));
-    if (SHOTS) await D.page.screenshot({ path: path.join(DIR, 'werkstatt-desktop.png') });
-    check('Desktop: keine Konsolenfehler', D.errors.length === 0, D.errors.join(' | '));
-    await D.context.close();
+    check('Loopwerk-Datei in Krachwerk: alle Clips bleiben, stumm als „Sound fehlt“', inKw.n === demoClips.length && inKw.missing === demoClips.length, `${inKw.n}/${demoClips.length}, stumm ${inKw.missing}`);
+    const [dl3] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => document.getElementById('save-btn').click())]);
+    const back = JSON.parse(fs.readFileSync(await dl3.path(), 'utf8'));
+    check('Wieder gespeichert: alle Sound-Kennungen erhalten (klingen in Loopwerk wieder)', JSON.stringify(back.tracks.flatMap((t) => t.clips).map((c) => c.sampleId)) === JSON.stringify(demoClips));
 
-    // ---------- Als App: Manifest, Offline-Start, dauerhafter Speicher, Home-Bildschirm-Tipp ----------
-    const base = `http://127.0.0.1:${server.address().port}`;
-    const P = await browser.newContext(PHONE);
-    await P.addInitScript(() => {
-      window.__persist = 0;
-      if (navigator.storage) navigator.storage.persist = async () => { window.__persist++; return true; };
-    });
-    const pg = await P.newPage();
-    const pErrors = [];
-    pg.on('pageerror', (e) => pErrors.push(e.message));
-    await pg.goto(`${base}/werkstatt/`);
-    await pg.waitForFunction(() => window.werkstatt?.ready);
-    const man = await pg.evaluate(async () => {
+    // ---------- 9: PWA ----------
+    const man = await page.evaluate(async () => {
       const link = document.querySelector('head link[rel="manifest"]');
       const res = await fetch(link.href);
       const m = await res.json();
       const icons = await Promise.all(m.icons.map(async (i) => (await fetch(new URL(i.src, link.href))).status));
-      return { href: link.href, type: res.headers.get('content-type'), m, icons, start: new URL(m.start_url, link.href).pathname, scope: new URL(m.scope, link.href).pathname };
+      const heads = [...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map((l) => l.getAttribute('href'));
+      return { m, icons, start: new URL(m.start_url, link.href).pathname, scope: new URL(m.scope, link.href).pathname, heads };
     });
-    check('Manifest im Kopf: Krachwerk, Vollbild, Start und Bereich /werkstatt/', man.m.name === 'Krachwerk' && man.m.display === 'standalone' && man.start === '/werkstatt/' && man.scope === '/werkstatt/' && /manifest\+json/.test(man.type), `${man.start} ${man.scope}`);
-    check('Manifest: Icons erreichbar, Farbe = Token --bg', man.icons.every((x) => x === 200) && man.m.background_color === '#16171A', man.icons.join(','));
-    const icons = await pg.evaluate(() => ({ head: [...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map((l) => l.getAttribute('href')), man: [] }));
-    check('Eigenes Icon: Tab, iOS und Manifest zeigen Krachwerk, nicht Loopwerk', icons.head.length === 3 && icons.head.every((h) => /krachwerk/.test(h)) && man.m.icons.every((i) => /krachwerk/.test(i.src)), icons.head.join(', '));
-    const reg = await pg.evaluate(async () => (await navigator.serviceWorker.ready).scope);
-    check('Service Worker aktiv, nur für /werkstatt/ (Loopwerk unberührt)', reg === `${base}/werkstatt/`, reg);
-    await pg.reload();
-    await pg.waitForFunction(() => window.werkstatt?.ready && navigator.serviceWorker.controller);
-    await pg.evaluate(async () => {
-      const sr = 48000, d = new Float32Array(sr);
-      for (let i = 0; i < 9600; i++) d[4800 + i] = 0.5 * Math.sin(2 * Math.PI * 60 * i / sr) * Math.exp(-i / 2000);
-      await window.werkstatt.ingestPad(3, [d], sr);
-    });
-    const kept = await pg.evaluate(() => ({ calls: window.__persist, persisted: window.werkstatt.app.persisted }));
-    check('Erster eigener Klang: Speicher dauerhaft angefragt (einmal)', kept.calls === 1 && kept.persisted === true, JSON.stringify(kept));
-    await P.setOffline(true);
-    await pg.reload();
-    const offline = await pg.waitForFunction(() => window.werkstatt?.ready, null, { timeout: 10000 }).then(() => true, () => false);
-    const offPad = offline && await pg.evaluate(() => window.werkstatt.pads[3]?.name);
-    check('Ohne Netz: Krachwerk startet aus dem Zwischenspeicher, Pads sind da', offline && /^Bumm/.test(offPad || ''), String(offPad));
-    await P.setOffline(false);
-    check('App-Modus: keine Programmfehler', pErrors.length === 0, pErrors.join(' | '));
-    await P.close();
+    check('Manifest: Krachwerk, Vollbild, Bereich /werkstatt/, Icons erreichbar', man.m.name === 'Krachwerk' && man.m.display === 'standalone' && man.start === '/werkstatt/' && man.scope === '/werkstatt/' && man.icons.every((x) => x === 200), man.icons.join(','));
+    check('Eigenes Icon (nicht das von Loopwerk)', man.heads.length >= 3 && man.heads.every((h) => /krachwerk/.test(h)), man.heads.join(', '));
+    const reg = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
+    check('Service Worker aktiv, nur für /werkstatt/', reg === `${base}/werkstatt/`, reg);
+    await page.reload();
+    await page.waitForFunction(() => window.loopwerk?.ready && navigator.serviceWorker.controller, null, { timeout: 30000 });
+    await C.setOffline(true);
+    await page.reload();
+    const off = await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 }).then(() => true, () => false);
+    const offOwn = off && await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'own' && !s.missing).length);
+    check('Ohne Netz: Krachwerk startet aus dem Zwischenspeicher, eigene Sounds da', off && offOwn >= 4, String(offOwn));
+    await C.setOffline(false);
+    check('Krachwerk: keine Konsolenfehler', A.errors.length === 0, A.errors.join(' | '));
+    await C.close();
 
-    // iPhone-Safari ohne Home-Bildschirm: einmal der Tipp
-    const I = await browser.newContext({ ...PHONE, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
-    const ip = await I.newPage();
-    await ip.goto(`${base}/werkstatt/`);
-    await ip.waitForFunction(() => window.werkstatt?.ready);
-    const ingest = () => ip.evaluate(async () => {
-      const sr = 48000, d = new Float32Array(sr);
-      for (let i = 0; i < 4800; i++) d[4800 + i] = (Math.random() - 0.5) * Math.exp(-i / 500);
-      await window.werkstatt.ingestPad(window.werkstatt.pads.findIndex((p) => !p), [d], sr);
-    });
-    await ingest();
-    const tip = await ip.waitForFunction(() => /Home-Bildschirm/.test(document.getElementById('whint').textContent) && !document.getElementById('whint').classList.contains('off'), null, { timeout: 5000 }).then(() => true, () => false);
-    check('iPhone im Browser: Tipp „Zum Home-Bildschirm“ nach dem ersten Klang', tip);
-    await ip.reload();
-    await ip.waitForFunction(() => window.werkstatt?.ready);
-    await ingest();
-    await ip.waitForTimeout(3200);
-    check('Tipp kommt nur einmal', await ip.evaluate(() => !/Home-Bildschirm/.test(document.getElementById('whint').textContent)));
+    const I = await browser.newContext({ ...PHONE, userAgent: IPHONE_UA });
+    const ip = await openKw(base, I);
+    const tip1 = await ip.page.evaluate(() => { window.loopwerk.pwa.tip(); return document.getElementById('hint-text').textContent; });
+    await ip.page.evaluate(() => { document.getElementById('hint-text').textContent = ''; window.loopwerk.pwa.tip(); });
+    const tip2 = await ip.page.evaluate(() => document.getElementById('hint-text').textContent);
+    check('iPhone im Browser: einmal der Tipp „Zum Home-Bildschirm“', /Home-Bildschirm/.test(tip1) && !/Home-Bildschirm/.test(tip2), tip1);
     await I.close();
 
-    // ---------- Tempo und Tonart ----------
-    const T = await browser.newContext(PHONE);
-    const tp = await T.newPage();
-    const tErrors = [];
-    tp.on('pageerror', (e) => tErrors.push(e.message));
-    tp.on('console', (m) => { if (m.type() === 'error') tErrors.push(m.text()); });
-    await tp.goto(`${base}/werkstatt/`);
-    await tp.waitForFunction(() => window.werkstatt?.ready);
-    check('Start: 90 BPM, A-Moll im Kopf', await tp.evaluate(() => document.getElementById('wsong').textContent.replace(/\s+/g, ' ').trim() === '90BPMA-Moll'));
-    // Schleife bei 90 festhalten
-    await tp.tap('#wsynth');
-    await tp.waitForFunction(() => window.werkstatt.pads.slice(0, 8).every((p) => p.length > 0));
-    await tp.tap('#wgroove');
-    await tp.waitForTimeout(200);
-    await tp.tap('#wfreeze');
-    await tp.waitForFunction(() => window.werkstatt.pads[8]?.cls === 'loop');
-    await tp.waitForFunction(() => window.werkstatt.live.includes(8), null, { timeout: 4000 });
-    await tp.tap('#wsong');
-    check('Tempo/Tonart-Leiste öffnet mit einem Tipp', await tp.evaluate(() => !document.getElementById('wset').hidden && document.getElementById('wsong').getAttribute('aria-expanded') === 'true'));
-    for (let k = 0; k < 6; k++) await tp.tap('#wbpm-up');
-    const fast = await tp.evaluate(() => ({ bpm: window.werkstatt.song.bpm, step: window.werkstatt.groove.stepDur, head: document.getElementById('wsong-bpm').textContent, loop: window.werkstatt.loopBuffer(8), sr: window.werkstatt.padBuffer(8).sampleRate }));
-    check('Tempo + : 90 → 120 BPM, Groove läuft im neuen Tempo weiter', fast.bpm === 120 && Math.abs(fast.step - 0.125) < 1e-9 && fast.head === '120', `${fast.bpm}`);
-    const stretched = await tp.evaluate(() => {
-      const b = window.werkstatt.loopBuffer(8);
-      let peak = 0;
-      for (const v of b.getChannelData(0)) peak = Math.max(peak, Math.abs(v));
-      return { len: b.length, sr: b.sampleRate, peak };
+    // ---------- 12: Zählen (Budgets 1b) und Bilder ----------
+    // Ein Klang liegt als Clip in Spur 1 (Szene „Clip gewählt“); die Szenen messen Desktop und Handy
+    const addBumm = (page) => page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const sr = 44100, d = new Float32Array(sr / 2);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * Math.exp(-i / 3000);
+      const b = new AudioBuffer({ numberOfChannels: 1, length: d.length, sampleRate: sr });
+      b.copyToChannel(d, 0);
+      const smp = await lw.own.create({ name: 'Bumm 1', buffer: b, source: 'Aufnahme', from: 'mic', cls: 'tief' });
+      lw.store.addClip('t1', smp.id, 0, 4);
     });
-    check('Schleife folgt dem Tempo: 1 Takt bei 120 BPM = 2,0 s (samplegenau), hörbar', stretched.len === Math.round(2 * stretched.sr) && stretched.peak > 0.1, `${stretched.len} Frames`);
-    await tp.waitForTimeout(2300);
-    check('Schleife läuft nach dem Tempowechsel weiter', await tp.evaluate(() => window.werkstatt.live.includes(8) && window.werkstatt.groove.playing));
-    // Tempo antippen: 4 Tipps im Abstand 0,5 s → 120 BPM; vorher auf 100 stellen
-    for (let k = 0; k < 4; k++) await tp.tap('#wbpm-down');
-    await tp.waitForTimeout(2100);
-    await tp.evaluate(() => new Promise((done) => {
-      const b = document.getElementById('wtap');
-      let k = 0;
-      const tap = () => { b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); if (++k < 4) setTimeout(tap, 500); else done(); };
-      tap();
-    }));
-    const tapped = await tp.evaluate(() => window.werkstatt.song.bpm);
-    check('Tempo antippen: 4 Tipps im Abstand 0,5 s → etwa 120 BPM', Math.abs(tapped - 120) <= 4, `${tapped}`);
-    // Tonart: C-Dur → Tasten C4 … C5
-    await tp.tap('.wset [data-root="0"]');
-    await tp.tap('.wset [data-mode="dur"]');
-    const drawer = await tp.evaluate(() => ({ bar: document.querySelector('.wbar').getBoundingClientRect().bottom, vh: innerHeight, scroll: document.documentElement.scrollWidth - innerWidth }));
-    check('Tempo/Tonart als Schublade: Werkzeugleiste bleibt im Bild, kein seitliches Scrollen', drawer.bar <= drawer.vh && drawer.scroll <= 0, JSON.stringify(drawer));
-    if (SHOTS) await tp.screenshot({ path: path.join(DIR, 'werkstatt-tonart-handy.png') });
-    await tp.tap('.wpad[data-pad="0"]');
-    check('Pad antippen schließt die Schublade', await tp.evaluate(() => document.getElementById('wset').hidden));
-    await tp.tap('#wkeys-btn');
-    const dur = await tp.evaluate(() => ({ keys: [...document.querySelectorAll('.wkey')].map((k) => k.textContent).join(' '), head: document.getElementById('wsong-key').textContent, pressed: document.querySelector('.wset [data-root="0"]').getAttribute('aria-pressed') }));
-    check('Tonart C-Dur: Kopf und Tasten C4 D4 E4 F4 G4 A4 H4 C5', dur.head === 'C-Dur' && dur.keys === 'C4 D4 E4 F4 G4 A4 H4 C5' && dur.pressed === 'true', dur.keys);
-    const kick = await tp.evaluate(async () => (await window.werkstatt.playKey(60)).src.playbackRate.value);
-    check('Klang ohne Tonhöhe liegt im Original auf der ersten Taste', Math.abs(kick - 1) < 1e-6, kick.toFixed(4));
-    if (SHOTS) await tp.screenshot({ path: path.join(DIR, 'werkstatt-tempo-handy.png') });
-    const tScroll = await tp.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-    check('Handy: Leiste offen ohne seitliches Scrollen', tScroll <= 0);
-    await tp.reload();
-    await tp.waitForFunction(() => window.werkstatt?.ready);
-    const kept2 = await tp.evaluate(() => ({ ...window.werkstatt.song }));
-    check('Tempo und Tonart bleiben nach dem Neuladen', kept2.bpm === tapped && kept2.root === 0 && kept2.mode === 'dur', JSON.stringify(kept2));
-    check('Tempo/Tonart: keine Konsolenfehler', tErrors.length === 0, tErrors.join(' | '));
-    await T.close();
+    const counts = {};
+    const bench = {};
+    for (const [dev, opts] of [['desktop', DESK], ['handy', PHONE]]) {
+      const ctx = await browser.newContext(opts);
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      await page.waitForTimeout(600);
+      for (const sc of ['start', 'clip']) {
+        if (sc === 'clip') await addBumm(page);
+        await scene(page, sc);
+        counts[`${dev}-${sc}`] = await countUi(page);
+        if (sc === 'start') bench[`empty-${dev}`] = await page.evaluate(() => ({
+          hint: getComputedStyle(document.querySelector('.track-row .lane'), '::after').content,
+          kiste: document.querySelector('#library .shelf-empty')?.textContent,
+        }));
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, `kw-${sc}-${dev}.png`) });
+      }
+      if (dev === 'handy') {
+        await page.click('#tab-werkbank');
+        await page.waitForTimeout(1100);
+        counts['handy-werkbank'] = await countUi(page);
+        bench.wbSheet = await page.evaluate(() => {
+          const wb = document.getElementById('werkbank').getBoundingClientRect();
+          const arr = document.querySelector('.arranger').getBoundingClientRect();
+          const rows = [...document.querySelectorAll('.track-row')].map((r) => r.getBoundingClientRect().bottom);
+          const head = document.querySelector('.playhead').getBoundingClientRect();
+          return { top: wb.top, frac: wb.height / arr.height, rowsAbove: rows.length === 2 && rows.every((b) => b <= wb.top + 1), markVisible: head.top < wb.top && head.height > 0 };
+        });
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-werkbank-handy.png') });
+        await page.evaluate(() => window.loopwerk.ui.setDock(null));
+        await page.waitForTimeout(600);
+        bench.phone = await page.evaluate(() => {
+          const box = (sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r && { w: r.width, h: r.height, bottom: r.bottom }; };
+          const fl = document.getElementById('clip-float');
+          const flr = fl.getBoundingClientRect();
+          return {
+            bar: ['#tab-sounds', '#play-btn', '#rec-btn', '#tab-werkbank'].map(box),
+            floatBtns: [...fl.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect().height),
+            floatIn: fl.closest('#arr-wrap') === document.getElementById('arr-wrap'),
+            floatHidden: fl.hidden, floatBottom: flr.bottom,
+            floatRight: flr.right,
+            order: [...fl.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.textContent),
+            headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(flr.right <= r.left || flr.left >= r.right || flr.bottom <= r.top || flr.top >= r.bottom); }),
+            rowsGone: ['.key-row', '.chord-row'].map((q) => document.querySelector(q).getClientRects().length === 0),
+          };
+        });
+        // Deck antippen öffnet das Song-Fach, dort stehen „Mischen“ und „FX-Pad“
+        await page.tap('.deck-name');
+        await page.waitForTimeout(900);
+        bench.songLinks = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, links: [...document.querySelectorAll('#song-links .tab')].map((b) => b.textContent.trim()), metro: !!document.querySelector('#song-links #metro-btn') }));
+        // Zwilling der Tonart-/Akkordzeile: Schalter im Song-Fach blendet beide wieder ein (Wechsel lassen sich anlegen)
+        await page.tap('#harm-btn');
+        await page.waitForTimeout(200);
+        bench.harmony = await page.evaluate(() => ({ pressed: document.getElementById('harm-btn').getAttribute('aria-pressed'), rows: ['.key-row', '.chord-row'].map((q) => document.querySelector(q).getClientRects().length > 0) }));
+        await page.tap('#harm-btn');
+        await page.evaluate(() => window.loopwerk.ui.setDock(null));
+      } else {
+        // Werkbank: 36 % bei Auswahl, ⤢ macht 60 %, bleibt nach dem Neuladen; ohne Auswahl 24 px
+        const wid = () => page.evaluate(() => ({ insp: document.getElementById('insp').getBoundingClientRect().width, app: document.getElementById('app').getBoundingClientRect().width, shelf: document.querySelector('.shelf').getBoundingClientRect().width }));
+        const pct = (w) => (w.insp / w.app) * 100;
+        const pctRest = (w) => (w.insp / (w.app - w.shelf)) * 100;
+        const open = await wid();
+        await page.click('#wb-wide');
+        await page.waitForTimeout(300);
+        const wide = await wid();
+        bench.wideState = await page.evaluate(() => {
+          const fl = document.getElementById('clip-float').getBoundingClientRect();
+          const sc = document.getElementById('arr-scroll').getBoundingClientRect();
+          const bars = [...document.querySelectorAll('.bar-mark')].filter((m) => { const r = m.getBoundingClientRect(); return r.right <= sc.right && r.left >= sc.left; }).map((m) => parseInt(m.textContent, 10));
+          return { headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(fl.right <= r.left || fl.left >= r.right || fl.bottom <= r.top || fl.top >= r.bottom); }), bars: [1, 2, 3, 4].every((b) => bars.includes(b)), barsSeen: bars.join(',') };
+        });
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-breit-desktop.png') });
+        await page.reload();
+        await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(400);
+        const again = await wid();
+        await page.click('#wb-wide');
+        await page.evaluate(() => window.loopwerk.ui.select(null));
+        await page.waitForTimeout(400);
+        const shut = await wid();
+        bench.wb = { open: pct(open), wide: pctRest(wide), again: pctRest(again), shut: shut.insp, shelfWide: wide.shelf };
+        // Werkzeug am Clip: innerhalb von #arr-wrap, deckt den Clip nicht ab; Kopie und Löschen je ein Undo-Schritt
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(400);
+        bench.stempo = await page.evaluate(() => ({ block: !!document.querySelector('.insp-stempo')?.offsetParent, off: [...document.querySelectorAll('#insp :disabled')].filter((b) => b.offsetParent).length }));
+        bench.float = await page.evaluate(() => {
+          const fl = document.getElementById('clip-float').getBoundingClientRect();
+          const w = document.getElementById('arr-wrap').getBoundingClientRect();
+          const c = document.querySelector('.clip.selected').getBoundingClientRect();
+          const hit = !(fl.right <= c.left || fl.left >= c.right || fl.bottom <= c.top || fl.top >= c.bottom);
+          return { inside: fl.left >= w.left && fl.right <= w.right && fl.top >= w.top && fl.bottom <= w.bottom, covers: hit, h: [...document.querySelectorAll('#clip-float button')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect().height) };
+        });
+        const nClips = () => page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length);
+        const n0 = await nClips();
+        await page.click('#cf-dup');
+        const n1 = await nClips();
+        await page.evaluate(() => window.loopwerk.store.undo());
+        const n2 = await nClips();
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(300);
+        await page.click('#cf-del');
+        const n3 = await nClips();
+        await page.evaluate(() => window.loopwerk.store.undo());
+        const n4 = await nClips();
+        bench.undo = [n0, n1, n2, n3, n4];
+        // M/S in der Spur-Werkbank
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(300);
+        await page.click('#insp-mute');
+        await page.click('#insp-solo');
+        bench.ms = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { mute: !!t.mute, solo: !!t.solo, m: document.getElementById('insp-mute').getAttribute('aria-pressed'), s: document.getElementById('insp-solo').getAttribute('aria-pressed') }; });
+        await page.click('#insp-mute');
+        await page.click('#insp-solo');
+        // Stufe 3: jedes Element hat einen Zwilling
+        bench.tiers = await page.evaluate(() => {
+          const tw = window.loopwerk.edition.twins;
+          const els = [...document.querySelectorAll('[data-tier="3"]')];
+          const miss = els.filter((e) => !(tw[e.id] || [...e.classList].some((c) => tw['.' + c]))).map((e) => e.id || e.className);
+          return { n: els.length, miss };
+        });
+        // Kiste: Gruppen nach Herkunft, einklappbar
+        await page.evaluate(async () => {
+          const lw = window.loopwerk;
+          const mk = (n) => { const b = new AudioBuffer({ numberOfChannels: 1, length: 4410, sampleRate: 44100 }); b.getChannelData(0)[0] = 0.5; return lw.own.create({ name: n, buffer: b, source: 'Import', from: n.startsWith('D') ? 'file' : 'loop' }); };
+          await mk('Datei X');
+          await mk('Schleife X');
+          const { newDrumPattern } = await import('./src/instruments.js');
+          lw.store.addPattern(newDrumPattern(1));
+          await lw.patterns.sync(lw.store.project);
+        });
+        await page.waitForTimeout(500);
+        bench.kiste = await page.evaluate(() => [...document.querySelectorAll('#library .shelf-cat')].map((b) => b.children[1].textContent));
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-kiste-desktop.png') });
+        await page.click('#kiste-toggle');
+        await page.waitForTimeout(300);
+        bench.kisteZu = await page.evaluate(() => ({ w: document.querySelector('.shelf').getBoundingClientRect().width, zu: document.getElementById('app').classList.contains('kiste-zu') }));
+        await page.click('#kiste-toggle');
+        bench.kisteAuf = await page.evaluate(() => document.querySelector('.shelf').getBoundingClientRect().width);
+      }
+      await ctx.close();
+    }
+    console.table(counts);
+    const B = { desktop: { controls: 70, frames: 60, sizes: 8 }, handy: { controls: 24, frames: 25, sizes: 6 } };
+    for (const [dev, b] of Object.entries(B)) {
+      const c = counts[`${dev}-clip`];
+      check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'} (Clip gewählt): ≤ ${b.controls} Bedienelemente, ≤ ${b.frames} Rahmen`, c.controls <= b.controls && c.frames <= b.frames, `${c.controls} / ${c.frames}`);
+      check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'}: ≤ ${b.sizes} Schriftgrößen, kleinste ≥ 11 px`, c.sizes <= b.sizes && c.minFont >= 11, `${c.sizes} Größen, kleinste ${c.minFont}`);
+    }
+    const w = bench.wb;
+    check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % des Raums rechts der Kiste (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
+    check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 Takte, Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
+    check('Werkbank: Sound-Tempo-Block bei Einzelklang und gesperrte Knöpfe nicht sichtbar', !bench.stempo.block && bench.stempo.off === 0, JSON.stringify(bench.stempo));
+    check('Leerer Start: Hinweis in Spur 1 („● tippen …“), Kiste „Noch nichts aufgenommen“ (Handy und Desktop)', ['desktop', 'handy'].every((d) => /tippen/.test(bench[`empty-${d}`].hint) && bench[`empty-${d}`].kiste === 'Noch nichts aufgenommen'), JSON.stringify([bench['empty-desktop'], bench['empty-handy']]));
+    check('Handy: „Tonart und Akkorde“ im Song-Fach blendet beide Zeilen wieder ein', bench.harmony?.pressed === 'true' && bench.harmony.rows.every(Boolean), JSON.stringify(bench.harmony));
+    check('Handy: Werkzeug am Clip deckt keinen Spurkopf ab, Reihenfolge Werkbank · Teilen · Kopie · Löschen; Tonart- und Akkordzeile ohne Wechsel weg', !bench.phone.headsHit && bench.phone.floatRight <= 390 && bench.phone.order.join() === 'Werkbank,Teilen,Kopie,Löschen' && bench.phone.rowsGone.every(Boolean), JSON.stringify([bench.phone.headsHit, bench.phone.order, bench.phone.rowsGone]));
+    check('Werkbank Desktop: ohne Auswahl eingeklappt (≤ 26 px)', w.shut <= 26, `${w.shut.toFixed(1)} px`);
+    const ws = bench.wbSheet;
+    check('Werkbank Handy: öffnet auf Mitte, 2 Spuren und die Marke bleiben sichtbar', Math.abs(ws.frac - 0.5) < 0.06 && ws.rowsAbove && ws.markVisible, JSON.stringify(ws));
+    const ph = bench.phone;
+    check('Daumenleiste: 4 Ziele ≥ 44 px, unterer Rand ≤ 844', ph.bar.every((r) => r && r.w >= 44 && r.h >= 44 && r.bottom <= 844), JSON.stringify(ph.bar.map((r) => r && [Math.round(r.w), Math.round(r.h), Math.round(r.bottom)])));
+    check('Song-Fach: Tipp aufs Deck öffnet es, „Mischen“ und „FX-Pad“ stehen darin', bench.songLinks.dock === 'song' && ['Mischen', 'FX-Pad'].every((t) => bench.songLinks.links.includes(t)) && bench.songLinks.metro, JSON.stringify(bench.songLinks));
+    check('Werkzeug am Clip (Handy): in #arr-wrap, 4 Tasten ≥ 44 px', ph.floatIn && !ph.floatHidden && ph.floatBtns.length === 4 && ph.floatBtns.every((h) => h >= 44), JSON.stringify(ph.floatBtns));
+    const f = bench.float;
+    check('Werkzeug am Clip (Desktop): innerhalb von #arr-wrap, deckt den Clip nicht ab, Tasten ≥ 44 px', f.inside && !f.covers && f.h.length === 3 && f.h.every((h) => h >= 44), JSON.stringify(f));
+    check('Kopie und Löschen sind je ein Undo-Schritt', bench.undo.join() === '1,2,1,0,1', bench.undo.join());
+    check('Spur-Werkbank: M und S schalten track.mute / track.solo', bench.ms.mute && bench.ms.solo && bench.ms.m === 'true' && bench.ms.s === 'true', JSON.stringify(bench.ms));
+    check('Stufe 3: jedes [data-tier="3"] hat einen Zwilling in EDITION.twins', bench.tiers.n > 10 && bench.tiers.miss.length === 0, `${bench.tiers.n} Elemente, ohne Zwilling: ${bench.tiers.miss.join(', ')}`);
+    check('Kiste: Gruppen in der Reihenfolge Aufnahmen · Dateien · Schleifen · Strom', bench.kiste.join(' · ') === 'Aufnahmen · Dateien · Schleifen · Strom', bench.kiste.join(' · '));
+    check('Kiste: 240 px breit, klappt auf 24 px ein und wieder aus', Math.abs(bench.kisteAuf - 240) <= 1 && bench.kisteZu.zu && bench.kisteZu.w <= 26, `${bench.kisteAuf} / ${bench.kisteZu.w}`);
 
-    // ---------- Mitnehmen: Krachwerk → Loopwerk ----------
-    const M = await browser.newContext({ ...PHONE, acceptDownloads: true });
-    const mp = await M.newPage();
-    const mErrors = [];
-    mp.on('pageerror', (e) => mErrors.push(e.message));
-    mp.on('console', (m) => { if (m.type() === 'error') mErrors.push(m.text()); });
-    await mp.goto(`${base}/werkstatt/`);
-    await mp.waitForFunction(() => window.werkstatt?.ready);
-    await mp.evaluate(signals);
-    await mp.tap('#wsynth');
-    await mp.waitForFunction(() => window.werkstatt.pads.slice(0, 8).every((p) => p.length > 0));
-    const rawAt = await mp.evaluate(async () => {
-      const sr = 48000;
-      await window.werkstatt.ingestPad(8, [window.sig.take(sr, 1, [[window.sig.tone, 0.2, 0.5, 0.5]])], sr);
-      return document.querySelector('.wpad[data-pad="8"]').classList.contains('raw');
-    });
-    await mp.waitForTimeout(900);
-    const formed = await mp.evaluate(() => {
-      const b = document.querySelector('.wpad[data-pad="8"]');
-      return !b.classList.contains('raw') && [...b.querySelectorAll('.wpad-wave i')].every((i) => getComputedStyle(i).transform === 'none');
-    });
-    check('Roh → geformt: neuer Klang erscheint als Wolke und ordnet sich zur Wellenform', rawAt && formed);
-    // ohne Schleife: der Groove wird als Schleife mitgegeben
-    await mp.tap('#wtake-btn');
-    check('„Mitnehmen“ öffnet die Schublade', await mp.evaluate(() => !document.getElementById('wtake').hidden));
-    const [dl0] = await Promise.all([mp.waitForEvent('download'), mp.tap('#wtake-project')]);
-    const p0 = JSON.parse(fs.readFileSync(await dl0.path(), 'utf8'));
-    check('Ohne Schleife: Groove kommt als Schleife ins Projekt', p0.tracks[0].clips.length === 1 && p0.ownSounds.some((o) => o.name === 'Groove' && o.kind === 'loop'), `${p0.tracks[0].clips.length} Clips`);
-    await mp.tap('#wgroove');
-    await mp.waitForTimeout(200);
-    await mp.tap('#wfreeze');
-    await mp.waitForFunction(() => window.werkstatt.pads[9]?.cls === 'loop');
-    await mp.tap('#wgroove');
-    await mp.tap('#wtake-btn');
-    const [dl] = await Promise.all([mp.waitForEvent('download'), mp.tap('#wtake-project')]);
-    const projFile = path.join(path.dirname(wav), dl.suggestedFilename());
-    await dl.saveAs(projFile);
-    const proj = JSON.parse(fs.readFileSync(projFile, 'utf8'));
-    check('Projektdatei: Loopwerk-Format, 90 BPM, A-Moll („Am“), Name mit Krachwerk', proj.version === 1 && proj.bpm === 90 && proj.key === 'Am' && /^Krachwerk /.test(proj.name) && /\.json$/.test(dl.suggestedFilename()), dl.suggestedFilename());
-    check('Projektdatei: alle 10 Pads als eigene Sounds, Schleife als 4-Takt-Clip', proj.ownSounds.length === 10 && proj.tracks[0].clips.length === 1 && proj.tracks[0].clips[0].lengthBeats === 16 && proj.ownSounds.every((o) => o.id.startsWith('own-')), `${proj.ownSounds.length} Sounds`);
-    // WAV der Schleife
-    await mp.tap('#wtake-btn');
-    const [dw] = await Promise.all([mp.waitForEvent('download'), mp.tap('#wtake-wav')]);
-    const wb = fs.readFileSync(await dw.path());
-    const wsr = wb.readUInt32LE(24), wch = wb.readUInt16LE(22), wlen = wb.readUInt32LE(40) / (2 * wch);
-    check('WAV: Schleife 4 Takte lang (90 BPM, samplegenau)', wb.toString('ascii', 0, 4) === 'RIFF' && wlen === 4 * Math.round((60 / 90) * 4 * wsr) && /\.wav$/.test(dw.suggestedFilename()), `${wlen} Frames, ${dw.suggestedFilename()}`);
-    check('Mitnehmen: keine Konsolenfehler', mErrors.length === 0, mErrors.join(' | '));
-    // In Loopwerk öffnen
-    const lw = await M.newPage();
-    const lwErrors = [];
-    lw.on('pageerror', (e) => lwErrors.push(e.message));
-    await lw.goto(`${base}/`);
-    await lw.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 20000 });
-    await lw.setInputFiles('#open-input', projFile);
-    await lw.waitForFunction(() => /^Krachwerk /.test(window.loopwerk.store.project.name), null, { timeout: 10000 });
-    const opened = await lw.evaluate((ids) => {
-      const { store, library } = window.loopwerk;
-      const clip = store.project.tracks[0].clips[0];
-      const s = library.get(clip?.sampleId);
-      return { clips: store.project.tracks[0].clips.length, kind: s?.kind, cat: s?.category, beats: s?.beats, bpm: store.project.bpm, all: ids.every((id) => !!library.get(id)) };
-    }, proj.ownSounds.map((o) => o.id));
-    check('Loopwerk öffnet die Datei: Schleifen-Clip bleibt, Sound unter „Eigene“', opened.clips === 1 && opened.kind === 'loop' && opened.cat === 'own' && opened.beats === 4 && opened.bpm === 90, JSON.stringify(opened));
-    check('Loopwerk: alle Krachwerk-Pads stehen als eigene Sounds bereit', opened.all);
-    check('Loopwerk: keine Programmfehler beim Öffnen', lwErrors.length === 0, lwErrors.join(' | '));
-    await M.close();
-
-    // GitHub-Pages-Build liefert dieselben Dateien unter werkstatt/
+    // ---------- 10: Pages-Build ----------
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });
     const site = path.join(__dirname, '..', '_site', 'werkstatt');
-    const built = ['index.html', 'manifest.webmanifest', 'sw.js'].every((f) => fs.existsSync(path.join(site, f)));
-    check('Pages-Build: werkstatt/index.html, manifest.webmanifest, sw.js', built && JSON.parse(fs.readFileSync(path.join(site, 'manifest.webmanifest'), 'utf8')).name === 'Krachwerk');
+    const html = fs.readFileSync(path.join(site, 'index.html'), 'utf8');
+    check('Pages-Build: /werkstatt/ ist die volle App mit Edition „make“', html.includes("LOOPWERK_EDITION = 'make'") && html.includes('src/main.js') && html.includes('Krach<b>werk</b>') && !html.includes('src/werkstatt/main.js') && fs.existsSync(path.join(site, 'sw.js')) && fs.existsSync(path.join(site, 'manifest.webmanifest')));
+
+    // ---------- 11: Loopwerk unverändert ----------
+    const L = await browser.newContext(DESK);
+    const lw = await L.newPage();
+    await lw.goto(`${base}/`);
+    await lw.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    const lwInfo = await lw.evaluate(() => {
+      localStorage.setItem('loopwerk.snap', localStorage.getItem('loopwerk.snap') || '1');
+      window.loopwerk.store.setProjectName('Prüfung'); // Projekt wird erst nach einer Änderung gesichert
+      return { off: document.querySelectorAll('[data-off]').length, ed: document.getElementById('app').dataset.edition, dens: document.getElementById('app').dataset.density, title: document.title, sw: !!navigator.serviceWorker.controller };
+    });
+    await lw.waitForTimeout(600);
+    const keys = await lw.evaluate(() => Object.keys(localStorage));
+    check('Loopwerk: keine abgeschalteten Flächen, Edition „full“, kein Service Worker', lwInfo.off === 0 && lwInfo.ed === 'full' && lwInfo.dens !== 'calm' && /Loopwerk$/.test(lwInfo.title) && !lwInfo.sw, JSON.stringify(lwInfo));
+    check('Loopwerk: Schlüssel wie bisher (loopwerk.project.v1, loopwerk.snap)', keys.includes('loopwerk.project.v1') && keys.includes('loopwerk.snap') && !keys.some((k) => k.startsWith('loopwerk.make.')), keys.join(','));
+    await L.close();
+    const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'count-baseline.json'), 'utf8'));
+    const now = {};
+    for (const [dev, opts] of [['desktop', DESK], ['handy', PHONE]]) {
+      const ctx = await browser.newContext(opts);
+      const pg = await ctx.newPage();
+      await pg.goto(`${base}/`);
+      await pg.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+      await pg.evaluate(() => window.loopwerk.library.catalogReady);
+      await pg.waitForTimeout(800);
+      for (const s of ['start', 'clip']) { await scene(pg, s); now[`${dev}-${s}`] = await countUi(pg); }
+      await ctx.close();
+    }
+    const same = Object.keys(baseline).every((k) => JSON.stringify(baseline[k]) === JSON.stringify(now[k]));
+    check('Loopwerk optisch unverändert (Zählung trifft die Basis exakt)', same, same ? '' : JSON.stringify(now));
   } catch (err) {
     check('Ablauf ohne Ausnahme', false, err.stack || err.message);
   } finally {

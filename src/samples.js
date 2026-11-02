@@ -1659,6 +1659,16 @@ export class Library extends Emitter {
   get(id) { return this.samples.get(id); }
   list() { return [...this.samples.values()]; }
 
+  // Stummer Platzhalter „Sound fehlt“ für einen Clip, dessen Sound nicht da ist: das Arrangement bleibt erhalten
+  placeholder(clip) {
+    const sr = 44100;
+    const beats = Math.max(1, Math.round(clip.lengthBeats || 4));
+    return this.register({
+      id: clip.sampleId, name: 'Sound fehlt', category: 'own', origin: 'Eigene', kind: 'oneshot', missing: true,
+      lengthBeats: beats, buffer: new AudioBuffer({ numberOfChannels: 2, length: Math.max(1, Math.round(beats * (60 / this.bpm) * sr)), sampleRate: sr }),
+    });
+  }
+
   // Fertigen Puffer übernehmen (Tests, erzeugte Sounds)
   register(sample) {
     sample.rev = (sample.rev ?? 0) + 1;
@@ -1807,10 +1817,12 @@ const ALL_CATALOG = [...CATALOG, ...VCSL_CATALOG, ...GUITAR_CATALOG];
 
 // Alle Sounds als Einträge sofort im Regal; geladen bzw. erzeugt wird nur, was das Projekt braucht (need) –
 // der Rest beim ersten Anhören oder Einsetzen (library.ensure).
-export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, need = null } = {}) {
+// catalogs = false (Krachwerk): keine mitgelieferten Loops und Sounds, nur eigene; catalogReady ist sofort erfüllt
+export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, need = null, catalogs = true } = {}) {
   const lib = new Library();
   lib.bpm = bpm;
   lib.semis = semis;
+  if (!catalogs) { onProgress?.(1, 1); return lib; }
   for (const def of ALL_LOOP_DEFS) {
     lib.stub({
       id: def.id, name: def.name, category: def.category, kind: def.oneShot ? 'oneshot' : 'loop',

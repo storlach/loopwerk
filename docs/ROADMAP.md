@@ -255,12 +255,11 @@
 - Swing (Aus, Leicht, Mittel, Triole, Stark) und Anschlag (Laut, Mittel, Leise) im Beat- und Melodie-Editor: Swing verschiebt Offbeat-Sechzehntel beim Rendern; Anschlag ist ein Pinsel – neue Schritte/Noten bekommen ihn, Antippen mit anderem Anschlag ändert, mit gleichem löscht; leise Schritte leuchten schwächer (`tests/swing-vel.test.cjs`)
 - Robustheit eigener Sounds: beim Start nur Name und Länge (aus dem WAV-Kopf), dekodiert wird beim ersten Gebrauch; Clips mit vom Browser gelöschtem Sound bleiben als „Sound fehlt“ erhalten (Hinweis, Projektdatei holt den Klang zurück); dauerhafter Speicher wird beim ersten eigenen Sound erbeten; eigene Sounds im Projekt werden direkt nach dem Start bereitgestellt (`tests/robust.test.cjs`)
 
-## 🧪 Krachwerk – Ableger „Selbermachen“ (Prototyp, Branch `werkstatt`, noch nicht auf `main`)
-- Edition `make` im selben Repo unter `/werkstatt/` (Spec `docs/specs/ableger-selbermachen.md`): nur Selbstgemachtes, Synth-Kits als Klangerzeuger, eigener Speicher
-- Pad-Wand mit Aufnahme und Auto-Säubern, „Klatsch dein Kit“ mit sofortigem Groove, Festhalten (Resampling) mit Schleifen im Takt, Tastenleiste in der Song-Tonart, Tempo und Tonart, „roh → geformt“
-- Als App: Manifest, Service Worker (offline), dauerhafter Speicher, eigenes Icon (`assets/icons/krachwerk.svg`, PNG über `tools/krachwerk-icons.cjs`)
-- Mitnehmen: Loopwerk-Projektdatei (Schleifen als Clips, alle Pads unter „Eigene“) oder Schleife als WAV; am Handy über das Teilen-Menü
-- Test: `tests/werkstatt.test.cjs`
+## 🧪 Krachwerk – Loopwerk zum Selbermachen (Branch `werkstatt`)
+- Brainstorm mit ux-designer, ui-designer, architekt, creative-director: `docs/ux/krachwerk-brainstorm/` (Zielbild: Song · Werkbank · Kiste, ruhiger bei gleichem Funktionsumfang). Der erste Prototyp (Pad-Wand ohne Arranger) ist zurückgebaut.
+- ✅ Scheibe 1a „Gerüst und erster Laut“ (`docs/specs/krachwerk-1-geruest.md`, ADR 007): volle App unter `/werkstatt/` ohne mitgelieferte Sounds, leerer Song (2 Spuren, 90 BPM), eigener Speicher inkl. der Pad-Wand-Klänge, ● nimmt ohne Vorzähler auf, säubert und legt den Klang als Clip in den Loop; PWA, eigenes Icon; Zählung Desktop „Clip gewählt“ 55 statt 114 Bedienelemente
+- ✅ Scheibe 1b „Flächen und Ruhe“: Dichte `calm` (Schriftskala, Stufen mit Zwillingen), Werkbank rechts (⤢ 60 %) bzw. als Schublade am Handy, Daumenleiste Kiste · ▶ · ● · Werkbank, Werkzeug am Clip (`src/ui/clip-float.js`), Kiste nach Herkunft; Zählung „Clip gewählt“ Desktop 54 Bedienelemente / 30 Rahmen / 4 Schriftgrößen (Loopwerk 114 / 71 / 12), Handy 18 / 8 / 4 (Loopwerk 43 / 27 / 7)
+- Als Nächstes Scheibe 2: Sound-Werkbank mit Rezept (Form, Ton, Farbe, Zeit, Zerlegen, Herkunft), Herkunftsfarben im Song
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

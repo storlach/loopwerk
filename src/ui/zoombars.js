@@ -7,8 +7,9 @@
 import { clamp, el, trackPointer } from '../util.js';
 import { touch, narrow } from './place.js';
 import { MIN_PPB, MAX_PPB, MIN_TRACK_ZOOM, MAX_TRACK_ZOOM } from './arranger.js';
+import { lsKey } from '../edition.js';
 
-const KEY = 'loopwerk.zoom';
+const KEY = lsKey('loopwerk.zoom');
 
 // Zoom-Stufe pro Gerät merken (kein Projektinhalt)
 export function loadZoom() {
