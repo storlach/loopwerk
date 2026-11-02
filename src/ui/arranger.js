@@ -30,7 +30,11 @@ export const MIN_TRACK_ZOOM = 0.4;
 export const MAX_TRACK_ZOOM = 3;
 const cssPx = (name, fallback) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || fallback;
 export const baseTrackH = () => cssPx('--track-h', 58);
-const MAX_CANVAS = 16000; // Gerätepixel; größere Canvas-Flächen verweigert der Browser
+// Gerätepixel; größere Canvas-Flächen verweigert der Browser. Am Touchgerät (iOS: Canvas-Speicher ist knapp)
+// höchstens 8000 breit und doppelte Pixeldichte – lange Songs mit vielen Clips bleiben so unter der Grenze.
+const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+const MAX_CANVAS = TOUCH ? 8000 : 16000;
+const canvasDpr = () => Math.min(TOUCH ? 2 : 4, window.devicePixelRatio || 1);
 
 export function mountArranger({ root, store, engine, library, ui }) {
   root.innerHTML = '';
@@ -240,7 +244,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   function drawGroupSum(r, members) {
     const w = Math.max(1, Math.round(totalBeats(store.project) * ppb()));
     const h = r.lane.clientHeight || 40;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = canvasDpr();
     const sx = Math.min(dpr, MAX_CANVAS / w);
     r.sum.width = Math.max(1, Math.round(w * sx));
     r.sum.height = Math.round(h * dpr);
@@ -499,7 +503,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
   function drawWave(canvas, clip, sample) {
     const w = Math.max(1, Math.round(clip.lengthBeats * ppb()));
     const h = canvas.clientHeight || 30;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = canvasDpr();
     const sx = Math.min(dpr, MAX_CANVAS / w);
     canvas.width = Math.max(1, Math.round(w * sx));
     canvas.height = Math.round(h * dpr);

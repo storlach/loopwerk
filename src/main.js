@@ -37,6 +37,13 @@ import { mountLinkImport } from './ui/link-import.js';
 import { touch } from './ui/place.js';
 import { doubleTapRanges } from './ui/touch.js';
 
+// iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
+// Zoomen mit zwei Fingern bleibt erlaubt (Safari ignoriert die Grenze dafür). Für Gerüste, die wir nicht selbst schreiben.
+{
+  const vp = document.querySelector('meta[name="viewport"]');
+  if (vp && !/maximum-scale/.test(vp.content)) vp.content += ', maximum-scale=1';
+}
+
 const STORAGE_KEY = 'loopwerk.project.v1';
 
 async function loadSaved(library, patterns) {

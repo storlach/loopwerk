@@ -439,6 +439,8 @@ export class Engine extends Emitter {
 
   // Ton-Kontext einmal aufbauen; gleichzeitige Aufrufe warten auf denselben Aufbau (Worklet laden ist asynchron)
   async _ensure() {
+    // Noch synchron in der Geste fortsetzen (iOS: nach einer Unterbrechung „interrupted“)
+    if (this.ctx && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {});
     if (!this._building) this._building = this._build();
     await this._building;
     if (this.ctx.state !== 'running') await this.ctx.resume();
@@ -447,9 +449,14 @@ export class Engine extends Emitter {
   async _build() {
     {
       // Erst laden, dann alles auf einmal setzen: wer this.ctx sieht, findet auch Mischung und Pad vor
+      // iOS: als Musik-App spielen – sonst schaltet der Stummschalter am iPhone Web Audio ab
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* älteres Safari */ }
       const ctx = new AudioContext({ latencyHint: 'interactive' });
       // Noch innerhalb der Geste starten (iOS), bevor das Laden wartet
       ctx.resume().catch(() => {});
+      // Nach Anruf, Sperrbildschirm oder App-Wechsel (iOS: „interrupted“) beim nächsten Tippen weiterlaufen
+      const wake = () => { if (ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {}); };
+      for (const type of ['pointerup', 'touchend', 'keydown']) document.addEventListener(type, wake, { capture: true, passive: true });
       const worklets = await loadFxWorklet(ctx);
       const loopExtra = await measureLoopExtra(ctx.sampleRate);
       this.ctx = ctx;
