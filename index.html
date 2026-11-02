@@ -90,6 +90,7 @@
 <link rel="modulepreload" href="src/ui/place.js">
 <link rel="modulepreload" href="src/engine.js">
 <link rel="modulepreload" href="src/fxpad.js">
+<link rel="modulepreload" href="src/fxpad-record.js">
 <link rel="modulepreload" href="src/dsp/master-core.js">
 <link rel="modulepreload" href="src/wav.js">
 <link rel="modulepreload" href="src/ui/library.js">
@@ -2638,6 +2639,13 @@
     width: 260px; height: 260px; margin: -130px 0 0 -130px; border-radius: 50%; pointer-events: none;
     background: radial-gradient(circle, color-mix(in srgb, var(--beam) 20%, transparent), transparent 65%);
   }
+  /* Kurve aufnehmen: Aufnahme-Rot nur hier; an = rote Linie, während eine Geste schreibt = rot gefüllt. Trefferfläche 44 px */
+  .fxpad-rec { position: relative; }
+  .fxpad-rec::after { content: ""; position: absolute; inset: -7px -3px; }
+  #fxpad-rec[aria-pressed="true"], #fxpad-rec[aria-pressed="true"]:is(:hover, :active, :focus-visible):not(:disabled) {
+    background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent);
+  }
+  #fxpad-rec.writing[aria-pressed="true"], #fxpad-rec.writing[aria-pressed="true"]:is(:hover, :active, :focus-visible):not(:disabled) { background: var(--meter-hot); color: var(--accent-ink); }
   #mixer-fxpad { display: none; }
   @media (max-width: 760px) {
     #fxpad-btn { display: none; }
@@ -2650,6 +2658,7 @@
     .mst-head .dbtn, .mst-styles .chip, .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 44px; height: 44px; }
     .mst-head .mst-ab-end { width: 44px; }
     .fxpad-target { height: 44px; }
+    .fxpad-rec::after { inset: 0; }
   }
 
   /* ---------- Clip-Editor: Kopf mit Name und Icons, Wellenform bleibt stehen, Schalter statt Häkchen ---------- */

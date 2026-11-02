@@ -1,7 +1,11 @@
-// Effekt-Pad: XY-Fläche, wirkt live auf Summe oder Spur, solange Finger oder Maus drücken. Wird nicht aufgezeichnet.
+// Effekt-Pad: XY-Fläche, wirkt live auf Summe oder Spur, solange Finger oder Maus drücken. „● Kurve aufnehmen“ schreibt
+// Filter- und Echo-Bewegungen während der Wiedergabe als Kurve des Ziels (src/fxpad-record.js) – erst beim Loslassen, als
+// ein Rückgängig-Schritt; danach öffnet sich die Kurvenzeile.
 // Desktop: eigene Schublade „FX-Pad“ in der Fachleiste. Handy: Knopf im Mixer-Kopf (dieselbe Schublade).
 
 import { PAD_MODES, ECHO_STEPS, STUTTER_STEPS, stepAt, padFilter, padBits, padHold } from '../fxpad.js';
+import { PadRecorder, padRecordBlocked } from '../fxpad-record.js';
+import { AUTO_PARAMS } from '../automation.js';
 import { clamp, el } from '../util.js';
 
 const hz = (f) => (f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 0 : 1).replace('.', ',')} kHz` : `${Math.round(f)} Hz`);
@@ -38,6 +42,9 @@ export function mountFxPad({ root, store, engine, ui }) {
   let held = false; // Finger/Maus drückt
   let live = false; // Effekt wirkt (gedrückt oder gehalten)
   let pos = { x: 0.5, y: 0.5 };
+  let rec = false; // Schalter „Kurve aufnehmen“
+  let take = null; // laufende Aufnahme (PadRecorder)
+  let lastTake = null; // Ergebnis der letzten Aufnahme (Tests, Anzeige)
 
   const modeBox = el('div', 'fxpad-modes');
   modeBox.setAttribute('role', 'group');
@@ -66,12 +73,64 @@ export function mountFxPad({ root, store, engine, ui }) {
   tapeBtn.id = 'fxpad-tape';
   tapeBtn.title = 'Beim Loslassen bremst das Band bis zum Stillstand, dann geht es auf dem nächsten Schlag weiter';
   tapeBtn.addEventListener('click', () => { tape = !tape; sync(); });
-  actions.append(modeBox, sel, lockBtn, tapeBtn);
+  const recBtn = el('button', 'dbtn fxpad-rec', '● Kurve aufnehmen');
+  recBtn.type = 'button';
+  recBtn.id = 'fxpad-rec';
+  recBtn.title = 'Filter- und Echo-Bewegungen während der Wiedergabe als Kurve des Ziels schreiben';
+  recBtn.addEventListener('click', () => setRecord(!rec));
+  actions.append(modeBox, sel, lockBtn, tapeBtn, recBtn);
+
+  const ownerOf = (id) => (id === 'master' ? store.project.master || {} : store.track(id));
+  const modeLabel = (id) => PAD_MODES.find((m) => m.id === id)?.label ?? id;
+
+  function setRecord(on) {
+    rec = !!on;
+    if (!rec && take) take = null; // Schalter aus mitten in der Geste: nichts schreiben
+    sync();
+  }
+
+  // Aufnahme beginnt mit dem Einsetzen des Effekts; die Position kommt aus der Kontextuhr (engine.currentBeat)
+  function beginTake() {
+    take = null;
+    if (!rec) return;
+    const why = padRecordBlocked(mode, ownerOf(target), modeLabel(mode));
+    if (why) { ui.flash?.(why); return; }
+    if (!engine.playing) { ui.flash?.('Kurve aufnehmen geht nur während der Wiedergabe.'); return; }
+    take = new PadRecorder({ mode, target, beat: engine.currentBeat(), x: pos.x, y: pos.y, loop: store.project.loop });
+    const t = take;
+    // Je Bild abtasten: Halten ohne Bewegung und Loop-Sprünge entstehen auch ohne Pointer-Ereignis
+    const tick = () => {
+      if (take !== t || t.closed) return;
+      if (!engine.playing) { t.stop(); return; }
+      t.sample(engine.currentBeat(), pos.x, pos.y);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  function finishTake() {
+    const t = take;
+    take = null;
+    if (!t) return;
+    const owner = ownerOf(t.target);
+    const res = t.finish(engine.playing ? engine.currentBeat() : null, owner);
+    lastTake = res;
+    if (!res.points) { ui.flash?.(res.reason); return; }
+    if (!store.recordAutoLane(t.target, res.key, res.points, res.fx)) return;
+    ui.autoLane?.open(t.target, res.key);
+    const label = AUTO_PARAMS[res.key].label;
+    const note = res.other ? ` Die ${res.type === 'highpass' ? 'Tiefpass' : 'Hochpass'}-Seite wirkt nur live.` : tape ? ' Der Bandstopp wirkt nur live.' : '';
+    ui.flash?.(`${t.target === 'master' ? 'Summe: ' : ''}${label}-Kurve aufgenommen.${note}`);
+  }
 
   function setMode(id) {
     if (id === mode) return;
     mode = id;
-    if (live) engine.padDown(target, mode, pos.x, pos.y);
+    if (live) {
+      finishTake();
+      engine.padDown(target, mode, pos.x, pos.y);
+      beginTake();
+    }
     sync();
   }
 
@@ -79,6 +138,7 @@ export function mountFxPad({ root, store, engine, ui }) {
     live = false;
     held = false;
     engine.padUp({ tape });
+    finishTake();
     sync();
   }
 
@@ -118,13 +178,15 @@ export function mountFxPad({ root, store, engine, ui }) {
     for (const b of modeBtns) b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
     lockBtn.setAttribute('aria-pressed', String(lock));
     tapeBtn.setAttribute('aria-pressed', String(tape));
+    recBtn.setAttribute('aria-pressed', String(rec));
+    recBtn.classList.toggle('writing', !!take);
     xLabel.textContent = m.x;
     yLabel.textContent = m.y;
     area.dataset.mode = mode;
     area.classList.toggle('live', live);
     area.style.setProperty('--px', String(pos.x));
     area.style.setProperty('--py', String(pos.y));
-    value.textContent = live ? describe(mode, pos.x, pos.y) : '';
+    value.textContent = live ? (take ? '● ' : '') + describe(mode, pos.x, pos.y) : '';
     drawGrid();
   }
 
@@ -139,8 +201,8 @@ export function mountFxPad({ root, store, engine, ui }) {
     area.setPointerCapture?.(e.pointerId);
     pos = at(e);
     held = true;
-    if (live && engine.pad?.active) engine.padMove(pos.x, pos.y);
-    else engine.padDown(target, mode, pos.x, pos.y);
+    if (live && engine.pad?.active) { engine.padMove(pos.x, pos.y); take?.sample(engine.currentBeat(), pos.x, pos.y); }
+    else { engine.padDown(target, mode, pos.x, pos.y); beginTake(); }
     live = true;
     sync();
     const end = () => {
@@ -151,6 +213,7 @@ export function mountFxPad({ root, store, engine, ui }) {
       if (ev.pointerId !== e.pointerId || !held) return;
       pos = at(ev);
       engine.padMove(pos.x, pos.y);
+      take?.sample(engine.currentBeat(), pos.x, pos.y);
       sync();
     };
     const up = (ev) => {
@@ -183,7 +246,7 @@ export function mountFxPad({ root, store, engine, ui }) {
   targets();
   sync();
   return {
-    get state() { return { mode, target, lock, tape, live, held, pos: { ...pos } }; },
-    setMode, setTarget(id) { target = id; targets(); },
+    get state() { return { mode, target, lock, tape, live, held, rec, pos: { ...pos }, take: take ? { key: take.key, count: take.count, passes: take.passes.length } : null, lastTake }; },
+    setMode, setTarget(id) { target = id; targets(); }, setRecord,
   };
 }
