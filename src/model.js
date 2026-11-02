@@ -4,6 +4,7 @@
 import { Emitter } from './util.js';
 import { withFx } from './effects.js';
 import { isChord } from './harmony.js';
+import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, carryAutomation, AUTO_TEMPLATES, STEP_BEATS } from './automation.js';
 
 export const EPS = 1e-6;
 export const DEFAULT_TRACK_NAME = /^Spur \d+$/;
@@ -298,9 +299,12 @@ export function transposePitch(m, delta) {
 }
 export const transposePattern = (pattern, delta) => ({ ...pattern, notes: (pattern.notes || []).map((n) => ({ ...n, pitch: transposePitch(n.pitch, delta) })) });
 
+// Automation ist optional (PROJECT_VERSION bleibt 1); abgelehnt wird nur ein Feld, das kein Objekt ist
+const autoOk = (a) => a == null || (typeof a === 'object' && !Array.isArray(a));
+
 export function isValidProject(p) {
-  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips))
-    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords));
+  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation))
+    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation);
 }
 
 export class Store extends Emitter {
@@ -446,6 +450,7 @@ export class Store extends Emitter {
       const { track, clip } = this.findClip(clipId);
       const target = this.track(trackId);
       const { start, length } = this._fit(startBeat, clip.lengthBeats);
+      carryAutomation([{ from: track, to: target, s0: clip.startBeat, e0: clip.startBeat + clip.lengthBeats, s1: start }], { copy });
       let moved;
       if (copy) {
         moved = { ...clip, id: newId, startBeat: start, lengthBeats: length };
@@ -476,6 +481,14 @@ export class Store extends Emitter {
     const ids = moves.map(() => (copy ? this.newId() : null));
     this.dispatch(copy ? 'copy-clips' : 'move-clips', () => {
       const placed = [];
+      // Kurven wandern mit: alle Bereiche aus dem Stand vor der Aktion
+      carryAutomation(moves.map((m) => {
+        const found = this.findClip(m.id);
+        const target = this.track(m.trackId);
+        if (!found || !target) return null;
+        const { track, clip } = found;
+        return { from: track, to: target, s0: clip.startBeat, e0: clip.startBeat + clip.lengthBeats, s1: this._fit(m.startBeat, clip.lengthBeats).start };
+      }).filter(Boolean), { copy });
       moves.forEach((m, i) => {
         const found = this.findClip(m.id);
         if (!found) return;
@@ -608,6 +621,7 @@ export class Store extends Emitter {
     this.dispatch('duplicate-clip', () => {
       const { track, clip } = this.findClip(clipId);
       const copy = normalizeClip({ ...clip, id, startBeat: start, lengthBeats: Math.min(clip.lengthBeats, total - start) });
+      carryAutomation([{ from: track, to: track, s0: clip.startBeat, e0: start, s1: start }], { copy: true });
       track.clips.push(copy);
       this._raise(track, copy);
     });
@@ -730,6 +744,7 @@ export class Store extends Emitter {
         p.tracks.splice(at++, 0, {
           id, name: s.name.slice(0, 32), volume: track.volume, pan: track.pan || 0, mute: false, solo: false, autoName: false,
           clips: [normalizeClip({ ...clip, id: this.newId(), sampleId: s.sampleId })],
+          ...(track.automation ? { automation: JSON.parse(JSON.stringify(track.automation)) } : {}),
         });
       }
       track.clips = track.clips.filter((c) => c.id !== clipId);
@@ -935,6 +950,7 @@ export class Store extends Emitter {
       delete p.keyChanges;
       delete p.chords;
       delete p.sampleTempo;
+      if (p.master) delete p.master.automation;
       p.loop = { on: false, startBeat: 0, endBeat: 16 };
     });
   }
@@ -947,5 +963,96 @@ export class Store extends Emitter {
 
   setLoop(patch) {
     this.dispatch('loop', (p) => Object.assign(p.loop, patch));
+  }
+
+  // ---------- Automation (target = Spur-ID oder 'master'; Indizes beziehen sich auf laneOf) ----------
+
+  _autoOwner(target, create = false) {
+    const p = this.project;
+    if (target === 'master') {
+      if (create) p.master = { volume: 0.85, fx: null, ...(p.master || {}) };
+      return p.master || null;
+    }
+    return this.track(target) || null;
+  }
+
+  _autoOk(target, key) {
+    return autoKeys(target).includes(key) && (target === 'master' || !!this.track(target));
+  }
+
+  // Punkt setzen (gleicher Schlag: Wert ersetzen); liefert den Index
+  addAutoPoint(target, key, beat, value) {
+    if (!this._autoOk(target, key) || !Number.isFinite(beat) || !Number.isFinite(value)) return -1;
+    const spec = AUTO_PARAMS[key];
+    const b = Math.max(0, beat);
+    const v = Math.min(spec.max, Math.max(spec.min, value));
+    const lane = laneOf(this._autoOwner(target), key);
+    const same = lane.findIndex((p) => Math.abs(p.beat - b) < EPS);
+    if (same >= 0) lane[same] = { ...lane[same], value: v }; else lane.push({ beat: b, value: v });
+    lane.sort((x, y) => x.beat - y.beat);
+    this.dispatch('auto-add', () => setLane(this._autoOwner(target, true), key, lane));
+    return lane.findIndex((p) => Math.abs(p.beat - b) < EPS);
+  }
+
+  // Ziehen: je Ziehvorgang ein eindeutiges coalesce ('auto-drag-' + n) = ein Rückgängig-Schritt; der Punkt bleibt
+  // zwischen seinen Nachbarn
+  moveAutoPoint(target, key, index, beat, value, coalesce) {
+    if (!this._autoOk(target, key)) return;
+    const lane = laneOf(this._autoOwner(target), key);
+    const pt = lane[index];
+    if (!pt) return;
+    const spec = AUTO_PARAMS[key];
+    const lo = index > 0 ? lane[index - 1].beat + STEP_BEATS : 0;
+    const hi = index < lane.length - 1 ? lane[index + 1].beat - STEP_BEATS : Infinity;
+    const b = Number.isFinite(beat) ? Math.min(hi, Math.max(lo, beat)) : pt.beat;
+    const v = Number.isFinite(value) ? Math.min(spec.max, Math.max(spec.min, value)) : pt.value;
+    if (b === pt.beat && v === pt.value) return;
+    lane[index] = { ...pt, beat: b, value: v };
+    this.dispatch('auto-move', () => setLane(this._autoOwner(target), key, lane), { coalesce });
+  }
+
+  // curve: null/undefined = linear, 'step' = Stufe (gilt ab diesem Punkt)
+  setAutoCurve(target, key, index, curve) {
+    if (!this._autoOk(target, key)) return;
+    const lane = laneOf(this._autoOwner(target), key);
+    if (!lane[index] || (lane[index].curve || null) === (curve === 'step' ? 'step' : null)) return;
+    const q = { beat: lane[index].beat, value: lane[index].value };
+    if (curve === 'step') q.curve = 'step';
+    lane[index] = q;
+    this.dispatch('auto-curve', () => setLane(this._autoOwner(target), key, lane));
+  }
+
+  // Letzter Punkt löscht die Kurve
+  deleteAutoPoint(target, key, index) {
+    if (!this._autoOk(target, key)) return;
+    const lane = laneOf(this._autoOwner(target), key);
+    if (!lane[index]) return;
+    lane.splice(index, 1);
+    this.dispatch('auto-delete', () => setLane(this._autoOwner(target), key, lane));
+  }
+
+  // Ohne key: alle Kurven des Ziels
+  clearAutomation(target, key) {
+    const owner = this._autoOwner(target);
+    if (!owner?.automation) return;
+    if (key != null && !laneOf(owner, key).length && owner.automation[key] == null) return;
+    this.dispatch('auto-clear', () => {
+      const o = this._autoOwner(target);
+      if (key == null) delete o.automation; else setLane(o, key, []);
+    });
+  }
+
+  // Vorlage (fadeIn, fadeOut) als ein Schritt. opts: { fromBeat, toBeat } oder { bars, playheadBeat } (Bereich wie
+  // templateRange). Liefert { key, fromBeat, toBeat } – die Oberfläche öffnet damit die Kurvenzeile.
+  applyAutoTemplate(target, name, opts = {}) {
+    const tpl = AUTO_TEMPLATES[name];
+    if (!tpl || !this._autoOk(target, tpl.key)) return null;
+    const range = opts.fromBeat != null && opts.toBeat != null ? { fromBeat: Math.max(0, opts.fromBeat), toBeat: opts.toBeat } : templateRange(this.project, target, name, opts);
+    if (!range || range.toBeat - range.fromBeat < STEP_BEATS) return null;
+    const lane = templatePoints(laneOf(this._autoOwner(target), tpl.key), name, range.fromBeat, range.toBeat);
+    this.batch('auto-template', () => {
+      this.dispatch('auto-template', () => setLane(this._autoOwner(target, true), tpl.key, lane));
+    });
+    return { key: tpl.key, ...range };
   }
 }

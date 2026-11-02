@@ -6,6 +6,7 @@ import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
+import { AUTO_PARAMS, autoKeys, laneOf, autoValueAt, planLane, autoWindow, handover } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 const TICK_MS = 25;
@@ -17,16 +18,32 @@ export function trackLevel(track, anySolo) {
   return track.volume;
 }
 
-// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Einschleifpunkt
-// fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel dazu) → Panorama → Ziel
+// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Automation (auto, gehört
+// nur der Lautstärke-Kurve, ohne Kurve 1) → Einschleifpunkt fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel
+// dazu) → Panorama → Ziel
 function createStrip(ctx, dest, { pan = true } = {}) {
   const input = ctx.createGain();
   const out = pan ? ctx.createStereoPanner() : ctx.createGain();
+  const auto = ctx.createGain();
   const pre = ctx.createGain();
   const dry = ctx.createGain();
-  pre.connect(dry).connect(out);
+  auto.connect(pre).connect(dry).connect(out);
   out.connect(dest);
-  return { input, gain: input, pan: pan ? out : null, out, pre, dry, chain: null, xf: null };
+  return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set() };
+}
+
+// AudioParams der Kanalzug-Kurven (Panorama folgt in Scheibe 2, Effekte über u.auto in Scheibe 3)
+const STRIP_PARAMS = { volume: (strip) => strip.auto.gain };
+
+// Kurven eines Kanalzugs: [{ key, param, map, points, def }]
+function stripLanes(strip, owner, target) {
+  const out = [];
+  for (const key of autoKeys(target)) {
+    const spec = AUTO_PARAMS[key];
+    const param = STRIP_PARAMS[key]?.(strip);
+    if (spec.target === 'strip' && param) out.push({ key, param, map: spec.map, points: laneOf(owner, key), def: spec.def });
+  }
+  return out;
 }
 
 // AudioWorklet-Modul (Mastering, Lo-Fi) einmal je Kontext laden; false, wenn es nicht geht
@@ -47,7 +64,7 @@ export const defaultMasterGains = (style) => ({ pre: 0, drive: styleOf(style).dr
 function installChain(ctx, strip, fx, spb, live, grid) {
   const chain = buildFxChain(ctx, fx, spb, grid);
   const xf = ctx.createGain();
-  chain.output.connect(xf).connect(strip.pre);
+  chain.output.connect(xf).connect(strip.auto);
   strip.input.connect(chain.input);
   const old = strip.chain;
   const oldXf = strip.xf;
@@ -369,6 +386,12 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     }
   }
   if (pad) pad(ctx, mix, { worklets, loopExtra: await measureLoopExtra(sampleRate) });
+  // Kurven: dieselbe Planung wie in der Wiedergabe, in einem Stück
+  for (const track of project.tracks) {
+    for (const l of stripLanes(mix.tracks.get(track.id), track, track.id)) {
+      if (l.points.length) planLane(l.param, l.map, l.points, fromBeat, end, 0, spb, 'set');
+    }
+  }
   const audible = audibleMap(project);
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
@@ -525,6 +548,9 @@ export class Engine extends Emitter {
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     this.cursorBeat = fromBeat;
     this.cursorTime = t0;
+    this._autoState = { beat: fromBeat };
+    this._autoSmooth = false;
+    this._planAuto(fromBeat, fromBeat, t0, 'set');
     this.knownSigs = this._signatures();
     this._scheduleActiveAt(fromBeat, t0, this._limitFor(fromBeat));
     this._tickErr = false;
@@ -595,6 +621,13 @@ export class Engine extends Emitter {
   _halt() {
     this.ticker.stop();
     const t = this.ctx.currentTime;
+    // Spur-Kurven halten ihren Wert: im Stillstand läuft nichts durch die Spur außer Hall-/Echo-Fahnen, und die sollen
+    // nach einer Ausblendung nicht wieder aufleben. Der nächste Start setzt neu an (auch auf 1, wenn die Kurve weg ist).
+    // Master (Scheibe 4) muss dagegen auf 1 zurück, weil das Vorhören über ihn läuft.
+    const beat = this.currentBeat(t);
+    this._eachLane((l, strip) => {
+      if (strip.autoOn.has(l.key)) handover(l.param, t, l.map(autoValueAt(l.points, beat, l.def)));
+    });
     for (const v of this.voices) this._kill(v, t);
     this.voices.clear();
     this.playing = false;
@@ -621,6 +654,8 @@ export class Engine extends Emitter {
       const spanEndTime = Math.min(horizon, this.cursorTime + (limit - this.cursorBeat) * spb);
       const spanEndBeat = this.cursorBeat + (spanEndTime - this.cursorTime) / spb;
       this._scheduleSpan(this.cursorBeat, spanEndBeat, this.cursorTime, limit);
+      this._planAuto(this.cursorBeat, spanEndBeat, this.cursorTime, this._autoSmooth ? 'smooth' : 'cont');
+      this._autoSmooth = false;
       if (this.metronome) this._metronome(this.cursorBeat, spanEndBeat, this.cursorTime);
       this.cursorBeat = spanEndBeat;
       this.cursorTime = spanEndTime;
@@ -628,6 +663,7 @@ export class Engine extends Emitter {
         this.cursorBeat = loop.startBeat;
         this.anchors.push({ time: this.cursorTime, beat: loop.startBeat });
         this._scheduleActiveAt(loop.startBeat, this.cursorTime, loop.endBeat);
+        this._autoSmooth = true;
       }
     }
     // Alte Ankerpunkte aufräumen (einer vor "jetzt" bleibt für die Positionsberechnung).
@@ -635,6 +671,42 @@ export class Engine extends Emitter {
     // Anker eine Weile behalten: die hörbare Position (heardBeat) liegt um die Ausgabelatenz zurück
     while (this.anchors.length > 1 && this.anchors[1].time <= now - 1) this.anchors.shift();
     if (this.currentBeat() >= songEnd - EPS) this.stop();
+  }
+
+  // ---------- Automation ----------
+
+  _eachLane(fn) {
+    if (!this._lanes || this._lanesFor !== this.project) {
+      this._lanes = this.project.tracks.map((t) => [t.id, t]);
+      this._lanesFor = this.project;
+      this._laneCache = new Map();
+    }
+    for (const [id, track] of this._lanes) {
+      const strip = this.mix.tracks.get(id);
+      if (!strip) continue;
+      let lanes = this._laneCache.get(id);
+      if (!lanes || lanes.strip !== strip) { lanes = stripLanes(strip, track, id); lanes.strip = strip; this._laneCache.set(id, lanes); }
+      for (const l of lanes) fn(l, strip);
+    }
+  }
+
+  // Kurven für [b0, b1] ab Kontextzeit t0 planen. Neue Kurven setzen am Ruhewert an, verschwundene rampen dorthin
+  // zurück; Live-Änderungen greifen ab dem nächsten Fenster, ohne etwas abzubrechen.
+  _planAuto(b0, b1, t0, entry) {
+    const w = autoWindow(this._autoState, b0, b1, t0, this.spb, entry);
+    if (!w) return;
+    this._eachLane((l, strip) => {
+      const on = strip.autoOn.has(l.key);
+      if (!l.points.length && !on) return;
+      if (!l.points.length) {
+        planLane(l.param, l.map, [], w.b0, w.b1, w.t0, this.spb, w.entry === 'set' ? 'set' : 'cont');
+        strip.autoOn.delete(l.key);
+        return;
+      }
+      if (!on && w.entry !== 'set') l.param.setValueAtTime(l.map(l.def), w.t0);
+      planLane(l.param, l.map, l.points, w.b0, w.b1, w.t0, this.spb, on || w.entry === 'set' ? w.entry : 'cont');
+      strip.autoOn.add(l.key);
+    });
   }
 
   // ---------- Einplanen ----------
@@ -746,6 +818,7 @@ export class Engine extends Emitter {
 
   _onChange(reason) {
     this._aud = null;
+    this._lanes = null;
     if (!this.ctx) return;
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     if (this.playing) this._resync();
