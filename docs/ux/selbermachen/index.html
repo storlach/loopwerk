@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Loopwerk-Ableger „Selbermachen“ – Bildschirm-Skizzen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Funnel+Sans:wght@300..800&family=Azeret+Mono:wght@200..700&display=swap">
+<style>
+/* Tokens wie :root in index.html (Phosphor) – Skizze, kein App-Code */
+:root{
+  --bg:#16171A; --ink:#F2F2F0; --muted:#9898A1; --line:#2A2B30; --deck:rgb(18 19 22/.62); --deck-2:#222328;
+  --amber:#FFFFFF; --accent-ink:#030304; --danger:#FF6B6B; --well:#0E0F12; --sheet-bg:#1A1B1F;
+  --cat-drums:#FFC53D; --cat-bass:#4A8CFF; --cat-chords:#2EE5A3; --cat-synth:#B494FF; --cat-fx:#FF7F45; --cat-own:#FF62A5;
+  --font-display:"Funnel Display",system-ui,sans-serif; --font-body:"Funnel Sans",system-ui,sans-serif; --font-mono:"Azeret Mono",ui-monospace,monospace;
+  --radius:3px; --radius-lg:14px;
+  --glow-cat:0 0 6px var(--cat),0 0 18px color-mix(in srgb,var(--cat) 45%,transparent);
+  --sheet-shadow:0 -1px 0 #2A2A2F,0 -10px 26px rgb(0 0 0/.5);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--ink);font:14px/1.35 var(--font-body);padding:24px}
+h1{font:600 22px var(--font-display);margin:0 0 4px} .lead{color:var(--muted);margin:0 0 24px;max-width:900px}
+.row{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+figure{margin:0;width:390px} figcaption{color:var(--muted);font-size:13px;margin-top:10px;max-width:390px}
+figcaption b{color:var(--ink)}
+.phone{width:390px;height:844px;background:var(--bg);border-radius:28px;overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 0 0 1px var(--line)}
+/* Deck */
+.deck{display:flex;align-items:center;gap:8px;padding:10px 10px;background:var(--deck);border-bottom:1px solid var(--line)}
+.k{min-width:44px;height:44px;border-radius:var(--radius);box-shadow:inset 0 0 0 1px var(--line);display:grid;place-items:center;color:var(--ink);font:600 12px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;padding:0 10px;background:transparent;border:0}
+.k.round{border-radius:50%;width:48px;height:48px;padding:0}
+.rec{width:64px;height:64px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--danger);display:grid;place-items:center}
+.rec i{width:26px;height:26px;border-radius:50%;background:var(--danger);display:block}
+.rec.on{box-shadow:inset 0 0 0 2px var(--danger),0 0 22px rgb(255 107 107/.55)} .rec.on i{width:20px;height:20px;border-radius:3px}
+.lcd{font:500 22px var(--font-mono);line-height:1} .lcd small{display:block;font:500 10px var(--font-mono);color:var(--muted);letter-spacing:.1em}
+.sp{flex:1}
+/* Arranger */
+.arr{flex:1;position:relative;overflow:hidden;background:linear-gradient(90deg,rgb(255 255 255/.07) 1px,transparent 1px) 92px 0/74px 100%}
+.ruler{height:34px;border-bottom:1px solid var(--line);font:500 11px var(--font-mono);color:var(--muted);padding:9px 0 0 96px;display:flex;gap:63px}
+.ruler .loop{position:absolute;left:92px;top:0;width:296px;height:6px;background:var(--amber);opacity:.85}
+.lane{height:58px;border-bottom:1px solid var(--line);display:flex}
+.head{width:92px;flex:none;padding:8px;font-size:13px;font-weight:600;border-right:1px solid var(--line);background:rgb(16 17 20/.9)}
+.head i{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--cat);margin-right:6px}
+.clip{position:absolute;height:50px;margin-top:4px;border-radius:var(--radius);background:rgb(14 15 18/.86);box-shadow:inset 0 0 0 1px var(--cat);font:600 11px var(--font-body);color:var(--cat);padding:4px 6px;overflow:hidden}
+.clip::after{content:"";position:absolute;left:6px;right:6px;bottom:8px;height:18px;background:repeating-linear-gradient(90deg,var(--cat) 0 2px,transparent 2px 6px);opacity:.6;mask:linear-gradient(transparent 30%,#000 30% 70%,transparent 70%)}
+/* Leere Leinwand */
+.empty{position:absolute;inset:34px 0 0 0;padding:18px 16px;display:flex;flex-direction:column;gap:12px}
+.empty h2{font:600 20px var(--font-display);margin:0 0 2px}
+.start{display:flex;gap:12px;align-items:center;padding:14px;border-radius:var(--radius-lg);box-shadow:inset 0 0 0 1px var(--line);background:rgb(22 23 27/.6);min-height:72px}
+.start .ico{width:44px;height:44px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--cat);display:grid;place-items:center;color:var(--cat);font-size:20px;flex:none}
+.start b{display:block;font:600 16px var(--font-display)} .start span{color:var(--muted);font-size:13px}
+.recipes{display:flex;gap:8px;overflow:hidden} .chip{flex:none;height:44px;padding:0 14px;border-radius:22px;box-shadow:inset 0 0 0 1px var(--line);display:grid;place-items:center;font-size:13px;color:var(--ink)}
+.chip.on{background:var(--amber);color:var(--accent-ink);font-weight:600}
+.lbl{font:500 11px var(--font-mono);letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+/* Schublade */
+.sheet{background:var(--sheet-bg);box-shadow:var(--sheet-shadow);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:8px 12px 12px}
+.grip{width:52px;height:4px;border-radius:2px;background:#4a4b52;margin:4px auto 10px}
+.shead{display:flex;align-items:center;gap:8px;margin-bottom:10px} .shead h3{margin:0;font:600 15px var(--font-display);flex:1}
+/* Pad-Wand */
+.pads{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.pad{height:80px;min-width:0;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);position:relative;padding:6px;font-size:11px;color:var(--muted);display:flex;flex-direction:column;justify-content:flex-end}
+.pad.full{box-shadow:inset 0 0 0 1.5px var(--cat);color:var(--ink)}
+.pad.full.hit{background:color-mix(in srgb,var(--cat) 30%,transparent);box-shadow:inset 0 0 0 1.5px var(--cat),var(--glow-cat)}
+.pad.full::before{content:"";position:absolute;left:8px;right:8px;top:12px;height:22px;background:repeating-linear-gradient(90deg,var(--cat) 0 2px,transparent 2px 5px);mask:linear-gradient(90deg,#000 20%,transparent 90%);opacity:.75}
+.pad.free{display:grid;place-items:center;text-align:center;font-size:20px;color:#5a5b63}
+.pad.rec{box-shadow:inset 0 0 0 2px var(--danger),0 0 18px rgb(255 107 107/.45);color:var(--danger);display:grid;place-items:center;font:600 11px var(--font-mono)}
+.pad.armed{box-shadow:inset 0 0 0 1px var(--danger);color:var(--danger)}
+.desk .pad{height:64px}
+.pad small{font:500 9px var(--font-mono);color:var(--muted);letter-spacing:.05em}
+.bar{display:flex;gap:8px;margin-top:10px}
+/* Meine Sounds */
+.search{height:44px;border-radius:22px;box-shadow:inset 0 0 0 1px var(--line);display:flex;align-items:center;padding:0 16px;color:var(--muted);margin-bottom:10px}
+.chips{display:flex;gap:6px;overflow:hidden;margin-bottom:10px}
+.chips .chip{height:36px;padding:0 12px;font-size:12px}
+.tile{display:flex;gap:10px;align-items:center;min-height:64px;padding:8px 6px;border-bottom:1px solid var(--line)}
+.tile .wf{width:64px;height:40px;border-radius:var(--radius);box-shadow:inset 0 0 0 1px var(--cat);background:repeating-linear-gradient(90deg,var(--cat) 0 2px,transparent 2px 5px) center/100% 50% no-repeat;opacity:.9;flex:none}
+.tile b{font-weight:600;display:block} .tile .tags{font:500 10px var(--font-mono);color:var(--muted);letter-spacing:.04em}
+.tile.sel{background:rgb(255 255 255/.04);box-shadow:inset 3px 0 0 var(--amber)}
+.acts{display:flex;gap:6px;padding:8px 0 4px 80px}
+.acts .k{height:44px;font-size:11px}
+/* Resample */
+.floatbar{position:absolute;left:12px;right:12px;bottom:84px;background:var(--sheet-bg);border-radius:var(--radius-lg);box-shadow:var(--sheet-shadow),inset 0 0 0 1px var(--line);padding:10px}
+.primary{background:var(--amber);color:var(--accent-ink);box-shadow:none}
+.seg{display:flex;box-shadow:inset 0 0 0 1px var(--line);border-radius:var(--radius);overflow:hidden}
+.seg span{flex:1;height:44px;display:grid;place-items:center;font-size:12px;color:var(--muted)} .seg span.on{background:var(--deck-2);color:var(--ink);font-weight:600}
+.toast{position:absolute;left:50%;transform:translateX(-50%);top:110px;background:var(--deck-2);border-radius:22px;padding:10px 16px;font-size:13px;white-space:nowrap;box-shadow:0 8px 24px #000}
+/* Fachleiste */
+.tabbar{display:flex;border-top:1px solid var(--line);background:var(--deck);height:64px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:600 10px var(--font-mono);letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.tab .g{font-size:18px;line-height:1} .tab.on{color:var(--ink)} .tab.on .g{text-shadow:0 0 10px #fff}
+/* Desktop */
+.desk{width:1240px;height:640px;background:var(--bg);border-radius:12px;overflow:hidden;display:grid;grid-template-columns:300px 1fr 260px;grid-template-rows:auto 1fr;box-shadow:0 0 0 1px var(--line)}
+.desk .deck{grid-column:1/-1}
+.col{border-right:1px solid var(--line);padding:12px;overflow:hidden}
+.col.r{border-right:0;border-left:1px solid var(--line)}
+.ltabs{display:flex;gap:4px;margin-bottom:10px} .ltabs span{height:36px;padding:0 12px;display:grid;place-items:center;font:600 11px var(--font-mono);letter-spacing:.08em;color:var(--muted);border-bottom:2px solid transparent} .ltabs span.on{color:var(--ink);border-color:var(--amber)}
+.kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px} .kv span{color:var(--muted)}
+.keycap{font:500 9px var(--font-mono);color:var(--muted);position:absolute;top:5px;right:6px}
+</style></head>
+<body>
+<h1>Ableger „Selbermachen“ – Bildschirm-Skizzen</h1>
+<p class="lead">Keine mitgelieferten Samples. Erzeugt wird mit Mikrofon, Synth-Kits (Klangerzeuger, keine Aufnahmen) und Resampling. Leitidee: <b>Pad-Wand statt Regal</b>, <b>Aufnahme als Hauptknopf</b>, <b>jede Aufnahme ist sofort ein Objekt</b> (Pad, Sound, Clip). Nur Skizze, Look Phosphor, Handy 390 × 844.</p>
+
+<div class="row">
+
+<!-- 1 · Leere Leinwand -->
+<figure>
+<div class="phone">
+  <div class="deck">
+    <button class="k round">▶</button><div class="rec"><i></i></div>
+    <div class="lcd"><small>TAKT</small>001</div><div class="lcd"><small>TEMPO</small>90</div><span class="sp"></span><button class="k">↶</button>
+  </div>
+  <div class="arr">
+    <div class="ruler"><span class="loop"></span><span>1</span><span>2</span><span>3</span></div>
+    <div class="empty">
+      <h2>Was machst du zuerst?</h2>
+      <div class="start" style="--cat:var(--cat-drums)"><div class="ico">✋</div><div><b>Beat klatschen</b><span>Klatschen, auf den Tisch klopfen, „ts“ sagen – wird zu Pads</span></div></div>
+      <div class="start" style="--cat:var(--cat-own)"><div class="ico">♪</div><div><b>Melodie summen</b><span>Summen oder singen – wird zu Noten, Klang wählst du danach</span></div></div>
+      <div class="start" style="--cat:var(--cat-fx)"><div class="ico">●</div><div><b>Irgendwas aufnehmen</b><span>Stimme, Gitarre, Kühlschrank – 2 Takte im Loop</span></div></div>
+      <div class="start" style="--cat:var(--cat-synth)"><div class="ico">◇</div><div><b>Ohne Mikro anfangen</b><span>Synth-Pads und Beat-Raster</span></div></div>
+      <div class="lbl" style="margin-top:6px">Rezepte – leere Formen mit Tempo und Spuren</div>
+      <div class="recipes"><span class="chip">Beatbox 90</span><span class="chip">Lo-Fi aus Stimme</span><span class="chip">Vocal-Chops</span><span class="chip">Summ-Song</span></div>
+    </div>
+  </div>
+  <nav class="tabbar"><div class="tab on"><span class="g">▦</span>Pads</div><div class="tab"><span class="g">♫</span>Sounds</div><div class="tab"><span class="g">⫼</span>Mixer</div><div class="tab"><span class="g">∿</span>Editor</div><div class="tab"><span class="g">☰</span>Song</div></nav>
+</div>
+<figcaption><b>1 · Leeres Projekt.</b> Kein Dialog: die Karten liegen <i>in</i> den leeren Spuren und verschwinden mit dem ersten Clip. Loop (2 Takte) und Klick sind schon an, Tempo 90 (Klatschen fällt leichter als bei 120). Mikrofon-Freigabe erst beim ersten Antippen einer Mikro-Karte. Rezepte = Tempo, Spurnamen, Pad-Beschriftungen, Effekte – ohne Audio.</figcaption>
+</figure>
+
+<!-- 2 · Pad-Wand -->
+<figure>
+<div class="phone">
+  <div class="deck">
+    <button class="k round">■</button><div class="rec on"><i></i></div>
+    <div class="lcd"><small>TAKT</small>002</div><div class="lcd"><small>TEMPO</small>90</div><span class="sp"></span><button class="k">↶</button>
+  </div>
+  <div class="arr" style="flex:0 0 200px">
+    <div class="ruler"><span class="loop"></span><span>1</span><span>2</span><span>3</span></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-drums)"><i></i>Pads</div><div class="clip" style="--cat:var(--cat-drums);left:92px;width:148px">Beat 1 · wird eingespielt</div></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-own)"><i></i>Spur 2</div></div>
+  </div>
+  <div class="sheet" style="flex:1">
+    <div class="grip"></div>
+    <div class="shead"><h3>Pads</h3><span class="chip on" style="height:36px">● Ins Pad</span><span class="chip" style="height:36px">Im Loop spielen</span></div>
+    <div class="pads">
+      <div class="pad full hit" style="--cat:var(--cat-drums)">Bauch 1<small>KURZ · TIEF</small></div>
+      <div class="pad full" style="--cat:var(--cat-drums)">Klatsch 1<small>KURZ · HELL</small></div>
+      <div class="pad full" style="--cat:var(--cat-drums)">Ts 1<small>KURZ · RAUSCHEN</small></div>
+      <div class="pad rec">● 0,4 s</div>
+      <div class="pad armed free">+</div><div class="pad armed free">+</div><div class="pad armed free">+</div><div class="pad armed free">+</div>
+      <div class="pad full" style="--cat:var(--cat-synth)">Synth-Kick<small>ERZEUGT</small></div>
+      <div class="pad armed free">+</div><div class="pad armed free">+</div><div class="pad armed free">+</div>
+    </div>
+    <div class="bar"><button class="k" style="flex:1">Aufteilen …</button><button class="k" style="flex:1">Klang: Knackig</button><button class="k" style="flex:1">Raster</button></div>
+  </div>
+  <nav class="tabbar"><div class="tab on"><span class="g">▦</span>Pads</div><div class="tab"><span class="g">♫</span>Sounds</div><div class="tab"><span class="g">⫼</span>Mixer</div><div class="tab"><span class="g">∿</span>Editor</div><div class="tab"><span class="g">☰</span>Song</div></nav>
+</div>
+<figcaption><b>2 · Pad-Wand (Hauptfach).</b> Leeres Pad antippen = aufnehmen (stoppt bei Stille, schneidet auf den Anschlag, normalisiert, benennt). Volles Pad antippen = spielen; Halten = Wirbel wie heute. Neu aufnehmen nur bei „● Ins Pad“ (scharf, rote Ränder). „Im Loop spielen“ nutzt die vorhandene Live-Aufnahme: Pads werden quantisiert zum Beat-Clip. Technisch ein Kit mit <code>map</code> auf eigene Sounds.</figcaption>
+</figure>
+
+<!-- 3 · Meine Sounds -->
+<figure>
+<div class="phone">
+  <div class="deck">
+    <button class="k round">▶</button><div class="rec"><i></i></div>
+    <div class="lcd"><small>TAKT</small>001</div><div class="lcd"><small>TEMPO</small>90</div><span class="sp"></span><button class="k">↶</button>
+  </div>
+  <div class="arr" style="flex:0 0 120px"><div class="ruler"><span>1</span><span>2</span><span>3</span></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-drums)"><i></i>Pads</div><div class="clip" style="--cat:var(--cat-drums);left:92px;width:296px">Beat 1</div></div></div>
+  <div class="sheet" style="flex:1">
+    <div class="grip"></div>
+    <div class="search">Suchen … „tief“, „Stimme“, „A-Moll“</div>
+    <div class="chips"><span class="chip on">Zuletzt</span><span class="chip">Perkussiv</span><span class="chip">Tonal</span><span class="chip">Stimme</span><span class="chip">Mixdown</span></div>
+    <div class="tile" style="--cat:var(--cat-own)"><div class="wf"></div><div><b>Summen A-Moll 1</b><span class="tags">STIMME · TONAL · 2 TAKTE · AM · VOR 1 MIN</span></div></div>
+    <div class="tile sel" style="--cat:var(--cat-fx)"><div class="wf"></div><div><b>Loop 1 (Mixdown)</b><span class="tags">MIXDOWN · 4 TAKTE · 90 BPM · AUS: PADS, SPUR 2</span></div></div>
+    <div class="acts"><button class="k">Auf Pad</button><button class="k">Zerlegen</button><button class="k">Bearbeiten</button></div>
+    <div class="tile" style="--cat:var(--cat-drums)"><div class="wf"></div><div><b>Klatsch 1</b><span class="tags">PERKUSSIV · KURZ · HELL · PAD 2</span></div></div>
+    <div class="tile" style="--cat:var(--cat-drums)"><div class="wf"></div><div><b>Bauch 1</b><span class="tags">PERKUSSIV · KURZ · TIEF · PAD 1</span></div></div>
+    <div class="tile" style="--cat:var(--cat-chords)"><div class="wf"></div><div><b>Gitarre 1</b><span class="tags">AUFNAHME · TONAL · 2 TAKTE · TAKE 3 VON 3</span></div></div>
+  </div>
+  <nav class="tabbar"><div class="tab"><span class="g">▦</span>Pads</div><div class="tab on"><span class="g">♫</span>Sounds</div><div class="tab"><span class="g">⫼</span>Mixer</div><div class="tab"><span class="g">∿</span>Editor</div><div class="tab"><span class="g">☰</span>Song</div></nav>
+</div>
+<figcaption><b>3 · Meine Sounds statt Regal.</b> Nur eigene Assets, neueste oben. Name und Etiketten automatisch aus Herkunft und Analyse (perkussiv/tonal, hell/tief, Länge, Tonart, Tempo); Farbe folgt der Art. Antippen = hören + zum Einsetzen bereit (wie heute), Ziehen auf Spur oder Pad. „Zerlegen“ = an Anschlägen auf Pads verteilen. Keine Genre-/Längenfilter mehr.</figcaption>
+</figure>
+
+<!-- 4 · Resampling -->
+<figure>
+<div class="phone">
+  <div class="deck">
+    <button class="k round">▶</button><div class="rec"><i></i></div>
+    <div class="lcd"><small>TAKT</small>001</div><div class="lcd"><small>TEMPO</small>90</div><span class="sp"></span><button class="k">↶</button>
+  </div>
+  <div class="arr">
+    <div class="ruler"><span class="loop"></span><span>1</span><span>2</span><span>3</span></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-drums)"><i></i>Pads</div><div class="clip" style="--cat:var(--cat-drums);left:92px;width:296px">Beat 1</div></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-own)"><i></i>Summen</div><div class="clip" style="--cat:var(--cat-own);left:92px;width:296px">Summen A-Moll 1 → E-Piano</div></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-fx)"><i></i>Gitarre</div><div class="clip" style="--cat:var(--cat-fx);left:166px;width:222px">Gitarre 1 · Take 3</div></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-fx)"><i></i>Spur 4</div></div>
+    <div class="toast">„Loop 1“ ist jetzt ein Sound – liegt auf Pad 5</div>
+    <div class="floatbar">
+      <div class="shead"><h3>Loop-Bereich (Takt 1–4)</h3></div>
+      <div class="seg" style="margin-bottom:8px"><span class="on">Alle Spuren</span><span>Nur Pads</span><span>Mit Effekten</span></div>
+      <div class="bar" style="margin-top:0"><button class="k primary" style="flex:2">Als neuen Sound</button><button class="k" style="flex:1">Rückwärts</button><button class="k" style="flex:1">Halb so schnell</button></div>
+    </div>
+  </div>
+  <nav class="tabbar"><div class="tab"><span class="g">▦</span>Pads</div><div class="tab"><span class="g">♫</span>Sounds</div><div class="tab"><span class="g">⫼</span>Mixer</div><div class="tab"><span class="g">∿</span>Editor</div><div class="tab"><span class="g">☰</span>Song</div></nav>
+</div>
+<figcaption><b>4 · Resampling „Als neuen Sound“.</b> Erscheint, wenn ein Loop-Bereich oder mehrere Clips gewählt sind (zwei Tipps). Rendert mit derselben Kette wie der Export, legt das Ergebnis in „Meine Sounds“ und auf das nächste freie Pad. Optional gleich verfremdet (rückwärts, halb so schnell). Quell-Spuren bleiben; ein Rückgängig-Schritt.</figcaption>
+</figure>
+
+</div>
+
+<h1 style="margin-top:40px">5 · Desktop</h1>
+<div class="desk">
+  <div class="deck"><button class="k round">▶</button><div class="rec"><i></i></div><div class="lcd"><small>TAKT</small>001</div><div class="lcd"><small>TEMPO</small>90</div><span class="sp"></span><span class="chip">Als neuen Sound</span><button class="k">Exportieren</button></div>
+  <div class="col">
+    <div class="ltabs"><span class="on">PADS</span><span>MEINE SOUNDS</span></div>
+    <div class="pads" style="gap:6px;--h:64px">
+      <div class="pad full" style="--cat:var(--cat-drums)"><span class="keycap">A</span>Bauch 1</div><div class="pad full" style="--cat:var(--cat-drums)"><span class="keycap">S</span>Klatsch 1</div><div class="pad full" style="--cat:var(--cat-drums)"><span class="keycap">D</span>Ts 1</div><div class="pad full" style="--cat:var(--cat-fx)"><span class="keycap">F</span>Loop 1</div>
+      <div class="pad free"><span class="keycap">G</span>+</div><div class="pad free"><span class="keycap">H</span>+</div><div class="pad free"><span class="keycap">J</span>+</div><div class="pad free"><span class="keycap">K</span>+</div>
+    </div>
+    <p class="lbl" style="margin-top:12px">Umschalt + Taste nimmt ins Pad auf · Pad auf Spur ziehen = Clip</p>
+  </div>
+  <div class="arr" style="border-right:1px solid var(--line)">
+    <div class="ruler"><span class="loop"></span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-drums)"><i></i>Pads</div><div class="clip" style="--cat:var(--cat-drums);left:92px;width:296px">Beat 1</div></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-own)"><i></i>Summen</div><div class="clip" style="--cat:var(--cat-own);left:92px;width:296px">Summen A-Moll 1 → E-Piano</div></div>
+    <div class="lane"><div class="head" style="--cat:var(--cat-fx)"><i></i>Gitarre</div><div class="clip" style="--cat:var(--cat-fx);left:166px;width:222px">Gitarre 1 · Take 3</div></div>
+  </div>
+  <div class="col r">
+    <div class="ltabs"><span class="on">CLIP</span><span>SPUR</span><span>SONG</span></div>
+    <div class="kv"><span>Sound</span>Gitarre 1</div>
+    <div class="kv"><span>Herkunft</span>Mikrofon · 2 Takte</div>
+    <div class="kv"><span>Takes</span>3 von 3 ‹ ›</div>
+    <div class="kv"><span>Etiketten</span>tonal · Am</div>
+    <div class="kv"><span>Klang</span>Knackig</div>
+    <div class="bar"><button class="k" style="flex:1">Bearbeiten</button><button class="k" style="flex:1">Zerlegen</button></div>
+  </div>
+</div>
+<p class="lead" style="margin-top:10px">Links „Pads | Meine Sounds“ statt „Sounds | Erstellen“, rechts der Inspektor mit Herkunft und Takes. Die Pads liegen auf A–K wie heute im Beat-Editor.</p>
+</body></html>
