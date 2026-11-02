@@ -8,8 +8,9 @@
 
 import { clamp, el, trackPointer } from '../util.js';
 import { narrow, touch } from './place.js';
+import { lsKey } from '../edition.js';
 
-const KEY = 'loopwerk.sheetH';
+const KEY = lsKey('loopwerk.sheetH');
 const MID = 0.5;
 const TOP = 1;
 const FLICK = 0.35; // px/ms: ab hier zählt die Bewegung als Schubs

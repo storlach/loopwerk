@@ -138,6 +138,11 @@
 <link rel="modulepreload" href="src/scale.js">
 <link rel="modulepreload" href="src/ui/mobile.js">
 <link rel="modulepreload" href="src/ui/link-import.js">
+<link rel="modulepreload" href="src/edition.js">
+<link rel="modulepreload" href="src/dsp/clean.js">
+<link rel="modulepreload" href="src/ui/surfaces.js">
+<link rel="modulepreload" href="src/pwa.js">
+<link rel="modulepreload" href="src/ui/clip-float.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -221,7 +226,11 @@
     /* Spurhöhe unter diesen Werten: Spurkopf einzeilig bzw. nur Name (siehe Zoom-Leisten unten) */
     --rh-two: 52px; --rh-one: 30px;
     --zbar: 12px; --zbar-b: 12px; --zbar-r: 12px; /* Dicke der Zoom-Leisten (unten, rechts) */
+    /* Schriftskala der Dichte „calm“ (Krachwerk); Loopwerk nutzt sie nicht */
+    --fs-11: 11px; --fs-13: 13px; --fs-15: 15px; --fs-24: 24px; --fs-38: 38px; --fs-56: 56px;
   }
+  /* Abgeschaltete Flächen einer Edition (src/ui/surfaces.js); bleiben im DOM */
+  [data-off] { display: none !important; }
 
   html, body { height: 100%; }
   body {
@@ -2861,6 +2870,82 @@
     .auto-chip { padding: 5px 4px; font-size: 10px; letter-spacing: 0; }
     .auto-close { margin-right: -2px; }
   }
+  /* Bausteine der Dichte „calm“: in allen anderen Editionen unsichtbar */
+  .tab-werkbank, .deck-name, .kiste-btn { display: none; }
+
+  /* Dichte calm */
+  /* Krachwerk, Spec krachwerk-1-geruest §5: Stufen, Schriftskala, Werkbank, Kiste, Daumenleiste, Werkzeug am Clip */
+  #app[data-density="calm"] [data-tier="3"]:not([data-placed]):not([data-tier-only]) { display: none !important; }
+  @media (max-width: 760px) { #app[data-density="calm"] [data-tier="3"][data-tier-only="narrow"]:not([data-placed]) { display: none !important; } }
+  /* Schrift: nur die Skala, Sans; Mono nur für Zahlen; Etiketten ohne Versalien */
+  #app[data-density="calm"] * { font-family: var(--font-body); font-size: var(--fs-13); letter-spacing: 0; text-transform: none; }
+  #app[data-density="calm"] :is(.lcd-label, .insp-kind, .insp-meta, .insp-sub, .create-sec, .shelf-count, .shelf-total, .tab, .tab-label, .ccard-sub, .bar-mark, .hint-text, .fxl-sum, .fx-param, .insp-row, .insp-row output) { font-size: var(--fs-11); }
+  #app[data-density="calm"] :is(.lcd-value, .shelf-count, .shelf-total, .bar-mark, .insp-tempo output, input[type="number"]) { font-family: var(--font-mono); }
+  #app[data-density="calm"] :is(.insp-title, .left-title, .deck-name, .dock-head h2, .brand-name) { font-family: var(--font-display); font-size: var(--fs-15); }
+  #app[data-density="calm"] .lcd-value { font-size: var(--fs-24); }
+  /* Rahmen nur an Tasten: Flächen, Abschnitte, Regler, Felder und Etiketten verlieren Rahmen und Ring */
+  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item) { border-color: transparent; box-shadow: none; }
+  #app[data-density="calm"] .insp-sec { border-bottom: 0; }
+  /* Weißglut nur an ▶ (spielend) und am gewählten Clip */
+  #app[data-density="calm"] .key.play, #app[data-density="calm"] .key.play[aria-pressed="true"]:not(.on) { background: transparent; color: var(--ink); box-shadow: var(--key-shadow); }
+  #app[data-density="calm"].playing .key.play, #app[data-density="calm"] .key.play.on { background: var(--amber); color: var(--accent-ink); }
+  /* Werkzeug am Clip (src/ui/clip-float.js) */
+  #app[data-density="calm"] .clip-float { position: absolute; z-index: 8; display: flex; gap: 2px; padding: 4px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow); }
+  #app[data-density="calm"] .cf-btn { min-width: 44px; height: 44px; padding: 0 6px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); cursor: pointer; }
+  #app[data-density="calm"] .cf-btn:hover:not(:disabled) { background: var(--deck-2); }
+  #app[data-density="calm"] .cf-btn:disabled { opacity: 0.4; cursor: default; }
+  #app[data-density="calm"] .cf-del { color: var(--danger); margin-left: 6px; }
+  /* Werkbank: nichts Gesperrtes zeigen; Wörter in Sans (Zahlen bleiben tabellarisch) */
+  #app[data-density="calm"] .insp :is(button, input):disabled { display: none; }
+  #app[data-density="calm"] output { font-variant-numeric: tabular-nums; }
+  #app[data-density="calm"] :is(.brand-name, .brand-name b) { font-family: var(--font-display); font-size: var(--fs-15); }
+  /* Leerer Song: leise Zeile in Spur 1 */
+  #app[data-density="calm"].song-empty .track-row:first-child .lane::after { content: "● tippen, dann ein Geräusch machen"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); z-index: 1; color: var(--muted); font-size: var(--fs-13); pointer-events: none; white-space: nowrap; }
+  /* Werkbank: Spur stumm/solo */
+  #app[data-density="calm"] .insp-ms { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #app[data-density="calm"] .insp-ms .key { width: 100%; height: 44px; }
+  #app[data-density="calm"] .insp-song-tools:empty { display: none; }
+  #app[data-density="calm"] .insp-song-tools .key { height: 44px; width: 100%; }
+
+  /* Breit: Kiste 240 px (einklappbar), Werkbank rechts 36 % (60 % mit ⤢), ohne Auswahl 24 px */
+  @media (min-width: 761px) {
+    #app[data-density="calm"] { --insp-w: 24px; --kiste-w: 240px; grid-template-columns: var(--kiste-w) minmax(0, 1fr) var(--insp-w); }
+    #app[data-density="calm"].insp-open { --insp-w: 36%; }
+    #app[data-density="calm"].insp-open.wb-wide { --kiste-w: 24px; --insp-w: calc((100% - var(--kiste-w)) * 0.6); }
+    #app[data-density="calm"].kiste-zu { --kiste-w: 24px; }
+    #app[data-density="calm"] .insp { position: relative; inset: auto; width: auto; z-index: auto; box-shadow: none; }
+    #app[data-density="calm"]:not(.insp-open) .insp > :not(.insp-toggle) { display: none; }
+    #app[data-density="calm"] .insp-toggle { display: flex; width: 100%; padding: 10px 0; border: 0; background: transparent; color: var(--muted); font-size: var(--fs-11); writing-mode: vertical-rl; cursor: pointer; }
+    #app[data-density="calm"].insp-open .insp-toggle { writing-mode: horizontal-tb; justify-content: flex-start; padding: 12px 14px; }
+    #app[data-density="calm"] .insp-wide { position: absolute; top: 4px; right: 6px; z-index: 2; width: 44px; height: 44px; border: 0; background: transparent; color: var(--muted); font-size: var(--fs-15); cursor: pointer; }
+    #app[data-density="calm"] .insp-wide:hover, #app[data-density="calm"] .insp-wide[aria-pressed="true"] { color: var(--ink); }
+    #app[data-density="calm"] .tabbar { overflow: hidden; white-space: nowrap; }
+    #app[data-density="calm"] #loop-btn { padding: 0 12px; margin-left: 8px; }
+    #app[data-density="calm"] .left-tabs { display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px 14px; }
+    #app[data-density="calm"] .left-title { margin: 0 auto 0 0; }
+    #app[data-density="calm"] .kiste-btn { display: inline-flex; align-items: center; justify-content: center; height: 32px; min-width: 32px; padding: 0 10px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer; }
+    #app[data-density="calm"] .kiste-fold { box-shadow: none; color: var(--muted); }
+    #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .shelf > :not(.left-tabs), #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .left-tabs > :not(.kiste-fold) { display: none; }
+    #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .left-tabs { padding: 10px 0 0; justify-content: center; }
+  }
+  /* Schmal: Werkbank als Schublade, Daumenleiste (Kiste · ▶ · ● · Werkbank), Deck als Lesezeile */
+  @media (max-width: 760px) {
+    #app[data-density="calm"] #werkbank .insp { display: block !important; border: 0; background: transparent; overflow: visible; }
+    #app[data-density="calm"] #werkbank .insp-toggle, #app[data-density="calm"] .insp-wide { display: none; }
+    #app[data-density="calm"] .werkbank-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+    #app[data-density="calm"] .tabbar { min-height: 64px; align-items: stretch; }
+    #app[data-density="calm"] .tab-werkbank { display: grid; }
+    #app[data-density="calm"] .tabbar > .tab, #app[data-density="calm"] .tabbar > .key { min-height: 56px; height: 100%; width: 100%; min-width: 0; border-radius: var(--radius); }
+    #app[data-density="calm"] .tabbar .key { box-shadow: none; }
+    #app[data-density="calm"] .tabbar .rec-label { display: none; }
+    #app[data-density="calm"] #tab-sounds { order: 1; } #app[data-density="calm"] #play-btn { order: 2; } #app[data-density="calm"] #rec-btn { order: 3; } #app[data-density="calm"] #tab-werkbank { order: 4; }
+    #app[data-density="calm"] .deck-name { display: block; order: -1; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #app[data-density="calm"] .lcd { flex: 0 0 auto; }
+    #app[data-density="calm"] .song-links .tab { display: inline-flex; min-height: 44px; width: auto; padding: 0 12px; font-size: var(--fs-13); }
+    #app[data-density="calm"] .song-links .tab svg { display: none; }
+    #app[data-density="calm"] .shelf[data-left="sounds"] :is(#import-btn, .shelf-make) { display: none; }
+    #app[data-density="calm"] #shelf-new { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); }
+  }
 </style>
 
 
@@ -2874,7 +2959,7 @@
     <span class="deck-sep sep-brand" aria-hidden="true"></span>
 
     <div class="group" role="group" aria-label="Transport">
-      <button class="key" id="home-btn" type="button" aria-label="Zum Anfang" title="Zum Anfang (Pos1)">
+      <button class="key" id="home-btn" data-tier="3" type="button" aria-label="Zum Anfang" title="Zum Anfang (Pos1)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg>
       </button>
       <button class="key play" id="play-btn" type="button" aria-label="Abspielen" title="Abspielen/Pause (Leertaste)">
@@ -2889,7 +2974,7 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
         <span class="rec-label">Aufnahme</span>
       </button>
-      <button class="key" id="metro-btn" type="button" title="Metronom">
+      <button class="key" id="metro-btn" data-tier="3" type="button" title="Metronom">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l3 14H3zm1.6 2L5.4 13h5.2L8.4 3zM8 6l4-3 .6.8-4 3z"/></svg>
         Klick
       </button>
@@ -2899,16 +2984,17 @@
 
     <div class="lcd" aria-live="off">
       <div class="lcd-cell"><span class="lcd-label">Takt</span><span class="lcd-value" id="lcd-bar">001</span></div>
-      <div class="lcd-cell lcd-more"><span class="lcd-label">Schlag</span><span class="lcd-value" id="lcd-beat">1</span></div>
-      <div class="lcd-cell lcd-more"><span class="lcd-label">Zeit</span><span class="lcd-value" id="lcd-time">0:00.0</span></div>
+      <div class="lcd-cell lcd-more" data-tier="3"><span class="lcd-label">Schlag</span><span class="lcd-value" id="lcd-beat">1</span></div>
+      <div class="lcd-cell lcd-more" data-tier="3"><span class="lcd-label">Zeit</span><span class="lcd-value" id="lcd-time">0:00.0</span></div>
       <div class="lcd-cell lcd-song"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
-      <div class="lcd-cell lcd-more lcd-key" title="Tonart des Songs – die mitgelieferten Loops werden umgestimmt"><label class="lcd-label" for="key-sel">Tonart</label><select class="lcd-value key-sel" id="key-sel" data-key-select></select></div>
+      <div class="lcd-cell lcd-more lcd-key" data-tier="3" title="Tonart des Songs – die mitgelieferten Loops werden umgestimmt"><label class="lcd-label" for="key-sel">Tonart</label><select class="lcd-value key-sel" id="key-sel" data-key-select></select></div>
     </div>
 
+    <span class="deck-name" id="deck-name"></span>
     <div class="group deck-undo" id="deck-undo" role="group" aria-label="Rückgängig"></div>
     <span class="deck-sep sep-meter" aria-hidden="true"></span>
 
-    <div class="meter-wrap">
+    <div class="meter-wrap" data-tier="3">
       <span class="lcd-label">Master</span>
       <canvas id="meter" aria-hidden="true"></canvas>
     </div>
@@ -2922,12 +3008,12 @@
       <button class="key" id="redo-btn" type="button" aria-label="Wiederholen" title="Wiederholen (Strg+Umschalt+Z)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3l5 4-5 4V8H6a3 3 0 000 6h2v2H6A5 5 0 016 6h4z"/></svg>
       </button>
-      <button class="key" id="zoom-out" type="button" aria-label="Verkleinern" title="Verkleinern (Strg+Mausrad)">−</button>
-      <button class="key" id="zoom-in" type="button" aria-label="Vergrößern" title="Vergrößern (Strg+Mausrad)">+</button>
-      <button class="key" id="zoomy-out" type="button" aria-label="Spuren niedriger" title="Spuren niedriger (Alt+Mausrad)">
+      <button class="key" id="zoom-out" data-tier="3" type="button" aria-label="Verkleinern" title="Verkleinern (Strg+Mausrad)">−</button>
+      <button class="key" id="zoom-in" data-tier="3" type="button" aria-label="Vergrößern" title="Vergrößern (Strg+Mausrad)">+</button>
+      <button class="key" id="zoomy-out" data-tier="3" type="button" aria-label="Spuren niedriger" title="Spuren niedriger (Alt+Mausrad)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1l3 3.5H5v7h2L4 15 1 11.5h2v-7H1zM9 7h6v2H9z"/></svg>
       </button>
-      <button class="key" id="zoomy-in" type="button" aria-label="Spuren höher" title="Spuren höher (Alt+Mausrad)">
+      <button class="key" id="zoomy-in" data-tier="3" type="button" aria-label="Spuren höher" title="Spuren höher (Alt+Mausrad)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1l3 3.5H5v7h2L4 15 1 11.5h2v-7H1zM9 7h6v2H9zm2-2h2v6h-2z"/></svg>
       </button>
       <label class="sr" for="snap-sel" hidden>Raster</label>
@@ -2942,13 +3028,13 @@
     </div>
 
     <div class="group" role="group" aria-label="Clip">
-      <button class="key" id="split-btn" type="button" title="An der Abspielmarke teilen (T)">
+      <button class="key" id="split-btn" data-tier="3" type="button" title="An der Abspielmarke teilen (T)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 1a2.5 2.5 0 012.3 3.5L8 5.7l5.3-5.3 1.4 1.4L9.4 7.1l5.3 5.3-1.4 1.4L8 8.5 6.8 9.7A2.5 2.5 0 114.5 8.3l.9-.9.2-.3-.2-.3-.9-.9A2.5 2.5 0 014.5 1zm0 1.6a.9.9 0 100 1.8.9.9 0 000-1.8zm0 7.8a.9.9 0 100 1.8.9.9 0 000-1.8z"/></svg>
         Teilen
       </button>
       <button class="key" id="edit-btn" type="button" title="Ausgewählten Clip im Sample-Editor öffnen (Doppelklick auf den Clip)">Bearbeiten</button>
-      <button class="key" id="dup-btn" type="button" title="Ausgewählten Clip duplizieren (Strg+D)">Duplizieren</button>
-      <button class="key" id="del-btn" type="button" title="Ausgewählten Clip löschen (Entf)">Löschen</button>
+      <button class="key" id="dup-btn" data-tier="3" type="button" title="Ausgewählten Clip duplizieren (Strg+D)">Duplizieren</button>
+      <button class="key" id="del-btn" data-tier="3" type="button" title="Ausgewählten Clip löschen (Entf)">Löschen</button>
     </div>
 
     <div class="group" role="group" aria-label="Projekt">
@@ -2957,7 +3043,7 @@
       <button class="key" id="save-btn" type="button" title="Projekt als Datei speichern">Speichern</button>
       <input type="file" id="open-input" accept=".json,application/json" hidden>
       <button class="key" id="export-btn" type="button" title="Song als WAV oder MP3 exportieren" aria-pressed="false">Exportieren</button>
-      <button class="key" id="demo-btn" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
+      <button class="key" id="demo-btn" data-surface="demo" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
       <button class="key" id="new-btn" type="button" title="Alle Spuren leeren">Leeren</button>
     </div>
 
@@ -2975,8 +3061,8 @@
           <div class="pop-sep"></div>
           <div class="pop-body" id="project-menu-start"></div>
           <div class="pop-sep"></div>
-          <button class="pop-item" id="tips-reset" type="button"><span class="lbl-long">Tipps wieder zeigen</span><span class="lbl-short">Tipps</span></button>
-          <p class="pop-about" id="pop-about">Loopwerk 2.8 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
+          <button class="pop-item" id="tips-reset" data-surface="tips" type="button"><span class="lbl-long">Tipps wieder zeigen</span><span class="lbl-short">Tipps</span></button>
+          <p class="pop-about" id="pop-about" data-surface="catalog">Loopwerk 2.8 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
         </div>
       </div>
       <div class="deck-export" id="deck-export"></div>
@@ -2987,8 +3073,10 @@
   <aside class="shelf" aria-label="Assets" data-left="sounds">
     <div class="left-tabs" role="tablist" aria-label="Assets">
       <h2 class="left-title">Assets</h2>
-      <button class="ltab" id="ltab-sounds" type="button" role="tab" data-left="sounds" aria-selected="true">Suchen</button>
-      <button class="ltab" id="ltab-create" type="button" role="tab" data-left="create" aria-selected="false">Erstellen</button>
+      <button class="ltab" id="ltab-sounds" data-tier="3" type="button" role="tab" data-left="sounds" aria-selected="true">Suchen</button>
+      <button class="ltab" id="ltab-create" data-tier="3" type="button" role="tab" data-left="create" aria-selected="false">Erstellen</button>
+      <button class="kiste-btn" id="shelf-new" type="button" aria-pressed="false" title="Neu: aufnehmen, Datei, Beat, Melodie">+ Neu</button>
+      <button class="kiste-btn kiste-fold" id="kiste-toggle" type="button" aria-expanded="true" aria-label="Kiste einklappen" title="Kiste ein- und ausklappen">‹</button>
     </div>
     <div class="shelf-sticky" id="shelf-sticky"></div>
     <div class="shelf-head">
@@ -2996,19 +3084,19 @@
       <button class="shelf-import" id="import-btn" type="button" title="Audiodateien (WAV, MP3, OGG …) als eigene Sounds importieren – oder Dateien direkt auf eine Spur ziehen"><span class="lbl-long">+ Eigene Sounds importieren</span><span class="lbl-short">+ Import</span></button>
       <input type="file" id="import-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" multiple hidden>
       <div class="shelf-make">
-        <button class="shelf-import" type="button" data-link-open title="Sound über einen Link holen oder Ton aus einem anderen Tab aufnehmen">+ Link</button>
+        <button class="shelf-import" type="button" data-link-open data-surface="link" title="Sound über einen Link holen oder Ton aus einem anderen Tab aufnehmen">+ Link</button>
         <button class="shelf-import" id="new-beat-btn" type="button" title="Neuen Beat im Stepsequencer bauen"><span class="lbl-long">+ Beat bauen</span><span class="lbl-short">+ Beat</span></button>
         <button class="shelf-import" id="new-melody-btn" type="button" title="Neue Melodie in der Piano-Roll schreiben">+ Melodie</button>
       </div>
       <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
-      <button type="button" class="shelf-filter-btn" id="shelf-filter-btn" aria-expanded="false" aria-controls="shelf-filters">Filter<span class="shelf-filter-n" id="shelf-filter-n"></span></button>
+      <button type="button" class="shelf-filter-btn" id="shelf-filter-btn" data-surface="catalog" aria-expanded="false" aria-controls="shelf-filters">Filter<span class="shelf-filter-n" id="shelf-filter-n"></span></button>
       <div class="shelf-filters" id="shelf-filters">
-      <div class="shelf-sort" role="group" aria-label="Ordnen nach">
+      <div class="shelf-sort" data-surface="catalog" role="group" aria-label="Ordnen nach">
         <span class="shelf-sort-label">Ordnen:</span>
         <button type="button" class="seg" data-sort="cat">Kategorie</button>
         <button type="button" class="seg" data-sort="genre">Genre</button>
       </div>
-      <div class="shelf-sort shelf-len" role="group" aria-label="Länge">
+      <div class="shelf-sort shelf-len" data-surface="catalog" role="group" aria-label="Länge">
         <span class="shelf-sort-label">Länge:</span>
         <button type="button" class="seg" data-len="all">Alle</button>
         <button type="button" class="seg" data-len="1" title="Loops bis 1 Takt">1T</button>
@@ -3017,13 +3105,13 @@
         <button type="button" class="seg" data-len="8" title="Loops ab 5 Takten">8T+</button>
         <button type="button" class="seg" data-len="shot" title="Einzelklänge ohne Takt">One-Shot</button>
       </div>
-      <div class="chips" id="shelf-chips" role="group" aria-label="Filter"></div>
+      <div class="chips" id="shelf-chips" data-surface="catalog" role="group" aria-label="Filter"></div>
       </div>
     </div>
     <div class="shelf-list" id="library"></div>
     <div class="create-panel" id="create-panel" role="tabpanel" aria-label="Erstellen">
-      <h3 class="create-sec">Song-Starter</h3>
-      <div class="starter" id="starter" role="group" aria-label="Song-Starter: Genre wählen">
+      <h3 class="create-sec" data-surface="starter">Song-Starter</h3>
+      <div class="starter" id="starter" data-surface="starter" role="group" aria-label="Song-Starter: Genre wählen">
         <div class="starter-genres" id="starter-genres"></div>
         <button class="key starter-again" id="starter-again" type="button" disabled title="Andere Fassung desselben Genres">Nochmal</button>
       </div>
@@ -3031,21 +3119,21 @@
       <button class="ccard cat-drums" type="button" data-create="beat"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 12h4v3H1zm5 0h4v3H6zm5 0h4v3h-4z"/></svg></span><span class="ccard-title">Beat bauen</span><span class="ccard-sub">Schlagzeug in Schritten oder auf Pads</span></button>
       <button class="ccard cat-synth" type="button" data-create="melody"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h14v12H1zm2 2v8h1.5V8H6v4h1V8h2v4h1V8h1.5v4H13V4h-1v4h-1V4H9v4H8V4H6v4H5V4z"/></svg></span><span class="ccard-title">Melodie schreiben</span><span class="ccard-sub">Noten setzen oder auf der Klaviatur spielen</span></button>
       <button class="ccard cat-own" type="button" data-create="sing"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a3 3 0 013 3v4a3 3 0 01-6 0V4a3 3 0 013-3zM3 7h1.5v1a3.5 3.5 0 007 0V7H13v1a5 5 0 01-4.25 4.94V15h-1.5v-2.06A5 5 0 013 8z"/></svg></span><span class="ccard-title">Melodie einsingen</span><span class="ccard-sub">Summen, singen, pfeifen – wird zu Noten</span></button>
-      <button class="ccard cat-chords" type="button" data-create="accomp"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2 3h3v10H2zm4.5 2h3v8h-3zM11 1h3v12h-3zM1 14h14v1.5H1z"/></svg></span><span class="ccard-title">Begleitung</span><span class="ccard-sub">Fläche, Bass und Arp folgen dem Akkord-Streifen</span></button>
+      <button class="ccard cat-chords" type="button" data-create="accomp" data-surface="accomp"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2 3h3v10H2zm4.5 2h3v8h-3zM11 1h3v12h-3zM1 14h14v1.5H1z"/></svg></span><span class="ccard-title">Begleitung</span><span class="ccard-sub">Fläche, Bass und Arp folgen dem Akkord-Streifen</span></button>
       <h3 class="create-sec">Aufnehmen und holen</h3>
       <button class="ccard cat-fx" type="button" data-create="record"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/></svg></span><span class="ccard-title">Audio aufnehmen</span><span class="ccard-sub">Stimme oder Instrument als Sound auf eine Spur</span></button>
       <button class="ccard cat-bass" type="button" data-create="import"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M7 1h2v8l3-3 1.4 1.4L8 12.8 2.6 7.4 4 6l3 3zM2 13h12v2H2z"/></svg></span><span class="ccard-title">Datei importieren</span><span class="ccard-sub">WAV, MP3, OGG … – oder direkt auf eine Spur ziehen</span></button>
-      <button class="ccard cat-chords" type="button" data-create="link"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6.6 9.4a3 3 0 004.2 0l2.8-2.8a3 3 0 00-4.2-4.2L8.2 3.6l1.1 1.1 1.2-1.2a1.5 1.5 0 012.1 2.1l-2.8 2.8a1.5 1.5 0 01-2.1 0zm2.8-2.8a3 3 0 00-4.2 0L2.4 9.4a3 3 0 004.2 4.2l1.2-1.2-1.1-1.1-1.2 1.2a1.5 1.5 0 01-2.1-2.1l2.8-2.8a1.5 1.5 0 012.1 0z"/></svg></span><span class="ccard-title">Aus dem Netz holen</span><span class="ccard-sub">Link zu einer Audiodatei – oder Ton aus einem anderen Tab aufnehmen</span></button>
+      <button class="ccard cat-chords" type="button" data-create="link" data-surface="link"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6.6 9.4a3 3 0 004.2 0l2.8-2.8a3 3 0 00-4.2-4.2L8.2 3.6l1.1 1.1 1.2-1.2a1.5 1.5 0 012.1 2.1l-2.8 2.8a1.5 1.5 0 01-2.1 0zm2.8-2.8a3 3 0 00-4.2 0L2.4 9.4a3 3 0 004.2 4.2l1.2-1.2-1.1-1.1-1.2 1.2a1.5 1.5 0 01-2.1-2.1l2.8-2.8a1.5 1.5 0 012.1 0z"/></svg></span><span class="ccard-title">Aus dem Netz holen</span><span class="ccard-sub">Link zu einer Audiodatei – oder Ton aus einem anderen Tab aufnehmen</span></button>
     </div>
-    <p class="shelf-credit">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
+    <p class="shelf-credit" data-surface="catalog">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
   </aside>
 
   <main class="arranger" aria-label="Arranger">
     <div class="arr-bar" id="arr-bar" role="toolbar" aria-label="Ansicht">
       <div class="arr-bar-view" id="arr-bar-view"></div>
       <div class="arr-bar-select" role="group" aria-label="Auswahl">
-        <button class="key" id="select-btn" type="button" aria-pressed="false" title="Mehrere Clips auswählen: Clips antippen">Auswählen</button>
-        <button class="key" id="select-all-btn" type="button" title="Alle Clips auswählen">Alle</button>
+        <button class="key" id="select-btn" data-tier="3" type="button" aria-pressed="false" title="Mehrere Clips auswählen: Clips antippen">Auswählen</button>
+        <button class="key" id="select-all-btn" data-tier="3" type="button" title="Alle Clips auswählen">Alle</button>
       </div>
       <span class="arr-bar-status" id="arr-bar-status"></span>
       <div class="arr-pills" id="arr-pills" role="group" aria-label="Raster, Klick und Loop"></div>
@@ -3209,7 +3297,7 @@
         <span class="pat-field" id="pat-scale-kind-field"><select id="pat-scale-kind" aria-label="Welche Tonleiter"></select></span>
         <button class="dbtn" id="pat-scale-fix" type="button" hidden>Auf Tonleiter ziehen</button>
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
-        <button class="dbtn" id="pat-continue" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
+        <button class="dbtn" id="pat-continue" data-surface="ai" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
         <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
         <button class="dbtn" id="pat-live" type="button" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">● Live</button>
         <label class="pat-field" id="pat-quant-field">Einrasten
@@ -3237,10 +3325,10 @@
           <label class="pat-field">Töne <select id="sing-key"></select></label>
         </div>
         <div class="pat-sing-row">
-          <label class="pat-field sing-desc-field">Wie soll es klingen?
+          <label class="pat-field sing-desc-field" data-surface="ai">Wie soll es klingen?
             <input type="text" id="sing-desc" maxlength="200" placeholder="z. B. weiche Flöte mit viel Hall" autocomplete="off">
           </label>
-          <button class="dbtn" id="sing-sound" type="button" title="Klang und Effekte nach deiner Beschreibung einstellen">Klang bauen</button>
+          <button class="dbtn" id="sing-sound" data-surface="ai" type="button" title="Klang und Effekte nach deiner Beschreibung einstellen">Klang bauen</button>
         </div>
         <p class="pat-sing-status" id="sing-status" role="status"></p>
       </div>
@@ -3308,21 +3396,29 @@
       <div class="song-auto" id="song-auto-slot" role="group" aria-label="Verlauf der Summe"><span class="song-auto-label">Summe</span></div>
       <div class="song-main" id="song-main"></div>
       <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
+      <template id="harm-tpl"><button class="key" id="harm-btn" type="button" aria-pressed="false">Tonart und Akkorde</button></template>
       <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>
     </div>
   </section>
 
-  <div class="pop link-pop" id="link-pop" role="dialog" aria-label="Aus dem Netz holen" hidden>
+  <section class="dock" id="werkbank" aria-label="Werkbank" hidden>
+    <div class="dock-head">
+      <h2>Werkbank</h2>
+    </div>
+    <div class="werkbank-body" id="werkbank-body"></div>
+  </section>
+
+  <div class="pop link-pop" id="link-pop" data-surface="link" role="dialog" aria-label="Aus dem Netz holen" hidden>
     <label class="link-label" for="link-input">Link zu einer Audiodatei</label>
     <div class="link-row">
       <input class="link-input" id="link-input" type="url" inputmode="url" placeholder="https://…/sound.mp3" autocomplete="off" spellcheck="false">
       <button class="dbtn primary" id="link-go" type="button">Holen</button>
     </div>
     <p class="link-note" id="link-note" role="status"></p>
-    <button class="dbtn link-capture" id="tab-capture" type="button" aria-pressed="false">● Ton aus einem Tab aufnehmen</button>
+    <button class="dbtn link-capture" id="tab-capture" data-surface="link" type="button" aria-pressed="false">● Ton aus einem Tab aufnehmen</button>
   </div>
 
-  <div class="clipbar" id="clipbar" role="toolbar" aria-label="Ausgewählter Clip" hidden>
+  <div class="clipbar" id="clipbar" data-tier="3" role="toolbar" aria-label="Ausgewählter Clip" hidden>
     <div class="clip-levels" id="clip-levels" hidden>
       <label class="lvl"><span>Lautstärke</span><input type="range" id="lvl-gain" min="0" max="1" step="0.01"><output id="lvl-gain-out"></output></label>
       <label class="lvl"><span>Einblenden</span><input type="range" id="lvl-in" min="0" max="4" step="0.25"><output id="lvl-in-out"></output></label>
@@ -3356,17 +3452,20 @@
     <button class="tab" id="tab-sounds" type="button" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5l8-1.5v10.5a2.5 2.5 0 11-1.5-2.3V3L7.5 4v8.5A2.5 2.5 0 116 10.2z"/></svg><span class="tab-label">Sounds</span>
     </button>
-    <button class="tab" id="mixer-btn" type="button" title="Mixer und Effekte" aria-pressed="false">
+    <button class="tab" id="mixer-btn" data-tier="3" data-tier-only="narrow" type="button" title="Mixer und Effekte" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg><span class="tab-label">Mixer</span>
     </button>
-    <button class="tab" id="fxpad-btn" type="button" title="Effekt-Pad: live auf Summe oder Spur einwirken" aria-pressed="false">
+    <button class="tab" id="fxpad-btn" data-tier="3" data-tier-only="narrow" type="button" title="Effekt-Pad: live auf Summe oder Spur einwirken" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1h14v14H1zm1.5 1.5v11h11v-11zM9 5a2 2 0 110 4 2 2 0 010-4z"/></svg><span class="tab-label">FX-Pad</span>
     </button>
-    <button class="tab" id="editor-tab" type="button" aria-pressed="false" disabled>
+    <button class="tab" id="editor-tab" data-tier="3" data-tier-only="narrow" type="button" aria-pressed="false" disabled>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h3l2-5 4 10 2-5h3v1.5h-2l-3 6.5-4-10-1 2.5H1z"/></svg><span class="tab-label" id="editor-tab-label">Editor</span>
     </button>
-    <button class="tab" id="tab-song" type="button" aria-pressed="false">
+    <button class="tab" id="tab-song" data-tier="3" data-tier-only="narrow" type="button" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2.5h9v3H1zm0 4h14v3H1zm0 4h6v3H1zM9 10.5h6v3H9z"/></svg><span class="tab-label">Song</span>
+    </button>
+    <button class="tab tab-werkbank" id="tab-werkbank" type="button" aria-pressed="false" title="Werkbank: Einstellungen des gewählten Clips, sonst des Songs">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 3h14v2H1zm0 4h14v2H1zm0 4h14v2H1zM10 2h2v4h-2zM4 6h2v4H4zm6 4h2v4h-2z"/></svg><span class="tab-label">Werkbank</span>
     </button>
     <div class="menu-wrap tabbar-end">
       <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false"><span class="for-mouse">? Tastenkürzel</span><span class="for-touch">? Gesten</span></button>

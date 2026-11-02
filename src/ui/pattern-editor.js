@@ -32,7 +32,7 @@ const KEY_OF = Object.fromEntries(Object.entries(KEYMAP).filter(([k]) => k !== '
 // Drumpad: Pads in der Reihenfolge der Zeilen, Tasten der mittleren Buchstabenreihe
 const PAD_KEYS = ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k'];
 
-export function mountPatternEditor({ root, store, engine, library, ui }) {
+export function mountPatternEditor({ root, store, engine, library, ui, kits = null }) {
   const $ = (id) => root.querySelector('#' + id);
   const nameIn = $('pat-name');
   const barsSel = $('pat-bars');
@@ -66,7 +66,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   let drag = null; // Vorschau beim Ziehen in der Piano-Roll
   let midiTried = false;
 
-  for (const k of KITS) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
+  for (const k of KITS.filter((x) => !kits || kits.includes(x.id))) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
   // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
   // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');

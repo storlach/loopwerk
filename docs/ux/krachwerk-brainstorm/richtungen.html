@@ -1,0 +1,918 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=1640">
+<title>Krachwerk – drei Richtungen (UI-Brainstorm)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Funnel+Sans:wght@300..800&family=Azeret+Mono:wght@200..700&display=swap">
+<style>
+/* Tokens 1:1 aus :root von index.html (Phosphor). Mockup, kein App-Code. */
+  :root {
+    /* Look „Phosphor“ (seit 2.2): Schwarz wie ein ausgeschalteter Bildschirm. Licht gibt es nur, wo Musik klingt.
+       Was klingt, leuchtet (Kategoriefarben); was eingestellt ist, ist eine Linie. Aktiv = Weißglut (--amber = Weiß). */
+    color-scheme: dark;
+    --bg: #16171A;
+    --panel: rgb(22 23 27 / 0.42);
+    --lane: #131417;
+    --lane-alt: #17181B;
+    --ink: #F2F2F0;
+    --muted: #9898A1;
+    --line: #2A2B30;
+    --grid-bar: rgb(255 255 255 / 0.07);
+    --grid-beat: rgb(255 255 255 / 0.028);
+    --deck: rgb(18 19 22 / 0.62);
+    --head-bg: rgb(16 17 20 / 0.9); /* Spurköpfe fast deckend, wie Martins Referenz */
+    --deck-2: #222328;
+    --deck-ink: #F2F2F0;
+    --deck-muted: #9898A1;
+    --lcd: transparent;
+    --amber: #FFFFFF;
+    --amber-dim: #9898A1;
+    --focus: #FFFFFF;
+    --meter-ok: #F2F2F0;
+    --meter-warm: #FFC53D;
+    --meter-hot: #FF4D4D;
+    --meter-off: #24252A;
+    --cat-drums: #FFC53D;
+    --cat-bass: #4A8CFF;
+    --cat-chords: #2EE5A3;
+    --cat-synth: #B494FF;
+    --cat-fx: #FF7F45;
+    --cat-own: #FF62A5;
+    --ambient-max: 0.64; --glow-blend: screen;
+    /* Weichzeichner für alle Fenster außer dem Arranger: Licht und Amplitude dahinter stören nicht */
+    --glass: blur(10px) saturate(1.1);
+    /* Spuren durchsichtig, damit das Umgebungslicht dahinter wirkt */
+    --lane-a: transparent;
+    --lane-alt-a: rgb(255 255 255 / 0.012);
+    --font-display: "Funnel Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: "Funnel Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --radius: 3px;
+    --radius-lg: 14px;
+    /* Licht */
+    --beam: #FFFFFF;
+    --beam-glow: 0 0 3px #fff, 0 0 10px rgb(255 255 255 / 0.55), 0 0 26px rgb(255 255 255 / 0.22);
+    --glow-ink: 0 0 14px rgb(255 255 255 / 0.38);
+    --glow-cat: 0 0 6px var(--cat), 0 0 18px color-mix(in srgb, var(--cat) 45%, transparent);
+    --trace-rest: 0.38;
+    --key-line: #34343A;
+    --danger: #FF6B6B;
+    /* Werkstück-Bausteine: Gummitasten, Mulden, Display, LED, Punktraster */
+    --accent-ink: #030304;
+    --key-face: transparent;
+    --key-shadow: inset 0 0 0 1px #34343A;
+    --well: #0E0F12;
+    --well-shadow: inset 0 0 0 1px #34343A;
+    --dots: none;
+    --clip-body: rgb(14 15 18 / 0.86);
+    --label-ink: #030304;
+    --lcd-face: transparent;
+    --lcd-shadow: none;
+    --lcd-sep: #222226;
+    --display-ink: #F2F2F0;
+    --lcd-label: #9898A1;
+    --sheet-bg: #1A1B1F;
+    --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -10px 26px rgb(0 0 0 / 0.5);
+    --led-off: #2A2A30;
+    --knob-hi: transparent;
+    --knob-lo: transparent;
+    --knob-edge: #3A3A40;
+    /* Klaviertasten sehen wie ein Klavier aus */
+    --key-white: #fdfdfb; --key-white-ink: #5b6475; --key-black: #1d2330; --key-black-ink: #b9c2d3;
+    --track-h: 58px;
+    /* Spurhöhe unter diesen Werten: Spurkopf einzeilig bzw. nur Name (siehe Zoom-Leisten unten) */
+    --rh-two: 52px; --rh-one: 30px;
+    --zbar: 12px; --zbar-b: 12px; --zbar-r: 12px; /* Dicke der Zoom-Leisten (unten, rechts) */
+  }
+
+/* Krachwerk-Aliase: nur Verweise auf vorhandene Tokens, keine neuen Farbwerte */
+:root {
+  --o-stimme: var(--cat-synth); --o-koerper: var(--cat-drums); --o-dinge: var(--cat-fx);
+  --o-strom: var(--cat-bass); --o-schleife: var(--cat-chords);
+  --brand: var(--cat-own); --rec: var(--danger); --raw: var(--ink);
+  --hair: var(--key-line);
+}
+.o-stimme{--cat:var(--o-stimme)} .o-koerper{--cat:var(--o-koerper)} .o-dinge{--cat:var(--o-dinge)}
+.o-strom{--cat:var(--o-strom)} .o-schleife{--cat:var(--o-schleife)} .o-raw{--cat:var(--raw)} .o-brand{--cat:var(--brand)}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--accent-ink);color:var(--ink);font:14px/1.45 var(--font-body);padding:64px 52px 120px;width:1640px;-webkit-font-smoothing:antialiased}
+svg.defs{position:absolute;width:0;height:0}
+.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.mono{font-family:var(--font-mono)}
+/* Seite */
+.pg-h{display:grid;grid-template-columns:1fr 520px;gap:64px;align-items:end}
+.pg-h h1{font:300 76px/0.95 var(--font-display);letter-spacing:-0.025em}
+.pg-h h1 em{font-style:normal;color:var(--brand)}
+.pg-h p{color:var(--muted);font-size:16px;max-width:520px}
+.pg-h p b{color:var(--ink);font-weight:500}
+.diag{margin-top:56px;display:grid;grid-template-columns:auto 230px 1fr;gap:40px;align-items:start}
+.diag img{display:block;border-radius:6px;box-shadow:0 0 0 1px var(--line)}
+.diag .shot-d{width:760px}.diag .shot-h{width:230px}
+.diag h2,.dir-h h2{font:500 13px var(--font-mono);letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:18px}
+.nums{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;align-items:baseline}
+.nums b{font:200 40px/1 var(--font-display);text-align:right;font-variant-numeric:tabular-nums}
+.nums span{color:var(--muted);font-size:14px}
+.diag ol{margin:26px 0 0 18px;color:var(--muted);font-size:14px;display:grid;gap:8px}
+.diag ol b{color:var(--ink);font-weight:500}
+.cap{color:var(--muted);font-size:13px;margin-top:12px;line-height:1.5}
+.cap b{color:var(--ink);font-weight:500}
+
+section.dir{margin-top:120px;padding-top:44px;border-top:1px solid var(--line)}
+.dir-h{display:grid;grid-template-columns:120px 1fr;gap:0 32px;align-items:start}
+.dir-h .L{font:200 128px/0.8 var(--font-display);color:var(--muted)}
+.dir-h h3{font:400 52px/1 var(--font-display);letter-spacing:-0.02em}
+.dir-h .idea{font:300 24px/1.3 var(--font-display);color:var(--ink);margin-top:12px;max-width:1100px}
+.spec{grid-column:2;display:grid;grid-template-columns:repeat(4,1fr);gap:22px 32px;margin-top:30px}
+.spec div{font-size:13px;color:var(--muted);line-height:1.5}
+.spec div b{display:block;color:var(--ink);font:500 11px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
+.spec code{font:12px var(--font-mono);color:var(--ink)}
+.row{display:flex;gap:40px;margin-top:48px;align-items:flex-start}
+figure{width:390px}
+figure.wide{width:1536px;margin-top:56px}
+.ph{width:390px;height:844px;position:relative;overflow:hidden;background:var(--bg);border-radius:38px;box-shadow:0 0 0 1px var(--line)}
+.dk{width:1536px;height:960px;position:relative;overflow:hidden;background:var(--bg);border-radius:10px;box-shadow:0 0 0 1px var(--line)}
+.home{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink);opacity:.5}
+.notes{width:390px;font-size:13px;color:var(--muted);line-height:1.55}
+.notes h4{font:500 11px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);margin:0 0 8px}
+.notes p{margin-bottom:22px}.notes b{color:var(--ink);font-weight:500}
+
+/* Bausteine, die alle Richtungen teilen */
+.cl:not(.live):not(.rec) .wv{opacity:.5}
+.arr{overflow:hidden}
+.wv{display:block;color:var(--cat)}
+.wv svg{display:block;overflow:visible}
+.lens{width:52px;height:52px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--hair);display:grid;place-items:center;color:var(--ink)}
+.lens.on{background:var(--beam);box-shadow:var(--beam-glow);color:var(--accent-ink)}
+.lens svg{width:18px;height:18px;fill:currentColor;stroke:none}
+.recb{width:72px;height:72px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--hair);display:grid;place-items:center;position:relative}
+.recb i{width:26px;height:26px;border-radius:50%;background:var(--rec);display:block}
+.recb.on{box-shadow:inset 0 0 0 1.5px var(--rec),0 0 28px color-mix(in srgb,var(--rec) 45%,transparent)}
+.recb.on i{width:22px;height:22px;border-radius:var(--radius)}
+.recb .lvl{position:absolute;inset:-7px;border-radius:50%;background:conic-gradient(var(--ink) 0 62%,transparent 62%);-webkit-mask:radial-gradient(circle,transparent 41px,#000 41.5px,#000 43px,transparent 43.5px);mask:radial-gradient(circle,transparent 41px,#000 41.5px,#000 43px,transparent 43.5px);opacity:.9}
+.k{height:44px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:var(--radius);box-shadow:inset 0 0 0 1px var(--hair);font:500 13px var(--font-body);color:var(--ink);white-space:nowrap}
+.k.icon{width:44px;padding:0;color:var(--muted)}
+.k.cta{background:var(--beam);color:var(--accent-ink);box-shadow:var(--glow-ink);font-weight:600}
+.bare{height:44px;min-width:44px;display:inline-grid;place-items:center;color:var(--muted)}
+/* Linien-Regler */
+.sl{position:relative;height:52px}
+.sl .lb{position:absolute;left:0;top:8px;font-size:13px;color:var(--muted)}
+.sl .va{position:absolute;right:0;top:7px;font:400 13px var(--font-mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.sl .tr{position:absolute;left:0;right:0;top:36px;height:1px;background:var(--hair)}
+.sl .fi{position:absolute;top:36px;height:1px;background:var(--ink)}
+.sl .th{position:absolute;top:28px;width:2px;height:17px;margin-left:-1px;background:var(--beam);box-shadow:0 0 6px rgb(255 255 255 / .5)}
+.sl .ct{position:absolute;left:50%;top:32px;width:1px;height:9px;background:var(--hair)}
+/* Umgebungslicht: nur Mischungen aus Kategorie-Tokens */
+.amb{position:absolute;inset:0;pointer-events:none;mix-blend-mode:var(--glow-blend)}
+.mic-light{position:absolute;left:-30%;right:-30%;bottom:-40%;height:85%;pointer-events:none;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--brand) 42%,transparent),color-mix(in srgb,var(--brand) 12%,transparent) 55%,transparent);}
+.grain{position:absolute;inset:0;pointer-events:none;opacity:.55}
+
+/* ========== A · Leinwand ========== */
+.A{--x0:16px;--bw:76px}
+.A .top{position:absolute;left:0;right:0;top:0;height:52px;padding:18px 20px 0;display:flex;justify-content:space-between;align-items:baseline}
+.A .song{font:400 15px var(--font-display);letter-spacing:.005em}
+.A .meta{font:400 12px var(--font-mono);color:var(--muted)}
+.A .ruler{position:absolute;left:0;right:0;height:24px;font:400 11px var(--font-mono);color:var(--muted)}
+.A .ruler span{position:absolute;top:4px;padding-left:5px;border-left:1px solid var(--grid-bar);height:20px}
+.A .ruler .loop{position:absolute;top:0;height:2px;background:var(--beam);opacity:.8;border:0;padding:0}
+.A .arr{position:absolute;left:0;right:0;background-image:linear-gradient(90deg,var(--grid-bar) 1px,transparent 1px);background-size:var(--bw) 100%;background-position:var(--x0) 0}
+.A .ln{position:absolute;left:0;right:0}
+.A .hd{position:absolute;left:20px;top:6px;font:400 12px var(--font-body);color:var(--muted);display:flex;align-items:center;gap:8px;z-index:2}
+.A .hd::before{content:"";width:2px;height:12px;background:var(--cat);border-radius:1px;box-shadow:var(--glow-cat)}
+.A .cl{position:absolute;top:26px;bottom:6px}
+.A .cl .cn{position:absolute;left:6px;top:0;font:500 11px var(--font-body);color:var(--cat);white-space:nowrap;overflow:hidden;max-width:calc(100% - 8px)}
+.A .cl::before{content:"";position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--cat);opacity:.6}
+.A .cl .wv{position:absolute;left:3px;right:2px;top:16px;bottom:0}
+.A .cl.sel{box-shadow:inset 0 0 0 1px var(--beam);border-radius:var(--radius);background:var(--clip-body)}
+.A .cl.sel .cn{color:var(--ink)}
+.A .cl.sel::after{content:"";position:absolute;inset:-4px;background:
+  linear-gradient(var(--beam),var(--beam)) 0 0/7px 1px,linear-gradient(var(--beam),var(--beam)) 0 0/1px 7px,
+  linear-gradient(var(--beam),var(--beam)) 100% 0/7px 1px,linear-gradient(var(--beam),var(--beam)) 100% 0/1px 7px,
+  linear-gradient(var(--beam),var(--beam)) 0 100%/7px 1px,linear-gradient(var(--beam),var(--beam)) 0 100%/1px 7px,
+  linear-gradient(var(--beam),var(--beam)) 100% 100%/7px 1px,linear-gradient(var(--beam),var(--beam)) 100% 100%/1px 7px;background-repeat:no-repeat}
+.A .ln.dim{opacity:.32}
+.A .cl.rec::before{background:var(--rec);opacity:1}
+.A .cl.rec .cn{color:var(--rec)}
+.A .ph-line{position:absolute;width:1px;background:var(--beam);box-shadow:var(--beam-glow);z-index:3}
+.A .tool{position:absolute;display:flex;background:var(--sheet-bg);border-radius:var(--radius-lg);box-shadow:var(--sheet-shadow),0 0 0 1px var(--line);padding:4px;z-index:5}
+.A .tool span{height:44px;padding:0 13px;display:grid;place-items:center;font:500 13px var(--font-body);color:var(--ink);border-radius:10px}
+.A .tool span.main{background:var(--beam);color:var(--accent-ink)}
+.A .tool span+span{margin-left:2px}
+.A .tool .del{color:var(--danger)}
+.A .tool::before{content:"";position:absolute;top:-5px;left:var(--nub,40px);width:9px;height:9px;background:var(--sheet-bg);transform:rotate(45deg);box-shadow:-1px -1px 0 var(--line)}
+.A .finds{position:absolute;left:0;right:0}
+.A .finds .fh{padding:0 20px;font:400 12px var(--font-body);color:var(--muted);display:flex;justify-content:space-between}
+.A .finds .fh b{font:400 12px var(--font-mono);color:var(--muted)}
+.A .chips{display:flex;gap:8px;padding:10px 20px 0;overflow:hidden;-webkit-mask:linear-gradient(90deg,#000 80%,transparent);mask:linear-gradient(90deg,#000 80%,transparent)}
+.A .chip{flex:none;width:76px;height:64px;border-radius:var(--radius);box-shadow:inset 0 0 0 1px var(--line);position:relative}
+.A .chip .wv{position:absolute;left:8px;right:8px;top:10px;height:22px}
+.A .chip span{position:absolute;left:8px;bottom:7px;font:500 11px var(--font-body);color:var(--cat);white-space:nowrap}
+.A .chip.raw span{color:var(--ink)}
+.A .chip.raw::after{content:"roh";position:absolute;right:6px;top:4px;font:400 9.5px var(--font-mono);color:var(--muted);display:none}
+.A .bar{position:absolute;left:0;right:0;bottom:0;height:124px;padding:0 20px 34px;display:flex;align-items:center;justify-content:space-between}
+.A .bar .pos{font:200 24px var(--font-mono);font-variant-numeric:tabular-nums;width:86px}
+.A .bar .pos small{font-size:12px;color:var(--muted);font-weight:400;margin-left:2px}
+.A .bar .grp{display:flex;align-items:center;gap:14px}
+/* Werkbank A */
+.A .wtop{position:absolute;left:0;right:0;top:0;height:60px;padding:12px 10px 0;display:flex;align-items:center;justify-content:space-between}
+.A .wtop .t{font:400 17px var(--font-display);text-align:center}
+.A .stamm{position:absolute;left:0;right:0;font:400 11px var(--font-mono);color:var(--muted);text-align:center}
+.A .stamm b{color:var(--ink);font-weight:400}
+.A .obj{position:absolute;left:20px;right:20px}
+.A .obj .wv{position:absolute;inset:0}
+.A .trim{position:absolute;top:-10px;bottom:-10px;width:1px;background:var(--beam)}
+.A .trim::before{content:"";position:absolute;top:-6px;left:-7px;width:15px;height:15px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--beam);background:var(--bg)}
+.A .dimL,.A .dimR{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--bg) 72%,transparent)}
+.A .tline{position:absolute;left:20px;right:20px;font:400 11px var(--font-mono);color:var(--muted);display:flex;justify-content:space-between}
+.A .words{position:absolute;left:0;right:0;display:flex;gap:22px;padding:0 20px;white-space:nowrap;overflow:hidden;-webkit-mask:linear-gradient(90deg,#000 82%,transparent);mask:linear-gradient(90deg,#000 82%,transparent)}
+.A .words span{font:300 28px/44px var(--font-display);color:var(--muted);opacity:.55;position:relative}
+.A .words span.on{color:var(--ink);opacity:1;font-weight:400}
+.A .words span.on::before{content:"";position:absolute;left:0;right:0;top:-2px;height:2px;background:var(--beam);box-shadow:var(--beam-glow)}
+.A .rows{position:absolute;left:20px;right:20px}
+.A .keys{position:absolute;left:20px;right:20px;display:flex;gap:8px}
+.A .keys .k{flex:1;padding:0 6px}
+.A .take{font:400 13px var(--font-mono);color:var(--ink);display:flex;align-items:center;gap:4px}
+.A .take .bare{min-width:36px}
+/* Aufnahme A */
+.A .counter{position:absolute;left:0;right:0;text-align:center}
+.A .counter .t{font:200 54px/1 var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.A .counter .t small{font-size:28px;color:var(--muted)}
+.A .counter .s{font:500 12px var(--font-body);color:var(--rec);margin-top:8px;display:inline-flex;align-items:center;gap:8px}
+.A .counter .s::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec)}
+.A .modes{position:absolute;left:0;right:0;display:flex;justify-content:center;gap:6px}
+.A .modes span{height:44px;padding:0 14px;display:grid;place-items:center;font:500 13px var(--font-body);color:var(--muted);border-radius:var(--radius)}
+.A .modes span.on{color:var(--ink);box-shadow:inset 0 0 0 1px var(--beam)}
+/* Desktop A */
+.dk.A{--x0:32px;--bw:150px}
+.dk.A .arr,.dk.A .ruler{left:252px;right:24px}
+.dk.A .card::before{left:var(--nub,60px)}
+.dk.A .top{height:72px;padding:24px 32px 0;align-items:center}
+.dk.A .brand{display:flex;align-items:center;gap:12px;font:400 18px var(--font-display)}
+.dk.A .brand img{width:26px;height:26px}
+.dk.A .brand span{color:var(--muted);font-weight:300}
+.dk.A .top .r{display:flex;gap:10px;align-items:center}
+.dk.A .hd{left:18px}
+.dk.A .side{position:absolute;left:32px;top:112px;width:200px}
+.dk.A .side .fh{font:400 12px var(--font-body);color:var(--muted);display:flex;justify-content:space-between;margin-bottom:10px}
+.dk.A .side .fh b{font:400 12px var(--font-mono);font-weight:400}
+.dk.A .it{height:52px;display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:12px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.dk.A .it .wv{height:22px}
+.dk.A .it span{font:500 13px var(--font-body);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dk.A .it small{font:400 11px var(--font-mono);color:var(--muted)}
+.dk.A .it.on span{color:var(--ink)} .dk.A .it.on{box-shadow:inset 2px 0 0 var(--beam);padding-left:10px;margin-left:-10px}
+.dk.A .card{position:absolute;width:420px;background:var(--sheet-bg);border-radius:var(--radius-lg);box-shadow:var(--sheet-shadow),0 0 0 1px var(--line);padding:18px 22px 20px;z-index:6}
+.dk.A .card::before{content:"";position:absolute;top:-6px;width:11px;height:11px;background:var(--sheet-bg);transform:rotate(45deg);box-shadow:-1px -1px 0 var(--line)}
+.dk.A .card .ch{display:flex;justify-content:space-between;align-items:baseline}
+.dk.A .card .ch b{font:400 18px var(--font-display)}
+.dk.A .card .ch small{font:400 11px var(--font-mono);color:var(--muted)}
+.dk.A .card .cw{display:flex;gap:16px;margin:14px 0 6px;white-space:nowrap}
+.dk.A .card .cw span{font:300 19px/40px var(--font-display);color:var(--muted);position:relative}
+.dk.A .card .cw span.on{color:var(--ink);font-weight:400}
+.dk.A .card .cw span.on::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--beam);box-shadow:var(--beam-glow)}
+.dk.A .card .ck{display:flex;gap:8px;margin-top:14px}
+.dk.A .card .ck .k{flex:1}
+.dk.A .caps{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;align-items:center;gap:22px;background:var(--sheet-bg);border-radius:var(--radius-lg);box-shadow:var(--sheet-shadow),0 0 0 1px var(--line);padding:10px 22px 10px 12px}
+.dk.A .caps .recb{width:56px;height:56px}.dk.A .caps .recb i{width:20px;height:20px}
+.dk.A .caps .d{font:200 22px var(--font-mono);font-variant-numeric:tabular-nums}
+.dk.A .caps .d small{display:block;font:400 10px var(--font-mono);color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.dk.A .caps .sep{width:1px;height:32px;background:var(--line)}
+
+/* ========== B · Bühne und Werkbank ========== */
+.B{--x0:84px;--bw:62px}
+.B .deck{position:absolute;left:0;right:0;top:0;height:64px;padding:10px 12px 0 14px;display:flex;align-items:center;gap:14px}
+.B .deck .lens{width:46px;height:46px}
+.B .deck .dsp{display:flex;gap:18px;align-items:baseline}
+.B .deck .dsp div{font:200 21px/1 var(--font-mono);font-variant-numeric:tabular-nums}
+.B .deck .dsp small{display:block;font:400 10px var(--font-mono);color:var(--muted);letter-spacing:.06em;margin-bottom:4px}
+.B .deck .sp{flex:1}
+.B .ruler{position:absolute;left:0;right:0;height:22px;font:400 11px var(--font-mono);color:var(--muted)}
+.B .ruler span{position:absolute;top:3px;padding-left:5px;border-left:1px solid var(--grid-bar);height:19px}
+.B .ruler .loop{position:absolute;top:0;height:2px;background:var(--beam);opacity:.8;border:0;padding:0}
+.B .arr{position:absolute;left:0;right:0;overflow:hidden;background-image:linear-gradient(90deg,var(--grid-bar) 1px,transparent 1px);background-size:var(--bw) 100%;background-position:var(--x0) 0}
+.B .ln{position:absolute;left:0;right:0;border-top:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.B .hd{position:absolute;left:0;top:0;bottom:0;width:78px;padding:9px 0 0 14px;background:var(--head-bg);z-index:3}
+.B .hd b{display:flex;align-items:center;gap:7px;font:500 13px var(--font-body);white-space:nowrap}
+.B .hd b::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cat);box-shadow:var(--glow-cat);flex:none}
+.B .hd small{display:flex;gap:14px;margin:7px 0 0 14px;font:500 11px var(--font-mono);color:var(--muted)}
+.B .hd small span{position:relative}.B .hd small .on{color:var(--ink)}.B .hd small .on::after{content:"";position:absolute;left:-3px;right:-3px;top:-3px;bottom:-3px;box-shadow:inset 0 0 0 1px var(--ink);border-radius:2px}
+.B .ln.mute .cl{opacity:.35}
+.B .ln.mute .hd b{color:var(--muted);text-decoration:line-through}
+.B .cl{position:absolute;top:4px;bottom:4px;border-radius:var(--radius);background:var(--clip-body);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cat) 30%,transparent)}
+.B .cl .cn{z-index:5;position:absolute;left:6px;top:3px;font:500 11px var(--font-body);color:var(--cat);white-space:nowrap;overflow:hidden;max-width:calc(100% - 10px)}
+.B .cl .wv{position:absolute;left:4px;right:4px;top:19px;bottom:4px}
+.B .cl.sel{box-shadow:inset 0 0 0 1px var(--beam)}
+.B .cl.rec{box-shadow:inset 0 0 0 1px var(--rec)}
+.B .cl.rec .cn{color:var(--rec)}
+.B .ph-line{position:absolute;width:1px;background:var(--beam);box-shadow:var(--beam-glow);z-index:4}
+.B .seam{position:absolute;left:0;right:0;height:1px;background:var(--line)}
+.B .seam .grab{position:absolute;left:24px;top:-12px;width:36px;height:24px;display:grid;place-items:center}
+.B .seam .grab::before{content:"";width:28px;height:3px;border-radius:2px;background:var(--hair)}
+.B .seam .recb{position:absolute;left:50%;top:-38px;margin-left:-38px;width:76px;height:76px;background:var(--bg)}
+.B .bench{position:absolute;left:0;right:0;padding:0 20px}
+.B .bn{font:400 24px/1.1 var(--font-display);letter-spacing:-.01em;display:flex;align-items:baseline;gap:10px}
+.B .bn i{font-style:normal;font:400 11px var(--font-mono);color:var(--cat)}
+.B .bs{font:400 11px var(--font-mono);color:var(--muted);margin-top:6px}
+.B .bs b{color:var(--ink);font-weight:400}
+.B .bw{position:relative;margin-top:14px}
+.B .bw .wv{position:absolute;inset:0}
+.B .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin-top:14px}
+.B .tabs span{flex:1;height:44px;display:grid;place-items:center;font:500 13px var(--font-body);color:var(--muted);position:relative}
+.B .tabs span.on{color:var(--ink)}
+.B .tabs span.on::before{content:"";position:absolute;left:10px;right:10px;top:0;height:2px;background:var(--beam);box-shadow:var(--beam-glow)}
+.B .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-top:10px}
+.B .keys{display:flex;gap:8px;margin-top:12px}
+.B .keys .k{flex:1;padding:0 4px}
+.B .trim{position:absolute;top:-6px;bottom:-6px;width:1px;background:var(--beam)}
+.B .trim::after{content:"";position:absolute;bottom:-4px;left:-4px;width:9px;height:9px;background:var(--beam);transform:rotate(45deg)}
+.B .dimL,.B .dimR{position:absolute;top:0;bottom:0;background:color-mix(in srgb,var(--bg) 70%,transparent)}
+.B .shelf{display:flex;gap:8px;margin-top:14px;overflow:hidden;-webkit-mask:linear-gradient(90deg,#000 80%,transparent);mask:linear-gradient(90deg,#000 80%,transparent)}
+.B .shelf span{flex:none;height:36px;padding:0 12px;display:flex;align-items:center;gap:8px;border-radius:var(--radius);box-shadow:inset 0 0 0 1px var(--line);font:500 12px var(--font-body);color:var(--ink);white-space:nowrap}
+.B .shelf span::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--cat)}
+.B .seg{display:flex;box-shadow:inset 0 0 0 1px var(--hair);border-radius:var(--radius)}
+.B .seg span{flex:1;height:44px;display:grid;place-items:center;font:500 13px var(--font-body);color:var(--muted)}
+.B .seg span.on{color:var(--ink);box-shadow:inset 0 0 0 1px var(--beam);border-radius:var(--radius)}
+.B .live{font:200 56px/1 var(--font-mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.B .live small{font-size:26px;color:var(--muted)}
+.B .live-s{font:500 12px var(--font-body);color:var(--rec);display:flex;align-items:center;gap:8px}
+.B .live-s::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec)}
+/* Desktop B */
+.dk.B{--x0:184px;--bw:98px}
+.dk.B .deck{height:64px;padding:0 24px;gap:22px;border-bottom:1px solid var(--line)}
+.dk.B .deck .brand{display:flex;align-items:center;gap:10px;font:400 17px var(--font-display);margin-right:10px}
+.dk.B .deck .brand img{width:24px;height:24px}
+.dk.B .deck .brand span{color:var(--muted);font-weight:300}
+.dk.B .deck .vsep{width:1px;height:28px;background:var(--line)}
+.dk.B .hd{width:178px;padding:12px 0 0 20px}
+.dk.B .hd small{margin-left:14px}
+.dk.B .vseam{position:absolute;top:64px;bottom:0;width:1px;background:var(--line)}
+.dk.B .vseam .recb{position:absolute;top:118px;left:-44px;width:88px;height:88px;background:var(--bg)}
+.dk.B .vseam .recb i{width:30px;height:30px}
+.dk.B .bench{padding:0}
+.dk.B .bn{font-size:38px}
+.dk.B .grid2{gap:6px 40px}
+
+/* ========== C · Partitur ========== */
+.C{--x0:20px;--bw:72px}
+.C .ttl{position:absolute;left:20px;right:20px;top:26px}
+.C .ttl h5{font:300 38px/1 var(--font-display);letter-spacing:-.02em}
+.C .ttl p{font:400 12px var(--font-mono);color:var(--muted);margin-top:10px}
+.C .ttl p b{color:var(--ink);font-weight:400}
+.C .ttl .more{position:absolute;right:-8px;top:-6px}
+.C .ruler{position:absolute;left:0;right:0;height:20px;font:400 10px var(--font-mono);color:var(--muted)}
+.C .ruler span{position:absolute;top:0}
+.C .ruler span::after{content:"";position:absolute;left:-1px;top:14px;width:3px;height:3px;border-radius:50%;background:var(--muted);opacity:.6}
+.C .ruler .loop{position:absolute;top:18px;height:1px;background:var(--beam)}
+.C .ruler .loop::after{display:none}
+.C .arr{position:absolute;left:0;right:0;overflow:hidden}
+.C .ln{position:relative;height:var(--lh,84px)}
+.C .ln::after{content:"";position:absolute;left:20px;right:0;bottom:16px;height:1px;background:var(--line)}
+.C .hd{position:absolute;left:20px;top:10px;font:400 21px/1 var(--font-display);color:var(--ink);letter-spacing:-.005em;display:flex;gap:10px;align-items:baseline;z-index:2}
+.C .hd small{font:400 10.5px var(--font-mono);color:var(--muted);letter-spacing:.02em}
+.C .ln.mute .hd{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px}
+.C .ln.mute .cl{opacity:.3}
+.C .cl{position:absolute;bottom:17px;height:38px}
+.C .cl .cn{display:none}
+.C .cl .wv{position:absolute;inset:0}
+.C .cl.sel::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:2px;background:var(--beam);box-shadow:var(--beam-glow)}
+.C .cl.rec::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:2px;background:var(--rec)}
+.C .ph-line{position:absolute;width:1px;background:var(--beam);box-shadow:var(--beam-glow);z-index:4}
+.C .open{position:relative;margin:-6px 0 6px;padding:0 20px}
+.C .open .on1{font:400 15px var(--font-body);color:var(--ink)}
+.C .open .on1 b{font-weight:500}
+.C .open .on1 small{font:400 11px var(--font-mono);color:var(--muted);margin-left:8px}
+.C .open .acts{display:flex;gap:2px;margin-left:-10px}
+.C .open .acts span{height:44px;padding:0 10px;display:grid;place-items:center;font:400 15px var(--font-body);color:var(--muted)}
+.C .open .acts span.main{color:var(--ink);text-decoration:underline;text-underline-offset:5px;text-decoration-thickness:1px}
+.C .bot{position:absolute;left:0;right:0;bottom:0;height:120px;padding:0 20px 34px;display:flex;align-items:center;justify-content:space-between}
+.C .bot .w{font:400 15px var(--font-body);color:var(--muted);height:44px;display:grid;place-items:center;min-width:64px}
+.C .bot .pos{font:200 22px var(--font-mono);font-variant-numeric:tabular-nums}
+/* Werkbank C: Sätze */
+.C .wb-h{position:absolute;left:20px;right:20px;top:24px}
+.C .wb-h .back{font:400 14px var(--font-body);color:var(--muted);height:44px;display:flex;align-items:center;margin-left:-2px}
+.C .wb-h h5{font:300 40px/1 var(--font-display);letter-spacing:-.02em;margin-top:6px}
+.C .wb-h p{font:400 14px/1.45 var(--font-body);color:var(--muted);margin-top:10px}
+.C .wb-w{position:absolute;left:20px;right:20px}
+.C .wb-w .wv{position:absolute;inset:0}
+.C .wb-w::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
+.C .sent{position:absolute;left:20px;right:20px}
+.C .sent p{font:300 18px/1.4 var(--font-display);color:var(--muted);padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.C .sent p:last-child{border-bottom:0}
+.C .sent u{text-decoration:none;color:var(--ink);font-weight:400;border-bottom:1px dotted var(--ink);padding-bottom:1px;white-space:nowrap}
+.C .sent .num{font-variant-numeric:tabular-nums}
+.C .acts2{position:absolute;left:20px;right:20px;display:flex;flex-wrap:wrap;gap:0 18px}
+.C .acts2 span{height:44px;display:grid;place-items:center;font:400 15px var(--font-body);color:var(--ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:5px;text-decoration-color:var(--hair)}
+/* Aufnahme C */
+.C .big{position:absolute;left:18px;right:20px}
+.C .big .t{font:200 128px/0.9 var(--font-display);letter-spacing:-.045em;font-variant-numeric:tabular-nums}
+.C .big .t small{font-size:48px;letter-spacing:-.02em;color:var(--muted)}
+.C .big .s{font:400 15px var(--font-body);color:var(--muted);margin-top:16px}
+.C .big .s b{color:var(--rec);font-weight:500;display:inline-flex;align-items:center;gap:8px;margin-right:6px}
+.C .big .s b::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec)}
+/* Desktop C */
+.dk.C{--x0:420px;--bw:90px}
+.dk.C .margin{position:absolute;left:40px;top:44px;width:320px;bottom:40px}
+.dk.C .margin h5{font:300 64px/0.95 var(--font-display);letter-spacing:-.03em}
+.dk.C .margin .meta{font:400 12px var(--font-mono);color:var(--muted);margin-top:14px;line-height:1.7}
+.dk.C .margin .meta b{color:var(--ink);font-weight:400}
+.dk.C .tp{display:flex;align-items:center;gap:16px;margin-top:30px}
+.dk.C .tp .pos{font:200 30px var(--font-mono);font-variant-numeric:tabular-nums}
+.dk.C .reg{position:absolute;left:0;right:0;bottom:0}
+.dk.C .reg h6{font:400 12px var(--font-body);color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between}
+.dk.C .reg h6 b{font:400 12px var(--font-mono);font-weight:400}
+.dk.C .reg li{list-style:none;display:grid;grid-template-columns:1fr auto;align-items:baseline;height:34px;padding-top:7px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);font:400 15px var(--font-body)}
+.dk.C .reg li i{font-style:normal;font:400 11px var(--font-mono);color:var(--cat)}
+.dk.C .reg li.r i{color:var(--muted)}
+.dk.C .vr{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+.dk.C .mg{position:absolute;right:40px;top:44px;width:360px}
+.dk.C .mg .k1{font:400 12px var(--font-mono);color:var(--muted)}
+.dk.C .mg h5{font:300 40px/1 var(--font-display);letter-spacing:-.02em;margin-top:10px}
+.dk.C .mg .sp{font:400 14px var(--font-body);color:var(--muted);margin-top:10px}
+.dk.C .sent{left:0;right:0}
+.dk.C .sent p{font-size:20px}
+.dk.C .hd{left:0;font-size:24px}
+.dk.C .ln::after{left:0}
+.dk.C .arr{left:420px;right:440px}
+.dk.C .arr .ln{margin-left:0}
+</style></head>
+<body>
+<svg class="defs" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 20 20"><path d="M6 3.5v13l11-6.5z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 20 20"><rect x="4.5" y="4.5" width="11" height="11" rx="1.5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 20 20"><path d="M7 5L3.5 8.5 7 12M4 8.5h8a4.5 4.5 0 010 9H9"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 20 20"><path d="M13 5l3.5 3.5L13 12M16 8.5H8a4.5 4.5 0 000 9h3"/></symbol>
+  <symbol id="i-more" viewBox="0 0 20 20"><circle cx="4" cy="10" r="1.2"/><circle cx="10" cy="10" r="1.2"/><circle cx="16" cy="10" r="1.2"/></symbol>
+  <symbol id="i-back" viewBox="0 0 20 20"><path d="M12.5 4l-6 6 6 6"/></symbol>
+  <symbol id="i-l" viewBox="0 0 20 20"><path d="M12 5l-5 5 5 5"/></symbol>
+  <symbol id="i-r" viewBox="0 0 20 20"><path d="M8 5l5 5-5 5"/></symbol>
+  <symbol id="i-big" viewBox="0 0 20 20"><path d="M11.5 3.5h5v5M16.5 3.5l-6 6M8.5 16.5h-5v-5M3.5 16.5l6-6"/></symbol>
+  <symbol id="i-start" viewBox="0 0 20 20"><path d="M5 4v12M16 4.5v11L7.5 10z"/></symbol>
+</svg>
+
+<header class="pg-h">
+  <h1>Krach<em>werk</em><br>drei Richtungen</h1>
+  <p><b>Loopwerk-artiger Song-Bau aus selbst Aufgenommenem.</b> Gleiche Funktionen, halb so viel sichtbare Oberfläche, doppelt so viel Raum fürs Formen. Familie Phosphor: schwarz, was klingt leuchtet, Einstellungen sind Linien, aktiv ist Weißglut, Rot nur für Aufnahme und Löschen. Neu: Kategorien nach <b>Herkunft</b> (Körper, Dinge, Stimme, Strom, Schleife), Licht aus dem <b>Mikrofon</b>, Pink nur als Marke.</p>
+</header>
+
+<div class="diag">
+  <div><h2>Loopwerk heute, Desktop 1400 × 820, Clip gewählt</h2><img class="shot-d" src="shots/ist-desktop-clip.png" alt="Loopwerk Desktop heute"></div>
+  <div><h2>Handy 390 × 844</h2><img class="shot-h" src="shots/ist-handy.png" alt="Loopwerk Handy heute"></div>
+  <div><h2>Gezählt (sichtbar, Desktop)</h2>
+    <div class="nums">
+      <b>117</b><span>Elemente mit Rahmen oder Kontur</span>
+      <b>113</b><span>Bedienelemente gleichzeitig</span>
+      <b>172</b><span>Beschriftungen, 12 Schriftgrößen</span>
+      <b>63 %</b><span>davon Mono, 60 in Versalien</span>
+    </div>
+    <ol>
+      <li><b>Alles hat einen Rahmen.</b> Tasten, Regler, Spurköpfe, Spalten: jede Haarlinie ist gleich hell, nichts tritt zurück.</li>
+      <li><b>Mono-Versalien überall.</b> „DRUMS“, „RASTER: SCHLAG“, „EINBLENDEN“ schreien gleich laut wie Zahlen.</li>
+      <li><b>Drei Spalten, drei Hierarchien.</b> Regal, Arranger und Inspektor sind gleich wichtig gesetzt; die Musik in der Mitte ist das ruhigste Feld.</li>
+      <li><b>Leere Zeilen kosten Platz.</b> Tonart- und Akkordzeile, 8 Spurköpfe mit M/S und Knopf, auch ohne Inhalt.</li>
+    </ol>
+  </div>
+</div>
+
+<!-- ===================== A ===================== -->
+<section class="dir">
+  <div class="dir-h">
+    <div class="L">A</div>
+    <div>
+      <h2>Richtung A</h2>
+      <h3>Leinwand</h3>
+      <p class="idea">Es gibt nur den Song. Jedes Werkzeug erscheint an dem Ding, das du berührst, und die Werkbank ist kein Fenster, sondern der herangezoomte Clip.</p>
+    </div>
+    <div class="spec">
+      <div><b>Tokens</b><code>--bg</code> als Leinwand, <code>--sheet-bg</code> nur für das Werkzeug am Objekt, Herkunft über <code>--cat-*</code>, Auswahl <code>--beam</code>, Aufnahme <code>--danger</code>, Mikrofonlicht <code>--cat-own</code>.</div>
+      <div><b>Typo-Skala</b>11 Mono (nur Zahlen) · 12/13 Sans (Namen, Werkzeug) · 15/17 Display (Titel) · 28 Display Light (Parameter-Wörter) · 54 Mono Thin (Aufnahmezeit).</div>
+      <div><b>Formensprache</b>Keine Spurköpfe, keine Clipkästen: Lichtkante am Anfang, Wellenform, Name. Eine einzige Fläche im Bild, das Werkzeug mit Nase zum Objekt. Radius 3 Inhalte, 14 Werkzeug.</div>
+      <div><b>Bewegung</b>Clip antippen: Werkzeug wächst aus dem Clip (120 ms). „Formen“: der Clip zoomt bildfüllend auf (280 ms, gleiche Wellenform, keine Überblendung). Aufnahme: Licht steigt vom unteren Rand, wo das Mikrofon sitzt.</div>
+      <div><b>Zugänglichkeit</b>Alle Ziele 44 px, Spurname immer sichtbar (12 px, muted 6,9 : 1). Stumm = durchgestrichen + 32 % Deckkraft. Fokus: weiße Kontur.</div>
+      <div><b>Weggelassen</b>Regal-Spalte, Inspektor-Spalte, Dock-Leiste, Tonart-/Akkordzeile als feste Zeilen, Spurköpfe mit M/S/Knopf (M/S per Halten auf dem Spurnamen).</div>
+      <div><b>Gefahr</b>Unsichtbares wird nicht gefunden: Mixer, Spur stumm, Export. Braucht Gesten-Tipps und ein vollständiges „Mehr“.</div>
+      <div><b>Aufwand</b>Hoch. Neuer Arranger-Kopf, Werkzeug-Positionierung am Objekt, Zoom-Übergang in den Editor.</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <figure>
+      <div class="ph A" id="A1">
+        <div class="top"><span class="song">Küchensong</span><span class="meta">A-Moll · 90</span></div>
+        <div class="ruler" style="top:52px" data-ruler="6"></div>
+        <div class="amb" style="background:radial-gradient(60% 30% at 30% 22%,color-mix(in srgb,var(--o-koerper) 9%,transparent),transparent),radial-gradient(60% 30% at 70% 48%,color-mix(in srgb,var(--o-strom) 9%,transparent),transparent)"></div>
+        <div class="arr" style="top:76px;height:432px" data-lanes='{"h":72,"play":10,"sel":1,"nub":true,"only":[0,1,2,3,4,5]}'></div>
+        <div class="finds" style="top:556px"><div class="fh"><span>Fundstücke</span><b>14</b></div><div class="chips">
+          <div class="chip raw o-raw"><i class="wv" data-w="raw" data-s="9"></i><span>Aufnahme 7</span></div>
+          <div class="chip o-dinge"><i class="wv" data-w="hit" data-p="18" data-s="3"></i><span>Löffel</span></div>
+          <div class="chip o-koerper"><i class="wv" data-w="one" data-s="4"></i><span>Bauch 1</span></div>
+          <div class="chip o-stimme"><i class="wv" data-w="voice" data-s="5"></i><span>Summen 2</span></div>
+          <div class="chip o-strom"><i class="wv" data-w="pad" data-s="6"></i><span>Brumm A</span></div>
+        </div></div>
+        <div class="bar">
+          <div class="grp"><div class="lens on"><svg><use href="#i-stop"/></svg></div><div class="pos">3.3<small>.1</small></div></div>
+          <div class="recb"><i></i></div>
+          <div class="grp"><span class="bare"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare"><svg class="ico" style="fill:currentColor"><use href="#i-more"/></svg></span></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Arranger, spielt.</b> Keine Spurköpfe: Name und Lichtkante liegen auf der Spur. Clip gewählt, das Werkzeug hängt am Clip. Unten die Fundstücke (frische Aufnahmen weiß und körnig = roh), dann Daumenzone: Spielen, Mikro, Rückgängig, Mehr.</p>
+    </figure>
+
+    <figure>
+      <div class="ph A" id="A2">
+        <div class="wtop"><span class="bare"><svg class="ico"><use href="#i-back"/></svg></span><span class="t">Löffel auf Glas</span><span class="bare"><svg class="ico" style="fill:currentColor;stroke:none"><use href="#i-play"/></svg></span></div>
+        <div class="stamm" style="top:62px">Dinge · Küche 21:14 → <b>gestimmt auf A</b> · 0,82 s</div>
+        <div class="obj o-dinge" style="top:112px;height:210px">
+          <i class="wv" data-w="glass" data-s="11" data-m="mid" data-trim="0.07,0.86" data-fade="0.03,0.12"></i>
+          <div class="dimL" style="left:0;width:7%"></div><div class="dimR" style="left:86%;right:0"></div>
+          <div class="trim" style="left:7%"></div><div class="trim" style="left:86%"></div>
+        </div>
+        <div class="tline" style="top:344px"><span>0</span><span>0,2</span><span>0,4</span><span>0,6</span><span>0,8 s</span></div>
+        <div class="words" style="top:392px"><span>Schnitt</span><span class="on">Tonhöhe</span><span>Hülle</span><span>Farbe</span><span>Raum</span><span>Zerlegen</span></div>
+        <div class="rows" style="top:452px">
+          <div class="sl"><span class="lb">Halbtöne</span><span class="va">+3</span><i class="tr"></i><i class="ct"></i><i class="fi" style="left:50%;width:12.5%"></i><i class="th" style="left:62.5%"></i></div>
+          <div class="sl"><span class="lb">Fein</span><span class="va">−12 ct</span><i class="tr"></i><i class="ct"></i><i class="fi" style="left:44%;width:6%"></i><i class="th" style="left:44%"></i></div>
+          <div class="sl"><span class="lb">Auf Tonart ziehen · A-Moll</span><span class="va">80 %</span><i class="tr"></i><i class="fi" style="left:0;width:80%"></i><i class="th" style="left:80%"></i></div>
+          <div class="sl"><span class="lb">Stimmfarbe halten</span><span class="va">an</span><i class="tr"></i><i class="fi" style="left:0;width:100%"></i><i class="th" style="left:100%"></i></div>
+        </div>
+        <div class="keys" style="top:672px"><span class="k">Rückwärts</span><span class="k">Einfrieren</span><span class="k">Als Instrument</span></div>
+        <div class="bar" style="height:108px">
+          <div class="lens"><svg><use href="#i-play"/></svg></div>
+          <div class="take"><span class="bare"><svg class="ico"><use href="#i-l"/></svg></span>Take 2 von 3<span class="bare"><svg class="ico"><use href="#i-r"/></svg></span></div>
+          <div class="recb" style="width:52px;height:52px"><i style="width:18px;height:18px"></i></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Werkbank = der Clip, groß.</b> Anfang und Ende sind Linien direkt an der Welle, Ein-/Ausblenden ist die Hüllkurve darauf. Darunter die Werkzeuge als Wörter: wischen wechselt, sechs Gruppen, je vier bis sechs Linien (insgesamt 28 Einstellungen, keine sichtbar, die du nicht gewählt hast).</p>
+    </figure>
+
+    <figure>
+      <div class="ph A" id="A3">
+        <div class="mic-light"></div>
+        <i class="grain wv o-brand" data-w="dust" data-s="21" style="position:absolute;left:0;right:0;top:560px;height:250px;opacity:.45"></i>
+        <div class="top"><span class="song">Küchensong</span><span class="meta">A-Moll · 90</span></div>
+        <div class="counter" style="top:96px"><div class="t">0:03<small>,4</small></div><div class="s">Aufnahme · Stimme 2 · ab Takt 3</div></div>
+        <div class="ruler" style="top:196px" data-ruler="6"></div>
+        <div class="arr" style="top:220px;height:300px" data-lanes='{"h":72,"play":13.12,"only":[0,1,4,7],"rec":[7,2,1.28],"dimAll":true}'></div>
+        <div class="modes" style="top:600px"><span>Ein Schuss</span><span class="on">Im Takt</span><span>Stapeln</span></div>
+        <div class="bar">
+          <div class="grp"><div class="lens on"><svg><use href="#i-stop"/></svg></div><div class="pos">4.2<small>.1</small></div></div>
+          <div class="recb on"><span class="lvl"></span><i></i></div>
+          <div class="grp"><span class="bare" style="opacity:.35"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare" style="opacity:.35"><svg class="ico" style="fill:currentColor"><use href="#i-more"/></svg></span></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Aufnahme.</b> Der Raum wird dunkel, nur die Zielspur bleibt hell. Der neue Clip wächst als weißes Korn (roh) an der Marke. Licht steigt vom unteren Rand, wo das Mikrofon ist, und folgt dem Pegel. Rot nur am Knopf, an der Zeit und am Clipanfang; Pegelring weiß.</p>
+    </figure>
+  </div>
+
+  <figure class="wide">
+    <div class="dk A" id="A4">
+      <div class="amb" style="background:radial-gradient(40% 30% at 35% 25%,color-mix(in srgb,var(--o-koerper) 8%,transparent),transparent),radial-gradient(40% 30% at 70% 55%,color-mix(in srgb,var(--o-strom) 8%,transparent),transparent),radial-gradient(30% 25% at 55% 70%,color-mix(in srgb,var(--o-stimme) 7%,transparent),transparent)"></div>
+      <div class="top"><div class="brand"><img src="../../../assets/icons/krachwerk-180.png" alt="">Krachwerk <span>/ Küchensong</span></div><div class="r"><span class="meta" style="margin-right:14px">A-Moll · 90 BPM · 16 Takte</span><span class="k" style="box-shadow:none;color:var(--muted)">Projekt</span><span class="k cta">Teilen</span></div></div>
+      <div class="side">
+        <div class="fh"><span>Fundstücke</span><b>14</b></div>
+        <div class="it o-raw"><i class="wv" data-w="raw" data-s="3"></i><span>Aufnahme 7</span><small>roh</small></div>
+        <div class="it on o-dinge"><i class="wv" data-w="hit" data-p="12" data-s="3"></i><span>Löffel auf Glas</span><small>0,8 s</small></div>
+        <div class="it o-dinge"><i class="wv" data-w="hit" data-p="26" data-s="5"></i><span>Topfdeckel</span><small>1,1 s</small></div>
+        <div class="it o-koerper"><i class="wv" data-w="loop" data-p="13" data-s="1"></i><span>Klatsch-Beat</span><small>4 T</small></div>
+        <div class="it o-koerper"><i class="wv" data-w="one" data-s="7"></i><span>Bauch 1</span><small>0,3 s</small></div>
+        <div class="it o-stimme"><i class="wv" data-w="tick" data-p="6" data-s="2"></i><span>Ts-Ts</span><small>1 T</small></div>
+        <div class="it o-stimme"><i class="wv" data-w="voice" data-s="8"></i><span>Summen A-Moll</span><small>2 T</small></div>
+        <div class="it o-strom"><i class="wv" data-w="pad" data-s="4"></i><span>Brumm A</span><small>4 T</small></div>
+        <div class="it o-schleife"><i class="wv" data-w="rev" data-s="9"></i><span>Loop 1 rückwärts</span><small>2 T</small></div>
+        <div class="it o-stimme"><i class="wv" data-w="voice" data-s="12"></i><span>Fläche aus Stimme</span><small>8 T</small></div>
+      </div>
+      <div class="ruler" style="top:84px" data-ruler="9"></div>
+      <div class="arr" style="top:108px;height:644px" data-lanes='{"h":92,"play":10,"sel":1}'></div>
+      <div class="card o-dinge" style="left:560px;top:302px;--nub:168px">
+        <div class="ch"><b>Löffel auf Glas</b><span style="display:flex;gap:6px"><span class="k icon" style="box-shadow:none"><svg class="ico"><use href="#i-big"/></svg></span></span></div>
+        <small style="font:400 11px var(--font-mono);color:var(--muted)">Dinge · Küche 21:14 → gestimmt auf A</small>
+        <div class="cw"><span>Schnitt</span><span>Tonhöhe</span><span class="on">Hülle</span><span>Farbe</span><span>Raum</span><span>Zerlegen</span></div>
+        <div class="sl"><span class="lb">Anschlag</span><span class="va">4 ms</span><i class="tr"></i><i class="fi" style="left:0;width:8%"></i><i class="th" style="left:8%"></i></div>
+        <div class="sl"><span class="lb">Halten</span><span class="va">120 ms</span><i class="tr"></i><i class="fi" style="left:0;width:30%"></i><i class="th" style="left:30%"></i></div>
+        <div class="sl"><span class="lb">Abklingen</span><span class="va">640 ms</span><i class="tr"></i><i class="fi" style="left:0;width:64%"></i><i class="th" style="left:64%"></i></div>
+        <div class="sl"><span class="lb">Ausblenden am Ende</span><span class="va">sanft</span><i class="tr"></i><i class="fi" style="left:0;width:70%"></i><i class="th" style="left:70%"></i></div>
+        <div class="ck"><span class="k">Rückwärts</span><span class="k">Einfrieren</span><span class="k">Teilen</span><span class="k icon">⋯</span></div>
+      </div>
+      <div class="caps">
+        <span class="bare"><svg class="ico"><use href="#i-start"/></svg></span>
+        <div class="lens on" style="width:48px;height:48px"><svg><use href="#i-stop"/></svg></div>
+        <div class="recb"><i></i></div>
+        <span class="sep"></span>
+        <div class="d">3.3.1<small>TAKT</small></div><div class="d">0:07,1<small>ZEIT</small></div><div class="d">90<small>TEMPO</small></div>
+        <span class="sep"></span>
+        <span class="bare"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare"><svg class="ico"><use href="#i-redo"/></svg></span>
+      </div>
+    </div>
+    <p class="cap"><b>Desktop.</b> Ganze Breite für die Musik. Links die Fundstücke als Liste ohne Spalte und ohne Kasten (ziehen = Clip). Das Werkzeug am gewählten Clip ist hier eine Karte mit Wörter-Reitern; ↗ zoomt in die volle Werkbank. Transport schwebt unten als einzige weitere Fläche. Mixer: Spurname anklicken öffnet dieselbe Karte für die Spur.</p>
+  </figure>
+</section>
+
+<!-- ===================== B ===================== -->
+<section class="dir">
+  <div class="dir-h">
+    <div class="L">B</div>
+    <div>
+      <h2>Richtung B</h2>
+      <h3>Bühne und Werkbank</h3>
+      <p class="idea">Oben spielt der Song, unten liegt immer der eine Klang, an dem du gerade arbeitest, und das Mikrofon sitzt genau auf der Naht dazwischen.</p>
+    </div>
+    <div class="spec">
+      <div><b>Tokens</b>Bühne <code>--bg</code> + <code>--head-bg</code>, Werkbank auf <code>--bg</code> (keine zweite Fläche), Naht <code>--line</code>, Regler <code>--key-line</code>/<code>--beam</code>, Clipkante 30 % <code>--cat</code> wie Loopwerk.</div>
+      <div><b>Typo-Skala</b>10/11 Mono (Zahlen, Etiketten) · 13 Sans (Spuren, Regler, Reiter) · 21 Mono Thin (Anzeige) · 24/38 Display (Klangname) · 56 Mono Thin (Aufnahme).</div>
+      <div><b>Formensprache</b>Zwei Zonen, eine Naht. Die Naht ist die einzige kräftige Linie; der runde Mikro-Knopf sitzt darauf wie ein Scharnier. Clips wie Loopwerk (vertraut), Spurköpfe nur Name + M S als Buchstaben.</div>
+      <div><b>Bewegung</b>Naht ziehen = Gewicht verschieben (drei Haltepunkte wie die Schubladen heute). Clip antippen: Werkbank wechselt mit kurzem Wisch der Welle. Aufnahme: Naht wird rot und pulsiert mit dem Pegel.</div>
+      <div><b>Zugänglichkeit</b>M/S als Buchstaben mit 44-px-Fläche, Zustand über Durchstreichen und Weißglut, nicht über Farbe. Reiter mit Lichtstrich + Schriftfarbe. Pink Marke vs. Rot Aufnahme: Formsignal (Quadrat, Zeit).</div>
+      <div><b>Weggelassen</b>Regal (wird „Ablage“ in der Werkbank), Inspektor (= Werkbank), Fachleiste (Mixer = Werkbank einer Spur), Zoomleisten, Tonart-/Akkordzeile.</div>
+      <div><b>Gefahr</b>Die Werkbank frisst am Handy die halbe Bühne; zwei Zonen können wie „Loopwerk mit Schublade“ wirken, also zu wenig Bruch.</div>
+      <div><b>Aufwand</b>Mittel. Baut auf `sheets.js` (Haltepunkte), `inspector.js` und dem Sample-Editor auf; neu sind Naht und Ablage.</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <figure>
+      <div class="ph B" id="B1">
+        <div class="deck"><div class="lens on"><svg><use href="#i-stop"/></svg></div><div class="dsp"><div><small>TAKT</small>003</div><div><small>TEMPO</small>90</div></div><span class="sp"></span><span class="bare"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare"><svg class="ico" style="fill:currentColor"><use href="#i-more"/></svg></span></div>
+        <div class="ruler" style="top:66px" data-ruler="6"></div>
+        <div class="arr" style="top:88px;height:396px" data-lanes='{"h":66,"play":10,"sel":1,"head":true,"mute":5}'></div>
+        <div class="seam" style="top:530px"><span class="grab"></span><div class="recb"><i></i></div></div>
+        <div class="bench o-dinge" style="top:584px">
+          <div class="bn">Löffel auf Glas <i>DINGE</i></div>
+          <div class="bs">Küche 21:14 → <b>gestimmt auf A</b> · 0,82 s</div>
+          <div class="bw" style="height:58px"><i class="wv" data-w="glass" data-s="11" data-m="mid" data-trim="0.07,0.86"></i></div>
+          <div class="keys"><span class="k">Rückwärts</span><span class="k">Einfrieren</span><span class="k">Zerlegen</span></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Bühne groß.</b> Song oben wie in Loopwerk, aber ohne Tonart-/Akkordzeile und Knöpfe im Spurkopf. Die Werkbank unten zeigt immer den gewählten Clip mit drei schnellen Griffen. „Rückwärts“ ist stumm (durchgestrichen, Clip gedimmt).</p>
+    </figure>
+
+    <figure>
+      <div class="ph B" id="B2">
+        <div class="deck"><div class="lens on"><svg><use href="#i-stop"/></svg></div><div class="dsp"><div><small>TAKT</small>003</div><div><small>TEMPO</small>90</div></div><span class="sp"></span><span class="bare"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare"><svg class="ico" style="fill:currentColor"><use href="#i-more"/></svg></span></div>
+        <div class="ruler" style="top:66px" data-ruler="6"></div>
+        <div class="arr" style="top:88px;height:132px" data-lanes='{"h":44,"play":10,"sel":1,"head":true,"only":[0,1,4],"slim":true}'></div>
+        <div class="seam" style="top:252px"><span class="grab"></span><div class="recb"><i></i></div></div>
+        <div class="bench o-dinge" style="top:300px">
+          <div class="bn">Löffel auf Glas <i>DINGE</i></div>
+          <div class="bs">Küche 21:14 → <b>gestimmt auf A</b> · 0,82 s</div>
+          <div class="bw" style="height:96px"><i class="wv" data-w="glass" data-s="11" data-m="mid" data-trim="0.07,0.86" data-fade="0.03,0.12"></i>
+            <div class="dimL" style="left:0;width:7%"></div><div class="dimR" style="left:86%;right:0"></div><div class="trim" style="left:7%"></div><div class="trim" style="left:86%"></div></div>
+          <div class="tabs" style="margin-top:24px"><span>Schnitt</span><span>Ton</span><span>Hülle</span><span class="on">Farbe</span><span>Raum</span></div>
+          <div class="grid2">
+            <div class="sl"><span class="lb">Tiefen weg</span><span class="va">120 Hz</span><i class="tr"></i><i class="fi" style="left:0;width:18%"></i><i class="th" style="left:18%"></i></div>
+            <div class="sl"><span class="lb">Höhen weg</span><span class="va">aus</span><i class="tr"></i><i class="fi" style="left:0;width:100%"></i><i class="th" style="left:100%"></i></div>
+            <div class="sl"><span class="lb">Rauschen weg</span><span class="va">60 %</span><i class="tr"></i><i class="fi" style="left:0;width:60%"></i><i class="th" style="left:60%"></i></div>
+            <div class="sl"><span class="lb">Verdichten</span><span class="va">35 %</span><i class="tr"></i><i class="fi" style="left:0;width:35%"></i><i class="th" style="left:35%"></i></div>
+            <div class="sl"><span class="lb">Wärme</span><span class="va">20 %</span><i class="tr"></i><i class="fi" style="left:0;width:20%"></i><i class="th" style="left:20%"></i></div>
+            <div class="sl"><span class="lb">Lautstärke</span><span class="va">−2,0 dB</span><i class="tr"></i><i class="fi" style="left:0;width:72%"></i><i class="th" style="left:72%"></i></div>
+          </div>
+          <div class="keys"><span class="k">Rückwärts</span><span class="k">Einfrieren</span><span class="k">Zerlegen</span></div>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Werkbank groß</b> (Naht nach oben gezogen). Der Song spielt weiter, drei Spuren bleiben sichtbar. Fünf Reiter, je sechs Linien in zwei Spalten; die Welle trägt Schnitt und Hülle direkt. Gleiche Werkbank für eine Spur = Mixer-Kanal.</p>
+    </figure>
+
+    <figure>
+      <div class="ph B" id="B3">
+        <div class="deck"><div class="lens on"><svg><use href="#i-stop"/></svg></div><div class="dsp"><div><small>TAKT</small>003</div><div><small>TEMPO</small>90</div></div><span class="sp"></span><span class="bare" style="opacity:.35"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare" style="opacity:.35"><svg class="ico" style="fill:currentColor"><use href="#i-more"/></svg></span></div>
+        <div class="ruler" style="top:66px" data-ruler="6"></div>
+        <div class="arr" style="top:88px;height:198px" data-lanes='{"h":66,"play":13.12,"head":true,"only":[1,4,7],"rec":[7,2,1.28]}'></div>
+        <div class="seam" style="top:326px;background:var(--rec);box-shadow:0 0 12px var(--rec)"><div class="recb on" style="width:76px;height:76px"><span class="lvl" style="-webkit-mask:radial-gradient(circle,transparent 43px,#000 43.5px,#000 45px,transparent 45.5px);mask:radial-gradient(circle,transparent 43px,#000 43.5px,#000 45px,transparent 45.5px)"></span><i></i></div></div>
+        <div class="mic-light" style="height:70%;opacity:.8"></div>
+        <div class="bench" style="top:392px">
+          <div class="live-s">Aufnahme · Stimme 2 · ab Takt 3</div>
+          <div class="live" style="margin-top:12px">0:03<small>,4</small></div>
+          <div class="bw o-raw" style="height:120px;margin-top:22px"><i class="wv" data-w="raw" data-s="31" data-d="2.4" data-grow="0.7"></i></div>
+          <div class="seg" style="margin-top:28px"><span>Ein Schuss</span><span class="on">Im Takt</span><span>Stapeln</span></div>
+          <p class="bs" style="margin-top:14px;text-align:center">2 Takte · Takes stapeln sich</p>
+        </div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Aufnahme.</b> Die Naht wird zur roten Aufnahmelinie, die Werkbank zeigt den eingehenden Klang roh (weißes Korn) und groß, die Bühne zeigt, wo er landet. Modus bleibt sichtbar und ist während der Aufnahme wählbar für den nächsten Durchgang.</p>
+    </figure>
+  </div>
+
+  <figure class="wide">
+    <div class="dk B" id="B4">
+      <div class="deck"><div class="brand"><img src="../../../assets/icons/krachwerk-180.png" alt="">Krachwerk <span>/ Küchensong</span></div><span class="vsep"></span>
+        <span class="bare"><svg class="ico"><use href="#i-start"/></svg></span><div class="lens on"><svg><use href="#i-stop"/></svg></div><span class="vsep"></span>
+        <div class="dsp"><div><small>TAKT</small>003.3</div><div><small>ZEIT</small>0:07,1</div><div><small>TEMPO</small>90</div><div><small>TONART</small>Am</div></div>
+        <span class="sp"></span><span class="bare"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare"><svg class="ico"><use href="#i-redo"/></svg></span><span class="vsep"></span><span class="k" style="box-shadow:none;color:var(--muted)">Projekt</span><span class="k cta">Teilen</span></div>
+      <div class="ruler" style="top:72px;right:556px" data-ruler="9"></div>
+      <div class="arr" style="top:96px;height:728px;right:556px" data-lanes='{"h":104,"play":10,"sel":1,"head":true,"mute":5}'></div>
+      <div class="vseam" style="left:980px"><div class="recb"><i></i></div></div>
+      <div class="bench o-dinge" style="left:1036px;right:40px;top:104px">
+        <div class="bn">Löffel auf Glas <i>DINGE</i></div>
+        <div class="bs">Küche, 2. Nov. 21:14 → <b>gestimmt auf A</b> → <b>Hülle</b> · 0,82 s</div>
+        <div class="bw" style="height:190px;margin-top:28px"><i class="wv" data-w="glass" data-s="11" data-m="mid" data-trim="0.07,0.86" data-fade="0.03,0.12"></i>
+          <div class="dimL" style="left:0;width:7%"></div><div class="dimR" style="left:86%;right:0"></div><div class="trim" style="left:7%"></div><div class="trim" style="left:86%"></div></div>
+        <div class="tabs" style="margin-top:22px"><span>Schnitt</span><span class="on">Ton</span><span>Hülle</span><span>Farbe</span><span>Raum</span><span>Zerlegen</span></div>
+        <div class="grid2">
+          <div class="sl"><span class="lb">Halbtöne</span><span class="va">+3</span><i class="tr"></i><i class="ct"></i><i class="fi" style="left:50%;width:12.5%"></i><i class="th" style="left:62.5%"></i></div>
+          <div class="sl"><span class="lb">Fein</span><span class="va">−12 ct</span><i class="tr"></i><i class="ct"></i><i class="fi" style="left:44%;width:6%"></i><i class="th" style="left:44%"></i></div>
+          <div class="sl"><span class="lb">Auf Tonart ziehen</span><span class="va">80 %</span><i class="tr"></i><i class="fi" style="left:0;width:80%"></i><i class="th" style="left:80%"></i></div>
+          <div class="sl"><span class="lb">Gleiten</span><span class="va">40 ms</span><i class="tr"></i><i class="fi" style="left:0;width:15%"></i><i class="th" style="left:15%"></i></div>
+          <div class="sl"><span class="lb">Länge</span><span class="va">1 Takt</span><i class="tr"></i><i class="fi" style="left:0;width:40%"></i><i class="th" style="left:40%"></i></div>
+          <div class="sl"><span class="lb">Stimmfarbe halten</span><span class="va">an</span><i class="tr"></i><i class="fi" style="left:0;width:100%"></i><i class="th" style="left:100%"></i></div>
+        </div>
+        <div class="keys" style="margin-top:18px"><span class="k">Rückwärts</span><span class="k">Einfrieren</span><span class="k">Als Instrument</span><span class="k">Als neuen Klang</span></div>
+        <div style="margin-top:64px;display:flex;justify-content:space-between;font:400 12px var(--font-body);color:var(--muted)"><span>Ablage</span><span class="mono">Körper 4 · Dinge 3 · Stimme 4 · Strom 2 · Schleife 1</span></div>
+        <div class="shelf">
+          <span class="o-raw">Aufnahme 7 · roh</span><span class="o-dinge">Topfdeckel</span><span class="o-koerper">Bauch 1</span><span class="o-koerper">Klatsch 1</span><span class="o-stimme">Ts-Ts</span><span class="o-stimme">Summen A-Moll</span><span class="o-strom">Brumm A</span>
+        </div>
+      </div>
+    </div>
+    <p class="cap"><b>Desktop.</b> Die Naht steht senkrecht: links Bühne (64 %), rechts Werkbank (36 %). Mikro-Knopf auf der Naht, auf Augenhöhe mit dem gewählten Klang. Die Ablage (alle eigenen Klänge nach Herkunft) liegt in der Werkbank; ein Regal gibt es nicht mehr.</p>
+  </figure>
+</section>
+
+<!-- ===================== C ===================== -->
+<section class="dir">
+  <div class="dir-h">
+    <div class="L">C</div>
+    <div>
+      <h2>Richtung C</h2>
+      <h3>Partitur</h3>
+      <p class="idea">Der Song liest sich wie ein Notenblatt: Spuren sind Zeilen aus Schrift, Clips sind Licht auf der Linie, und jede Einstellung ist ein Satz, dessen Zahlen man zieht.</p>
+    </div>
+    <div class="spec">
+      <div><b>Tokens</b>Nur <code>--bg</code>, <code>--ink</code>, <code>--muted</code>, <code>--line</code>; Licht ausschließlich in der Welle (<code>--cat-*</code>). Auswahl = weißer Lichtstrich unter dem Clip (<code>--beam-glow</code>). Keine Flächen, keine Tasten mit Rahmen.</div>
+      <div><b>Typo-Skala</b>10,5/11 Mono (Takt, Herkunft) · 15 Sans (Aktionen, Wörter) · 19/20 Display Light (Sätze) · 21/24 Display (Spuren) · 38/64 Display Light (Titel) · 128 Display Thin (Aufnahmezeit).</div>
+      <div><b>Formensprache</b>Grundlinien statt Kästen. Wellen stehen auf der Linie wie Buchstaben. Werte sind gepunktet unterstrichen (ziehen oder tippen). Ein Radius: keiner, außer Linse und Mikro.</div>
+      <div><b>Bewegung</b>Clip antippen: die Partitur öffnet eine Zeile darunter (Zeilen schieben sich, 180 ms). Zahl ziehen: Ziffern rollen wie ein Zählwerk. Aufnahme: die Zeit wächst als Schrift, die Welle schreibt sich über die Seite.</div>
+      <div><b>Zugänglichkeit</b>Größte Schrift aller Richtungen (Sätze 19 px). Werte als Text auch für Bildschirmleser natürlich („Klingt 3 Halbtöne höher“). Risiko: gepunktete Unterstreichung als einziges Signal für „ziehbar“, deshalb zusätzlich Fokusrahmen und Tipp.</div>
+      <div><b>Weggelassen</b>Alle Tastenrahmen, Spurköpfe, Regler-Grafik, Inspektor und Dock-Leiste. Mixer = Satz pro Spur („Brumm ist 2 dB leiser, links“).</div>
+      <div><b>Gefahr</b>Präzision und Tempo: Sätze sind langsamer zu überfliegen als Regler, Übersetzung und lange Werte brechen Zeilen. Bei 16 Spuren wird die Partitur lang.</div>
+      <div><b>Aufwand</b>Mittel bis hoch. Ziehbare Zahlen sind einfach, aber jede Einstellung braucht einen guten Satz (Texte = Gestaltung).</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <figure>
+      <div class="ph C" id="C1">
+        <div class="ttl"><h5>Küchensong</h5><p><b>90</b> · A-Moll · Takt <b>3</b> von 16</p><span class="more bare"><svg class="ico" style="fill:currentColor"><use href="#i-more"/></svg></span></div>
+        <div class="ruler" style="top:118px" data-ruler="6"></div>
+        <div class="arr" style="top:146px;height:576px;-webkit-mask:linear-gradient(#000 88%,transparent);mask:linear-gradient(#000 88%,transparent)" data-lanes='{"h":84,"play":10,"sel":1,"head":true,"open":1,"mute":5}'></div>
+        <div class="bot"><div class="lens on"><svg><use href="#i-stop"/></svg></div><span class="pos">3.3.1</span><div class="recb"><i></i></div><span class="w">Fundstücke</span></div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Partitur, spielt.</b> Spurname in groß, Herkunft in klein daneben. Kein Kasten: die Wellen stehen auf ihrer Zeile. Clip antippen öffnet eine Zeile mit Name und vier Wörtern. „Rückwärts“ ist stumm: durchgestrichen.</p>
+    </figure>
+
+    <figure>
+      <div class="ph C" id="C2">
+        <div class="wb-h"><span class="back"><svg class="ico" style="width:18px;height:18px;margin-right:4px"><use href="#i-back"/></svg>Küchensong</span><h5>Löffel auf Glas</h5><p>Aufgenommen in der Küche am 2. November, 21:14. Take 2 von 3.</p></div>
+        <div class="wb-w o-dinge" style="top:188px;height:64px"><i class="wv" data-w="glass" data-s="11" data-trim="0.07,0.86" data-fade="0.03,0.12"></i></div>
+        <div class="sent" style="top:262px">
+          <p>Beginnt bei <u class="num">0,06 s</u> und endet bei <u class="num">0,71 s</u>.</p>
+          <p>Klingt <u>3 Halbtöne höher</u> und wird zu <u>80 %</u> auf <u>A-Moll</u> gezogen.</p>
+          <p>Schlägt in <u class="num">4 ms</u> an und klingt in <u class="num">640 ms</u> aus.</p>
+          <p>Unter <u class="num">120 Hz</u> ist Ruhe, Rauschen ist zu <u>60 %</u> weg.</p>
+          <p>Steht in einem <u>kleinen Raum</u>, Echo <u>aus</u>.</p>
+          <p>Spielt <u class="num">2 dB</u> leiser, <u>etwas links</u>.</p>
+        </div>
+        <div class="acts2" style="top:684px"><span>rückwärts</span><span>einfrieren</span><span>zerlegen</span><span>als Instrument</span></div>
+        <div class="bot" style="height:110px"><div class="lens"><svg><use href="#i-play"/></svg></div><span class="w" style="color:var(--ink);font-family:var(--font-mono);font-size:13px">‹&nbsp;&nbsp;Take 2 von 3&nbsp;&nbsp;›</span><span class="w">neu&nbsp;aufnehmen</span></div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Werkbank als Sätze.</b> Jeder Wert ist ziehbar (waagrecht) oder antippbar (Liste). Eine Gruppe pro Satz statt Reiter: alles sichtbar, nichts versteckt, und trotzdem kein einziger Regler. Was auf Standard steht, fällt aus dem Satz.</p>
+    </figure>
+
+    <figure>
+      <div class="ph C" id="C3">
+        <div class="mic-light" style="height:70%"></div>
+        <div class="ttl"><h5 style="color:var(--muted)">Küchensong</h5><p><b>90</b> · A-Moll · Takt <b>3</b> von 16</p></div>
+        <div class="big" style="top:150px"><div class="t">0:03<small>,4</small></div><div class="s"><b>Aufnahme</b>in Stimme 2, ab Takt 3, im Takt</div></div>
+        <div class="o-raw" style="position:absolute;left:0;right:0;top:400px;height:180px"><i class="wv" data-w="raw" data-s="41" data-d="2.2" data-grow="0.78" style="position:absolute;inset:0"></i></div>
+        <div class="ph-line" style="left:304px;top:392px;height:196px"></div>
+        <div class="bot"><span class="w" style="opacity:.4">Ein Schuss</span><div class="recb on"><span class="lvl"></span><i></i></div><span class="w" style="opacity:.4">Stapeln</span></div>
+        <div class="home"></div>
+      </div>
+      <p class="cap"><b>Aufnahme.</b> Die Seite wird zur Anzeige: die Zeit als größte Schrift im ganzen Produkt, darunter schreibt sich die rohe Welle über die Seite bis zur Marke. Pink steigt vom Mikrofon auf, Rot bleibt auf Punkt, Wort und Knopf.</p>
+    </figure>
+  </div>
+
+  <figure class="wide">
+    <div class="dk C" id="C4">
+      <div class="margin">
+        <h5>Küchen-<br>song</h5>
+        <div class="meta"><b>90</b> BPM · A-Moll · 16 Takte<br>14 Geräusche · 3 Räume · 0 fremde Klänge</div>
+        <div class="tp"><span class="bare"><svg class="ico"><use href="#i-start"/></svg></span><div class="lens on"><svg><use href="#i-stop"/></svg></div><div class="recb" style="width:56px;height:56px"><i style="width:20px;height:20px"></i></div><span class="pos">3.3.1</span></div>
+        <div style="display:flex;gap:4px;align-items:center;margin-top:18px;margin-left:-10px"><span class="bare" style="padding:0 10px"><svg class="ico"><use href="#i-undo"/></svg></span><span class="bare" style="padding:0 10px"><svg class="ico"><use href="#i-redo"/></svg></span><span class="bare" style="padding:0 10px;font-size:15px">Projekt</span><span class="k cta" style="margin-left:auto">Teilen</span></div>
+        <div class="reg">
+          <h6><span>Fundstücke</span><b>14</b></h6>
+          <ul>
+            <li class="r"><span>Aufnahme 7</span><i>roh</i></li>
+            <li class="o-dinge"><span>Löffel auf Glas</span><i>Dinge</i></li>
+            <li class="o-dinge"><span>Topfdeckel</span><i>Dinge</i></li>
+            <li class="o-koerper"><span>Klatsch-Beat</span><i>Körper</i></li>
+            <li class="o-koerper"><span>Bauch 1</span><i>Körper</i></li>
+            <li class="o-stimme"><span>Ts-Ts</span><i>Stimme</i></li>
+            <li class="o-stimme"><span>Summen A-Moll</span><i>Stimme</i></li>
+            <li class="o-strom"><span>Brumm A</span><i>Strom</i></li>
+            <li class="o-schleife"><span>Loop 1 rückwärts</span><i>Schleife</i></li>
+          </ul>
+        </div>
+      </div>
+      <div class="vr" style="left:392px"></div>
+      <div class="ruler" style="top:52px;left:420px;right:440px" data-ruler="8" data-x0="0"></div>
+      <div class="arr" style="top:84px;height:860px" data-lanes='{"h":104,"play":10,"sel":1,"head":true,"x0":0,"mute":5}'></div>
+      <div class="vr" style="right:416px"></div>
+      <div class="mg o-dinge">
+        <div class="k1">Spur Küche · Takt 3–4 · Dinge</div>
+        <h5>Löffel auf Glas</h5>
+        <p class="sp">Aufgenommen in der Küche am 2. November, 21:14. Take 2 von 3.</p>
+        <div class="wb-w" style="position:relative;left:0;right:0;height:84px;margin-top:22px"><i class="wv" data-w="glass" data-s="11" data-trim="0.07,0.86" data-fade="0.03,0.12"></i></div>
+        <div class="sent" style="position:relative;margin-top:10px">
+          <p>Beginnt bei <u class="num">0,06 s</u> und endet bei <u class="num">0,71 s</u>.</p>
+          <p>Klingt <u>3 Halbtöne höher</u>, zu <u>80 %</u> auf <u>A-Moll</u> gezogen.</p>
+          <p>Schlägt in <u class="num">4 ms</u> an und klingt in <u class="num">640 ms</u> aus.</p>
+          <p>Unter <u class="num">120 Hz</u> ist Ruhe, Rauschen zu <u>60 %</u> weg.</p>
+          <p>Steht in einem <u>kleinen Raum</u>, Echo <u>aus</u>.</p>
+          <p>Spielt <u class="num">2 dB</u> leiser, <u>etwas links</u>.</p>
+        </div>
+        <div class="acts2" style="position:relative;left:0;margin-top:14px"><span>rückwärts</span><span>einfrieren</span><span>zerlegen</span><span>als Instrument</span><span>teilen</span></div>
+      </div>
+    </div>
+    <p class="cap"><b>Desktop als Buchseite.</b> Linker Rand: Titel, Zutatenliste („0 fremde Klänge“), Transport, Fundstücke als Register. Mitte: die Partitur. Rechter Rand: die Werkbank des gewählten Clips als Marginalie aus Sätzen.</p>
+  </figure>
+</section>
+
+<section class="dir">
+  <div class="dir-h"><div class="L" style="font-size:96px">→</div><div><h2>Empfehlung UI</h2><h3>B als Gerüst, A als Geste, C als Stimme</h3>
+  <p class="idea">B ist die einzige Richtung, die „mehr Raum fürs Selbermachen“ wörtlich baut, ohne Funktionen zu verstecken. Von A kommt das Werkzeug am Objekt (statt Inspektor-Spalte), von C die Sprache: Mono nur noch für Zahlen, Werte und Stammbaum als lesbare Sätze.</p></div></div>
+</section>
+
+<script>
+// Wellenformen als 1-px-Lichtstriche im 2-px-Raster (Phosphor), rohe Aufnahmen als Korn.
+const SONG=[
+ {n:'Beat',o:'koerper',w:'Körper',c:[[0,4,'Klatsch-Beat','loop',1],[4,4,'Klatsch-Beat','loop',1]]},
+ {n:'Küche',o:'dinge',w:'Dinge',c:[[0,2,'Topfdeckel','hit',2,'p2'],[2,2,'Löffel auf Glas','glass2',3],[5,1,'Topfdeckel','hit',2,'p2']]},
+ {n:'Ts',o:'stimme',w:'Stimme',c:[[1,4,'Ts-Ts','tick',4],[6,2,'Ts-Ts','tick',4]]},
+ {n:'Brumm',o:'strom',w:'Strom',c:[[0,4,'Brumm A','pad',5],[4,4,'Brumm A','pad',6]]},
+ {n:'Summen',o:'stimme',w:'Stimme',c:[[2,3,'Summen A-Moll','voice',6]]},
+ {n:'Rückwärts',o:'schleife',w:'Schleife',c:[[4,2,'Loop 1 rückwärts','rev',7]]},
+ {n:'Fläche',o:'stimme',w:'Stimme',c:[[3,5,'Fläche aus Stimme','pad',9]]},
+ {n:'Stimme 2',o:'stimme',w:'Stimme',c:[]},
+];
+const px=(el,name)=>parseFloat(getComputedStyle(el).getPropertyValue(name));
+function rulers(){document.querySelectorAll('[data-ruler]').forEach(r=>{const host=r.closest('.ph,.dk');let x0=r.dataset.x0!=null?+r.dataset.x0:px(host,'--x0');const bw=px(host,'--bw');let h='';
+ for(let i=0;i<+r.dataset.ruler;i++)h+=`<span style="left:${x0+i*bw}px">${i+1}</span>`;
+ h+=`<span class="loop" style="left:${x0}px;width:${bw*4}px"></span>`;r.innerHTML=h;});}
+function lanes(){document.querySelectorAll('[data-lanes]').forEach(a=>{const o=JSON.parse(a.dataset.lanes);const host=a.closest('.ph,.dk');const bw=px(host,'--bw');const x0=o.x0!=null?o.x0:px(host,'--x0');const isC=host.classList.contains('C');
+ let h='',y=0;const idx=o.only||SONG.map((_,i)=>i);
+ const n=Math.ceil(a.clientHeight/o.h);
+ idx.slice(0, isC?99:n+1).forEach((li,k)=>{const L=SONG[li];if(!L)return;if(!L.c.length&&!(o.rec&&o.rec[0]===li))return;
+  const dim=(o.dimAll&&!(o.rec&&o.rec[0]===li))?' dim':'';const mute=o.mute===li?' mute':'';
+  const st=isC?`--lh:${o.h}px`:`top:${y}px;height:${o.h}px`;
+  h+=`<div class="ln o-${L.o}${dim}${mute}" style="${st}">`;
+  if(o.head) h+= isC?`<div class="hd">${L.n}<small>${L.w}</small></div>`:`<div class="hd"><b>${L.n}</b>${o.slim?'':`<small><span${mute?' class="on"':''}>M</span><span>S</span></small>`}</div>`;
+  else h+=`<div class="hd">${L.n}</div>`;
+  L.c.forEach(c=>{const sel=(o.sel===li&&c[2]==='Löffel auf Glas')?' sel':'';const pb=o.play!=null?o.play/4:-1;const live=(pb>=c[0]&&pb<c[0]+c[1]&&!mute)?' live':'';
+    h+=`<div class="cl${sel}${live}" style="left:${x0+c[0]*bw}px;width:${c[1]*bw-3}px"><span class="cn">${c[2]}</span><i class="wv" data-w="${c[3]}" data-s="${c[4]}" data-p="${c[3]==='loop'?bw/4:c[3]==='tick'?bw/8:c[3]==='hit'?bw/2:c[3]==='glass2'?bw/2:0}" ${isC?'':'data-m="mid"'}></i></div>`;});
+  if(o.rec&&o.rec[0]===li){h+=`<div class="cl rec o-raw" style="left:${x0+o.rec[1]*bw}px;width:${o.rec[2]*bw}px"><span class="cn">Aufnahme</span><i class="wv" data-w="raw" data-s="17" data-d="1.6" ${isC?'':'data-m="mid"'}></i></div>`;}
+  h+='</div>';
+  if(isC&&o.open===li) h+=`<div class="open o-dinge"><div class="on1"><b>Löffel auf Glas</b><small>Takt 3–4 · 0,8 s</small></div><div class="acts"><span class="main">formen</span><span>teilen</span><span>doppeln</span><span>löschen</span></div></div>`;
+  y+=o.h;});
+ // Aufnahme in eigener Spur (Summen-Spur bekommt den Rohclip)
+ if(o.rec){/* Spur ist SONG[o.rec[0]] */}
+ a.innerHTML=h;
+ if(o.play!=null){const x=x0+(o.play/4)*bw;a.insertAdjacentHTML('beforeend',`<div class="ph-line" style="left:${x}px;top:0;height:${Math.min(isC?Math.max(...[...a.children].map(c=>c.offsetTop+c.offsetHeight))-16:y,a.clientHeight)}px"></div>`);}
+ if(o.nub){const s=a.querySelector('.cl.sel');if(s){const r=s.getBoundingClientRect(),hr=host.getBoundingClientRect();const left=12, top=r.bottom-hr.top+10;host.insertAdjacentHTML('beforeend',`<div class="tool" style="left:${left}px;top:${top}px;--nub:${r.left-hr.left+r.width/2-left-4}px"><span class="main">Formen</span><span>Teilen</span><span>Doppeln</span><span>Stumm</span><span class="del">Löschen</span></div>`);}}
+ });}
+function rng(s){s=(s*7919+17)%2147483647||1;return()=>(s=s*16807%2147483647)/2147483647;}
+function waves(){document.querySelectorAll('[data-w]').forEach(el=>{
+ const W=Math.round(el.clientWidth||el.getBoundingClientRect().width),H=Math.round(el.clientHeight||el.getBoundingClientRect().height);if(!W||!H)return;
+ const k=el.dataset.w,R=rng(+el.dataset.s||7),mid=el.dataset.m==='mid',p=+el.dataset.p||Math.max(10,W/4);
+ const trim=(el.dataset.trim||'0,1').split(',').map(Number),fade=(el.dataset.fade||'').split(',').map(Number);
+ const grow=+el.dataset.grow||1;let s='';
+ if(k==='raw'||k==='dust'){const n=Math.round(W*grow*H/(k==='dust'?60:18)*(+el.dataset.d||1));
+  for(let i=0;i<n;i++){const x=R()*W*grow;const t=x/W;const env=k==='dust'?1:(0.25+0.75*Math.abs(Math.sin(t*9+R()*.6))*(0.6+0.4*Math.sin(t*23)));
+   const y=k==='dust'?R()*H:H/2+(R()-0.5)*H*env*(0.4+0.6*R());const r=0.5+R()*0.9;const op=k==='dust'?0.15+R()*0.5:0.25+R()*0.75;
+   s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="currentColor" opacity="${op.toFixed(2)}"/>`;}
+ } else for(let x=0;x<W;x+=2){const t=x/W;let a;
+  switch(k){
+   case 'loop':{const ph=x%p;const beat=Math.floor(x/p)%2;a=ph<3?(beat?0.7:0.98):(ph>p/2-1&&ph<p/2+2?0.45:0.08+0.07*R());break;}
+   case 'tick':{const ph=x%p;a=ph<2?0.55+0.2*R():0.04+0.04*R();break;}
+   case 'hit':{const ph=(x%p)/p;a=Math.exp(-ph*5)*(0.85+0.15*R());break;}
+   case 'glass2':{const ph=(x%p)/p;a=(ph<0.02?0.95:Math.exp(-ph*3.2))*(0.85+0.15*R());break;}
+   case 'glass':{a=(t<0.07?0.05+0.1*R():(Math.min(1,(t-0.07)*40)*Math.exp(-(t-0.07)*3.6)))*(0.78+0.22*Math.abs(Math.sin(x*0.9)))+0.03*R();break;}
+   case 'one':{a=Math.min(1,t*30)*Math.exp(-t*4.5)*(0.8+0.2*R());break;}
+   case 'voice':{a=(0.42+0.3*Math.sin(t*14)+0.14*Math.sin(t*51))*(0.75+0.25*R())*Math.min(1,t*20)*Math.min(1,(1-t)*12);break;}
+   case 'pad':{a=(0.42+0.18*Math.sin(t*6.3+ (+el.dataset.s))+0.06*Math.sin(t*40))*(0.9+0.1*R());break;}
+   case 'rev':{const ph=1-((x%(W/4))/(W/4));a=Math.exp(-ph*4)*(0.85+0.15*R());break;}
+   default:a=0.3+0.4*R();}
+  if(fade.length===2){if(t<trim[0]+fade[0])a*=Math.max(0.05,(t-trim[0])/fade[0]);if(t>trim[1]-fade[1])a*=Math.max(0.08,(trim[1]-t)/fade[1]);}
+  a=Math.max(0.05,Math.min(1,a));const h=a*H;const out=t<trim[0]||t>trim[1];
+  const y1=mid?(H-h)/2:H-h,y2=mid?(H+h)/2:H;
+  s+=`<line x1="${x+0.5}" x2="${x+0.5}" y1="${y1.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="currentColor" stroke-width="1"${out?' opacity="0.28"':''}/>`;}
+ if(fade.length===2&&k==='glass'&&el.closest('.obj,.bw')){// Hüllkurve als Linie über der Welle
+  const xa=trim[0]*W,xb=(trim[0]+fade[0])*W,xc=(trim[1]-fade[1])*W,xd=trim[1]*W;
+  s+=`<polyline points="${xa},${H-1} ${xb},1 ${xc},${H*0.18} ${xd},${H-1}" fill="none" stroke="var(--beam)" stroke-width="1" opacity="0.8"/>`;
+  [[xb,1],[xc,H*0.18]].forEach(([cx,cy])=>s+=`<circle cx="${cx}" cy="${cy}" r="4" fill="var(--bg)" stroke="var(--beam)"/>`);}
+ el.innerHTML=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${s}</svg>`;});}
+rulers();lanes();waves();
+</script>
+</body></html>

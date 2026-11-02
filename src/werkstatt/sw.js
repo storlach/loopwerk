@@ -2,7 +2,7 @@
 // Netz zuerst, damit jede neue Fassung sofort ankommt; ohne Netz aus dem Zwischenspeicher – so startet die App auch offline.
 // Schriften (Google Fonts) ändern sich nicht: Zwischenspeicher zuerst.
 
-const CACHE = 'krachwerk-v1';
+const CACHE = 'krachwerk-v2'; // v2: volle App statt Pad-Wand (alte Dateien fliegen raus)
 const FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 
 self.addEventListener('install', () => self.skipWaiting());

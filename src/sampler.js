@@ -25,6 +25,9 @@ export const isLoaded = (id) => ready.has(id);
 export const loadedInstrument = (id) => ready.get(id) ?? null;
 export const loadState = (id) => (ready.has(id) ? 'ready' : pending.has(id) ? 'loading' : 'idle');
 
+// Ohne mitgelieferte Instrumente starten (Krachwerk)
+export function clearInstruments() { registry.clear(); pending.clear(); ready.clear(); }
+
 // Weitere Instrumente zur Laufzeit (Tests, später eigene Instrumente)
 export function registerInstrument(def) {
   registry.set(def.id, def);

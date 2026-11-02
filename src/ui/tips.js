@@ -4,8 +4,9 @@
 
 import { el } from '../util.js';
 import { narrow, touch } from './place.js';
+import { lsKey } from '../edition.js';
 
-const KEY = 'loopwerk.tips';
+const KEY = lsKey('loopwerk.tips');
 
 // sel: Element, an dem der Tipp steht (das erste sichtbare Treffer-Element)
 // only: Bildschirm ('wide' | 'narrow') oder Eingabe ('mouse' | 'touch'), auch als Liste (eins davon genügt)

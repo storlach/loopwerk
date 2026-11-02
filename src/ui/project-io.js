@@ -6,7 +6,8 @@ import { saveFile, safeName } from './save-file.js';
 
 const fileName = (name) => `${safeName(name)}.json`;
 
-export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
+// keepUnknown: Clips ohne passenden Sound als stummen Platzhalter behalten statt weglassen (Krachwerk)
+export function mountProjectIO({ store, engine, ui, library, own, patterns, keepUnknown = false, appName = 'Loopwerk' }) {
   const saveBtn = document.getElementById('save-btn');
   const openBtn = document.getElementById('open-btn');
   const input = document.getElementById('open-input');
@@ -17,7 +18,7 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
   const showName = () => {
     const name = store.project.name || 'unbenannt';
     if (document.activeElement !== nameIn) nameIn.value = name;
-    document.title = `${name} · Loopwerk`;
+    document.title = `${name} · ${appName}`;
   };
   nameIn.addEventListener('change', () => { store.setProjectName(nameIn.value); showName(); });
   nameIn.addEventListener('keydown', (e) => {
@@ -62,9 +63,10 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
     }
     delete project.ownSounds;
     if (patterns) await patterns.sync(project);
-    let missing = 0;
+    let missing = 0, kept = 0;
     for (const t of project.tracks) {
       const before = t.clips.length;
+      if (keepUnknown) { for (const c of t.clips) if (!library.get(c.sampleId)) { library.placeholder(c); kept++; } continue; }
       t.clips = t.clips.filter((c) => library.get(c.sampleId));
       missing += before - t.clips.length;
     }
@@ -75,6 +77,6 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns }) {
     store.replace(project);
     ui.flash(missing
       ? `„${project.name}“ geöffnet. ${missing} Clip(s) ohne passenden Sound wurden weggelassen.`
-      : `„${project.name}“ geöffnet.`);
+      : kept ? `„${project.name}“ geöffnet. ${kept} Clip(s) ohne Sound bleiben stumm erhalten.` : `„${project.name}“ geöffnet.`);
   });
 }

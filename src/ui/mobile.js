@@ -12,7 +12,7 @@ import { narrow, touch } from './place.js';
 
 export { narrow };
 // Diese Fächer gibt es nur am Handy; Mixer, Editoren und Export sind die gewöhnlichen Docks.
-const PHONE_DOCKS = ['sounds', 'song', 'tempo'];
+const PHONE_DOCKS = ['sounds', 'song', 'tempo', 'werkbank'];
 const TEMPO_PRESETS = [80, 90, 100, 120, 128, 140];
 
 const formatBeats = (b) => (b <= 0 ? 'aus' : `${String(Math.round(b * 100) / 100).replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`);
@@ -30,12 +30,18 @@ export function mountMobile({ store, ui, tools, library }) {
   // ---------- Leiste unten ----------
 
   // Mixer und Editor bedienen mixer.js und layout.js – dieselben Reiter wie am Desktop
-  const tabs = [['tab-sounds', 'sounds'], ['tab-song', 'song']];
+  const tabs = [['tab-sounds', 'sounds'], ['tab-song', 'song'], ['tab-werkbank', 'werkbank']];
   for (const [id, dock] of tabs) $(id).addEventListener('click', () => ui.setDock(ui.dock === dock ? null : dock));
+  // Dichte „calm“: das Deck ist die Lesezeile (Name · Takt · Tempo), ein Tipp darauf öffnet das Song-Fach
+  $('app').querySelector('.deck').addEventListener('click', (e) => {
+    if (app.dataset.density !== 'calm' || !narrow.matches || e.target.closest('button, input, select, label')) return;
+    ui.setDock(ui.dock === 'song' ? null : 'song');
+  });
 
   function syncTabs() {
     app.dataset.dock = ui.dock || '';
     song.hidden = ui.dock !== 'song';
+    $('werkbank').hidden = ui.dock !== 'werkbank';
     for (const [id, dock] of tabs) $(id).setAttribute('aria-pressed', String(ui.dock === dock));
   }
 

@@ -1,0 +1,26 @@
+{
+  "desktop-start": {
+    "controls": 114,
+    "frames": 67,
+    "sizes": 12,
+    "minFont": 9
+  },
+  "desktop-clip": {
+    "controls": 114,
+    "frames": 71,
+    "sizes": 12,
+    "minFont": 9
+  },
+  "handy-start": {
+    "controls": 41,
+    "frames": 24,
+    "sizes": 7,
+    "minFont": 9
+  },
+  "handy-clip": {
+    "controls": 43,
+    "frames": 27,
+    "sizes": 7,
+    "minFont": 9
+  }
+}
