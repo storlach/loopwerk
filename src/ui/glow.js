@@ -51,6 +51,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
   // Farben aus den Tokens (Hell/Dunkel), regelmäßig neu gelesen
   const rgb = {};
+  let white = [255, 255, 255];
   let ambientMax = 0.5;
   let colorAge = Infinity;
   function readColors() {
@@ -62,6 +63,9 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       rgb[c] = /^#/.test(h) ? [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) : [136, 136, 136];
     }
     ambientMax = parseFloat(cs.getPropertyValue('--ambient-max')) || 0.5;
+    ac.fillStyle = '#000';
+    ac.fillStyle = cs.getPropertyValue('--beam').trim() || '#fff';
+    if (/^#/.test(ac.fillStyle)) white = [1, 3, 5].map((i) => parseInt(ac.fillStyle.slice(i, i + 2), 16));
     colorAge = 0;
   }
 
@@ -73,7 +77,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   const GLOW_RELEASE = 1.4;
   let sparks = [];
   let last = performance.now();
-  let frameNo = 0;
+  let roomAt = -Infinity;
   let shown = false;
   let bw = 0;
   let bh = 0;
@@ -122,6 +126,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   }
 
   let cost = 0;
+  let roomCost = 0;
   function frame(now) {
     requestAnimationFrame(frame);
     const t0 = performance.now();
@@ -134,8 +139,13 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     last = now;
     const live = engine.playing;
     if (++colorAge > 60) readColors();
-    // Raumlicht (Hintergrund, Leiste oben, Regal) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde
-    if (frameNo++ % 3 === 0) drawRoom(now / 1000);
+    // Raumlicht (Hintergrund, Leiste oben) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde, auch bei 120 Hz
+    if (now - roomAt >= 45) {
+      roomAt = now;
+      const r0 = performance.now();
+      drawRoom(now / 1000);
+      roomCost += (performance.now() - r0 - roomCost) * 0.2;
+    }
     drawRow();
     if (!live && !shown) return;
 
@@ -308,45 +318,272 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   const spot = (i, k, t, speed = 1) => [0.5 + 0.42 * Math.sin(t * 0.21 * speed + i * 1.7 + k * 2.9), 0.5 + 0.4 * Math.cos(t * 0.17 * speed + (i * 1.7 + k * 2.9) * 1.3)];
   const GREY = [150, 154, 166];
 
+  // ---------- Raumlicht nach Frequenz: Bass unten, Mitten als Wolken, Höhen funkeln oben ----------
+  // Bänder aus engine.spectrumDb() (dB) → 0…1; Spannen nach dem Spektrum typischer Mischungen (Höhen liegen tiefer)
+  const BAND_DB = [[-58, -18], [-60, -20], [-84, -40]];
+  // Welche Kategorie in welchem Band färbt (Bass, Mitten, Höhen) – nur Gewichte, die Farben kommen aus den Tokens
+  const AFF = { drums: [0.8, 0.35, 1], bass: [1, 0.3, 0.1], chords: [0.2, 1, 0.4], synth: [0.3, 1, 0.6], fx: [0.3, 0.6, 1], own: [0.4, 1, 0.5] };
+  const BAND_ATTACK = 0.1;
+  const BAND_RELEASE = 1.3;
+  const RISE_MAX = 1.0; // höchstens so viel Helligkeit (0…1) pro Sekunde dazu
+  const fract = (x) => x - Math.floor(x);
+  const STARS = Array.from({ length: 14 }, (_, i) => ({
+    x: 0.04 + 0.92 * fract(i * 0.618 + 0.13), y: 0.03 + 0.27 * fract(i * 0.382 + 0.27) ** 1.3,
+    w: 0.9 + 1.3 * fract(i * 0.77 + 0.4), ph: i * 2.3, s: 0.8 + 0.6 * fract(i * 0.29),
+  }));
+  const room = {
+    t: 0, band: [0, 0, 0], fast: [-90, -90, -90], base: [-90, -90, -90], since: [9, 9, 9], warm: 0,
+    hue: Object.fromEntries(CATS.map((c) => [c, 0])),
+    glowT: [0, 0, 0], glow: [0, 0, 0], colX: -1, colI: 0, ghosts: [], waves: [], bar: null, lastBeat: 0, vig: 0,
+  };
+  let phEl = null;
+  // Mischfarbe; quadrierte Gewichte, damit die kräftigste Farbe die Fläche trägt (statt Grau aus allen)
+  const mixRGB = (w) => {
+    let n = 0, r = 0, g = 0, b = 0;
+    for (const c of CATS) { const k = w(c) ** 2; n += k; r += rgb[c][0] * k; g += rgb[c][1] * k; b += rgb[c][2] * k; }
+    return n > 1e-6 ? [r / n, g / n, b / n] : null;
+  };
+  const toWhite = (c, k) => c.map((v, i) => v + (white[i] - v) * k);
+  const css = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  // Weicher Abfall wie ein Lichtkegel (glockenförmig, ohne sichtbare Kante)
+  const BELL = [[0, 1], [0.2, 0.86], [0.42, 0.55], [0.64, 0.25], [0.84, 0.07], [1, 0]];
+  const soft = (c, a) => BELL.map(([o, f]) => [o, css(c, a * f)]);
+  // Ellipse mit weichem Rand (Kreis im Einheitsmaß, gestreckt)
+  function blob(x, y, rx, ry, stops) {
+    ac.save();
+    ac.translate(x, y);
+    ac.scale(rx, ry);
+    const g = ac.createRadialGradient(0, 0, 0, 0, 0, 1);
+    for (const [o, c] of stops) g.addColorStop(o, c);
+    ac.fillStyle = g;
+    ac.fillRect(-1, -1, 2, 2);
+    ac.restore();
+  }
+
+  // Bänder, Nachglühen, Marke: zeitbasiert fortschreiben (dt in Sekunden)
+  function stepRoom(dt) {
+    const live = engine.playing;
+    const calm = reduced.matches;
+    const k = (tau) => 1 - Math.exp(-dt / tau);
+    const db = live ? engine.spectrumDb?.() : null;
+    room.warm = live ? room.warm + dt : 0;
+    for (let b = 0; b < 3; b++) {
+      let target = 0;
+      if (live) {
+        if (db) {
+          const [lo, hi] = BAND_DB[b];
+          target = Math.max(0, Math.min(1, (db[b] - lo) / (hi - lo)));
+          // Nachglühen: deutlicher Anstieg über die jüngsten Spitzen (Drop, Becken)
+          const d = Math.max(lo - 12, db[b]);
+          room.fast[b] += (d - room.fast[b]) * k(0.05);
+          if (room.warm < 0.6) room.base[b] = Math.max(room.base[b] + (room.fast[b] - room.base[b]) * k(0.15), room.fast[b]);
+          else room.base[b] += (room.fast[b] - room.base[b]) * k(room.fast[b] > room.base[b] ? 0.7 : 4);
+          room.since[b] += dt;
+          const rise = room.fast[b] - room.base[b];
+          if (!calm && room.warm >= 0.6 && rise > 6 && room.since[b] > 1.2 && target > 0.2) {
+            room.glowT[b] = Math.min(1, room.glowT[b] + 0.45 + (rise - 6) / 12);
+            room.since[b] = 0;
+          }
+        } else target = amp;
+      }
+      // weich hoch, lange zurück; ruhig (reduzierte Bewegung) noch gemächlicher
+      const up = k(calm ? 0.8 : BAND_ATTACK), down = k(live && !calm ? BAND_RELEASE : 2.5);
+      // Anstieg zusätzlich begrenzt (je Sekunde), damit auch ein Drop nicht blitzt
+      const v = room.band[b] + (target - room.band[b]) * (target > room.band[b] ? up : down);
+      room.band[b] = Math.min(v, room.band[b] + RISE_MAX * dt);
+      room.glowT[b] *= Math.exp(-dt / 1.0);
+      const g = room.glow[b] + (room.glowT[b] - room.glow[b]) * k(room.glowT[b] > room.glow[b] ? 0.35 : 0.3);
+      room.glow[b] = Math.min(g, room.glow[b] + RISE_MAX * 0.8 * dt);
+    }
+  }
+
+  // Farbe der klingenden Clips breitet sich von der Marke aus (Welle je Takt) und zieht hinter ihr nach;
+  // beim Loop-Sprung oder Weiterblättern blendet das alte Licht aus und das neue ein
+  function drawWave(W, H, L, dt, mix, K) {
+    const live = engine.playing;
+    const k = (tau) => 1 - Math.exp(-dt / tau);
+    const vw = window.innerWidth || 1, vh = window.innerHeight || 1;
+    let x = -1, y0 = room.y0 ?? 0, y1 = room.y1 ?? H;
+    if (live) {
+      if (!phEl?.isConnected) phEl = grid.querySelector('.playhead');
+      const ar = root.getBoundingClientRect();
+      const r = phEl?.getBoundingClientRect();
+      if (r && ar.height) {
+        const px = r.left + r.width / 2;
+        if (px >= ar.left && px <= ar.right) x = (px / vw) * W;
+        y0 = (Math.max(0, ar.top) / vh) * H;
+        y1 = (Math.min(vh, ar.bottom) / vh) * H;
+        room.y0 = y0; room.y1 = y1;
+      }
+    }
+    if (mix) room.colC = mix;
+    const c = room.colC || GREY;
+    const beat = live ? engine.heardBeat() : room.lastBeat;
+    const jumped = live && (beat < room.lastBeat - 0.25 || beat > room.lastBeat + 2 || (x >= 0 && room.colX >= 0 && Math.abs(x - room.colX) > W * 0.06));
+    if (jumped && room.colI > 0.01) room.ghosts.push({ x: room.colX, i: room.colI, c, y0, y1 });
+    if (jumped) room.colI = 0;
+    if (x >= 0) room.colX = x;
+    const target = x >= 0 ? K * (0.35 + 0.65 * (room.amp || 0)) : 0;
+    room.colI += (target - room.colI) * k(target > room.colI ? 0.25 : 0.5);
+    const bar = Math.floor(beat / (store.project.beatsPerBar || 4) + 1e-6);
+    if (live && !jumped && room.bar !== null && bar !== room.bar && x >= 0 && target > 0.02) {
+      room.waves.push({ x, y: (y0 + y1) / 2, age: 0, a: target, c });
+      if (room.waves.length > 4) room.waves.shift();
+    }
+    room.bar = live ? bar : null;
+    room.lastBeat = beat;
+
+    ac.globalCompositeOperation = 'lighter';
+    const LIFE = 1.8;
+    room.waves = room.waves.filter((w) => (w.age += dt) < LIFE);
+    for (const w of room.waves) {
+      const u = w.age / LIFE;
+      const r = L * (0.04 + 0.55 * (1 - (1 - u) ** 2));
+      const a = 0.8 * w.a * Math.min(1, w.age / 0.25) * (1 - u) ** 2;
+      if (a < 0.005) continue;
+      const wd = Math.min(r, L * 0.06 + 0.25 * r);
+      const i0 = Math.max(0, (r - wd) / r);
+      const i1 = Math.max(i0, (r - wd / 2) / r);
+      blob(w.x, w.y, r, r * 0.85, [[0, css(w.c, 0)], [i0, css(w.c, 0)], [(i0 + i1) / 2, css(w.c, 0.5 * a)], [i1, css(w.c, a)], [(i1 + 1) / 2, css(w.c, 0.5 * a)], [1, css(w.c, 0)]]);
+    }
+    const column = (cx, ci, cc, a0, a1) => {
+      const yc = (a0 + a1) / 2, ry = Math.max(4, ((a1 - a0) / 2) * 1.05);
+      blob(cx - L * 0.07, yc, L * 0.11, ry, soft(cc, 0.7 * ci));
+      blob(cx, yc, L * 0.04, ry * 0.9, soft(toWhite(cc, 0.2), 0.8 * ci));
+    };
+    room.ghosts = room.ghosts.filter((g) => (g.i *= Math.exp(-dt / 0.35)) > 0.01);
+    for (const g of room.ghosts) column(g.x, g.i, g.c, g.y0, g.y1);
+    if (room.colX >= 0 && room.colI > 0.01) column(room.colX, room.colI, c, y0, y1);
+    ac.globalCompositeOperation = 'source-over';
+  }
+
   function drawRoom(t) {
+    const dt = Math.min(0.15, Math.max(0, t - room.t || 0.05));
+    room.t = t;
+    room.n = (room.n || 0) + 1;
     // Musik hört auf: alle Farbe blendet über gut zwei Sekunden sanft aus (kein Sprung)
     if (!engine.playing) { for (const c of CATS) level[c] *= 0.955; amp *= 0.955; }
     const total = CATS.reduce((n, c) => n + level[c], 0);
     const presence = Math.min(1, total / 0.12);
     const loud = total > 0.0005 ? ambientMax * presence * (0.35 + 0.65 * amp) : 0;
-    const still = reduced.matches ? 0 : t;
+    const calm = reduced.matches;
+    const still = calm ? 0 : t;
+    stepRoom(dt);
 
-    // ---------- Hintergrund: Anthrazit-Wabern, darüber die Farben der klingenden Sounds ----------
+    // Fläche passend zum Fenster (Kreise bleiben rund), lange Seite 160 px – der Browser zeichnet weich hoch
+    const vw = window.innerWidth || 1, vh = window.innerHeight || 1;
+    const Wn = vw >= vh ? 160 : Math.max(24, Math.round((160 * vw) / vh));
+    const Hn = vw >= vh ? Math.max(24, Math.round((160 * vh) / vw)) : 160;
+    if (amb.width !== Wn || amb.height !== Hn) { amb.width = Wn; amb.height = Hn; }
     const W = amb.width;
     const H = amb.height;
+    const L = Math.max(W, H);
+
+    // ---------- Hintergrund: Anthrazit-Wabern (still wie bisher) ----------
+    ac.globalCompositeOperation = 'source-over';
     ac.clearRect(0, 0, W, H);
     for (let k = 0; k < 3; k++) {
       const [x, y] = spot(7, k, still, 0.35);
-      const g = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, W * 0.55);
+      const g = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, L * 0.55);
       g.addColorStop(0, `rgba(${GREY},${0.16 + 0.05 * Math.sin(still * 0.3 + k)})`);
       g.addColorStop(1, `rgba(${GREY},0)`);
       ac.fillStyle = g;
       ac.fillRect(0, 0, W, H);
     }
-    if (loud > 0) {
-      let mr = 0, mg = 0, mb = 0;
-      for (const c of CATS) { const sh = level[c] / total; mr += rgb[c][0] * sh; mg += rgb[c][1] * sh; mb += rgb[c][2] * sh; }
-      ac.fillStyle = `rgba(${mr | 0},${mg | 0},${mb | 0},${0.32 * loud})`;
-      ac.fillRect(0, 0, W, H);
-      CATS.forEach((c, i) => {
-        const share = level[c] / total;
-        if (share < 0.03) return;
-        const [r, g, b] = rgb[c];
-        for (let k = 0; k < 2; k++) {
-          const [x, y] = spot(i, k, still);
-          const rad = W * (0.22 + 0.6 * share);
-          const grd = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, rad);
-          grd.addColorStop(0, `rgba(${r},${g},${b},${Math.min(1, 1.1 * Math.sqrt(share)) * loud})`);
-          grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          ac.fillStyle = grd;
-          ac.fillRect(0, 0, W, H);
+
+    // Gesamthelligkeit: beim Start weich herein, nach dem Stopp in gut zwei Sekunden gleichmäßig heraus
+    const Kt = engine.playing ? ambientMax * presence : 0;
+    const K0 = room.K || 0;
+    room.K = Math.max(K0 - 0.45 * ambientMax * dt, Math.min(Kt, K0 + RISE_MAX * (calm ? 0.35 : 0.65) * ambientMax * dt));
+    const K = room.K;
+    // Ausschlag noch einmal geglättet, ruhig (reduzierte Bewegung) fast stehend
+    room.amp = (room.amp || 0) + (amp - (room.amp || 0)) * (1 - Math.exp(-dt / (calm ? 1.5 : 0.15)));
+    const A = room.amp;
+    const [b0, b1, b2] = room.band;
+    const lit = K * Math.max(b0, b1, b2, A * 0.5);
+    const vt = Math.min(1, lit * 2);
+    room.vig += (vt - room.vig) * (1 - Math.exp(-dt / (vt > room.vig ? 0.6 : 0.3)));
+    // Farben wandern langsamer als die Helligkeit: ein Schlag ändert das Licht, nicht gleich den Farbton
+    const hue = room.hue;
+    for (const c of CATS) hue[c] += (level[c] - hue[c]) * (1 - Math.exp(-dt / (level[c] > hue[c] ? 0.7 : 1.6)));
+    const mix = total > 0.0005 ? mixRGB((c) => hue[c]) : null;
+    if (mix && K > 0.002) {
+      const bandC = [0, 1, 2].map((b) => mixRGB((c) => hue[c] * AFF[c][b]) || mix);
+      // Mitte satter: ein großer Grund in der Mischfarbe statt einer flachen Fläche
+      blob(W / 2, H * 0.5, L * 0.6, L * 0.45, soft(bandC[1], 0.5 * K * (0.4 + 0.6 * A)));
+      // Bass: breites, warmes Feld von unten
+      if (b0 > 0.01) {
+        const top = H * (1 - (0.42 + 0.33 * b0));
+        const g = ac.createLinearGradient(0, H, 0, top);
+        g.addColorStop(0, css(bandC[0], 1.25 * K * b0));
+        g.addColorStop(0.55, css(bandC[0], 0.5 * K * b0));
+        g.addColorStop(1, css(bandC[0], 0));
+        ac.fillStyle = g;
+        ac.fillRect(0, top, W, H - top);
+        const sx = calm ? 0.5 : 0.5 + 0.12 * Math.sin(still * 0.13);
+        blob(W * sx, H * 1.02, W * 0.75, H * (0.3 + 0.25 * b0), soft(bandC[0], 1.2 * K * b0));
+      }
+      // Mitten: wenige große Farbwolken – schwache Anteile blenden weich aus, statt hart wegzufallen
+      if (b1 > 0.01) {
+        const sum = CATS.reduce((n, c) => n + hue[c] * AFF[c][1], 0);
+        for (let i = 0; i < CATS.length; i++) {
+          const c = CATS[i];
+          const share = (hue[c] * AFF[c][1]) / sum;
+          const vis = Math.min(1, Math.max(0, (share - 0.05) / 0.2));
+          if (vis < 0.01) continue;
+          const [x, y] = spot(i, 0, still, 0.8);
+          const cy = 0.32 + 0.3 * y;
+          const rad = L * (0.24 + 0.22 * share) * (0.75 + 0.35 * b1);
+          const a = Math.min(1, (0.9 + 0.7 * share) * K * b1) * vis * vis * (3 - 2 * vis);
+          blob(x * W, cy * H, rad, rad * 0.8, soft(rgb[c], a));
         }
-      });
+      }
+      ac.globalCompositeOperation = 'lighter';
+      // Höhen: feines Funkeln oben, dazu ein zarter heller Saum
+      if (b2 > 0.01) {
+        const g = ac.createLinearGradient(0, 0, 0, H * 0.4);
+        g.addColorStop(0, css(bandC[2], 0.4 * K * b2));
+        g.addColorStop(1, css(bandC[2], 0));
+        ac.fillStyle = g;
+        ac.fillRect(0, 0, W, H * 0.4);
+        const sc = toWhite(bandC[2], 0.45);
+        const r = L * 0.014;
+        for (const s of STARS) {
+          const tw = calm ? 0.55 : (0.5 + 0.5 * Math.sin(still * s.w + s.ph)) ** 2;
+          const a = 1.3 * K * b2 * tw;
+          if (a < 0.01) continue;
+          const x = s.x * W, y = s.y * H, rr = r * s.s * (0.8 + 0.6 * b2);
+          const g2 = ac.createRadialGradient(x, y, 0, x, y, rr);
+          g2.addColorStop(0, css(sc, a));
+          g2.addColorStop(1, css(sc, 0));
+          ac.fillStyle = g2;
+          ac.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+        }
+      }
+      ac.globalCompositeOperation = 'source-over';
+    }
+
+    // ---------- Lichtwelle an der Abspielmarke ----------
+    if (!calm) drawWave(W, H, L, dt, mix, K);
+    else { room.waves = []; room.ghosts = []; room.colI = 0; }
+
+    // ---------- Nachglühen nach lauten Stellen: heller Schimmer, löst sich über 2–3 s auf ----------
+    const gl = room.glow;
+    if (mix && (gl[0] + gl[1] + gl[2]) > 0.01) {
+      ac.globalCompositeOperation = 'lighter';
+      const shimmer = (b) => toWhite(mixRGB((c) => hue[c] * AFF[c][b]) || mix, 0.55);
+      const M = ambientMax;
+      if (gl[0] > 0.01) blob(W / 2, H, W * 0.8, H * 0.45, soft(shimmer(0), 0.55 * M * gl[0]));
+      if (gl[1] > 0.01) blob(W / 2, H * 0.48, L * 0.5, L * 0.36, soft(shimmer(1), 0.5 * M * gl[1]));
+      if (gl[2] > 0.01) blob(W / 2, 0, W * 0.75, H * 0.32, soft(shimmer(2), 0.55 * M * gl[2]));
+      ac.globalCompositeOperation = 'source-over';
+    }
+
+    // ---------- Kontrast: Ränder zurück ins Anthrazit (nur wenn Licht da ist) ----------
+    if (room.vig > 0.01) {
+      ac.globalCompositeOperation = 'destination-out';
+      blob(W / 2, H / 2, W * 0.62, H * 0.62, [[0, 'rgba(0,0,0,0)'], [0.6, 'rgba(0,0,0,0)'], [0.8, `rgba(0,0,0,${(0.35 * room.vig).toFixed(3)})`], [1, `rgba(0,0,0,${(0.85 * room.vig).toFixed(3)})`]]);
+      ac.globalCompositeOperation = 'source-over';
     }
 
     // ---------- Lichtleiste oben: dieselben Farben als LED-Band ----------
@@ -451,5 +688,5 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   readColors();
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level } }; } };
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: amb.width } }; } };
 }
