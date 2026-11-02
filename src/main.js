@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf } from './model.js';
+import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf } from './model.js';
 import { accompanimentPlan, applyPlan } from './starter.js';
 import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
@@ -36,6 +36,10 @@ import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
 import { touch } from './ui/place.js';
 import { doubleTapRanges } from './ui/touch.js';
+import { EDITION, lsKey } from './edition.js';
+import { applySurfaces } from './ui/surfaces.js';
+import { clearInstruments } from './sampler.js';
+import { mountPwa } from './pwa.js';
 
 // iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
 // Zoomen mit zwei Fingern bleibt erlaubt (Safari ignoriert die Grenze dafür). Für Gerüste, die wir nicht selbst schreiben.
@@ -44,17 +48,18 @@ import { doubleTapRanges } from './ui/touch.js';
   if (vp && !/maximum-scale/.test(vp.content)) vp.content += ', maximum-scale=1';
 }
 
-const STORAGE_KEY = 'loopwerk.project.v1';
+const STORAGE_KEY = lsKey('loopwerk.project.v1');
 
-function missingSound(library, clip) {
-  const sr = 44100;
-  const spb = 60 / library.bpm;
-  const beats = Math.max(1, Math.round(clip.lengthBeats || 4));
-  library.register({
-    id: clip.sampleId, name: 'Sound fehlt', category: 'own', origin: 'Eigene', kind: 'oneshot', missing: true,
-    lengthBeats: beats, buffer: new AudioBuffer({ numberOfChannels: 2, length: Math.max(1, Math.round(beats * spb * sr)), sampleRate: sr }),
-  });
+// Edition (ADR 007): Kennzeichen am Wurzelelement, abgeschaltete Flächen ausblenden – vor allem anderen
+{
+  const app = document.getElementById('app');
+  if (app) { app.dataset.edition = EDITION.id; app.dataset.density = EDITION.density; }
+  applySurfaces(EDITION.surfaces);
+  if (!EDITION.catalogs) clearInstruments();
 }
+const startProject = () => (EDITION.demo ? createDemoProject() : createEmptyProject(EDITION));
+
+const missingSound = (library, clip) => library.placeholder(clip);
 
 async function loadSaved(library, patterns) {
   try {
@@ -283,24 +288,46 @@ function mountSampleTempo({ store, engine, library, ui, arranger }) {
 }
 
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
-function mountRecording({ store, engine, ui, arranger, recorder }) {
+// mode 'sound' (Krachwerk): ohne Vorzähler; der gesäuberte Klang kommt als Clip ab dem Takt der Marke in den Loop
+function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }) {
   const btn = document.getElementById('rec-btn');
   const label = btn.querySelector('.rec-label');
   const freeTrack = (from, to) => store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < to && c.startBeat + c.lengthBeats > from));
   btn.addEventListener('click', () => start(null));
+  let pending = null;
+  // Krachwerk: Clip ab dem Takt der Marke, auf ganze Takte, Loop darum, losspielen – ein Rückgängig-Schritt
+  function place(sample) {
+    const bpb = store.project.beatsPerBar;
+    const { startBeat } = pending;
+    const len = Math.max(bpb, Math.ceil((sample.lengthBeats || 1) / bpb - 1e-6) * bpb);
+    let clipId = null;
+    store.batch('Aufnahme', () => {
+      const free = store.project.tracks.find((t) => t.id === pending.trackId)
+        ?? store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < startBeat + len && c.startBeat + c.lengthBeats > startBeat));
+      const trackId = free?.id ?? store.addTrack();
+      if (!trackId) return;
+      clipId = store.addClip(trackId, sample.id, startBeat, len);
+      store.setLoop({ on: true, startBeat, endBeat: startBeat + len });
+    });
+    if (!clipId) { ui.flash('Keine freie Spur für die Aufnahme.'); return null; }
+    arranger.select(clipId);
+    if (!engine.playing) engine.play(startBeat);
+    return clipId;
+  }
   async function start(target) {
     if (recorder.state === 'recording') { recorder.stop(); return; }
     if (recorder.state !== 'idle') return;
     const bpb = store.project.beatsPerBar;
     const startBeat = target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
-    if (engine.playing) engine.stop();
+    if (engine.playing && mode === 'song') engine.stop();
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
-    let trackId = target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, startBeat + 16)?.id;
-    if (!trackId) trackId = store.addTrack();
-    if (!trackId) { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
+    let trackId = target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, startBeat + (mode === 'sound' ? bpb : 16))?.id;
+    if (!trackId && mode === 'song') trackId = store.addTrack();
+    if (!trackId && mode === 'song') { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
+    pending = { trackId, startBeat };
     try {
-      await recorder.start({ trackId, startBeat });
-      ui.flash('Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.');
+      await recorder.start({ trackId, startBeat, mode });
+      ui.flash(mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.' : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.');
     } catch (err) {
       ui.flash(err.code === 'denied'
         ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
@@ -312,7 +339,8 @@ function mountRecording({ store, engine, ui, arranger, recorder }) {
     btn.classList.toggle('recording', recorder.state === 'recording');
     btn.setAttribute('aria-pressed', String(rec));
     label.textContent = recorder.state === 'recording' ? 'Stopp' : recorder.state === 'saving' ? 'Speichert …' : 'Aufnahme';
-    if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
+    if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
+    else if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
     if (what === 'error') ui.flash(payload.message);
   });
   return { start };
@@ -386,19 +414,20 @@ async function boot() {
   const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
   // Sounds machen den Großteil der Ladezeit aus: 5–80 %
   // Nur die Katalog-Sounds, die das Projekt benutzt, vor dem Start laden – der Rest kommt im Hintergrund
-  const need = new Set((isValidProject(saved) ? saved : createDemoProject()).tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
+  const need = new Set((isValidProject(saved) ? saved : startProject()).tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
   const library = await buildLibrary({
     need,
     semis: keySemis(keyOf(isValidProject(saved) ? saved : null)),
-    bpm: isValidProject(saved) ? saved.bpm : 120,
+    bpm: isValidProject(saved) ? saved.bpm : EDITION.bpm,
+    catalogs: EDITION.catalogs,
     onProgress: (done, total) => splash.set(0.05 + 0.75 * (done / total), `Sounds werden geladen – ${done} von ${total}`),
   });
   splash.set(0.82, 'Eigene Sounds …');
-  const own = new OwnSounds(library);
+  const own = new OwnSounds(library, { db: EDITION.db });
   await own.loadAll();
   splash.set(0.88, 'Projekt wird geöffnet …');
   const patterns = new Patterns(library);
-  const store = new Store((await loadSaved(library, patterns)) ?? createDemoProject(), {
+  const store = new Store((await loadSaved(library, patterns)) ?? startProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
     sampleName: (id) => library.get(id)?.name,
   });
@@ -421,12 +450,12 @@ async function boot() {
       ui.flash('Eigener Sound gelöscht.');
     },
   });
-  mountTransport({ store, engine, ui, arranger });
-  mountProjectIO({ store, engine, ui, library, own, patterns });
+  mountTransport({ store, engine, ui, arranger, emptyProject: () => createEmptyProject(EDITION) });
+  mountProjectIO({ store, engine, ui, library, own, patterns, keepUnknown: EDITION.keepUnknownClips, appName: EDITION.title });
   const tools = mountClipTools({ store, engine, ui, arranger });
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
   const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
-  const patternEditor = mountPatternEditor({ root: document.getElementById('pattern'), store, engine, library, ui });
+  const patternEditor = mountPatternEditor({ root: document.getElementById('pattern'), store, engine, library, ui, kits: EDITION.synthKits ?? null });
   // Pattern-Clips öffnen den Pattern-Editor, alle anderen den Sample-Editor
   const openClip = (clipId) => {
     const c = store.findClip(clipId)?.clip;
@@ -479,7 +508,8 @@ async function boot() {
   ensureStretch(); // einmal beim Start: eigene Sounds im Projekt (auf Abruf) gleich bereitstellen
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
-  const recording = mountRecording({ store, engine, ui, arranger, recorder });
+  const recording = mountRecording({ store, engine, ui, arranger, recorder, mode: EDITION.record });
+  const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine);
   const glow = mountGlow({ engine, store, library, ui });
@@ -526,7 +556,7 @@ async function boot() {
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
   const sheets = mountSheets({ ui, arranger });
-  const tips = mountTips({ ui, store });
+  const tips = EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
 
   let saveTimer = null;
   const saveNow = () => {
@@ -598,10 +628,10 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {
-  splash.fail(`Loopwerk konnte nicht starten: ${err.message}`);
+  splash.fail(`${EDITION.title} konnte nicht starten: ${err.message}`);
   console.error(err);
 });

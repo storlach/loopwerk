@@ -220,6 +220,8 @@
     --rh-two: 52px; --rh-one: 30px;
     --zbar: 12px; --zbar-b: 12px; --zbar-r: 12px; /* Dicke der Zoom-Leisten (unten, rechts) */
   }
+  /* Abgeschaltete Flächen einer Edition (src/ui/surfaces.js); bleiben im DOM */
+  [data-off] { display: none !important; }
 
   html, body { height: 100%; }
   body {
@@ -2928,7 +2930,7 @@
       <button class="key" id="save-btn" type="button" title="Projekt als Datei speichern">Speichern</button>
       <input type="file" id="open-input" accept=".json,application/json" hidden>
       <button class="key" id="export-btn" type="button" title="Song als WAV oder MP3 exportieren" aria-pressed="false">Exportieren</button>
-      <button class="key" id="demo-btn" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
+      <button class="key" id="demo-btn" data-surface="demo" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
       <button class="key" id="new-btn" type="button" title="Alle Spuren leeren">Leeren</button>
     </div>
 
@@ -2946,8 +2948,8 @@
           <div class="pop-sep"></div>
           <div class="pop-body" id="project-menu-start"></div>
           <div class="pop-sep"></div>
-          <button class="pop-item" id="tips-reset" type="button"><span class="lbl-long">Tipps wieder zeigen</span><span class="lbl-short">Tipps</span></button>
-          <p class="pop-about" id="pop-about">Loopwerk 2.8 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
+          <button class="pop-item" id="tips-reset" data-surface="tips" type="button"><span class="lbl-long">Tipps wieder zeigen</span><span class="lbl-short">Tipps</span></button>
+          <p class="pop-about" id="pop-about" data-surface="catalog">Loopwerk 2.8 · Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0</p>
         </div>
       </div>
       <div class="deck-export" id="deck-export"></div>
@@ -2967,19 +2969,19 @@
       <button class="shelf-import" id="import-btn" type="button" title="Audiodateien (WAV, MP3, OGG …) als eigene Sounds importieren – oder Dateien direkt auf eine Spur ziehen"><span class="lbl-long">+ Eigene Sounds importieren</span><span class="lbl-short">+ Import</span></button>
       <input type="file" id="import-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" multiple hidden>
       <div class="shelf-make">
-        <button class="shelf-import" type="button" data-link-open title="Sound über einen Link holen oder Ton aus einem anderen Tab aufnehmen">+ Link</button>
+        <button class="shelf-import" type="button" data-link-open data-surface="link" title="Sound über einen Link holen oder Ton aus einem anderen Tab aufnehmen">+ Link</button>
         <button class="shelf-import" id="new-beat-btn" type="button" title="Neuen Beat im Stepsequencer bauen"><span class="lbl-long">+ Beat bauen</span><span class="lbl-short">+ Beat</span></button>
         <button class="shelf-import" id="new-melody-btn" type="button" title="Neue Melodie in der Piano-Roll schreiben">+ Melodie</button>
       </div>
       <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
-      <button type="button" class="shelf-filter-btn" id="shelf-filter-btn" aria-expanded="false" aria-controls="shelf-filters">Filter<span class="shelf-filter-n" id="shelf-filter-n"></span></button>
+      <button type="button" class="shelf-filter-btn" id="shelf-filter-btn" data-surface="catalog" aria-expanded="false" aria-controls="shelf-filters">Filter<span class="shelf-filter-n" id="shelf-filter-n"></span></button>
       <div class="shelf-filters" id="shelf-filters">
-      <div class="shelf-sort" role="group" aria-label="Ordnen nach">
+      <div class="shelf-sort" data-surface="catalog" role="group" aria-label="Ordnen nach">
         <span class="shelf-sort-label">Ordnen:</span>
         <button type="button" class="seg" data-sort="cat">Kategorie</button>
         <button type="button" class="seg" data-sort="genre">Genre</button>
       </div>
-      <div class="shelf-sort shelf-len" role="group" aria-label="Länge">
+      <div class="shelf-sort shelf-len" data-surface="catalog" role="group" aria-label="Länge">
         <span class="shelf-sort-label">Länge:</span>
         <button type="button" class="seg" data-len="all">Alle</button>
         <button type="button" class="seg" data-len="1" title="Loops bis 1 Takt">1T</button>
@@ -2988,13 +2990,13 @@
         <button type="button" class="seg" data-len="8" title="Loops ab 5 Takten">8T+</button>
         <button type="button" class="seg" data-len="shot" title="Einzelklänge ohne Takt">One-Shot</button>
       </div>
-      <div class="chips" id="shelf-chips" role="group" aria-label="Filter"></div>
+      <div class="chips" id="shelf-chips" data-surface="catalog" role="group" aria-label="Filter"></div>
       </div>
     </div>
     <div class="shelf-list" id="library"></div>
     <div class="create-panel" id="create-panel" role="tabpanel" aria-label="Erstellen">
-      <h3 class="create-sec">Song-Starter</h3>
-      <div class="starter" id="starter" role="group" aria-label="Song-Starter: Genre wählen">
+      <h3 class="create-sec" data-surface="starter">Song-Starter</h3>
+      <div class="starter" id="starter" data-surface="starter" role="group" aria-label="Song-Starter: Genre wählen">
         <div class="starter-genres" id="starter-genres"></div>
         <button class="key starter-again" id="starter-again" type="button" disabled title="Andere Fassung desselben Genres">Nochmal</button>
       </div>
@@ -3002,13 +3004,13 @@
       <button class="ccard cat-drums" type="button" data-create="beat"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 12h4v3H1zm5 0h4v3H6zm5 0h4v3h-4z"/></svg></span><span class="ccard-title">Beat bauen</span><span class="ccard-sub">Schlagzeug in Schritten oder auf Pads</span></button>
       <button class="ccard cat-synth" type="button" data-create="melody"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M1 2h14v12H1zm2 2v8h1.5V8H6v4h1V8h2v4h1V8h1.5v4H13V4h-1v4h-1V4H9v4H8V4H6v4H5V4z"/></svg></span><span class="ccard-title">Melodie schreiben</span><span class="ccard-sub">Noten setzen oder auf der Klaviatur spielen</span></button>
       <button class="ccard cat-own" type="button" data-create="sing"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M8 1a3 3 0 013 3v4a3 3 0 01-6 0V4a3 3 0 013-3zM3 7h1.5v1a3.5 3.5 0 007 0V7H13v1a5 5 0 01-4.25 4.94V15h-1.5v-2.06A5 5 0 013 8z"/></svg></span><span class="ccard-title">Melodie einsingen</span><span class="ccard-sub">Summen, singen, pfeifen – wird zu Noten</span></button>
-      <button class="ccard cat-chords" type="button" data-create="accomp"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2 3h3v10H2zm4.5 2h3v8h-3zM11 1h3v12h-3zM1 14h14v1.5H1z"/></svg></span><span class="ccard-title">Begleitung</span><span class="ccard-sub">Fläche, Bass und Arp folgen dem Akkord-Streifen</span></button>
+      <button class="ccard cat-chords" type="button" data-create="accomp" data-surface="accomp"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M2 3h3v10H2zm4.5 2h3v8h-3zM11 1h3v12h-3zM1 14h14v1.5H1z"/></svg></span><span class="ccard-title">Begleitung</span><span class="ccard-sub">Fläche, Bass und Arp folgen dem Akkord-Streifen</span></button>
       <h3 class="create-sec">Aufnehmen und holen</h3>
       <button class="ccard cat-fx" type="button" data-create="record"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5"/></svg></span><span class="ccard-title">Audio aufnehmen</span><span class="ccard-sub">Stimme oder Instrument als Sound auf eine Spur</span></button>
       <button class="ccard cat-bass" type="button" data-create="import"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M7 1h2v8l3-3 1.4 1.4L8 12.8 2.6 7.4 4 6l3 3zM2 13h12v2H2z"/></svg></span><span class="ccard-title">Datei importieren</span><span class="ccard-sub">WAV, MP3, OGG … – oder direkt auf eine Spur ziehen</span></button>
-      <button class="ccard cat-chords" type="button" data-create="link"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6.6 9.4a3 3 0 004.2 0l2.8-2.8a3 3 0 00-4.2-4.2L8.2 3.6l1.1 1.1 1.2-1.2a1.5 1.5 0 012.1 2.1l-2.8 2.8a1.5 1.5 0 01-2.1 0zm2.8-2.8a3 3 0 00-4.2 0L2.4 9.4a3 3 0 004.2 4.2l1.2-1.2-1.1-1.1-1.2 1.2a1.5 1.5 0 01-2.1-2.1l2.8-2.8a1.5 1.5 0 012.1 0z"/></svg></span><span class="ccard-title">Aus dem Netz holen</span><span class="ccard-sub">Link zu einer Audiodatei – oder Ton aus einem anderen Tab aufnehmen</span></button>
+      <button class="ccard cat-chords" type="button" data-create="link" data-surface="link"><span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M6.6 9.4a3 3 0 004.2 0l2.8-2.8a3 3 0 00-4.2-4.2L8.2 3.6l1.1 1.1 1.2-1.2a1.5 1.5 0 012.1 2.1l-2.8 2.8a1.5 1.5 0 01-2.1 0zm2.8-2.8a3 3 0 00-4.2 0L2.4 9.4a3 3 0 004.2 4.2l1.2-1.2-1.1-1.1-1.2 1.2a1.5 1.5 0 01-2.1-2.1l2.8-2.8a1.5 1.5 0 012.1 0z"/></svg></span><span class="ccard-title">Aus dem Netz holen</span><span class="ccard-sub">Link zu einer Audiodatei – oder Ton aus einem anderen Tab aufnehmen</span></button>
     </div>
-    <p class="shelf-credit">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
+    <p class="shelf-credit" data-surface="catalog">Antippen zum Anhören und Auswählen, dann in eine Spur tippen – oder direkt auf eine Spur ziehen. Sounds: synthetisch (Loopwerk) und <a href="https://github.com/sonic-pi-net/sonic-pi/blob/main/etc/samples/README.md" target="_blank" rel="noopener">Sonic Pi</a>, CC0.</p>
   </aside>
 
   <main class="arranger" aria-label="Arranger">
@@ -3174,7 +3176,7 @@
         <span class="pat-field" id="pat-scale-kind-field"><select id="pat-scale-kind" aria-label="Welche Tonleiter"></select></span>
         <button class="dbtn" id="pat-scale-fix" type="button" hidden>Auf Tonleiter ziehen</button>
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
-        <button class="dbtn" id="pat-continue" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
+        <button class="dbtn" id="pat-continue" data-surface="ai" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
         <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
         <button class="dbtn" id="pat-live" type="button" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">● Live</button>
         <label class="pat-field" id="pat-quant-field">Einrasten
@@ -3201,10 +3203,10 @@
           <label class="pat-field">Töne <select id="sing-key"></select></label>
         </div>
         <div class="pat-sing-row">
-          <label class="pat-field sing-desc-field">Wie soll es klingen?
+          <label class="pat-field sing-desc-field" data-surface="ai">Wie soll es klingen?
             <input type="text" id="sing-desc" maxlength="200" placeholder="z. B. weiche Flöte mit viel Hall" autocomplete="off">
           </label>
-          <button class="dbtn" id="sing-sound" type="button" title="Klang und Effekte nach deiner Beschreibung einstellen">Klang bauen</button>
+          <button class="dbtn" id="sing-sound" data-surface="ai" type="button" title="Klang und Effekte nach deiner Beschreibung einstellen">Klang bauen</button>
         </div>
         <p class="pat-sing-status" id="sing-status" role="status"></p>
       </div>
@@ -3275,14 +3277,14 @@
     </div>
   </section>
 
-  <div class="pop link-pop" id="link-pop" role="dialog" aria-label="Aus dem Netz holen" hidden>
+  <div class="pop link-pop" id="link-pop" data-surface="link" role="dialog" aria-label="Aus dem Netz holen" hidden>
     <label class="link-label" for="link-input">Link zu einer Audiodatei</label>
     <div class="link-row">
       <input class="link-input" id="link-input" type="url" inputmode="url" placeholder="https://…/sound.mp3" autocomplete="off" spellcheck="false">
       <button class="dbtn primary" id="link-go" type="button">Holen</button>
     </div>
     <p class="link-note" id="link-note" role="status"></p>
-    <button class="dbtn link-capture" id="tab-capture" type="button" aria-pressed="false">● Ton aus einem Tab aufnehmen</button>
+    <button class="dbtn link-capture" id="tab-capture" data-surface="link" type="button" aria-pressed="false">● Ton aus einem Tab aufnehmen</button>
   </div>
 
   <div class="clipbar" id="clipbar" role="toolbar" aria-label="Ausgewählter Clip" hidden>

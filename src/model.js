@@ -10,15 +10,15 @@ export const EPS = 1e-6;
 export const DEFAULT_TRACK_NAME = /^Spur \d+$/;
 export const PROJECT_VERSION = 1;
 
-export function createEmptyProject() {
+export function createEmptyProject({ tracks = 8, bpm = 120 } = {}) {
   return {
     version: PROJECT_VERSION,
     name: 'unbenannt',
-    bpm: 120,
+    bpm,
     beatsPerBar: 4,
     lengthBars: 32,
     loop: { on: false, startBeat: 0, endBeat: 16 },
-    tracks: Array.from({ length: 8 }, (_, i) => ({
+    tracks: Array.from({ length: tracks }, (_, i) => ({
       id: 't' + (i + 1),
       name: 'Spur ' + (i + 1),
       volume: 0.8,

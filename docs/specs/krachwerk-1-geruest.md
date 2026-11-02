@@ -42,7 +42,7 @@ make: { id:'make', title:'Krachwerk', db:'loopwerk-make', keyPrefix:'loopwerk.ma
 | `accomp` | `.ccard[data-create="accomp"]` | Begleitautomatik weg |
 | `ai` | `#pat-continue`, `.sing-desc-field`, `#sing-sound` | KI-Erzeugung weg |
 | `link` | `[data-link-open]`, `.ccard[data-create="link"]`, `#link-pop`, `#tab-capture` | Link-Import und Tab-Aufnahme weg |
-| `catalog` | `.shelf-sort` (Ordnen, Länge), `.shelf-credit`, `#pop-about` | ohne Katalog sinnlos |
+| `catalog` | `.shelf-sort` (Ordnen, Länge), `#shelf-filter-btn`, `#shelf-chips` (Kategorie-Filter), `.shelf-credit`, `#pop-about` | ohne Katalog sinnlos |
 | `demo` | `#demo-btn` | kein Beispiel-Song |
 | `tips` | `#tips-reset` | Loopwerk-Tipps zeigen auf Katalog-Flächen |
 
@@ -79,7 +79,7 @@ Folge: Eine Loopwerk-Datei mit Katalog-Loops öffnet in Krachwerk mit stummen Cl
 - `toSample(rec)` versteht die Prototyp-Felder:
   - `kind`: aus `rec.kind`, sonst `'loop'`, wenn `rec.cls === 'loop'`
   - `beats`: aus `rec.beats`, sonst `rec.bars * 4`
-  - neu `make: { cls, tags, from }`. `from` ist `'loop'` (`cls === 'loop'`), `'file'` (`source` beginnt mit „Import“) oder sonst `'mic'`.
+  - neu `made: { cls, tags, from }`. `from` ist `'loop'` (`cls === 'loop'`), `'file'` (`source` beginnt mit „Import“) oder sonst `'mic'`.
   - `category` bleibt `'own'`, weil Löschen, Editor und Starter darauf prüfen.
 - `create()` speichert die optionalen Felder `cls`, `tags` und `from` mit. `embed()`/`restore()` tragen sie in der Projektdatei mit (optionale Felder, `PROJECT_VERSION` bleibt 1).
 - Neu `export const isOwnId = (id) => /^(own|mk)-/.test(id)`. `embed()` nutzt es, sonst fehlten die `mk-`-Klänge in der Projektdatei. Die IDs werden nicht umbenannt, weil `padsKey` auf sie zeigt.

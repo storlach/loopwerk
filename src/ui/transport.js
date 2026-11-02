@@ -2,8 +2,9 @@
 
 import { clamp } from '../util.js';
 import { createDemoProject, createEmptyProject } from '../model.js';
+import { lsKey } from '../edition.js';
 
-export function mountTransport({ store, engine, ui, arranger }) {
+export function mountTransport({ store, engine, ui, arranger, emptyProject = createEmptyProject }) {
   const $ = (id) => document.getElementById(id);
   const play = $('play-btn');
   const loopBtn = $('loop-btn');
@@ -48,13 +49,13 @@ export function mountTransport({ store, engine, ui, arranger }) {
   // Raster merkt sich der Browser (nur eine Bequemlichkeit, kein Projektinhalt)
   const snapSel = $('snap-sel');
   try {
-    const saved = localStorage.getItem('loopwerk.snap');
+    const saved = localStorage.getItem(lsKey('loopwerk.snap'));
     if (saved != null && [...snapSel.options].some((o) => o.value === saved)) snapSel.value = saved;
   } catch { /* ohne Speicher gilt die Voreinstellung */ }
   ui.snapBeats = Number(snapSel.value);
   snapSel.addEventListener('change', () => {
     ui.snapBeats = Number(snapSel.value);
-    try { localStorage.setItem('loopwerk.snap', snapSel.value); } catch { /* egal */ }
+    try { localStorage.setItem(lsKey('loopwerk.snap'), snapSel.value); } catch { /* egal */ }
   });
 
   // Zweistufige Bestätigung im Button selbst (Dialoge gibt es hier nicht).
@@ -75,7 +76,7 @@ export function mountTransport({ store, engine, ui, arranger }) {
     });
   }
   const reset = (project) => { engine.stop(); engine.setPosition(0); ui.select(null); store.replace(project); };
-  confirmButton($('new-btn'), 'Leeren', () => reset(createEmptyProject()));
+  confirmButton($('new-btn'), 'Leeren', () => reset(emptyProject()));
   confirmButton($('demo-btn'), 'Beispiel', () => reset(createDemoProject()));
 
   function sync() {

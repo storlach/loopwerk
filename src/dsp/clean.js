@@ -2,8 +2,8 @@
 // Ablauf: Doppel-Mono erkennen, Trittschall weg (Hochpass), Stille vorn/hinten weg (Start auf dem Anschlag),
 // Ränder weich, Pegel angleichen. Danach Merkmale messen und daraus Name und Etiketten ableiten.
 
-import { fft, hann } from '../dsp/fft.js';
-import { detectPitch } from '../dsp/pitch.js';
+import { fft, hann } from './fft.js';
+import { detectPitch } from './pitch.js';
 
 export const PEAK_TARGET = 0.89; // −1 dB
 const PRE_ROLL = 0.002;          // so viel vor dem Anschlag behalten (s)

@@ -2,11 +2,12 @@
 
 import { CATEGORIES, GENRES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
+import { lsKey } from '../edition.js';
 
-const FAV_KEY = 'loopwerk.favs';
-const OPEN_KEY = 'loopwerk.shelfOpen';
-const SORT_KEY = 'loopwerk.shelfSort';
-const LEN_KEY = 'loopwerk.shelfLen';
+const FAV_KEY = lsKey('loopwerk.favs');
+const OPEN_KEY = lsKey('loopwerk.shelfOpen');
+const SORT_KEY = lsKey('loopwerk.shelfSort');
+const LEN_KEY = lsKey('loopwerk.shelfLen');
 // Längen-Filter: Loops nach Takten, Einzelklänge als One-Shot
 const lenBucket = (s) => {
   if (s.kind !== 'loop') return 'shot';

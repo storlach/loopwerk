@@ -4,25 +4,25 @@
 import { decodeAudio } from './samples.js';
 import { encodeWav } from './wav.js';
 
-const DB_NAME = 'loopwerk';
 const STORE = 'sounds';
 const MAX_SECONDS = 480;
 
-let dbPromise = null;
-function db() {
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+// Eine Datenbank je Edition (Loopwerk „loopwerk“, Krachwerk „loopwerk-make“), gleiches Schema
+const dbs = new Map();
+function db(name) {
+  if (!dbs.has(name)) {
+    dbs.set(name, new Promise((resolve, reject) => {
+      const req = indexedDB.open(name, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' });
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
-    }).catch((err) => { dbPromise = null; throw err; });
+    }).catch((err) => { dbs.delete(name); throw err; }));
   }
-  return dbPromise;
+  return dbs.get(name);
 }
 
-function tx(mode, fn) {
-  return db().then((d) => new Promise((resolve, reject) => {
+function txOn(name, mode, fn) {
+  return db(name).then((d) => new Promise((resolve, reject) => {
     const t = d.transaction(STORE, mode);
     const result = fn(t.objectStore(STORE));
     t.oncomplete = () => resolve(result?.result ?? result);
@@ -31,6 +31,8 @@ function tx(mode, fn) {
 }
 
 const newId = () => 'own-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+// Eigene Sounds: „own-…“ (Loopwerk, Krachwerk) und „mk-…“ (Aufnahmen aus der früheren Krachwerk-Pad-Wand)
+export const isOwnId = (id) => /^(own|mk)-/.test(String(id));
 
 export function channelsToBuffer(chs, sampleRate) {
   const b = new AudioBuffer({ numberOfChannels: chs.length, length: Math.max(1, chs[0].length), sampleRate });
@@ -59,13 +61,21 @@ export function wavDuration(buf) {
 }
 
 // Library-Eintrag aus Datensatz (orig fehlt bei Einträgen auf Abruf; dann zählt die Länge aus dem WAV-Kopf)
+// Herkunft für die Kiste (Krachwerk): Mikrofon, Datei oder Schleife; Felder aus der Pad-Wand (cls, tags, bars) verstanden
+function makeMeta(rec) {
+  const from = rec.from || (rec.cls === 'loop' ? 'loop' : /^Import/.test(rec.source || '') ? 'file' : 'mic');
+  return { cls: rec.cls ?? null, tags: rec.tags ?? [], from };
+}
+
 function toSample(rec, orig, duration = orig?.duration) {
+  const loop = rec.kind === 'loop' || rec.cls === 'loop';
   const s = {
     id: rec.id,
     name: rec.name,
     category: 'own',
-    kind: rec.kind === 'loop' ? 'loop' : 'oneshot',
-    beats: rec.beats || null,
+    kind: loop ? 'loop' : 'oneshot',
+    beats: rec.beats || (rec.bars ? rec.bars * 4 : null),
+    made: makeMeta(rec),
     origin: 'Eigene',
     source: rec.source || '',
     license: null,
@@ -85,22 +95,25 @@ export function askPersist() {
 }
 
 export class OwnSounds {
-  constructor(library) {
+  constructor(library, { db = 'loopwerk' } = {}) {
     this.library = library;
+    this.dbName = db;
     this.available = typeof indexedDB !== 'undefined';
   }
+
+  tx(mode, fn) { return txOn(this.dbName, mode, fn); }
 
   async loadAll() {
     if (!this.available) return 0;
     try {
       // Nur Name und Länge sofort (Start bleibt schnell, egal wie viele Aufnahmen); dekodiert wird beim ersten Gebrauch
-      const recs = await tx('readonly', (s) => s.getAll());
+      const recs = await this.tx('readonly', (s) => s.getAll());
       for (const rec of recs || []) {
         const had = this.library.get(rec.id);
         if (had && !had.missing) continue;
         const sample = toSample(rec, null, wavDuration(rec.wav) ?? undefined);
         this.library.stub(sample, async (x) => {
-          const r = await tx('readonly', (st) => st.get(x.id));
+          const r = await this.tx('readonly', (st) => st.get(x.id));
           if (!r?.wav) throw new Error('nicht mehr im Browser gespeichert');
           x.orig = await decodeAudio(r.wav.slice(0));
           x.duration = x.orig.duration;
@@ -119,14 +132,18 @@ export class OwnSounds {
   }
 
   // Neuen eigenen Sound anlegen (aus Puffer) und dauerhaft speichern
-  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId() }) {
+  // cls/tags/from: optionale Herkunft und Einordnung (Krachwerk); landen auch in der Projektdatei
+  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from }) {
     if (buffer.duration > MAX_SECONDS) throw new Error(`„${name}“ ist länger als ${MAX_SECONDS / 60} Minuten – bitte vorher kürzen.`);
     const wav = await encodeWav(buffer).arrayBuffer();
     const rec = { id, name, kind, beats, source, wav, created: Date.now() };
+    if (cls != null) rec.cls = cls;
+    if (tags) rec.tags = tags;
+    if (from) rec.from = from;
     const sample = await this.library.add(toSample(rec, buffer));
     if (this.available) {
       askPersist();
-      try { await tx('readwrite', (s) => s.put(rec)); } catch (err) {
+      try { await this.tx('readwrite', (s) => s.put(rec)); } catch (err) {
         this.available = false;
         console.warn('Eigener Sound nur für diese Sitzung gespeichert:', err?.message || err);
       }
@@ -150,12 +167,12 @@ export class OwnSounds {
 
   async remove(id) {
     this.library.remove(id);
-    if (this.available) { try { await tx('readwrite', (s) => s.delete(id)); } catch { /* egal */ } }
+    if (this.available) { try { await this.tx('readwrite', (s) => s.delete(id)); } catch { /* egal */ } }
   }
 
   // Für die Projektdatei: alle im Projekt benutzten eigenen Sounds als Base64-WAV
   async embed(project) {
-    const used = new Set(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)).filter((id) => id.startsWith('own-')));
+    const used = new Set(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)).filter(isOwnId));
     const out = [];
     for (const id of used) {
       const s = await this.library.ensure(id).catch(() => null);
@@ -163,7 +180,11 @@ export class OwnSounds {
       const wav = new Uint8Array(await encodeWav(s.orig).arrayBuffer());
       let bin = '';
       for (let i = 0; i < wav.length; i += 0x8000) bin += String.fromCharCode.apply(null, wav.subarray(i, i + 0x8000));
-      out.push({ id, name: s.name, kind: s.kind, beats: s.beats, source: s.source, wav: btoa(bin) });
+      const e = { id, name: s.name, kind: s.kind, beats: s.beats, source: s.source, wav: btoa(bin) };
+      if (s.made?.cls != null) e.cls = s.made.cls;
+      if (s.made?.tags?.length) e.tags = s.made.tags;
+      if (s.made?.from) e.from = s.made.from;
+      out.push(e);
     }
     return out;
   }
@@ -179,7 +200,7 @@ export class OwnSounds {
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const buffer = await decodeAudio(bytes.buffer);
-      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source });
+      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from });
       n++;
     }
     return n;
