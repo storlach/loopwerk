@@ -1,4 +1,5 @@
-// Effekt-Pad: live auf die Summe oder eine Spur einwirken, solange der Finger drückt. Nichts davon landet im Projekt.
+// Effekt-Pad: live auf die Summe oder eine Spur einwirken, solange der Finger drückt. Nichts davon landet im Projekt
+// (als Kurve aufnehmen: src/fxpad-record.js).
 // Jede Berührung baut eine eigene Kette (Effekt → Bandstopp-Stufe → wet) parallel zum Einschleifpunkt des Kanalzugs
 // (strip.pre → strip.dry). Ein- und Aussteigen überblendet dry ↔ wet; alle Effekte geben das volle Signal aus,
 // in Ruhestellung unverändert – die Überblendung bleibt dadurch unhörbar.
