@@ -184,6 +184,7 @@ const { check, finish } = createChecker();
     await page.evaluate((id) => window.loopwerk.arranger.select(id), riserId);
 
     // Ausgewählter Clip lässt sich ziehen
+    await page.evaluate(() => { document.getElementById('arr-scroll').scrollLeft += 120; }); // Clip ins Bild, weg vom Rollbalken am Rand
     const sel = await box('.clip.selected');
     const start0 = (await lw()).tracks[6].find((c) => c.id === riserId).startBeat;
     // nicht auf dem senkrechten Rollbalken am rechten Rand ansetzen

@@ -116,6 +116,9 @@ export function mountMobile({ store, ui, tools, library }) {
       input.max = String(max);
       if (document.activeElement !== input) input.value = String(value);
     };
+    const snd0 = library.get(c.sampleId);
+    $('lvl-head-name').textContent = snd0?.name ?? 'Clip';
+    levels.className = `clip-levels cat-${snd0?.colorCat ?? snd0?.category ?? 'fx'}`;
     set(gainIn, clipGain(c), 1);
     set(fadeIn, c.fadeInBeats || 0, c.lengthBeats);
     set(fadeOut, c.fadeOutBeats || 0, c.lengthBeats);

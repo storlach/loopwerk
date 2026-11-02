@@ -301,6 +301,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await page.waitForTimeout(200);
     await page.tap('#fx-hall-on');
     check('Inspektor: Effekt per Antippen einschalten', await page.evaluate(() => window.loopwerk.store.track('t2').fx.hall.on === true));
+    await page.evaluate(() => document.getElementById('insp-pan').scrollIntoView({ block: 'center' })); // Spur-Abschnitt hat jetzt eine Kopfzeile: Regler erst in die Mitte rollen
     await targets('Inspektor mit Effekt');
     await page.tap('.insp-toggle');
     await page.tap('#undo-btn');

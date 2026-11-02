@@ -14,7 +14,8 @@ import { mountAutoLanes, templateControls, applyTemplate } from './auto-lane.js'
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
 const narrow = window.matchMedia('(max-width: 760px)');
-export const headW = () => (narrow.matches ? 124 : touch.matches ? 208 : 176);
+export const headW = () => (narrow.matches ? 136 : touch.matches ? 232 : 176);
+const CHEVRON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3"/></svg>';
 const WAVE_TOP = 17; // Abstand der Wellenform vom Clip-Oberrand (Platz für den Namen)
 
 export const formatDb = (g) => (g <= 0.0001 ? '−∞ dB' : `${(20 * Math.log10(g)).toFixed(1).replace('.', ',').replace('-', '−')} dB`);
@@ -55,7 +56,14 @@ export function mountArranger({ root, store, engine, library, ui }) {
   addBtn.type = 'button';
   addBtn.id = 'add-track';
   addBtn.title = 'Neue Spur hinzufügen';
-  addRow.append(addBtn);
+  // Summen-Kurve auf-/zuklappen: sitzt rechts in der Zeile „+ Spur“, am Ende der Spurliste
+  const sumBtn = el('button', 'sum-toggle');
+  sumBtn.type = 'button';
+  sumBtn.id = 'sum-toggle';
+  sumBtn.innerHTML = `<span>Summe</span>${CHEVRON}`;
+  sumBtn.setAttribute('aria-expanded', 'false');
+  sumBtn.addEventListener('click', () => autoLanes.toggle('master'));
+  addRow.append(addBtn, sumBtn);
   const loopShade = el('div', 'loop-shade');
   const playhead = el('div', 'playhead');
   // Griff der Abspielmarke im Lineal: ziehen setzt die Wiedergabeposition
@@ -132,7 +140,12 @@ export function mountArranger({ root, store, engine, library, ui }) {
     // Lautstärke als Drehregler (Doppelklick = Grundwert)
     const volKnob = makeKnob(vol, { wrapClass: 'track-vol-wrap' });
     vol.addEventListener('dblclick', () => store.setTrack(track.id, { volume: 0.8 }));
-    btns.append(mute, solo, volKnob.wrap);
+    // Kurve auf-/zuklappen (am Touchscreen gibt es die Taste A nicht); sitzt unter dem Menü-Knopf
+    const chev = el('button', 'tbtn tbtn-chev');
+    chev.type = 'button';
+    chev.innerHTML = CHEVRON;
+    chev.setAttribute('aria-expanded', 'false');
+    btns.append(mute, solo, volKnob.wrap, chev);
     head.append(top, btns);
     const lane = el('div', 'lane');
     lane.dataset.trackId = track.id;
@@ -146,12 +159,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     name.addEventListener('click', (e) => { if (e.pointerType === 'touch') startRename(track.id); });
 
     menuBtn.addEventListener('click', () => openMenu(track.id, menuBtn));
+    chev.addEventListener('click', () => autoLanes.toggle(track.id));
     head.addEventListener('pointerdown', (e) => startTrackDrag(e, track.id));
 
     // Klick auf den Spurkopf zeigt die Spur im Inspektor (Lautstärke, Panorama, Effekte)
     head.addEventListener('click', (e) => { if (!e.target.closest('button, input, .knob')) ui.selectTrack?.(track.id); });
 
-    const r = { row, head, name, dot, top, menuBtn, mute, solo, vol, volKnob, lane };
+    const r = { row, head, name, dot, top, menuBtn, mute, solo, chev, vol, volKnob, lane };
     rows.set(track.id, r);
     return r;
   }
@@ -329,16 +343,25 @@ export function mountArranger({ root, store, engine, library, ui }) {
       r.solo.setAttribute('aria-pressed', String(t.solo));
       r.vol.setAttribute('aria-label', `Lautstärke ${t.name}`);
       r.menuBtn.setAttribute('aria-label', `Menü für Spur ${t.name}`);
+      const open = autoLanes.isOpen(t.id);
+      r.chev.setAttribute('aria-expanded', String(open));
+      r.chev.setAttribute('aria-label', `${open ? 'Kurve schließen' : 'Kurve zeigen'}: ${t.name}`);
+      r.chev.title = open ? 'Kurve schließen' : 'Kurve zeigen (Taste A)';
       if (document.activeElement !== r.vol) r.vol.value = String(t.volume);
       r.volKnob.update();
       const first = t.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
       const fs = first && library.get(first.sampleId);
       r.dot.className = `track-dot${fs ? ` cat-${fs.colorCat ?? fs.category}` : ''}`;
       const st = trackState(p, t);
-      r.row.classList.toggle('silent', st.mute || (anySolo && !st.solo));
+      r.silent = st.mute || (anySolo && !st.solo);
+      r.row.classList.toggle('silent', r.silent);
       r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === t.id);
     });
-    addRow.hidden = tracks.length >= MAX_TRACKS;
+    addBtn.hidden = tracks.length >= MAX_TRACKS;
+    const sumOpen = autoLanes.isOpen('master');
+    sumBtn.setAttribute('aria-expanded', String(sumOpen));
+    sumBtn.setAttribute('aria-label', sumOpen ? 'Summen-Kurve schließen' : 'Summen-Kurve zeigen');
+    sumBtn.title = sumOpen ? 'Summen-Kurve schließen' : 'Summen-Kurve zeigen (Taste A ohne Auswahl)';
   }
 
   // ---------- Spur-Menü und Spuren ziehen ----------
@@ -676,9 +699,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
   // Nur Spuren neu zeichnen, deren Clips sich geändert haben: schnelle Eingaben (Tasten, Pads) bleiben flüssig.
   // Während eines Ziehens verändert die Vorschau das DOM direkt – dann zeichnet der nächste Durchlauf alles neu.
   let forceAll = true;
-  const laneKey = (track) => `${ppb()}|${headW()}|${rowH()}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
+  const laneKey = (track, silent) => `${ppb()}|${headW()}|${rowH()}|${silent ? 'stumm' : 'laut'}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
   function renderLane(r, track) {
-    const key = laneKey(track);
+    // Stumme Spuren zeichnen die Wellenform grau (--wave): beim Wechsel muss die Fläche neu gezeichnet werden
+    const key = laneKey(track, r.silent);
     if (!forceAll && r.key === key) return;
     r.key = key;
     for (const n of r.lane.querySelectorAll('.clip')) n.remove();
@@ -756,15 +780,37 @@ export function mountArranger({ root, store, engine, library, ui }) {
   }
 
   let gripDrag = null; // während des Ziehens bestimmt der Griff die Position
+  // Folgen der Marke: gilt, bis die Person die Ansicht selbst bewegt (Scrollen, Leisten, Wischen, Zoomen) – bis zum nächsten Start.
+  // Eigene Schreibzugriffe auf scrollLeft merkt sich appLeft; ein Scroll-Ereignis mit anderem Wert kommt von der Person.
+  let freeView = false;
+  let wasPlaying = false;
+  let appLeft = root.scrollLeft;
+  const followChip = el('button', 'follow-chip', 'Marke folgen');
+  followChip.type = 'button';
+  followChip.id = 'follow-btn';
+  followChip.hidden = true;
+  followChip.title = 'Die Ansicht folgt wieder der Abspielmarke';
+  root.parentElement?.append(followChip);
+  followChip.addEventListener('click', () => { freeView = false; setPlayhead(engine.heardBeat()); });
+  root.addEventListener('scroll', () => {
+    if (Math.abs(root.scrollLeft - appLeft) < 0.5) return;
+    appLeft = root.scrollLeft;
+    if (engine.playing) freeView = true;
+  }, { passive: true });
+  const userMovedView = () => { if (engine.playing) freeView = true; };
   function setPlayhead(beat) {
     if (gripDrag != null) beat = gripDrag;
     const x = headW() + beat * ppb();
     playhead.style.transform = `translateX(${x}px)`;
     phGrip.style.transform = `translateX(${beat * ppb()}px)`;
+    if (engine.playing && !wasPlaying) freeView = false;
+    wasPlaying = engine.playing;
     if (engine.playing) {
       const view = root.clientWidth;
-      if (x > root.scrollLeft + view - 40 || x < root.scrollLeft + headW()) root.scrollLeft = x - headW() - 24;
-    }
+      const out = x > root.scrollLeft + view - 40 || x < root.scrollLeft + headW();
+      if (out && !freeView) { root.scrollLeft = x - headW() - 24; appLeft = root.scrollLeft; }
+      followChip.hidden = !(freeView && out);
+    } else followChip.hidden = true;
   }
 
   // ---------- Zeiger-Interaktionen ----------
@@ -1267,6 +1313,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const anchor = rowAnchor(root.scrollTop + y);
     ui.pxPerBeat = nx;
     ui.trackZoom = ny;
+    userMovedView();
     render();
     if (after) after();
     else {
@@ -1276,6 +1323,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
         root.scrollTop = Math.max(0, top - y);
       }
     }
+    appLeft = root.scrollLeft;
     ui.emit();
     return true;
   }
