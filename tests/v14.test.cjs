@@ -154,7 +154,7 @@ const { check, finish } = createChecker();
     // ---------- Spuren: Menü ----------
     await page.locator('.track-row').nth(1).locator('.tbtn-menu').click();
     const items = await page.locator('.track-menu:not([hidden]) .track-menu-item').allTextContents();
-    check('Spur-Menü zeigt die Befehle', items.join(',') === 'Duplizieren,Nach oben,Nach unten,Umbenennen,Kurve,Einblenden,Ausblenden,Filter öffnen,Filter schließen,Länge: 4 Takte ›,Gruppe bilden,Löschen', items.join(','));
+    check('Spur-Menü zeigt die Befehle', items.join(',') === 'Duplizieren,Nach oben,Nach unten,Umbenennen,Kurve,Einblenden,Ausblenden,Verlauf ›,Gruppe bilden,Löschen', items.join(','));
     await page.locator('.track-menu-item', { hasText: 'Duplizieren' }).click();
     const dup = await page.evaluate(() => {
       const t = window.loopwerk.store.project.tracks;

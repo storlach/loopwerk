@@ -424,12 +424,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
       item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
-      // Vorlagen direkt (zwei Tipps): Ein-/Ausblenden, Filter öffnen/schließen; „Länge ›“ für die Anzahl Takte
+      // Ein-/Ausblenden direkt (zwei Tipps); Filter-Vorlagen und Länge unter „Verlauf ›“ – das Menü bleibt kurz
       item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
       item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
-      item('Filter öffnen', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'filterOpen' }); }),
-      item('Filter schließen', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'filterClose' }); }),
-      item(`Länge: ${ui.autoBars ?? 4} ${(ui.autoBars ?? 4) === 1 ? 'Takt' : 'Takte'} ›`, () => openFadeMenu(trackId, btn)),
+      item('Verlauf ›', () => openFadeMenu(trackId, btn)),
       // gilt für den zuletzt gewählten Parameter der Kurvenzeile
       ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
       ...groupItems(trackId, item),

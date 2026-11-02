@@ -445,7 +445,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
 
     // Öffnen über das Spur-Menü
     await page.tap('.track-row .tbtn-menu');
-    check('Handy: Spur-Menü hat „Kurve“, „Einblenden“, „Ausblenden“ und „Länge“', await page.evaluate(() => { const l = [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent); return l.includes('Kurve') && l.includes('Einblenden') && l.includes('Ausblenden') && l.some((x) => x.startsWith('Länge')); }));
+    check('Handy: Spur-Menü hat „Kurve“, „Einblenden“, „Ausblenden“ und „Verlauf ›“', await page.evaluate(() => { const l = [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent); return l.includes('Kurve') && l.includes('Einblenden') && l.includes('Ausblenden') && l.includes('Verlauf ›'); }));
     await page.tap('.track-menu-item:text-is("Kurve")');
     await page.waitForSelector('.auto-row');
     let g = await geom(page);
@@ -509,7 +509,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.tap('.auto-close');
     const st0 = (await state(page)).steps;
     await page.tap('.track-row .tbtn-menu');
-    await page.tap('.track-menu-item:text-matches("^Länge")');
+    await page.tap('.track-menu-item:text-is("Verlauf ›")');
     check('Handy: Verlauf zeigt Längen-Chips 1 · 2 · 4 · 8 und beide Knöpfe', await page.evaluate(() => [...document.querySelectorAll('.track-menu .auto-bars button')].map((b) => b.textContent).join() === '1,2,4,8' && !!document.querySelector('.track-menu [data-template="fadeIn"]') && !!document.querySelector('.track-menu [data-template="fadeOut"]')));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-phone-menu.png') });
     const mt = (await page.evaluate(measureTargets)).filter((x) => /track-menu-item|„\d Takte?“/.test(x.label));
@@ -576,13 +576,15 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     const st2 = (await state(page)).steps;
     await page.tap('.track-row .tbtn-menu');
     const tm = await page.evaluate(() => { const m = document.querySelector('.track-menu'); const r = m.getBoundingClientRect(); return { items: [...m.querySelectorAll('.track-menu-item')].map((b) => b.textContent), top: r.top, bottom: r.bottom, vh: innerHeight }; });
-    check('Handy: Spur-Menü hat „Filter öffnen“ und „Filter schließen“ direkt, Menü liegt im Bild', tm.items.includes('Filter öffnen') && tm.items.includes('Filter schließen') && tm.top >= 0 && tm.bottom <= tm.vh, JSON.stringify(tm));
+    const tabTop = await page.evaluate(() => document.getElementById('tabbar').getBoundingClientRect().top);
+    check('Handy: Spur-Menü kurz – Einblenden, Ausblenden direkt, Filter unter „Verlauf ›“; Menü über der Fachleiste', tm.items.includes('Einblenden') && tm.items.includes('Verlauf ›') && !tm.items.includes('Filter öffnen') && tm.top >= 0 && tm.bottom <= tabTop + 1, JSON.stringify({ ...tm, tabTop }));
     const mi = (await page.evaluate(measureTargets)).filter((x) => /track-menu-item/.test(x.label));
     check('Handy: Spur-Menü-Einträge ≥ 44 px hoch', mi.length >= 8 && mi.every((x) => x.h >= 44 && x.w >= 44), JSON.stringify(mi.map((x) => `${x.label} ${x.w}×${x.h}`)));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone-menu.png') });
-    await page.tap('.track-menu-item:text-is("Filter öffnen")');
+    await page.tap('.track-menu-item:text-is("Verlauf ›")');
+    await page.tap('.track-menu [data-template="filterOpen"]');
     const fp = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { cut: t.automation?.['filter.cutoff'], filter: t.fx?.filter, steps: window.loopwerk.store.undoStack.length, key: document.querySelector('.auto-row')?.dataset.key }; });
-    check('Handy: Spur-Menü → Filter öffnen in zwei Tipps, ein Schritt, Zeile mit Filter-Frequenz offen', fp.cut?.length === 2 && fp.cut[0].value === 0.25 && fp.cut[1].value === 1 && fp.filter?.on && fp.filter.type === 'lowpass' && fp.steps === st2 + 1 && fp.key === 'filter.cutoff', JSON.stringify(fp));
+    check('Handy: Spur-Menü → Verlauf → Filter öffnen, ein Schritt, Zeile mit Filter-Frequenz offen', fp.cut?.length === 2 && fp.cut[0].value === 0.25 && fp.cut[1].value === 1 && fp.filter?.on && fp.filter.type === 'lowpass' && fp.steps === st2 + 1 && fp.key === 'filter.cutoff', JSON.stringify(fp));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone.png') });
     // Mixer → Kanal → Effekte: Frequenz-Regler gesperrt, Antippen öffnet die Zeile
     await page.tap('.auto-close');
