@@ -11,6 +11,9 @@ fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT);
 const head = SKELETON_HEAD;
 fs.writeFileSync(path.join(OUT, 'index.html'), head + fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8') + '</body></html>');
+// Werkstatt (Edition „make“) unter /werkstatt/ – dort geht auch das Mikrofon
+fs.mkdirSync(path.join(OUT, 'werkstatt'));
+fs.writeFileSync(path.join(OUT, 'werkstatt', 'index.html'), require('./werkstatt-page.cjs').werkstattPage(head));
 for (const dir of ['src', 'assets', 'vendor']) fs.cpSync(path.join(ROOT, dir), path.join(OUT, dir), { recursive: true });
 // UX-Entwürfe mit ausliefern, damit man sie im Browser ansehen kann
 fs.cpSync(path.join(ROOT, 'docs', 'ux'), path.join(OUT, 'docs', 'ux'), { recursive: true });

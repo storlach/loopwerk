@@ -19,6 +19,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
   - `inspector.js`: rechte Spalte (Clip/Spur/Song); `ui.selectTrack(id)` neben `ui.select(clipId)`.
   - `sheets.js`: Fächer als Schubladen über dem Arranger (Haltepunkte zu/Mitte/oben, je Fach gemerkt); `create.js`: Erstellen-Karten; `tips.js`: Tutorial.
   - Eine Fachleiste `#tabbar` für Handy und Desktop; Rückmeldungen nur als Einblender (`#hint`), keine Erklärtexte (dafür Tipps).
+- Edition **Krachwerk** (`src/edition.js`, `src/werkstatt/`, Adresse `/werkstatt/`): Pad-Wand nur mit Selbstgemachtem (Mikrofon + Synth-Kits, keine mitgelieferten Samples), eigener Speicher (IndexedDB `loopwerk-make`, `loopwerk.make.*`). Seite wird aus `index.html` (Tokens, Schriften) von `tools/werkstatt-page.cjs` erzeugt, lokal über `tests/serve.cjs`. Test: `tests/werkstatt.test.cjs`.
 - Veröffentlichung: GitHub Pages (https://storlach.github.io/loopwerk/) baut sich bei jedem Push auf `main` (`tools/build-pages.cjs` ergänzt das HTML-Gerüst wie `tests/serve.cjs`); Artifact-Vorschau siehe Skill `artifact-sync`.
 - Entscheidungen: `docs/adr/`, Specs je Stufe: `docs/specs/`, Stand: `docs/ROADMAP.md`.
 

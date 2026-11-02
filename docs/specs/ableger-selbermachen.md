@@ -9,6 +9,13 @@ Status: Brainstorming für Martin, keine Entscheidung, keine ADR. Arbeitstitel �
 - Eigene Adresse oder Modus in Loopwerk: noch offen, wird später evaluiert. Die Edition-Konfiguration (Option a) hält beides offen.
 - Vorschläge aus Markt-Scout, UX und Creative Director gefallen; nächster Schritt: Prototyp der Momente „Pad-Wand mit Aufnahme + Auto-Säubern“ und „Klatsch dein Kit“, auf GitHub Pages am Handy ausprobieren.
 
+## Prototyp (Branch `werkstatt`, 02.11.2026)
+- Name: **Krachwerk** (Martin). Adresse `/werkstatt/`, Edition `make` (Option a): `src/edition.js`, Oberfläche `src/werkstatt/`, Seite erzeugt von `tools/werkstatt-page.cjs` (kein zweites `index.html`).
+- Moment 1, Pad-Wand: leeres Pad antippen nimmt auf, stoppt nach Stille; `clean.js` säubert (Hochpass, Start auf dem Anschlag, Stille hinten weg, −1 dB, Doppel-Mono → mono) und benennt (Bumm/Klatsch/Ts/Ton A4 + Etiketten). „● Ins Pad“ nimmt neu auf, „✕ Leeren“ leert.
+- Moment 2, „Klatsch dein Kit“: Aufnahme bis Stille/Fertig, `slice.js` zerlegt an Anschlägen, bis zu 8 Stücke tief → hell auf freie Pads, Groove (`groove.js`, 4 Muster, „Nochmal“) startet sofort mit Kick = tief, Snare = mittel, Hi-Hat = hell.
+- Synth-Kits (elektro, 909) als „◇ Synth“ auf freie Pads. Keine Anfrage unter `assets/` (außer Icons).
+- Noch nicht drin: Stimmen auf die Tonart, Resampling, Arranger/Song, Weg nach Loopwerk, Lichtwolke roh → geformt.
+
 ## Ziel aus Nutzersicht
 Wer die Werkstatt öffnet, hat ein leeres Regal und baut alles selbst – aufnehmen, klatschen, singen, Synth schrauben, Beats und Melodien, Teile des eigenen Songs wieder zu neuen Sounds machen.
 
