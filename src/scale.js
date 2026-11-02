@@ -56,3 +56,41 @@ export function patternScale(project, pattern) {
   const foreign = (notes) => (on ? (notes || []).filter((n) => !has(n.pitch)).length : 0);
   return { on, kind, root, label: scaleLabel(project, kind), has, isRoot, snap, lock, foreign };
 }
+
+// ---------- Akkord-Eingabe ----------
+// Eine Taste (Klick in die Piano-Roll, Klaviatur, Computertastatur, MIDI) spielt und setzt einen ganzen Akkord.
+// rel: Halbtöne über der gedrückten Taste. „Tonleiter“ baut den leitereigenen Dreiklang der Songtonart.
+export const CHORD_MODES = [
+  { id: 'off', label: 'Aus', rel: [0] },
+  { id: 'major', label: 'Dur', rel: [0, 4, 7] },
+  { id: 'minor', label: 'Moll', rel: [0, 3, 7] },
+  { id: 'scale', label: 'Tonleiter', rel: null },
+  { id: 'power', label: 'Power', rel: [0, 7, 12] },
+  { id: 'seventh', label: 'Sept', rel: [0, 4, 7, 10] }, // Dur-Dreiklang mit kleiner Septime
+];
+
+// Töne des Akkords zur Taste `root` (aufsteigend, ohne Doppelte, nur LOW…HIGH). Eine aktive Tonleiter-Sperre
+// rastet jeden Ton ein; bei Gleichstand gewinnt der tiefere (Dur über A in A-Moll gibt A C E).
+export function chordPitches(project, pattern, mode, root) {
+  const sc = patternScale(project, pattern);
+  const def = CHORD_MODES.find((c) => c.id === mode) ?? CHORD_MODES[0];
+  let raw;
+  if (def.rel) raw = def.rel.map((r) => root + r);
+  else {
+    // Leitereigen: die sieben Töne der Songtonart (Moll = Dur-Parallele); Terz und Quinte liegen je zwei Leiterstufen höher
+    const pcs = new Array(12).fill(false);
+    const tonic = KEYS.indexOf(keyOf(project));
+    for (const s of SCALE_KINDS.minor.steps) pcs[(tonic + s) % 12] = true;
+    const dia = (m) => pcs[((m % 12) + 12) % 12];
+    let r = root;
+    for (let d = 1; !dia(r) && d <= 2; d++) r = dia(root - d) ? root - d : dia(root + d) ? root + d : r;
+    const up = (from, n) => { let m = from; while (n > 0) { m++; if (dia(m)) n--; } return m; };
+    raw = [r, up(r, 2), up(r, 4)];
+  }
+  const out = [];
+  for (const m of raw) {
+    const p = sc.lock(m);
+    if (p >= LOW && p <= HIGH && !out.includes(p)) out.push(p);
+  }
+  return out.sort((a, b) => a - b);
+}

@@ -5,7 +5,7 @@
 import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
   noteName, resizeDrumRows, previewNote, previewDrum, startNote, sampledPresets, allPresets, presetInfo, preparePreset,
-  GLIDE_OPTIONS, glideOf, SWING_OPTIONS, swingOf,
+  GLIDE_OPTIONS, glideOf, SWING_OPTIONS, swingOf, midiVelocity, GM_DRUMS,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
@@ -16,7 +16,7 @@ import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { place, touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
-import { patternScale, scaleKindOf, SCALE_ORDER } from '../scale.js';
+import { patternScale, scaleKindOf, SCALE_ORDER, CHORD_MODES, chordPitches } from '../scale.js';
 
 // Linke Spalte der Piano-Roll: am Handy die (senkrechte, spielbare) Klaviatur, am Desktop nur Notennamen –
 // dort spielt man auf der waagerechten Klaviatur darunter
@@ -47,6 +47,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   const hint = $('pat-hint');
   const liveBtn = $('pat-live');
   const quantSel = $('pat-quant');
+  const quantBtn = $('pat-quantize');
+  const chordSel = $('pat-chord');
   const padsEl = $('pat-pads');
   const keysEl = $('pat-keys');
   const keybed = $('pat-keybed');
@@ -68,10 +70,28 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
   // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');
-  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
-    const always = [nameIn, $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-clear')].includes(node);
+  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-chord-field'), $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
+    const always = [nameIn, $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-clear')].includes(node);
     place(node, always ? { wide: moreEl, narrow: moreEl } : { narrow: moreEl });
   }
+  // Menü „Mehr“ in den sichtbaren Bereich einpassen. Desktop: bricht die Kopfzeile um und „Mehr“ steht links in der
+  // letzten Zeile, ragt es sonst über den Rand der Schublade. Handy: steht die Schublade tief, endet das Menü über der
+  // Fachleiste und scrollt dort, statt dahinter zu verschwinden.
+  $('pat-more-btn').addEventListener('click', () => requestAnimationFrame(() => {
+    moreEl.style.right = '';
+    moreEl.style.maxHeight = '';
+    if (moreEl.hidden) return;
+    const r = moreEl.getBoundingClientRect();
+    if (narrow.matches) {
+      const bar = document.getElementById('tabbar')?.getBoundingClientRect().top ?? innerHeight;
+      const cs = getComputedStyle(moreEl);
+      const frame = cs.boxSizing === 'content-box' ? ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((sum, k) => sum + parseFloat(cs[k] || 0), 0) : 0;
+      moreEl.style.maxHeight = `${Math.max(160, Math.floor(Math.min(bar, innerHeight) - r.top - 8 - frame))}px`;
+      return;
+    }
+    const over = root.getBoundingClientRect().left + 8 - r.left;
+    if (over > 0) moreEl.style.right = `${-over}px`;
+  }));
   // Nach einer Auswahl den Fokus vom Auswahlfeld nehmen: sonst „frisst“ es die Buchstabentasten
   // (A springt z. B. zum Kit „Akustik“), statt dass sie Pads oder Klaviatur spielen
   root.addEventListener('change', (e) => { if (e.target.tagName === 'SELECT') e.target.blur(); });
@@ -93,6 +113,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   let brush = 1;
   velSel.addEventListener('change', () => { brush = Number(velSel.value) || 1; });
   const sameVel = (v) => Math.abs((v ?? 1) - brush) < 0.01;
+  // Akkord-Eingabe: gehört zum Editor (wie der Pinsel), nicht zum Pattern; Voreinstellung „Aus“
+  for (const c of CHORD_MODES) { const o = el('option', null, c.label); o.value = c.id; chordSel.append(o); }
+  const chordAt = (pitch) => chordPitches(store.project, pat(), chordSel.value, pitch);
 
   const pat = () => (id ? store.project.patterns?.[id] : null);
   const steps = () => pat().bars * 4 * STEPS_PER_BEAT;
@@ -124,9 +147,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     cursor = 0;
     ui.setDock('pattern');
     render();
+    setupMidi(); // Melodie: Tasten; Beat: Pads nach General-MIDI-Belegung
     if (pat()?.type === 'synth') {
       preparePreset(pat().preset);
-      setupMidi();
       requestAnimationFrame(() => reveal(octave + 7));
     }
   }
@@ -486,6 +509,20 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     return target === pitch0 ? pitch0 : lock(target, Math.sign(rows));
   };
   const noteAt = (notes, pitch, beat) => notes.findIndex((n) => n.pitch === pitch && beat >= n.start && beat < n.start + n.len);
+  // Neue Note(n) an dieser Stelle: bei aktivem Akkord alle Töne des Akkords (gleicher Start, gleiche Länge, gleicher
+  // Anschlag); ein Ton, der schon genau dort liegt, wird ersetzt. Gibt die neuen Noten zurück.
+  function addNotes(notes, pitch, start, len, vel) {
+    const made = [];
+    for (const m of chordAt(pitch)) {
+      const i = notes.findIndex((n) => n.pitch === m && n.start === start);
+      if (i >= 0) notes.splice(i, 1);
+      const n = { pitch: m, start, len, vel };
+      notes.push(n);
+      made.push(n);
+    }
+    return made;
+  }
+  const hear = (notes) => audio().then((a) => { for (const n of notes) previewNote(a, engine.mix.master, pat().preset, n.pitch, brush); });
 
   holdArea(canvas);
   canvas.addEventListener('pointerdown', async (e) => {
@@ -516,28 +553,28 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       pressHold(e, {
         onTap: () => {
           if (hit >= 0) { if (sameVel(notes[hit].vel)) notes.splice(hit, 1); else notes[hit].vel = brush; } else {
-            notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: brush });
-            audio().then((a) => previewNote(a, engine.mix.master, p.preset, pitch));
+            hear(addNotes(notes, pitch, beat, Math.min(Number(lenSel.value), total - beat), brush));
           }
           update((q) => { q.notes = notes; });
         },
         onHold: () => {
           let n = notes[hit];
           let lengthen = hit < 0;
+          let group = [n]; // neue Akkord-Noten werden gemeinsam verlängert
           if (n) {
             const w = n.len * STEPS_PER_BEAT * cellW;
             lengthen = keyW() + n.start * STEPS_PER_BEAT * cellW + w - x <= Math.max(16, w * 0.3);
           } else {
-            n = { pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: brush };
-            notes.push(n);
+            group = addNotes(notes, pitch, beat, Math.min(Number(lenSel.value), total - beat), brush);
+            n = group[0];
           }
           const start0 = n.start;
           const pitch0 = n.pitch;
           canvas.classList.add('holding');
           drawRoll(p, notes);
-          audio().then((a) => previewNote(a, engine.mix.master, p.preset, n.pitch));
+          hear(group);
           trackPointer(e, (ev) => {
-            if (lengthen) n.len = clamp((stepAt(ev.clientX) + 1) / STEPS_PER_BEAT - n.start, 0.25, total - n.start);
+            if (lengthen) { for (const g of group) g.len = clamp((stepAt(ev.clientX) + 1) / STEPS_PER_BEAT - g.start, 0.25, total - g.start); }
             else {
               const dx = Math.round((ev.clientX - e.clientX) / cellW) / STEPS_PER_BEAT;
               n.start = clamp(start0 + dx, 0, total - n.len);
@@ -575,16 +612,15 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       return;
     }
     const len = Math.min(Number(lenSel.value), total - beat);
-    const note = { pitch, start: beat, len, vel: brush };
-    notes.push(note);
+    const made = addNotes(notes, pitch, beat, len, brush);
     drawRoll(p, notes);
     // Erst das Loslassen abonnieren, dann vorhören – sonst geht ein schneller Klick verloren, solange der Klang lädt
     trackPointer(e, (ev) => {
       const end = (stepAt(ev.clientX) + 1) / STEPS_PER_BEAT;
-      note.len = clamp(Math.max(len, end - note.start), 0.25, total - note.start);
+      for (const note of made) note.len = clamp(Math.max(len, end - note.start), 0.25, total - note.start);
       drawRoll(p, notes);
     }, () => update((q) => { q.notes = notes; }), () => render());
-    audio().then((a) => previewNote(a, engine.mix.master, p.preset, pitch));
+    hear(made);
   });
 
   // ---------- Tastatur und MIDI ----------
@@ -603,27 +639,28 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   }
 
   // Schritt-Eingabe: Taste setzt eine Note an der Marke; wer länger hält, bekommt eine längere Note
-  let stepHold = new Map(); // Tonhöhe → { start, len, time }
-  function stepPress(pitch) {
+  // Taste (eingerastet) → { start, len, time, pitches }; bei einem Akkord setzt eine Taste mehrere Noten auf einmal
+  let stepHold = new Map();
+  function stepPress(key, pitches, vel) {
     const p = pat();
     if (!p || p.type !== 'synth' || !rec) return;
     const len = Number(lenSel.value);
     const start = cursor / STEPS_PER_BEAT;
     if (start + len > p.bars * 4 + 1e-9) return;
-    update((q) => { q.notes = [...q.notes.filter((n) => !(n.pitch === pitch && n.start === start)), { pitch, start, len, vel: 1 }]; }, `step-${id}-${start}`);
-    stepHold.set(pitch, { start, len, time: engine.ctx?.currentTime ?? 0 });
+    update((q) => { q.notes = [...q.notes.filter((n) => !(pitches.includes(n.pitch) && n.start === start)), ...pitches.map((pitch) => ({ pitch, start, len, vel }))]; }, `step-${id}-${start}`);
+    stepHold.set(key, { start, len, time: engine.ctx?.currentTime ?? 0, pitches });
     cursor = (cursor + len * STEPS_PER_BEAT) % steps();
     render();
   }
-  function stepRelease(pitch) {
-    const h = stepHold.get(pitch);
-    stepHold.delete(pitch);
+  function stepRelease(key) {
+    const h = stepHold.get(key);
+    stepHold.delete(key);
     if (!h || !engine.ctx) return;
     const heldBeats = (engine.ctx.currentTime - h.time) / engine.spb;
     const total = pat().bars * 4;
     const len = Math.min(total - h.start, Math.max(h.len, Math.round(heldBeats * STEPS_PER_BEAT) / STEPS_PER_BEAT));
     if (len <= h.len + 1e-9) return;
-    update((q) => { const n = q.notes.find((x) => x.pitch === pitch && x.start === h.start); if (n) n.len = len; }, `step-${id}-${h.start}`);
+    update((q) => { for (const m of h.pitches) { const n = q.notes.find((x) => x.pitch === m && x.start === h.start); if (n) n.len = len; } }, `step-${id}-${h.start}`);
     cursor = Math.round(((h.start + len) * STEPS_PER_BEAT)) % steps();
     render();
   }
@@ -676,10 +713,17 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         for (const input of access.inputs.values()) {
           input.onmidimessage = (m) => {
             const [status, note, vel] = m.data;
-            if (root.hidden) return;
-            const pitch = clamp(note, PITCH_LOW, PITCH_HIGH);
+            if (root.hidden || !pat()) return;
             const type = status & 0xf0;
-            if (type === 0x90 && vel > 0) noteOn(pitch);
+            const on = type === 0x90 && vel > 0;
+            // Beat-Editor: Pads nach General-MIDI-Belegung, Anschlag aus der Velocity, andere Noten ignorieren
+            if (pat().type === 'drums') {
+              const row = GM_DRUMS[note];
+              if (on && row) hitPad(row, undefined, midiVelocity(vel));
+              return;
+            }
+            const pitch = clamp(note, PITCH_LOW, PITCH_HIGH);
+            if (on) noteOn(pitch, midiVelocity(vel));
             else if (type === 0x80 || type === 0x90) noteOff(pitch);
           };
         }
@@ -805,12 +849,12 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   }
 
-  // when: Kontextzeit des Schlags (Wiederholung beim Halten); ohne Angabe sofort
-  async function hitPad(rowId, when) {
+  // when: Kontextzeit des Schlags (Wiederholung beim Halten); ohne Angabe sofort. vel: Anschlag (MIDI), sonst der Pinsel
+  async function hitPad(rowId, when, vel = brush) {
     const p = pat();
     if (!p || p.type !== 'drums') return;
     const ctx = await audio();
-    previewDrum(ctx, engine.mix.master, p.kit, rowId, library, when);
+    previewDrum(ctx, engine.mix.master, p.kit, rowId, library, when, vel);
     const pad = padsEl.querySelector(`[data-row="${rowId}"]`);
     if (pad) {
       // Jeder Schlag leuchtet neu auf, auch wenn der vorige noch leuchtet
@@ -826,7 +870,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (!looper.running) return;
     const step = when == null ? looper.stepNow(rowId) : looper.stepAt(when);
     if (step == null) return;
-    update((q) => { q.rows = resizeDrumRows(q.rows, q.bars); q.rows[rowId][step] = 1; }, 'live-' + id);
+    update((q) => { q.rows = resizeDrumRows(q.rows, q.bars); q.rows[rowId][step] = vel; }, 'live-' + id);
   }
 
   // Pad halten = Wirbel: der Schlag wiederholt sich im Raster (1/16 oder 1/8), solange man hält.
@@ -923,58 +967,63 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   $('pat-oct-up').addEventListener('click', () => { octave = clamp(octave + 12, PITCH_LOW, PITCH_HIGH - 12); render(); });
 
   // Taste gedrückt: Ton klingt, solange gehalten wird. Live-Aufnahme: Startschritt merken, beim Loslassen Länge setzen.
-  // Schritt-Eingabe: Note an der Marke, Haltedauer bestimmt die Länge.
-  const voices = new Map(); // Tonhöhe → gehaltener Ton
-  function noteOn(pitch) {
+  // Schritt-Eingabe: Note an der Marke, Haltedauer bestimmt die Länge. Mit Akkord spielt und setzt eine Taste alle
+  // Akkordtöne zusammen (ein Rückgängig-Schritt). vel: Anschlag (MIDI-Velocity), sonst der Pinsel.
+  const heldKeys = new Map(); // gedrückte Taste (eingerastet) → { pitches, voices, released }
+  function noteOn(key, vel = brush) {
     const p = pat();
     if (!p || p.type !== 'synth') return;
-    pitch = lock(pitch); // Computertastatur, MIDI, Klaviertasten und Live-Einspielen: Fremdton → nächster Tonleiterton
-    if (voices.has(pitch)) return;
-    keyEl(pitch)?.classList.add('down');
-    vkeyEl(pitch)?.classList.add('down');
-    reveal(pitch);
-    const token = {};
-    voices.set(pitch, token);
+    const root = lock(key); // Computertastatur, MIDI, Klaviertasten und Live-Einspielen: Fremdton → nächster Tonleiterton
+    if (heldKeys.has(root)) return;
+    const pitches = chordAt(root);
+    if (!pitches.length) return;
+    const g = { pitches, voices: [], released: false };
+    heldKeys.set(root, g);
+    for (const m of pitches) { keyEl(m)?.classList.add('down'); vkeyEl(m)?.classList.add('down'); }
+    reveal(root);
     audio().then((ctx) => {
-      const still = voices.get(pitch) === token;
+      const preset = pat()?.preset ?? p.preset;
       // Schon wieder losgelassen (sehr kurzer Tipp): kurz anspielen und trotzdem eintragen
-      if (still) voices.set(pitch, startNote(ctx, engine.mix.master, pat().preset, pitch));
-      else previewNote(ctx, engine.mix.master, pat().preset, pitch);
+      if (!g.released) g.voices = pitches.map((m) => startNote(ctx, engine.mix.master, preset, m, vel));
+      else for (const m of pitches) previewNote(ctx, engine.mix.master, preset, m, vel);
       if (looper.running) {
         const step = looper.stepNow();
         if (step != null) {
-          looper.held.set(pitch, { step, time: ctx.currentTime });
-          if (!still) finishLive(pitch);
+          looper.held.set(root, { step, time: ctx.currentTime, pitches, vel });
+          if (g.released) finishLive(root);
         }
       } else {
-        stepPress(pitch);
-        if (!still) stepRelease(pitch);
+        stepPress(root, pitches, vel);
+        if (g.released) stepRelease(root);
       }
     });
   }
-  function noteOff(pitch) {
-    pitch = lock(pitch);
-    keyEl(pitch)?.classList.remove('down');
-    vkeyEl(pitch)?.classList.remove('down');
-    voices.get(pitch)?.stop?.();
-    voices.delete(pitch);
-    stepRelease(pitch);
-    finishLive(pitch);
+  function noteOff(key) {
+    const root = lock(key);
+    const g = heldKeys.get(root);
+    if (g) {
+      g.released = true;
+      for (const m of g.pitches) { keyEl(m)?.classList.remove('down'); vkeyEl(m)?.classList.remove('down'); }
+      for (const v of g.voices) v?.stop?.();
+      heldKeys.delete(root);
+    }
+    stepRelease(root);
+    finishLive(root);
   }
-  function finishLive(pitch) {
-    const h = looper.held?.get(pitch);
+  function finishLive(root) {
+    const h = looper.held?.get(root);
     if (!h) return;
-    looper.held.delete(pitch);
+    looper.held.delete(root);
     const q = Number(quantSel.value);
     const heldSteps = ((engine.ctx.currentTime - h.time) / looper.spb) * STEPS_PER_BEAT;
     const lenSteps = Math.max(q, Math.round(heldSteps / q) * q);
     const start = h.step / STEPS_PER_BEAT;
     update((p) => {
       const len = Math.min(lenSteps / STEPS_PER_BEAT, p.bars * 4 - start);
-      p.notes = [...p.notes.filter((n) => !(n.pitch === pitch && n.start === start)), { pitch, start, len, vel: 1 }];
+      p.notes = [...p.notes.filter((n) => !(h.pitches.includes(n.pitch) && n.start === start)), ...h.pitches.map((pitch) => ({ pitch, start, len, vel: h.vel }))];
     }, 'live-' + id);
   }
-  const notesOffAll = () => { for (const pitch of [...voices.keys()]) noteOff(pitch); };
+  const notesOffAll = () => { for (const key of [...heldKeys.keys()]) noteOff(key); };
   window.addEventListener('blur', notesOffAll);
 
   // ---------- Senkrechte Klaviertasten (Handy): links neben der Piano-Roll, spielbar mit Halten und Gleiten ----------
@@ -1178,6 +1227,51 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     }
   });
 
+  // ---------- Quantisieren ----------
+
+  // Rückt Noten (Start, Länge auf mindestens ein Raster) bzw. Beat-Schläge auf das Raster aus „Einrasten“.
+  // Beat: Schläge auf Zwischenplätzen wandern zum nächsten Rasterplatz (bei Gleichstand zum späteren, am Ende des Loops
+  // zum Anfang); landen zwei auf demselben Platz, bleibt der lautere. Ein Rückgängig-Schritt.
+  quantBtn.addEventListener('click', () => {
+    const p = pat();
+    if (!p) return;
+    const q = Number(quantSel.value);
+    const label = q === 1 ? '1/16' : '1/8';
+    let moved = 0;
+    if (p.type === 'drums') {
+      const n = steps();
+      const rows = resizeDrumRows(p.rows, p.bars);
+      for (const row of DRUM_ROWS) {
+        const src = rows[row.id];
+        const out = src.map((v, i) => (i % q === 0 ? v : 0));
+        src.forEach((v, i) => {
+          if (!v || i % q === 0) return;
+          const j = (Math.round(i / q) * q) % n;
+          out[j] = Math.max(out[j], v);
+          moved++;
+        });
+        rows[row.id] = out;
+      }
+      if (moved) update((d) => { d.rows = rows; });
+    } else {
+      const grid = q / STEPS_PER_BEAT;
+      const total = p.bars * 4;
+      const out = [];
+      for (const note of p.notes) {
+        const start = Math.min(total - grid, Math.round(note.start / grid) * grid);
+        const len = Math.min(total - start, Math.max(grid, Math.round(note.len / grid) * grid));
+        if (Math.abs(start - note.start) > 1e-9 || Math.abs(len - note.len) > 1e-9) moved++;
+        // Gleicher Ton am gleichen Platz: eine Note (die längere, lautere)
+        const twin = out.find((o) => o.pitch === note.pitch && Math.abs(o.start - start) < 1e-9);
+        if (twin) { twin.len = Math.max(twin.len, len); twin.vel = Math.max(twin.vel ?? 1, note.vel ?? 1); } else out.push({ ...note, start, len });
+      }
+      if (moved || out.length !== p.notes.length) update((d) => { d.notes = out; });
+    }
+    if (!moved) ui.flash(`Alles liegt schon im ${label}-Raster.`);
+    else if (p.type === 'drums') ui.flash(`${moved} ${moved === 1 ? 'Schlag' : 'Schläge'} gerückt (${label}).`);
+    else ui.flash(`${moved} ${moved === 1 ? 'Note' : 'Noten'} gerückt (${label}).`);
+  });
+
   // ---------- Tonleiter-Sperre ----------
 
   scaleBtn.addEventListener('click', () => {
@@ -1267,6 +1361,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     $('pat-kit-field').hidden = !drums;
     $('pat-preset-field').hidden = drums;
     $('pat-glide-field').hidden = drums;
+    $('pat-chord-field').hidden = drums;
     $('pat-len-field').hidden = drums;
     recBtn.hidden = drums;
     recBtn.setAttribute('aria-pressed', String(rec));

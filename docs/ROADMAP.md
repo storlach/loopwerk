@@ -64,7 +64,7 @@
 - Spec: `docs/specs/stufe-7-instrumente.md`, Tests: `tests/stufe7.test.cjs`
 
 ### Offen aus Stufe 7
-- Akkord-Eingabe, Echtzeit-Aufnahme von MIDI (Anschlag und Swing: erledigt)
+- ~~Akkord-Eingabe, Echtzeit-Aufnahme von MIDI~~ (Anschlag, Swing, MIDI-Anschlag, MIDI-Drums, Akkord-Eingabe, Quantisieren: erledigt, siehe „Editor: MIDI, Akkorde, Quantisieren“)
 
 ## ✅ 1.1 – Handy-Bedienung
 - Sound-Regal als Akkordeon: Kategorien auf- und zuklappen, am Handy immer nur eine offen, kein eigener Scrollbereich mehr, größere Tippziele
@@ -234,6 +234,13 @@
 - Scheibe 3: Effekt-Kurven Filter-Frequenz, Hall-, Echo- und Verzerrer-Anteil (Einheiten liefern `u.auto`, `updateFxParams` lässt automatisierte Parameter aus). Filter-Frequenz läuft immer über `detune` (40 Hz · 2^(Regler · 8,81)), Null-Test alter Projekte < −88 dB; Verzerrer-Anteil als ein gemeinsamer Parameter für trocken/nass (auch Amp). Neue Effektkette im Lauf plant die Kurven sofort nach; Effekt aus = Kurve wirkt nicht, gestrichelt. Erster Punkt und Vorlagen schalten den Effekt ein (Filter: Tiefpass). Vorlagen „Filter öffnen“ (0,25 → 1, 8 Takte) und „Filter schließen“ (Wert → 0,25) im Inspektor und im Spur-Menü; gesperrte Effekt-Regler in Inspektor und Mixer-Effektseite
 - Scheibe 4: Summe – `masterStrip.auto` (Lautstärke-Anteil vom Master-Fader) und Kurven für die Master-Effekte (Filter-Frequenz, Hall-, Echo-, Verzerrer-Anteil; kein Panorama), vor Mastering und Limiter: Mastering-Analyse und Export rechnen die Kurve mit. Stillstand: Summe hält 4 s (Fahnen bleiben ausgeblendet) und geht dann auf 1, Vorhören/Pads/Pattern-Vorhören heben sie sofort. Summen-Zeile unter allen Spuren (Taste A ohne Spurauswahl, „Summe“ im Kopf), Vorlagen Einblenden · Ausblenden im Inspektor „Song“ unter Master und im Handy-Fach „Song“ (zwei Tipps); gesperrte Master-Effekt-Regler (Inspektor, Mixer); `clearSong` löscht die Summen-Kurven
 - Offen: Effekt-Pad als Kurve aufnehmen; Spec: `docs/specs/v2.12-automation.md`
+
+## ✅ Editor: MIDI, Akkorde, Quantisieren
+- MIDI-Anschlag: Velocity 1–127 wird zum Anschlag (v/127)^0,8, mindestens 0,1 – bei Live-Aufnahme, Schritt-Eingabe und Vorhören (leiser Ton ist leiser, auch Lead und Pad, live wie beim Rendern); Maus, Klaviatur und Computertastatur nutzen den Anschlag-Pinsel (auch Live und Pad-Antippen)
+- MIDI im Beat-Editor: Pads nach General-MIDI-Belegung (35/36 Kick, 37/38/40 Snare, 39 Clap, 42/44 Hi-Hat zu, 46 offen, 41/43/45 Tom tief, 47/48/50 Tom hoch, 49/51/52/55/57/59 Becken), Kanal egal, andere Noten werden ignoriert; bei Live-Aufnahme quantisiert mit Anschlag
+- Akkord-Eingabe im Melodie-Editor: Feld „Akkord“ (Aus, Dur, Moll, Tonleiter, Power, Sept; Kopfzeile, am Handy unter „Mehr“) gilt für Klick/Antippen in der Piano-Roll, Klaviatur, Computertastatur, MIDI und Live; „Tonleiter“ = leitereigener Dreiklang der Songtonart; mit Tonleiter-Sperre rasten die Töne ein; Töne außerhalb C2–C6 entfallen; ein Akkord = ein Rückgängig-Schritt, einzelne Noten bleiben einzeln editierbar (`src/scale.js`)
+- Quantisieren (Kopfzeile, am Handy unter „Mehr“): Noten (Start, Länge mindestens ein Raster) bzw. Beat-Schläge auf das Raster aus „Einrasten“, Einblender „n Noten gerückt“, ein Rückgängig-Schritt; Beat: Schläge auf ungeraden Sechzehnteln wandern zur nächsten Achtel, bei Kollision gewinnt der lautere
+- Tests: `tests/editor-midi.test.cjs` (MIDI-Attrappe über `page.addInitScript`, `openApp({ init })`)
 
 ## Korrekturen nach 2.11
 - Handy: Loop-Bereich lässt sich auf der Taktleiste ziehen (vorher hat der Browser die Geste als Scrollen abgebrochen); Taktleiste fingerhoch, Einblender beim Einschalten des Loops
