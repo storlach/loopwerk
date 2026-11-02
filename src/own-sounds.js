@@ -42,8 +42,24 @@ export function bufferToChannels(buffer) {
   return Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c).slice());
 }
 
-// Library-Eintrag aus Datensatz
-function toSample(rec, orig) {
+// Länge einer WAV-Datei aus dem Kopf lesen, ohne sie zu dekodieren (eigene Sounds sind PCM-WAV aus encodeWav)
+export function wavDuration(buf) {
+  try {
+    const v = new DataView(buf);
+    if (v.getUint32(0, false) !== 0x52494646) return null; // „RIFF“
+    let pos = 12, rate = 0, block = 0;
+    while (pos + 8 <= v.byteLength) {
+      const id = v.getUint32(pos, false), size = v.getUint32(pos + 4, true);
+      if (id === 0x666d7420) { rate = v.getUint32(pos + 12, true); block = v.getUint16(pos + 20, true); } // „fmt “
+      if (id === 0x64617461) return rate && block ? Math.min(size, v.byteLength - pos - 8) / block / rate : null; // „data“
+      pos += 8 + size + (size & 1);
+    }
+  } catch { /* kein WAV */ }
+  return null;
+}
+
+// Library-Eintrag aus Datensatz (orig fehlt bei Einträgen auf Abruf; dann zählt die Länge aus dem WAV-Kopf)
+function toSample(rec, orig, duration = orig?.duration) {
   const s = {
     id: rec.id,
     name: rec.name,
@@ -54,10 +70,18 @@ function toSample(rec, orig) {
     source: rec.source || '',
     license: null,
     orig,
-    duration: orig.duration,
+    duration,
   };
-  if (s.kind === 'loop' && s.beats) s.bpm = Math.round((s.beats * 60 / orig.duration) * 100) / 100;
+  if (s.kind === 'loop' && s.beats && duration) s.bpm = Math.round((s.beats * 60 / duration) * 100) / 100;
   return s;
+}
+
+// Browser bitten, die eigenen Sounds nicht bei Platzmangel oder nach Wochen ohne Besuch zu löschen (iOS: 7 Tage)
+let persistAsked = false;
+export function askPersist() {
+  if (persistAsked || !navigator.storage?.persist) return;
+  persistAsked = true;
+  navigator.storage.persisted?.().then((on) => (on ? null : navigator.storage.persist())).catch(() => {});
 }
 
 export class OwnSounds {
@@ -69,12 +93,23 @@ export class OwnSounds {
   async loadAll() {
     if (!this.available) return 0;
     try {
+      // Nur Name und Länge sofort (Start bleibt schnell, egal wie viele Aufnahmen); dekodiert wird beim ersten Gebrauch
       const recs = await tx('readonly', (s) => s.getAll());
       for (const rec of recs || []) {
-        if (this.library.get(rec.id)) continue;
-        const orig = await decodeAudio(rec.wav.slice(0));
-        await this.library.add(toSample(rec, orig));
+        const had = this.library.get(rec.id);
+        if (had && !had.missing) continue;
+        const sample = toSample(rec, null, wavDuration(rec.wav) ?? undefined);
+        this.library.stub(sample, async (x) => {
+          const r = await tx('readonly', (st) => st.get(x.id));
+          if (!r?.wav) throw new Error('nicht mehr im Browser gespeichert');
+          x.orig = await decodeAudio(r.wav.slice(0));
+          x.duration = x.orig.duration;
+          if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
+        });
+        if (sample.duration && !sample.beats) sample.lengthBeats = Math.max(1, Math.ceil(sample.duration / (60 / this.library.bpm) - 1e-6));
       }
+      if (recs?.length) askPersist();
+      if (recs?.length) this.library.emit();
       return recs?.length ?? 0;
     } catch (err) {
       this.available = false;
@@ -90,6 +125,7 @@ export class OwnSounds {
     const rec = { id, name, kind, beats, source, wav, created: Date.now() };
     const sample = await this.library.add(toSample(rec, buffer));
     if (this.available) {
+      askPersist();
       try { await tx('readwrite', (s) => s.put(rec)); } catch (err) {
         this.available = false;
         console.warn('Eigener Sound nur für diese Sitzung gespeichert:', err?.message || err);
@@ -122,7 +158,7 @@ export class OwnSounds {
     const used = new Set(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)).filter((id) => id.startsWith('own-')));
     const out = [];
     for (const id of used) {
-      const s = this.library.get(id);
+      const s = await this.library.ensure(id).catch(() => null);
       if (!s?.orig) continue;
       const wav = new Uint8Array(await encodeWav(s.orig).arrayBuffer());
       let bin = '';
@@ -136,7 +172,9 @@ export class OwnSounds {
   async restore(list = []) {
     let n = 0;
     for (const e of list) {
-      if (this.library.get(e.id)) continue;
+      // Platzhalter („Sound fehlt“) wird durch den Sound aus der Datei ersetzt
+      const had = this.library.get(e.id);
+      if (had && !had.missing) continue;
       const bin = atob(e.wav);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

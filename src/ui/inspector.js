@@ -13,6 +13,7 @@ import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
 import { mountMasteringControls } from './mastering.js';
+import { autoLock, lockedValue, templateControls } from './auto-lane.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -129,10 +130,23 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const trackSub = el('p', 'insp-sub');
   const vol = slider('Lautstärke', 'insp-vol', 0, 1, 0.01);
   const pan = slider('Panorama', 'insp-pan', -1, 1, 0.05);
+  // Panorama mit Kurve: gedimmt, folgt der Kurve; Klick öffnet die Kurvenzeile
+  const panBox = el('div', 'insp-pan-box');
+  panBox.append(pan.row);
+  const panLock = autoLock({ ui, key: 'pan', wrap: panBox, input: pan.input, getTrackId: () => (trackId && trackId !== MASTER ? trackId : null) });
+  let panFollow = 0;
   const mixerLink = el('button', 'insp-link', 'Alle Spuren im Mixer vergleichen →');
   mixerLink.type = 'button';
   mixerLink.addEventListener('click', () => ui.setDock('mixer'));
-  trackSec.append(trackKind, trackTitle, trackSub, vol.row, pan.row);
+  // Verlauf: Ein-/Ausblenden der Spur als Kurve, ohne Zeichnen (Automation)
+  const autoBlock = el('div', 'insp-auto');
+  const tpl = templateControls({ store, ui, engine, getTarget: () => (trackId === MASTER ? null : trackId) });
+  const curveBtn = el('button', 'insp-link', 'Kurve zeigen');
+  curveBtn.type = 'button';
+  curveBtn.id = 'insp-auto-toggle';
+  curveBtn.addEventListener('click', () => { if (trackId && trackId !== MASTER) ui.autoLane?.toggle(trackId); });
+  autoBlock.append(el('span', 'insp-kind', 'Verlauf'), tpl.node, curveBtn);
+  trackSec.append(trackKind, trackTitle, trackSub, vol.row, panBox, autoBlock);
 
   let trackId = null; // Spur, deren Einstellungen gerade gezeigt werden
   vol.input.addEventListener('input', () => {
@@ -310,12 +324,18 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(track.volume);
       vol.out.textContent = formatDb(track.volume);
       pan.row.hidden = false;
-      if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
-      const pv = track.pan || 0;
-      pan.out.textContent = Math.abs(pv) < 0.01 ? 'Mitte' : `${Math.round(Math.abs(pv) * 100)} % ${pv < 0 ? 'links' : 'rechts'}`;
+      autoBlock.hidden = false;
+      tpl.update();
+      curveBtn.textContent = ui.autoLane?.isOpen(trackId) ? 'Kurve schließen (A)' : 'Kurve zeigen (A)';
+      if (panLock.update(track)) { showPan(track); if (!panFollow) panFollow = requestAnimationFrame(followPan); }
+      else {
+        if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
+        pan.out.textContent = panText(track.pan || 0);
+      }
       if (fxl.parentElement !== trackSec) trackSec.append(fxl, mixerLink);
     } else {
       trackId = MASTER;
+      autoBlock.hidden = true;
       songName.textContent = store.project.name || 'Song';
       renderKeyChanges();
       tval.textContent = String(store.project.bpm);
@@ -327,7 +347,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
     }
-    if (mode !== 'song' && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, pan.row); }
+    if (mode !== 'song' && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();
     for (const e of EFFECTS) {
@@ -341,6 +361,23 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         if (c.out) c.out.textContent = formatParam(e.params[k], f[k]);
       }
     }
+  }
+
+  // Gesperrtes Panorama folgt beim Abspielen der Kurve (Wert an der hörbaren Marke)
+  function panText(pv) {
+    return Math.abs(pv) < 0.01 ? 'Mitte' : `${Math.round(Math.abs(pv) * 100)} % ${pv < 0 ? 'links' : 'rechts'}`;
+  }
+  function showPan(track) {
+    const v = Math.round(lockedValue(track, 'pan', engine) * 100) / 100;
+    if (Number(pan.input.value) !== v) pan.input.value = String(v);
+    const text = panText(v);
+    if (pan.out.textContent !== text) pan.out.textContent = text;
+  }
+  function followPan() {
+    const track = trackId && trackId !== MASTER ? store.track(trackId) : null;
+    if (!track || trackSec.hidden || root.dataset.mode === 'song' || !panLock.update(track)) { panFollow = 0; return; }
+    showPan(track);
+    panFollow = requestAnimationFrame(followPan);
   }
 
   ui.on(render);

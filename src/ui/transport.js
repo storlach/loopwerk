@@ -23,7 +23,9 @@ export function mountTransport({ store, engine, ui, arranger }) {
   });
   bpmInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') bpmInput.blur(); });
 
-  play.addEventListener('click', () => (engine.playing ? engine.pause() : engine.play()));
+  const playFail = (err) => { console.error('Wiedergabe:', err); ui.flash(`Kein Ton: ${err?.message || err}`); };
+  play.addEventListener('click', () => { try { Promise.resolve(engine.playing ? engine.pause() : engine.play()).catch(playFail); } catch (err) { playFail(err); } });
+  engine.on((what, err) => { if (what === 'error') ui.flash(`Wiedergabe-Fehler: ${err?.message || err}`); });
   $('home-btn').addEventListener('click', () => engine.setPosition(0));
   const touchy = matchMedia('(max-width: 760px), (hover: none) and (pointer: coarse)');
   loopBtn.addEventListener('click', () => {

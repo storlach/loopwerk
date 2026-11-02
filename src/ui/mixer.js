@@ -7,6 +7,7 @@ import { clamp, el } from '../util.js';
 import { formatDb } from './arranger.js';
 import { narrow } from './place.js';
 import { makeKnob, relativeDrag } from './knob.js';
+import { autoLock, lockedValue } from './auto-lane.js';
 
 const MASTER = '__master';
 const SHORT = { drive: 'Zerr', filter: 'Filter', eq: 'EQ', comp: 'Komp', pump: 'Pump', echo: 'Echo', hall: 'Hall' };
@@ -66,6 +67,8 @@ export function mountMixer({ root, store, engine, ui }) {
       pan.addEventListener('dblclick', () => store.setTrack(id, { pan: 0 }));
     }
     const knob = pan ? makeKnob(pan, { wrapClass: 'strip-pan-wrap', center: true }) : null;
+    // Panorama mit Kurve: Regler folgt ihr, Klick öffnet die Kurvenzeile (am Handy macht der Mixer dafür Platz)
+    const lock = pan ? autoLock({ ui, key: 'pan', wrap: knob.wrap, input: pan, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } }) : null;
     const faderRow = el('div', 'strip-fader-row');
     const fader = document.createElement('input');
     fader.type = 'range';
@@ -101,7 +104,7 @@ export function mountMixer({ root, store, engine, ui }) {
     strip.append(name, sum, fxBtns);
     if (pan) strip.append(knob.wrap);
     strip.append(faderRow, value, ms);
-    const s = { strip, name, sum, fxMap, pan, knob, fader, meter, value, mute, solo, peak: 0 };
+    const s = { strip, name, sum, fxMap, pan, knob, lock, locked: false, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);
     return s;
   }
@@ -126,7 +129,9 @@ export function mountMixer({ root, store, engine, ui }) {
       s.value.textContent = formatDb(vol);
       if (s.pan) {
         const t = store.track(id);
-        if (document.activeElement !== s.pan) s.pan.value = String(t.pan || 0);
+        s.locked = s.lock.update(t);
+        if (s.locked) showPan(s, t);
+        else if (document.activeElement !== s.pan) s.pan.value = String(t.pan || 0);
         s.knob.update();
         s.pan.setAttribute('aria-label', `Panorama ${t.name}`);
         s.mute.setAttribute('aria-pressed', String(t.mute));
@@ -135,6 +140,14 @@ export function mountMixer({ root, store, engine, ui }) {
     });
     if (selected && !ids.includes(selected)) selected = null;
     renderDetail();
+  }
+
+  // Gesperrtes Panorama: Wert der Kurve an der Marke
+  function showPan(s, t) {
+    const v = Math.round(lockedValue(t, 'pan', engine) * 100) / 100;
+    if (Number(s.pan.value) === v) return;
+    s.pan.value = String(v);
+    s.knob.update();
   }
 
   // Am Desktop zeigt der Inspektor die Effekte der gewählten Spur (Master: Song-Ansicht);
@@ -241,6 +254,7 @@ export function mountMixer({ root, store, engine, ui }) {
         const top = h * (1 - s.peak);
         g.fillStyle = css.getPropertyValue(s.peak > 0.92 ? '--meter-hot' : s.peak > 0.75 ? '--meter-warm' : '--meter-ok').trim();
         g.fillRect(0, top, w, h - top);
+        if (s.locked) { const t = store.track(id); if (t) showPan(s, t); }
       }
     }
     requestAnimationFrame(drawMeters);

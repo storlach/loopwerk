@@ -6,6 +6,7 @@ import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
+import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 const TICK_MS = 25;
@@ -17,17 +18,37 @@ export function trackLevel(track, anySolo) {
   return track.volume;
 }
 
-// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Einschleifpunkt
-// fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel dazu) → Panorama → Ziel
+// Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Automation (auto, gehört
+// nur der Lautstärke-Kurve, ohne Kurve 1) → Einschleifpunkt fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel
+// dazu) → Panorama → Ziel
 function createStrip(ctx, dest, { pan = true } = {}) {
   const input = ctx.createGain();
   const out = pan ? ctx.createStereoPanner() : ctx.createGain();
+  const auto = ctx.createGain();
   const pre = ctx.createGain();
   const dry = ctx.createGain();
-  pre.connect(dry).connect(out);
+  auto.connect(pre).connect(dry).connect(out);
   out.connect(dest);
-  return { input, gain: input, pan: pan ? out : null, out, pre, dry, chain: null, xf: null };
+  return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set() };
 }
+
+// AudioParams der Kanalzug-Kurven (Effekte über u.auto in Scheibe 3). Ein Besitzer je AudioParam: auto.gain gehört
+// immer der Automation, das Panorama nur, solange die Spur eine Pan-Kurve hat (sonst syncStrip).
+const STRIP_PARAMS = { volume: (strip) => strip.auto.gain, pan: (strip) => strip.pan?.pan };
+
+// Kurven eines Kanalzugs: [{ key, param, map, points, def, absolute }]; def = Ruhewert ohne Kurve (Panorama: Regler)
+function stripLanes(strip, owner, target) {
+  const out = [];
+  for (const key of autoKeys(target)) {
+    const spec = AUTO_PARAMS[key];
+    const param = STRIP_PARAMS[key]?.(strip);
+    if (spec.target === 'strip' && param) out.push({ key, param, map: spec.map, points: laneOf(owner, key), def: autoRest(owner, key), absolute: spec.owner === 'absolute' });
+  }
+  return out;
+}
+
+// Regler-Parameter, die eine Kurve gerade übernimmt (syncStrip lässt sie aus)
+const skipOf = (owner) => ({ pan: laneOf(owner, 'pan').length > 0 });
 
 // AudioWorklet-Modul (Mastering, Lo-Fi) einmal je Kontext laden; false, wenn es nicht geht
 const FX_WORKLET = new URL('./dsp/fx-worklet.js', import.meta.url);
@@ -47,7 +68,7 @@ export const defaultMasterGains = (style) => ({ pre: 0, drive: styleOf(style).dr
 function installChain(ctx, strip, fx, spb, live, grid) {
   const chain = buildFxChain(ctx, fx, spb, grid);
   const xf = ctx.createGain();
-  chain.output.connect(xf).connect(strip.pre);
+  chain.output.connect(xf).connect(strip.auto);
   strip.input.connect(chain.input);
   const old = strip.chain;
   const oldXf = strip.xf;
@@ -68,10 +89,10 @@ function installChain(ctx, strip, fx, spb, live, grid) {
   strip.xf = xf;
 }
 
-function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid) {
+function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid, skip = {}) {
   const t = live ? ctx.currentTime : null;
   if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
-  if (strip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
+  if (strip.pan && !skip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
   if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live, grid);
   else updateFxParams(strip.chain, fx, t, spb, grid);
 }
@@ -205,7 +226,7 @@ export function syncMix(ctx, project, mix, spb, live = true) {
       mix.tracks.set(track.id, strip);
       mix.onStrip?.(track.id, strip);
     }
-    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid);
+    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid, skipOf(track));
   }
   const m = masterOf(project);
   syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);
@@ -369,6 +390,12 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     }
   }
   if (pad) pad(ctx, mix, { worklets, loopExtra: await measureLoopExtra(sampleRate) });
+  // Kurven: dieselbe Planung wie in der Wiedergabe, in einem Stück
+  for (const track of project.tracks) {
+    for (const l of stripLanes(mix.tracks.get(track.id), track, track.id)) {
+      if (l.points.length) planLane(l.param, l.map, l.points, fromBeat, end, 0, spb, 'set');
+    }
+  }
   const audible = audibleMap(project);
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
@@ -397,22 +424,36 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
 }
 
 // Takt-Geber in einem Worker, damit er in Hintergrund-Tabs nicht gedrosselt wird.
+// Wächter: meldet sich der Worker nicht (manche Browser/Seiten blockieren Blob-Worker still, ohne Fehler),
+// übernimmt nach kurzer Zeit ein Intervall im Haupt-Thread – sonst liefe die Marke, aber nichts klänge.
 function createTicker(fn) {
   let interval = null;
   let worker = null;
   let running = false;
-  const fallback = () => { worker = null; if (running) { clearInterval(interval); interval = setInterval(fn, TICK_MS); } };
+  let heard = false;
+  let watchdog = null;
+  const fallback = () => {
+    worker?.terminate?.();
+    worker = null;
+    if (running) { clearInterval(interval); interval = setInterval(fn, TICK_MS); }
+  };
   try {
     const code = `let id=null;onmessage=(e)=>{clearInterval(id);if(e.data==='start')id=setInterval(()=>postMessage(0),${TICK_MS});};`;
     worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
-    worker.onmessage = fn;
+    worker.onmessage = () => { heard = true; fn(); };
     worker.onerror = fallback;
   } catch {
     worker = null;
   }
   return {
-    start() { running = true; if (worker) worker.postMessage('start'); else fallback(); },
-    stop() { running = false; worker?.postMessage('stop'); clearInterval(interval); },
+    start() {
+      running = true;
+      if (!worker) { fallback(); return; }
+      worker.postMessage('start');
+      clearTimeout(watchdog);
+      if (!heard) watchdog = setTimeout(() => { if (running && !heard) fallback(); }, 8 * TICK_MS);
+    },
+    stop() { running = false; clearTimeout(watchdog); worker?.postMessage('stop'); clearInterval(interval); },
   };
 }
 
@@ -430,7 +471,12 @@ export class Engine extends Emitter {
     this.anchors = [];
     this.knownSigs = new Map();
     this.preview = null;
-    this.ticker = createTicker(() => this._tick());
+    // Fehler beim Einplanen nicht still schlucken: einmal je Start melden (Einblender), damit man sieht, warum es stumm bleibt
+    this.ticker = createTicker(() => {
+      try { this._tick(); } catch (err) {
+        if (!this._tickErr) { this._tickErr = true; console.error('Wiedergabe:', err); this.emit('error', err); }
+      }
+    });
     store.on((project, reason) => this._onChange(reason));
   }
 
@@ -506,8 +552,12 @@ export class Engine extends Emitter {
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     this.cursorBeat = fromBeat;
     this.cursorTime = t0;
+    this._autoState = { beat: fromBeat };
+    this._autoSmooth = false;
+    this._planAuto(fromBeat, fromBeat, t0, 'set');
     this.knownSigs = this._signatures();
     this._scheduleActiveAt(fromBeat, t0, this._limitFor(fromBeat));
+    this._tickErr = false;
     this._tick();
     this.ticker.start();
     this.emit('state');
@@ -575,6 +625,16 @@ export class Engine extends Emitter {
   _halt() {
     this.ticker.stop();
     const t = this.ctx.currentTime;
+    // Spur-Kurven halten ihren Wert: im Stillstand läuft nichts durch die Spur außer Hall-/Echo-Fahnen, und die sollen
+    // nach einer Ausblendung nicht wieder aufleben. Der nächste Start setzt neu an (auch auf 1, wenn die Kurve weg ist).
+    // Master (Scheibe 4) muss dagegen auf 1 zurück, weil das Vorhören über ihn läuft.
+    const beat = this.currentBeat(t);
+    this._eachLane((l, strip) => {
+      if (!strip.autoOn.has(l.key)) return;
+      const v = l.map(autoValueAt(l.points, beat, l.def));
+      handover(l.param, t, v);
+      (strip.autoHeld ||= {})[l.key] = v;
+    });
     for (const v of this.voices) this._kill(v, t);
     this.voices.clear();
     this.playing = false;
@@ -601,6 +661,8 @@ export class Engine extends Emitter {
       const spanEndTime = Math.min(horizon, this.cursorTime + (limit - this.cursorBeat) * spb);
       const spanEndBeat = this.cursorBeat + (spanEndTime - this.cursorTime) / spb;
       this._scheduleSpan(this.cursorBeat, spanEndBeat, this.cursorTime, limit);
+      this._planAuto(this.cursorBeat, spanEndBeat, this.cursorTime, this._autoSmooth ? 'smooth' : 'cont');
+      this._autoSmooth = false;
       if (this.metronome) this._metronome(this.cursorBeat, spanEndBeat, this.cursorTime);
       this.cursorBeat = spanEndBeat;
       this.cursorTime = spanEndTime;
@@ -608,6 +670,7 @@ export class Engine extends Emitter {
         this.cursorBeat = loop.startBeat;
         this.anchors.push({ time: this.cursorTime, beat: loop.startBeat });
         this._scheduleActiveAt(loop.startBeat, this.cursorTime, loop.endBeat);
+        this._autoSmooth = true;
       }
     }
     // Alte Ankerpunkte aufräumen (einer vor "jetzt" bleibt für die Positionsberechnung).
@@ -615,6 +678,69 @@ export class Engine extends Emitter {
     // Anker eine Weile behalten: die hörbare Position (heardBeat) liegt um die Ausgabelatenz zurück
     while (this.anchors.length > 1 && this.anchors[1].time <= now - 1) this.anchors.shift();
     if (this.currentBeat() >= songEnd - EPS) this.stop();
+  }
+
+  // ---------- Automation ----------
+
+  _eachLane(fn) {
+    if (!this._lanes || this._lanesFor !== this.project) {
+      this._lanes = this.project.tracks.map((t) => [t.id, t]);
+      this._lanesFor = this.project;
+      this._laneCache = new Map();
+    }
+    for (const [id, track] of this._lanes) {
+      const strip = this.mix.tracks.get(id);
+      if (!strip) continue;
+      let lanes = this._laneCache.get(id);
+      if (!lanes || lanes.strip !== strip) { lanes = stripLanes(strip, track, id); lanes.strip = strip; this._laneCache.set(id, lanes); }
+      for (const l of lanes) fn(l, strip);
+    }
+  }
+
+  // Kurven für [b0, b1] ab Kontextzeit t0 planen. Neue Kurven setzen am Ruhewert an, verschwundene rampen dorthin
+  // zurück; Live-Änderungen greifen ab dem nächsten Fenster, ohne etwas abzubrechen.
+  _planAuto(b0, b1, t0, entry) {
+    const w = autoWindow(this._autoState, b0, b1, t0, this.spb, entry);
+    if (!w) return;
+    this._eachLane((l, strip) => {
+      const on = strip.autoOn.has(l.key);
+      if (!l.points.length && !on) return;
+      if (!l.points.length) {
+        // Kurve weg: auf den Ruhewert zurück (absolute Parameter gibt schon _releaseAuto an den Regler zurück)
+        planLane(l.param, l.map, [{ beat: 0, value: l.def }], w.b0, w.b1, w.t0, this.spb, w.entry === 'set' ? 'set' : 'cont');
+        strip.autoOn.delete(l.key);
+        return;
+      }
+      if (!on && w.entry !== 'set') l.param.setValueAtTime(l.map(l.def), w.t0);
+      planLane(l.param, l.map, l.points, w.b0, w.b1, w.t0, this.spb, on || w.entry === 'set' ? w.entry : 'cont');
+      strip.autoOn.add(l.key);
+      (strip.autoPts ||= {})[l.key] = l.points;
+      if (strip.autoHeld) delete strip.autoHeld[l.key];
+    });
+  }
+
+  // Besitzwechsel vor syncMix: Verschwindet eine absolute Kurve (Panorama), hält die Automation ihren Wert jetzt an
+  // (Firefox ohne cancelAndHoldAtTime: Wert aus der eigenen Planung) und gibt den Parameter an den Regler zurück –
+  // syncStrip rampt danach mit setTargetAtTime auf den Reglerwert.
+  _releaseAuto() {
+    if (!this.mix) return;
+    const t = this.ctx.currentTime;
+    const beat = this.currentBeat(t);
+    for (const [id, strip] of this.mix.tracks) {
+      for (const key of [...strip.autoOn]) {
+        if (AUTO_PARAMS[key]?.owner !== 'absolute') continue;
+        const track = this.project.tracks.find((x) => x.id === id);
+        if (track && laneOf(track, key).length) continue;
+        const param = STRIP_PARAMS[key]?.(strip);
+        const pts = strip.autoPts?.[key];
+        if (param) {
+          const held = this.playing && pts?.length ? AUTO_PARAMS[key].map(autoValueAt(pts, beat)) : strip.autoHeld?.[key] ?? param.value;
+          handover(param, t, held);
+        }
+        strip.autoOn.delete(key);
+        if (strip.autoHeld) delete strip.autoHeld[key];
+      }
+    }
   }
 
   // ---------- Einplanen ----------
@@ -726,6 +852,8 @@ export class Engine extends Emitter {
 
   _onChange(reason) {
     this._aud = null;
+    if (this.ctx) this._releaseAuto();
+    this._lanes = null;
     if (!this.ctx) return;
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     if (this.playing) this._resync();

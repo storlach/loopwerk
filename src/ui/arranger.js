@@ -3,11 +3,13 @@
 
 import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
+import { AUTO_PARAMS, laneOf } from '../automation.js';
 import { makeKnob } from './knob.js';
 import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
 import { mountChordRow } from './chord-row.js';
+import { mountAutoLanes, templateControls, applyTemplate } from './auto-lane.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
@@ -79,6 +81,17 @@ export function mountArranger({ root, store, engine, library, ui }) {
   const step = (ev) => (ev?.shiftKey || !ui.snapBeats ? FREE_STEP : ui.snapBeats);
   const snap = (b, ev) => Math.round(b / step(ev)) * step(ev);
   const snapDown = (b, ev) => Math.floor(b / step(ev) + 1e-9) * step(ev);
+
+  // Kurvenzeilen (Automation) unter den Spuren
+  const autoLanes = mountAutoLanes({
+    rowsEl, store, ui, engine,
+    view: {
+      ppb, rowH, snap, step,
+      formatPos: (b) => formatPos(b, store.project.beatsPerBar),
+      relayout: () => render(),
+      reveal: (node) => revealNode(node),
+    },
+  });
 
   addBtn.addEventListener('click', () => {
     const id = store.addTrack();
@@ -270,6 +283,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const tracks = p.tracks;
     const ids = new Set(tracks.map((t) => t.id));
     for (const [id, r] of rows) if (!ids.has(id)) { r.row.remove(); rows.delete(id); }
+    autoLanes.prune(ids);
     const gids = new Set((p.groups || []).map((g) => g.id));
     for (const [id, r] of groupRows) if (!gids.has(id)) { r.row.remove(); groupRows.delete(id); }
     const anySolo = anySoloOf(p);
@@ -298,6 +312,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
       r.row.classList.toggle('in-group', !!g);
       r.row.classList.toggle('group-last', !!g && tracks.filter((x) => x.groupId === g.id).at(-1) === t);
       seq.push(r.row);
+      const ar = autoLanes.rowNode(t.id);
+      if (ar) { ar.hidden = !!g?.collapsed; seq.push(ar); }
     }
     // Nur umhängen, wenn nötig – sonst verliert ein gerade gezogener Regler den Fokus.
     seq.forEach((n, i) => { if (rowsEl.children[i] !== n) rowsEl.insertBefore(n, rowsEl.children[i] || null); });
@@ -400,6 +416,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
       item('Nach oben', () => { closeMenu(); store.moveTrack(trackId, i - 1); }, i === 0),
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
+      item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
+      // Ein- und Ausblenden direkt (zwei Tipps); „Länge ›“ für die Anzahl Takte
+      item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
+      item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
+      item(`Länge: ${ui.autoBars ?? 4} ${(ui.autoBars ?? 4) === 1 ? 'Takt' : 'Takte'} ›`, () => openFadeMenu(trackId, btn)),
+      // gilt für den zuletzt gewählten Parameter der Kurvenzeile
+      ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
       ...groupItems(trackId, item),
       item('Löschen', (b) => {
         if (b.classList.contains('confirm')) { closeMenu(); store.removeTrack(trackId); return; }
@@ -415,6 +438,17 @@ export function mountArranger({ root, store, engine, library, ui }) {
     menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
     menu.style.top = (r.bottom + 4 + mh > innerHeight - 8 ? r.top - mh - 4 : r.bottom + 4) + 'px';
     menu.querySelector('button:not(:disabled)')?.focus();
+  }
+
+  // Unterseite des Spur-Menüs: Einblenden/Ausblenden mit Länge (am Handy statt Inspektor)
+  function openFadeMenu(trackId, btn) {
+    const back = el('button', 'track-menu-item auto-menu-back', '‹ Verlauf');
+    back.type = 'button';
+    back.setAttribute('role', 'menuitem');
+    back.addEventListener('click', () => { menuFor = null; openMenu(trackId, btn); });
+    const tpl = templateControls({ store, ui, engine, getTarget: () => trackId, onDone: () => closeMenu(), variant: 'menu' });
+    menu.replaceChildren(back, tpl.node);
+    showMenu(btn);
   }
 
   document.addEventListener('pointerdown', (e) => {
@@ -699,6 +733,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     chordRow.render();
     syncRows();
     for (const t of p.tracks) renderLane(rows.get(t.id), t);
+    autoLanes.render();
     forceAll = false;
     if (ui.selectedClipId && !store.findClip(ui.selectedClipId)) ui.select(null);
     else if (ui.multi.length && ui.multi.some((id) => !store.findClip(id))) ui.selectMany(ui.multi.filter((id) => store.findClip(id)));
@@ -1138,6 +1173,17 @@ export function mountArranger({ root, store, engine, library, ui }) {
     return true;
   }
 
+  // Eine Zeile (z. B. die Kurvenzeile) in den sichtbaren Bereich scrollen, unter den klebenden Kopfzeilen
+  function revealNode(node) {
+    if (!node?.isConnected) return;
+    const box = root.getBoundingClientRect();
+    const r = node.getBoundingClientRect();
+    const top = box.top + rowsEl.offsetTop;
+    const bottom = box.bottom - (parseFloat(getComputedStyle(grid).getPropertyValue('--zbar-b')) || 0) - 12;
+    if (r.bottom > bottom) root.scrollTop += r.bottom - bottom;
+    else if (r.top < top) root.scrollTop -= top - r.top;
+  }
+
   // Clip über einer Schublade sichtbar halten: so scrollen, dass er oberhalb von `limitTop` liegt
   function revealClip(clipId, limitTop) {
     const node = root.querySelector(`.clip[data-clip-id="${clipId}"]`);
@@ -1323,5 +1369,5 @@ export function mountArranger({ root, store, engine, library, ui }) {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
     markSelection();
   });
-  return { render, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
+  return { render, autoLanes, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
 }

@@ -46,12 +46,24 @@ import { doubleTapRanges } from './ui/touch.js';
 
 const STORAGE_KEY = 'loopwerk.project.v1';
 
+function missingSound(library, clip) {
+  const sr = 44100;
+  const spb = 60 / library.bpm;
+  const beats = Math.max(1, Math.round(clip.lengthBeats || 4));
+  library.register({
+    id: clip.sampleId, name: 'Sound fehlt', category: 'own', origin: 'Eigene', kind: 'oneshot', missing: true,
+    lengthBeats: beats, buffer: new AudioBuffer({ numberOfChannels: 2, length: Math.max(1, Math.round(beats * spb * sr)), sampleRate: sr }),
+  });
+}
+
 async function loadSaved(library, patterns) {
   try {
     const p = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!isValidProject(p)) return null;
     await patterns.sync(p);
-    for (const t of p.tracks) t.clips = t.clips.filter((c) => library.get(c.sampleId));
+    // Fehlt ein Sound (z. B. vom Browser gelöscht), bleibt der Clip als stummer Platzhalter „Sound fehlt“ –
+    // sonst wäre das Arrangement beim nächsten Speichern für immer weg. Eine Projektdatei bringt den Klang zurück.
+    for (const t of p.tracks) for (const c of t.clips) if (!library.get(c.sampleId)) missingSound(library, c);
     return p;
   } catch {
     return null;
@@ -464,6 +476,7 @@ async function boot() {
   const ensureStretch = () => library.ensureProject(store.project).then(() => engine.refresh()).catch((err) => ui.flash(`Sounds: ${err.message}`));
   store.on(ensureStretch);
   library.on(ensureStretch);
+  ensureStretch(); // einmal beim Start: eigene Sounds im Projekt (auf Abruf) gleich bereitstellen
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
   const recording = mountRecording({ store, engine, ui, arranger, recorder });
@@ -561,6 +574,10 @@ async function boot() {
       // Alle Clips auswählen
       e.preventDefault();
       tools.selectAll();
+    } else if (!mod && !e.altKey && !e.shiftKey && key === 'a' && ui.dock !== 'pattern') {
+      // Kurve (Automation) der gewählten Spur auf- oder zuklappen
+      e.preventDefault();
+      arranger.autoLanes.toggleSelected();
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();
@@ -575,6 +592,10 @@ async function boot() {
 
   splash.done();
   document.getElementById('app').classList.add('ready');
+
+  // Hat der Browser eigene Sounds gelöscht, bleiben die Clips als „Sound fehlt“ – einmal Bescheid sagen
+  const missing = library.list().filter((s) => s.missing).length;
+  if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
   window.loopwerk = { store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
