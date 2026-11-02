@@ -131,6 +131,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const volKnob = makeKnob(vol, { wrapClass: 'track-vol-wrap' });
     vol.addEventListener('dblclick', () => store.setTrack(track.id, { volume: 0.8 }));
     btns.append(mute, solo, volKnob.wrap);
+    // Stufe 3: in „calm“ am Handy nicht sichtbar, die Spur-Werkbank hat M, S und Lautstärke (src/edition.js twins)
+    for (const n of [mute, solo, volKnob.wrap]) { n.dataset.tier = '3'; n.dataset.tierOnly = 'narrow'; }
     head.append(top, btns);
     const lane = el('div', 'lane');
     lane.dataset.trackId = track.id;

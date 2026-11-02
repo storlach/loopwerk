@@ -16,6 +16,7 @@ export function mountStarter({ root, store, library, ui, onAccomp }) {
   const songBody = document.querySelector('#song .song-body');
   if (songBody) {
     const sec = el('div', 'starter-sec');
+    if (box.hasAttribute('data-off')) sec.setAttribute('data-off', ''); // Fläche der Edition abgeschaltet: auch die Überschrift
     sec.append(el('h3', 'create-sec', 'Song-Starter'));
     const slot = el('div', 'song-starter');
     sec.append(slot);

@@ -1,4 +1,4 @@
-// Krachwerk Scheibe 1a (Spec docs/specs/krachwerk-1-geruest.md §7): die volle App unter /werkstatt/ als Edition „make“ –
+// Krachwerk Scheibe 1a und 1b (Spec docs/specs/krachwerk-1-geruest.md §7): die volle App unter /werkstatt/ als Edition „make“ –
 // ohne mitgelieferte Sounds, leerer Song, eigener Speicher, ● → säubern → Clip im Loop, PWA. Loopwerk bleibt unverändert.
 // node tests/werkstatt.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const fs = require('fs');
@@ -369,32 +369,161 @@ async function seedPadWall() {
     check('iPhone im Browser: einmal der Tipp „Zum Home-Bildschirm“', /Home-Bildschirm/.test(tip1) && !/Home-Bildschirm/.test(tip2), tip1);
     await I.close();
 
-    // ---------- 12: Zählen (Budgets 1a) und Bilder ----------
+    // ---------- 12: Zählen (Budgets 1b) und Bilder ----------
+    // Ein Klang liegt als Clip in Spur 1 (Szene „Clip gewählt“); die Szenen messen Desktop und Handy
+    const addBumm = (page) => page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const sr = 44100, d = new Float32Array(sr / 2);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * Math.exp(-i / 3000);
+      const b = new AudioBuffer({ numberOfChannels: 1, length: d.length, sampleRate: sr });
+      b.copyToChannel(d, 0);
+      const smp = await lw.own.create({ name: 'Bumm 1', buffer: b, source: 'Aufnahme', from: 'mic', cls: 'tief' });
+      lw.store.addClip('t1', smp.id, 0, 4);
+    });
     const counts = {};
+    const bench = {};
     for (const [dev, opts] of [['desktop', DESK], ['handy', PHONE]]) {
       const ctx = await browser.newContext(opts);
       const k = await openKw(base, ctx);
-      await k.page.waitForTimeout(600);
-      for (const s of ['start', 'clip']) {
-        if (s === 'clip') await k.page.evaluate(async () => {
-          const lw = window.loopwerk;
-          const sr = 44100, d = new Float32Array(sr / 2);
-          for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * Math.exp(-i / 3000);
-          const b = new AudioBuffer({ numberOfChannels: 1, length: d.length, sampleRate: sr });
-          b.copyToChannel(d, 0);
-          const smp = await lw.own.create({ name: 'Bumm 1', buffer: b, source: 'Aufnahme', from: 'mic' });
-          lw.store.addClip('t1', smp.id, 0, 4);
+      const page = k.page;
+      await page.waitForTimeout(600);
+      for (const sc of ['start', 'clip']) {
+        if (sc === 'clip') await addBumm(page);
+        await scene(page, sc);
+        counts[`${dev}-${sc}`] = await countUi(page);
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, `kw-${sc}-${dev}.png`) });
+      }
+      if (dev === 'handy') {
+        await page.click('#tab-werkbank');
+        await page.waitForTimeout(1100);
+        counts['handy-werkbank'] = await countUi(page);
+        bench.wbSheet = await page.evaluate(() => {
+          const wb = document.getElementById('werkbank').getBoundingClientRect();
+          const arr = document.querySelector('.arranger').getBoundingClientRect();
+          const rows = [...document.querySelectorAll('.track-row')].map((r) => r.getBoundingClientRect().bottom);
+          const head = document.querySelector('.playhead').getBoundingClientRect();
+          return { top: wb.top, frac: wb.height / arr.height, rowsAbove: rows.length === 2 && rows.every((b) => b <= wb.top + 1), markVisible: head.top < wb.top && head.height > 0 };
         });
-        await scene(k.page, s);
-        counts[`${dev}-${s}`] = await countUi(k.page);
-        if (SHOTS) await k.page.screenshot({ path: path.join(DIR, `kw-${s}-${dev}.png`) });
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-werkbank-handy.png') });
+        await page.evaluate(() => window.loopwerk.ui.setDock(null));
+        await page.waitForTimeout(600);
+        bench.phone = await page.evaluate(() => {
+          const box = (sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r && { w: r.width, h: r.height, bottom: r.bottom }; };
+          const fl = document.getElementById('clip-float');
+          const flr = fl.getBoundingClientRect();
+          return {
+            bar: ['#tab-sounds', '#play-btn', '#rec-btn', '#tab-werkbank'].map(box),
+            floatBtns: [...fl.querySelectorAll('button')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect().height),
+            floatIn: fl.closest('#arr-wrap') === document.getElementById('arr-wrap'),
+            floatHidden: fl.hidden, floatBottom: flr.bottom,
+          };
+        });
+        // Deck antippen öffnet das Song-Fach, dort stehen „Mischen“ und „FX-Pad“
+        await page.tap('.deck-name');
+        await page.waitForTimeout(900);
+        bench.songLinks = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, links: [...document.querySelectorAll('#song-links .tab')].map((b) => b.textContent.trim()), metro: !!document.querySelector('#song-links #metro-btn') }));
+        await page.evaluate(() => window.loopwerk.ui.setDock(null));
+      } else {
+        // Werkbank: 36 % bei Auswahl, ⤢ macht 60 %, bleibt nach dem Neuladen; ohne Auswahl 24 px
+        const wid = () => page.evaluate(() => ({ insp: document.getElementById('insp').getBoundingClientRect().width, app: document.getElementById('app').getBoundingClientRect().width }));
+        const pct = (w) => (w.insp / w.app) * 100;
+        const open = await wid();
+        await page.click('#wb-wide');
+        await page.waitForTimeout(300);
+        const wide = await wid();
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-breit-desktop.png') });
+        await page.reload();
+        await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(400);
+        const again = await wid();
+        await page.click('#wb-wide');
+        await page.evaluate(() => window.loopwerk.ui.select(null));
+        await page.waitForTimeout(400);
+        const shut = await wid();
+        bench.wb = { open: pct(open), wide: pct(wide), again: pct(again), shut: shut.insp };
+        // Werkzeug am Clip: innerhalb von #arr-wrap, deckt den Clip nicht ab; Kopie und Löschen je ein Undo-Schritt
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(400);
+        bench.float = await page.evaluate(() => {
+          const fl = document.getElementById('clip-float').getBoundingClientRect();
+          const w = document.getElementById('arr-wrap').getBoundingClientRect();
+          const c = document.querySelector('.clip.selected').getBoundingClientRect();
+          const hit = !(fl.right <= c.left || fl.left >= c.right || fl.bottom <= c.top || fl.top >= c.bottom);
+          return { inside: fl.left >= w.left && fl.right <= w.right && fl.top >= w.top && fl.bottom <= w.bottom, covers: hit, h: [...document.querySelectorAll('#clip-float button')].filter((b) => b.offsetParent).map((b) => b.getBoundingClientRect().height) };
+        });
+        const nClips = () => page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length);
+        const n0 = await nClips();
+        await page.click('#cf-dup');
+        const n1 = await nClips();
+        await page.evaluate(() => window.loopwerk.store.undo());
+        const n2 = await nClips();
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(300);
+        await page.click('#cf-del');
+        const n3 = await nClips();
+        await page.evaluate(() => window.loopwerk.store.undo());
+        const n4 = await nClips();
+        bench.undo = [n0, n1, n2, n3, n4];
+        // M/S in der Spur-Werkbank
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        await page.waitForTimeout(300);
+        await page.click('#insp-mute');
+        await page.click('#insp-solo');
+        bench.ms = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { mute: !!t.mute, solo: !!t.solo, m: document.getElementById('insp-mute').getAttribute('aria-pressed'), s: document.getElementById('insp-solo').getAttribute('aria-pressed') }; });
+        await page.click('#insp-mute');
+        await page.click('#insp-solo');
+        // Stufe 3: jedes Element hat einen Zwilling
+        bench.tiers = await page.evaluate(() => {
+          const tw = window.loopwerk.edition.twins;
+          const els = [...document.querySelectorAll('[data-tier="3"]')];
+          const miss = els.filter((e) => !(tw[e.id] || [...e.classList].some((c) => tw['.' + c]))).map((e) => e.id || e.className);
+          return { n: els.length, miss };
+        });
+        // Kiste: Gruppen nach Herkunft, einklappbar
+        await page.evaluate(async () => {
+          const lw = window.loopwerk;
+          const mk = (n) => { const b = new AudioBuffer({ numberOfChannels: 1, length: 4410, sampleRate: 44100 }); b.getChannelData(0)[0] = 0.5; return lw.own.create({ name: n, buffer: b, source: 'Import', from: n.startsWith('D') ? 'file' : 'loop' }); };
+          await mk('Datei X');
+          await mk('Schleife X');
+          const { newDrumPattern } = await import('./src/instruments.js');
+          lw.store.addPattern(newDrumPattern(1));
+          await lw.patterns.sync(lw.store.project);
+        });
+        await page.waitForTimeout(500);
+        bench.kiste = await page.evaluate(() => [...document.querySelectorAll('#library .shelf-cat')].map((b) => b.children[1].textContent));
+        if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-kiste-desktop.png') });
+        await page.click('#kiste-toggle');
+        await page.waitForTimeout(300);
+        bench.kisteZu = await page.evaluate(() => ({ w: document.querySelector('.shelf').getBoundingClientRect().width, zu: document.getElementById('app').classList.contains('kiste-zu') }));
+        await page.click('#kiste-toggle');
+        bench.kisteAuf = await page.evaluate(() => document.querySelector('.shelf').getBoundingClientRect().width);
       }
       await ctx.close();
     }
     console.table(counts);
-    const dc = counts['desktop-clip'], hc = counts['handy-clip'];
-    check('Zählung 1a Desktop (Clip gewählt): ≤ 85 Bedienelemente, ≤ 95 Rahmen', dc.controls <= 85 && dc.frames <= 95, `${dc.controls} / ${dc.frames}`);
-    check('Zählung 1a Handy (Clip gewählt): ≤ 38 Bedienelemente, ≤ 50 Rahmen', hc.controls <= 38 && hc.frames <= 50, `${hc.controls} / ${hc.frames}`);
+    const B = { desktop: { controls: 70, frames: 60, sizes: 8 }, handy: { controls: 24, frames: 25, sizes: 6 } };
+    for (const [dev, b] of Object.entries(B)) {
+      const c = counts[`${dev}-clip`];
+      check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'} (Clip gewählt): ≤ ${b.controls} Bedienelemente, ≤ ${b.frames} Rahmen`, c.controls <= b.controls && c.frames <= b.frames, `${c.controls} / ${c.frames}`);
+      check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'}: ≤ ${b.sizes} Schriftgrößen, kleinste ≥ 11 px`, c.sizes <= b.sizes && c.minFont >= 11, `${c.sizes} Größen, kleinste ${c.minFont}`);
+    }
+    const w = bench.wb;
+    check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
+    check('Werkbank Desktop: ohne Auswahl eingeklappt (≤ 26 px)', w.shut <= 26, `${w.shut.toFixed(1)} px`);
+    const ws = bench.wbSheet;
+    check('Werkbank Handy: öffnet auf Mitte, 2 Spuren und die Marke bleiben sichtbar', Math.abs(ws.frac - 0.5) < 0.06 && ws.rowsAbove && ws.markVisible, JSON.stringify(ws));
+    const ph = bench.phone;
+    check('Daumenleiste: 4 Ziele ≥ 44 px, unterer Rand ≤ 844', ph.bar.every((r) => r && r.w >= 44 && r.h >= 44 && r.bottom <= 844), JSON.stringify(ph.bar.map((r) => r && [Math.round(r.w), Math.round(r.h), Math.round(r.bottom)])));
+    check('Song-Fach: Tipp aufs Deck öffnet es, „Mischen“ und „FX-Pad“ stehen darin', bench.songLinks.dock === 'song' && ['Mischen', 'FX-Pad'].every((t) => bench.songLinks.links.includes(t)) && bench.songLinks.metro, JSON.stringify(bench.songLinks));
+    check('Werkzeug am Clip (Handy): in #arr-wrap, 4 Tasten ≥ 44 px', ph.floatIn && !ph.floatHidden && ph.floatBtns.length === 4 && ph.floatBtns.every((h) => h >= 44), JSON.stringify(ph.floatBtns));
+    const f = bench.float;
+    check('Werkzeug am Clip (Desktop): innerhalb von #arr-wrap, deckt den Clip nicht ab, Tasten ≥ 44 px', f.inside && !f.covers && f.h.length === 3 && f.h.every((h) => h >= 44), JSON.stringify(f));
+    check('Kopie und Löschen sind je ein Undo-Schritt', bench.undo.join() === '1,2,1,0,1', bench.undo.join());
+    check('Spur-Werkbank: M und S schalten track.mute / track.solo', bench.ms.mute && bench.ms.solo && bench.ms.m === 'true' && bench.ms.s === 'true', JSON.stringify(bench.ms));
+    check('Stufe 3: jedes [data-tier="3"] hat einen Zwilling in EDITION.twins', bench.tiers.n > 10 && bench.tiers.miss.length === 0, `${bench.tiers.n} Elemente, ohne Zwilling: ${bench.tiers.miss.join(', ')}`);
+    check('Kiste: Gruppen in der Reihenfolge Aufnahmen · Dateien · Schleifen · Strom', bench.kiste.join(' · ') === 'Aufnahmen · Dateien · Schleifen · Strom', bench.kiste.join(' · '));
+    check('Kiste: 240 px breit, klappt auf 24 px ein und wieder aus', Math.abs(bench.kisteAuf - 240) <= 1 && bench.kisteZu.zu && bench.kisteZu.w <= 26, `${bench.kisteAuf} / ${bench.kisteZu.w}`);
 
     // ---------- 10: Pages-Build ----------
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });

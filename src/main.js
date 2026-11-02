@@ -40,6 +40,7 @@ import { EDITION, lsKey } from './edition.js';
 import { applySurfaces } from './ui/surfaces.js';
 import { clearInstruments } from './sampler.js';
 import { mountPwa } from './pwa.js';
+import { mountClipFloat } from './ui/clip-float.js';
 
 // iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
 // Zoomen mit zwei Fingern bleibt erlaubt (Safari ignoriert die Grenze dafür). Für Gerüste, die wir nicht selbst schreiben.
@@ -437,7 +438,7 @@ async function boot() {
   const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
-    root: document.getElementById('library'), library, store, engine, ui, arranger,
+    root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
     onDeleteOwn: async (id) => {
       if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
         ui.flash('Dieser Sound wird im Projekt benutzt. Entferne erst die Clips.');
@@ -555,6 +556,8 @@ async function boot() {
   const starter = mountStarter({ root: document.getElementById('create-panel'), store, library, ui, onAccomp: accompany });
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
+  // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
+  if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools });
   const sheets = mountSheets({ ui, arranger });
   const tips = EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
 

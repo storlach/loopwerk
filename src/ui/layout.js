@@ -3,6 +3,7 @@
 // Fach „Song“). Menüs, Reiter und Export-Klappfeld.
 
 import { place, narrow } from './place.js';
+import { lsKey } from '../edition.js';
 
 export function mountLayout({ store, ui, library, editName = () => '' }) {
   const $ = (id) => document.getElementById(id);
@@ -13,7 +14,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Raster, Klick und Loop wandern über die Spuren (so bleibt im Deck Platz für Aufnahme, Wiederholen und die Anzeige); Zoomen geht am Handy mit zwei Fingern (die Knöpfe bleiben unsichtbar im Deck)
   for (const id of ['zoom-out', 'zoom-in', 'zoomy-out', 'zoomy-in']) place($(id), { wide: $('arr-bar-view') });
   place($('snap-sel'), { wide: $('arr-bar-view'), narrow: $('arr-pills') });
-  place($('metro-btn'), { narrow: $('arr-pills') });
+  place($('metro-btn'), { narrow: $('arr-pills'), calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
   place($('loop-btn'), { narrow: $('arr-pills') }); // der Loop-Bereich liegt im Lineal darunter
   // Rückgängig und Wiederholen: am Handy beide im Deck
   place($('undo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
@@ -31,6 +32,12 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('shelf-search'), { narrow: $('shelf-sticky') });
   place($('shelf-filter-btn'), { narrow: $('shelf-sticky') });
   place($('shelf-filters'), { narrow: $('shelf-sticky') });
+  // Dichte „calm“: Daumenleiste am Handy (Kiste · ▶ · ● · Werkbank), Mischen und FX-Pad im Fach „Song“, „+ Neu“ neben der Suche
+  place($('play-btn'), { calm: { narrow: $('tabbar') } });
+  place($('rec-btn'), { calm: { narrow: $('tabbar') } });
+  place($('mixer-btn'), { calm: { narrow: $('song-links') } });
+  place($('fxpad-btn'), { calm: { narrow: $('song-links') } });
+  place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
   const pops = [];
@@ -65,7 +72,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
 
   // Projekt-Menü: Name sichtbar im Knopf
   const setProject = popup($('project-menu-btn'), $('project-menu'), { onOpen: () => requestAnimationFrame(() => $('project-name').select?.()) });
-  const showName = () => { $('project-menu-name').textContent = store.project.name || 'Projekt'; };
+  const showName = () => { $('project-menu-name').textContent = store.project.name || 'Projekt'; $('deck-name').textContent = store.project.name || 'Song'; };
   store.on(showName);
   showName();
   // Öffnen, Beispiel und Leeren schließen das Menü (Leeren erst nach der Bestätigung)
@@ -96,6 +103,36 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
     for (const b of document.querySelectorAll('.ltab')) b.setAttribute('aria-selected', String(b.dataset.left === which));
   }
   for (const b of document.querySelectorAll('.ltab')) b.addEventListener('click', () => setLeft(b.dataset.left));
+
+  // ---------- Dichte „calm“: Kiste mit „+ Neu“, einklappbar; Namen der Fächer ----------
+  const calm = app.dataset.density === 'calm';
+  const newBtn = $('shelf-new');
+  newBtn.addEventListener('click', () => {
+    const create = shelf.dataset.left !== 'create';
+    setLeft(create ? 'create' : 'sounds');
+    newBtn.setAttribute('aria-pressed', String(create));
+    newBtn.textContent = create ? 'Fertig' : '+ Neu';
+  });
+  const foldKey = lsKey('loopwerk.kiste');
+  const fold = (zu) => {
+    app.classList.toggle('kiste-zu', zu);
+    $('kiste-toggle').setAttribute('aria-expanded', String(!zu));
+    $('kiste-toggle').setAttribute('aria-label', zu ? 'Kiste ausklappen' : 'Kiste einklappen');
+    $('kiste-toggle').textContent = zu ? '›' : '‹';
+  };
+  try { if (calm && localStorage.getItem(foldKey) === '1') fold(true); } catch { /* Standard */ }
+  $('kiste-toggle').addEventListener('click', () => {
+    const zu = !app.classList.contains('kiste-zu');
+    fold(zu);
+    try { localStorage.setItem(foldKey, zu ? '1' : '0'); } catch { /* egal */ }
+  });
+  if (calm) {
+    document.querySelector('.left-title').textContent = 'Kiste';
+    $('tab-sounds').querySelector('.tab-label').textContent = 'Kiste';
+    const labels = () => { $('mixer-btn').querySelector('.tab-label').textContent = narrow.matches ? 'Mischen' : 'Mixer'; };
+    narrow.addEventListener('change', labels);
+    labels();
+  }
 
   // ---------- Fachleiste: Editor-Reiter für den ausgewählten Clip (am Handy nur „Editor“) ----------
   const editorTab = $('editor-tab');
