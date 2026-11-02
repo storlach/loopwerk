@@ -68,6 +68,9 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   const level = Object.fromEntries(CATS.map((c) => [c, 0]));
   const trackGlow = new Map();
   let amp = 0;
+  // Raumlicht: Anstieg und Nachklingen in Sekunden
+  const GLOW_ATTACK = 0.12;
+  const GLOW_RELEASE = 1.4;
   let sparks = [];
   let last = performance.now();
   let frameNo = 0;
@@ -154,13 +157,16 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
         hits.push({ trackId: t.id, cat, lv, clip });
       }
     }
-    // schnell hoch, langsam zurück – wie eine Amplitude (nach dem Stopp blendet drawRoom sanft aus)
+    // Weich hoch, lange zurück – wie ein Nachleuchten (Zeiten in Sekunden, unabhängig von der Bildrate);
+    // nach dem Stopp blendet drawRoom sanft aus
     if (live) {
-      for (const c of CATS) level[c] += (target[c] - level[c]) * (target[c] > level[c] ? 0.5 : 0.06);
+      const k = (tau) => 1 - Math.exp(-dt / tau);
+      const up = k(GLOW_ATTACK), down = k(GLOW_RELEASE);
+      for (const c of CATS) level[c] += (target[c] - level[c]) * (target[c] > level[c] ? up : down);
       const peak = engine.peakLevel();
       const db = peak > 0 ? 20 * Math.log10(peak) : -60;
       const a = Math.min(1, Math.max(0, (db + 36) / 36));
-      amp += (a - amp) * (a > amp ? 0.45 : 0.08);
+      amp += (a - amp) * (a > amp ? k(GLOW_ATTACK * 0.8) : k(GLOW_RELEASE * 0.85));
     }
     for (const h of hits) {
       const g = trackGlow.get(h.trackId) ?? 0;
