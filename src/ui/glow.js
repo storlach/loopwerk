@@ -4,6 +4,7 @@
 
 import { anySoloOf, isAbove, trackState, EPS } from '../model.js';
 import { headW } from './arranger.js';
+import { createRoomShader } from './room-shader.js';
 
 const CATS = ['drums', 'bass', 'chords', 'synth', 'fx', 'own'];
 const BEHIND = 150; // px hinter der Marke: Platz für Funken
@@ -20,6 +21,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   amb.height = 30;
   amb.setAttribute('aria-hidden', 'true');
   document.body.prepend(amb);
+  // Shader, wenn der Browser WebGL 2 kann; sonst malt Canvas 2D dieselben Werte
+  const shader = createRoomShader(amb);
   const beam = document.createElement('canvas');
   beam.className = 'beam';
   beam.setAttribute('aria-hidden', 'true');
@@ -42,7 +45,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   const rowWave = document.createElement('canvas');
   rowWave.className = 'loop-wave';
   rowWave.setAttribute('aria-hidden', 'true');
-  const ac = amb.getContext('2d');
+  const ac = shader ? document.createElement('canvas').getContext('2d') : amb.getContext('2d');
   const bc = beam.getContext('2d');
   const barC = bar.getContext('2d');
   const glowC = barGlow.getContext('2d');
@@ -140,7 +143,9 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const live = engine.playing;
     if (++colorAge > 60) readColors();
     // Raumlicht (Hintergrund, Leiste oben) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde, auch bei 120 Hz
-    if (now - roomAt >= 45) {
+    // Shader: 30 Bilder pro Sekunde, damit der Nebel fließt; in der Stille genügen 15
+    const roomIdle = !live && (room.K || 0) < 0.002 && room.glow.every((g) => g < 0.01);
+    if (now - roomAt >= (shader ? (roomIdle ? 66 : 32) : 45)) {
       roomAt = now;
       const r0 = performance.now();
       drawRoom(now / 1000);
@@ -433,13 +438,16 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     room.bar = live ? bar : null;
     room.lastBeat = beat;
 
-    ac.globalCompositeOperation = 'lighter';
     const LIFE = 1.8;
     room.waves = room.waves.filter((w) => (w.age += dt) < LIFE);
+    room.ghosts = room.ghosts.filter((g) => (g.i *= Math.exp(-dt / 0.35)) > 0.01);
+    // Wellenradius (Anteil der langen Seite) und Stärke: leise, nur ein Hauch je Takt
+    const waveAt = (w) => { const u = w.age / LIFE; return { r: 0.04 + 0.55 * (1 - (1 - u) ** 2), a: 0.3 * w.a * Math.min(1, w.age / 0.25) * (1 - u) ** 2 }; };
+    if (shader) return waveAt;
+    ac.globalCompositeOperation = 'lighter';
     for (const w of room.waves) {
-      const u = w.age / LIFE;
-      const r = L * (0.04 + 0.55 * (1 - (1 - u) ** 2));
-      const a = 0.8 * w.a * Math.min(1, w.age / 0.25) * (1 - u) ** 2;
+      const { r: rr, a } = waveAt(w);
+      const r = L * rr;
       if (a < 0.005) continue;
       const wd = Math.min(r, L * 0.06 + 0.25 * r);
       const i0 = Math.max(0, (r - wd) / r);
@@ -451,10 +459,43 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       blob(cx - L * 0.07, yc, L * 0.11, ry, soft(cc, 0.7 * ci));
       blob(cx, yc, L * 0.04, ry * 0.9, soft(toWhite(cc, 0.2), 0.8 * ci));
     };
-    room.ghosts = room.ghosts.filter((g) => (g.i *= Math.exp(-dt / 0.35)) > 0.01);
     for (const g of room.ghosts) column(g.x, g.i, g.c, g.y0, g.y1);
     if (room.colX >= 0 && room.colI > 0.01) column(room.colX, room.colI, c, y0, y1);
     ac.globalCompositeOperation = 'source-over';
+  }
+
+  // Alle Werte für den Shader sammeln (dieselben wie beim Malen mit Canvas 2D) und zeichnen
+  const GL_SCALE = 0.4;
+  const GL_MAX = 720;
+  let flow = 0;
+  function drawShader({ W, H, L, dt, mix, K, A, calm, still, hue }) {
+    let waveAt = null;
+    if (!calm) waveAt = drawWave(W, H, L, dt, mix, K);
+    else { room.waves = []; room.ghosts = []; room.colI = 0; }
+    const [b0, b1, b2] = room.band;
+    const bandC = [0, 1, 2].map((b) => (mix && mixRGB((c) => hue[c] * AFF[c][b])) || mix || GREY);
+    const clouds = [];
+    if (mix && b1 > 0.01) {
+      const sum = CATS.reduce((n, c) => n + hue[c] * AFF[c][1], 0);
+      CATS.forEach((c, i) => {
+        const share = (hue[c] * AFF[c][1]) / sum;
+        const vis = Math.min(1, Math.max(0, (share - 0.05) / 0.2));
+        if (vis < 0.01) return;
+        const [x, y] = spot(i, 0, still, 0.8);
+        const rad = (0.24 + 0.22 * share) * (0.75 + 0.35 * b1);
+        const a = Math.min(1, (0.9 + 0.7 * share) * K * b1) * vis * vis * (3 - 2 * vis);
+        clouds.push({ x: (x * W) / L, y: ((0.32 + 0.3 * y) * H) / L, r: rad, a: 0.7 * a, c: rgb[c] });
+      });
+    }
+    const g = room.ghosts.reduce((m, x) => (x.i > (m?.i ?? 0) ? x : m), null);
+    shader.draw({
+      t: flow, K: mix ? K : 0, A, band: mix ? [b0, b1, b2] : [0, 0, 0], glow: mix ? room.glow : [0, 0, 0],
+      c0: bandC[0], c1: bandC[1], c2: bandC[2], white, clouds,
+      col: { x: room.colX >= 0 ? room.colX / W : -1, i: room.colI, y0: (room.y0 ?? 0) / H, y1: (room.y1 ?? H) / H, c: room.colC || GREY },
+      ghost: g ? { x: g.x / W, i: g.i, y0: g.y0 / H, y1: g.y1 / H } : { x: -1, i: 0, y0: 0, y1: 1 },
+      waves: waveAt ? room.waves.map((w) => ({ x: w.x / L, y: w.y / L, ...waveAt(w) })) : [],
+      vig: room.vig, idle: 0.13, grey: GREY, glowMax: ambientMax,
+    });
   }
 
   function drawRoom(t) {
@@ -474,15 +515,22 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const vw = window.innerWidth || 1, vh = window.innerHeight || 1;
     const Wn = vw >= vh ? 160 : Math.max(24, Math.round((160 * vw) / vh));
     const Hn = vw >= vh ? Math.max(24, Math.round((160 * vh) / vw)) : 160;
-    if (amb.width !== Wn || amb.height !== Hn) { amb.width = Wn; amb.height = Hn; }
-    const W = amb.width;
-    const H = amb.height;
+    if (shader) {
+      // Shader in gut einem Drittel der Fensterauflösung – der Nebel ist weich, die Linien bleiben fein genug
+      const sc = Math.min(GL_SCALE, GL_MAX / Math.max(vw, vh));
+      const gw = Math.max(16, Math.round(vw * sc)), gh = Math.max(16, Math.round(vh * sc));
+      if (amb.width !== gw || amb.height !== gh) { amb.width = gw; amb.height = gh; }
+    } else if (amb.width !== Wn || amb.height !== Hn) { amb.width = Wn; amb.height = Hn; }
+    // Raum-Maß für alle Werte (Marke, Wellen, Wolken): lange Seite 160
+    const W = Wn;
+    const H = Hn;
     const L = Math.max(W, H);
+    room.W = W; room.H = H;
 
     // ---------- Hintergrund: Anthrazit-Wabern (still wie bisher) ----------
-    ac.globalCompositeOperation = 'source-over';
-    ac.clearRect(0, 0, W, H);
-    for (let k = 0; k < 3; k++) {
+    if (!shader) ac.globalCompositeOperation = 'source-over';
+    if (!shader) ac.clearRect(0, 0, W, H);
+    for (let k = 0; k < (shader ? 0 : 3); k++) {
       const [x, y] = spot(7, k, still, 0.35);
       const g = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, L * 0.55);
       g.addColorStop(0, `rgba(${GREY},${0.16 + 0.05 * Math.sin(still * 0.3 + k)})`);
@@ -507,7 +555,10 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const hue = room.hue;
     for (const c of CATS) hue[c] += (level[c] - hue[c]) * (1 - Math.exp(-dt / (level[c] > hue[c] ? 0.7 : 1.6)));
     const mix = total > 0.0005 ? mixRGB((c) => hue[c]) : null;
-    if (mix && K > 0.002) {
+    if (shader) {
+      flow += dt * (calm ? 0.12 : 0.35 + 1.1 * A * (K / (ambientMax || 1)));
+      drawShader({ W, H, L, dt, mix, K, A, calm, still, hue });
+    } else if (mix && K > 0.002) {
       const bandC = [0, 1, 2].map((b) => mixRGB((c) => hue[c] * AFF[c][b]) || mix);
       // Mitte satter: ein großer Grund in der Mischfarbe statt einer flachen Fläche
       blob(W / 2, H * 0.5, L * 0.6, L * 0.45, soft(bandC[1], 0.5 * K * (0.4 + 0.6 * A)));
@@ -564,12 +615,12 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     }
 
     // ---------- Lichtwelle an der Abspielmarke ----------
-    if (!calm) drawWave(W, H, L, dt, mix, K);
+    if (shader) { /* in drawShader */ } else if (!calm) drawWave(W, H, L, dt, mix, K);
     else { room.waves = []; room.ghosts = []; room.colI = 0; }
 
     // ---------- Nachglühen nach lauten Stellen: heller Schimmer, löst sich über 2–3 s auf ----------
     const gl = room.glow;
-    if (mix && (gl[0] + gl[1] + gl[2]) > 0.01) {
+    if (!shader && mix && (gl[0] + gl[1] + gl[2]) > 0.01) {
       ac.globalCompositeOperation = 'lighter';
       const shimmer = (b) => toWhite(mixRGB((c) => hue[c] * AFF[c][b]) || mix, 0.55);
       const M = ambientMax;
@@ -580,7 +631,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     }
 
     // ---------- Kontrast: Ränder zurück ins Anthrazit (nur wenn Licht da ist) ----------
-    if (room.vig > 0.01) {
+    if (!shader && room.vig > 0.01) {
       ac.globalCompositeOperation = 'destination-out';
       blob(W / 2, H / 2, W * 0.62, H * 0.62, [[0, 'rgba(0,0,0,0)'], [0.6, 'rgba(0,0,0,0)'], [0.8, `rgba(0,0,0,${(0.35 * room.vig).toFixed(3)})`], [1, `rgba(0,0,0,${(0.85 * room.vig).toFixed(3)})`]]);
       ac.globalCompositeOperation = 'source-over';
@@ -688,5 +739,12 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   readColors();
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: amb.width } }; } };
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader }; },
+    // Für Tests: das Raumlicht als RGBA im Raum-Maß (lange Seite 160), gleich ob Shader oder Canvas 2D
+    readRoom() {
+      const W = room.W || amb.width, H = room.H || amb.height;
+      if (shader) return { data: shader.read(W, H), W, H };
+      return { data: ac.getImageData(0, 0, W, H).data, W, H };
+    },
+  };
 }

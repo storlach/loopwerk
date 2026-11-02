@@ -261,6 +261,10 @@
 - Inspektor (`.insp-clip-speed`) und Handy-Clip-Leiste („Pegel“) über `src/ui/clip-speed.js`; Test `tests/clip-speed.test.cjs`
 - Offen: das Etikett am Clip zeigt noch die Laufzeit (×1,5) statt der Geschwindigkeit
 
+## ✅ UI-Paket und Raumlicht als Shader
+- Stumm: Clip-Farbe kommt nach dem Wiederanschalten zurück; Inspektor mit getrennten Abschnitten „Clip“ und „Spur“; Ansicht folgt der Marke nicht mehr, sobald man sie beim Spielen selbst bewegt („Marke folgen“ holt sie zurück, nächster Start folgt wieder); Pfeil im Spurkopf öffnet die Kurven (wie A, auch per Touch); Editor ohne Reiter (`tests/ui-paket.test.cjs`)
+- Raumlicht nach Frequenz (Bass unten, Höhen oben), Säule an der Marke, Nachglühen, Vignette; gezeichnet als WebGL-2-Shader (`src/ui/room-shader.js`): verzerrter Nebel mit leuchtenden Höhenlinien, die dort aufleuchten, wo Licht ist; je Takt läuft nur eine leise Welle durch die Linien. 30 Bilder/s beim Spielen, 15 in der Stille, ohne WebGL 2 Canvas 2D (`tests/ambient.test.cjs`)
+
 ## 🧪 Krachwerk – Loopwerk zum Selbermachen (Branch `werkstatt`)
 - Brainstorm mit ux-designer, ui-designer, architekt, creative-director: `docs/ux/krachwerk-brainstorm/` (Zielbild: Song · Werkbank · Kiste, ruhiger bei gleichem Funktionsumfang). Der erste Prototyp (Pad-Wand ohne Arranger) ist zurückgebaut.
 - ✅ Scheibe 1a „Gerüst und erster Laut“ (`docs/specs/krachwerk-1-geruest.md`, ADR 007): volle App unter `/werkstatt/` ohne mitgelieferte Sounds, leerer Song (2 Spuren, 90 BPM), eigener Speicher inkl. der Pad-Wand-Klänge, ● nimmt ohne Vorzähler auf, säubert und legt den Klang als Clip in den Loop; PWA, eigenes Icon; Zählung Desktop „Clip gewählt“ 55 statt 114 Bedienelemente
