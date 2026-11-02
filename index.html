@@ -903,6 +903,7 @@
   .ex-set { border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px 10px; margin: 0; display: grid; gap: 6px; min-width: 0; }
   .ex-set legend { padding: 0 4px; font: 600 10px/1.4 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .ex-set label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ex-set label:has(input:disabled) { color: var(--muted); }
   .ex-go { display: grid; gap: 8px; align-content: start; min-width: 240px; flex: 1; }
   .ex-go .dbtn { justify-self: start; height: 34px; padding: 0 18px; }
   .ex-go progress { width: 100%; max-width: 360px; accent-color: var(--amber); }
@@ -3146,6 +3147,11 @@
         <label><input type="radio" name="ex-range" id="ex-range-song" value="song" checked> <span id="ex-range-song-label">Ganzer Song</span></label>
         <label><input type="radio" name="ex-range" id="ex-range-loop" value="loop"> <span id="ex-range-loop-label">Loop-Bereich</span></label>
         <label><input type="checkbox" id="ex-tail" checked> Hall und Echo ausklingen lassen (+2,5 s)</label>
+      </fieldset>
+      <fieldset class="ex-set" id="ex-stems-set">
+        <legend>Einzelspuren</legend>
+        <label><input type="checkbox" id="ex-stems"> <span id="ex-stems-label">Einzelspuren (Stems)</span></label>
+        <label title="Jede Spur läuft durch Master-Effekte, Fader und Mastering – die Spuren ergeben zusammen dann nicht mehr genau den Mix."><input type="checkbox" id="ex-stems-master" disabled> Mit Summe (Master-Effekte, Mastering)</label>
       </fieldset>
       <fieldset class="ex-set ex-master" id="ex-master-set">
         <legend>Mastering</legend>
