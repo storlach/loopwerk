@@ -1,6 +1,8 @@
 // Effekte: festes Rack pro Kanal (Verzerrer → Filter → EQ → Kompressor → Pumpen → Echo → Hall), wie im Music-Maker-Mixer.
 // Jeder Effekt funktioniert mit AudioContext und OfflineAudioContext (gleiche Signalkette für Export und Tests).
-// set(p, t, spb, grid): grid ist die Kontextzeit von Schlag 0 des Songs – daran richten sich LFOs im Takt aus.
+// set(p, t, spb, grid, skip): grid ist die Kontextzeit von Schlag 0 des Songs – daran richten sich LFOs im Takt aus.
+// u.auto = { <param>: { param, map } }: AudioParams, die eine Kurve übernehmen kann (Automation, ADR 006). map rechnet den
+// Reglerwert in den Parameterwert um (affin). skip = { <param>: true } lässt diese Parameter aus (ein Besitzer je AudioParam).
 
 import { mulberry32 } from './util.js';
 
@@ -76,8 +78,12 @@ const FILTER_TYPES = [
 
 // Regler 0…1 auf Frequenzen (logarithmisch) abbilden
 export const cutoffHz = (v) => 40 * Math.pow(2, v * 8.81); // 40 Hz … 18 kHz
+// Filter-Frequenz läuft über detune: frequency fest 40 Hz, detune = Regler · 8,81 Oktaven. Linear in Cent = linear auf der
+// Regler-Skala – eine Rampe der Kurve ist damit exakt die Fahrt am Regler; der LFO addiert sich auf detune.
+export const CUTOFF_BASE_HZ = 40;
+export const cutoffCents = (v) => v * 8.81 * 1200;
 const toneHz = (v) => 400 * Math.pow(2, v * 5.5); // 400 Hz … 18 kHz
-const formatHz = (hz) => (hz >= 1000 ? `${(hz / 1000).toFixed(hz >= 10000 ? 0 : 1).replace('.', ',')} kHz` : `${Math.round(hz)} Hz`);
+export const formatHz = (hz) => (hz >= 1000 ? `${(hz / 1000).toFixed(hz >= 10000 ? 0 : 1).replace('.', ',')} kHz` : `${Math.round(hz)} Hz`);
 export const crushBits = (drive) => Math.round(16 - drive * 13);
 
 // Kennlinien der Verzerrung; k = Vorverstärkung
@@ -134,6 +140,8 @@ function beatLfo(ctx, target, wave) {
         old?.stop(now);
       }
     },
+    // Kette wird entsorgt: laufende Oszillatoren halten ihren Teilgraphen sonst am Leben
+    stop() { try { osc?.stop(); } catch { /* schon gestoppt */ } osc = null; key = null; },
   };
 }
 
@@ -174,6 +182,19 @@ export const EFFECTS = [
       const wet = ctx.createGain();
       input.connect(dry).connect(output);
       input.connect(shaper).connect(dc).connect(tone).connect(post).connect(wet).connect(output);
+      // Anteil als ein gemeinsamer Parameter (mix.offset): trocken = 1 − Anteil, nass = Anteil × Art-Weiche. Eine Kurve
+      // plant nur mix.offset; beide Zweige bleiben immer komplementär, auch beim Wechsel zwischen Verzerrer und Amp.
+      const mix = ctx.createConstantSource();
+      mix.offset.value = 0;
+      const inv = ctx.createGain();
+      inv.gain.value = -1;
+      dry.gain.value = 1;
+      wet.gain.value = 0;
+      const wetSel = ctx.createGain();
+      const aWetSel = ctx.createGain();
+      mix.connect(inv).connect(dry.gain);
+      mix.connect(wetSel).connect(wet.gain);
+      mix.start();
       // Zweiter Zweig: Gitarren-Verstärker mit Box; je nach Art klingt genau einer der beiden Zweige
       const biq = (type, f, q = 0.7, g = 0) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.gain.value = g; return b; };
       const aIn = ctx.createGain();
@@ -191,11 +212,14 @@ export const EFFECTS = [
       const aPost = ctx.createGain();
       const aWet = ctx.createGain();
       aWet.gain.value = 0;
+      mix.connect(aWetSel).connect(aWet.gain);
       [input, aIn, aHp, aBoost, aShaper, aDc, aBass, aMid, aTreble, ...aCab, aTone, aPost, aWet, output].reduce((a, b) => a.connect(b));
       let shape = null;
       return {
         input, output,
-        set(p, t) {
+        auto: { mix: { param: mix.offset, map: (v) => v } },
+        dispose() { try { mix.stop(); } catch { /* schon gestoppt */ } mix.disconnect(); },
+        set(p, t, spb, grid, skip) {
           const amp = isAmp(p.type);
           const key = `${p.type}|${Math.round(p.drive * 100)}`;
           if (key !== shape) {
@@ -217,9 +241,9 @@ export const EFFECTS = [
             ramp(post.gain, driveMakeup(p.type, p.drive), t);
             ramp(tone.frequency, toneHz(p.tone), t);
           }
-          ramp(wet.gain, amp ? 0 : p.mix, t);
-          ramp(aWet.gain, amp ? p.mix : 0, t);
-          ramp(dry.gain, 1 - p.mix, t);
+          ramp(wetSel.gain, amp ? 0 : 1, t);
+          ramp(aWetSel.gain, amp ? 1 : 0, t);
+          if (!skip?.mix) ramp(mix.offset, p.mix, t);
         },
       };
     },
@@ -235,14 +259,17 @@ export const EFFECTS = [
     },
     create(ctx) {
       const f = ctx.createBiquadFilter();
+      f.frequency.value = CUTOFF_BASE_HZ;
       const lfoAmt = ctx.createGain();
       lfoAmt.connect(f.detune);
       const lfo = beatLfo(ctx, lfoAmt);
       return {
         input: f, output: f,
-        set(p, t, spb, grid) {
+        auto: { cutoff: { param: f.detune, map: cutoffCents } },
+        dispose() { lfo.stop(); },
+        set(p, t, spb, grid, skip) {
           f.type = p.type;
-          ramp(f.frequency, cutoffHz(p.cutoff), t);
+          if (!skip?.cutoff) ramp(f.detune, cutoffCents(p.cutoff), t);
           ramp(f.Q, 0.7 + Math.pow(p.reso, 1.5) * 17, t);
           ramp(lfoAmt.gain, p.depth * 3600, t); // bis ±3 Oktaven
           lfo.set(LFO_RATES.find((r) => r.id === p.lfo)?.beats ?? 0, spb, grid, t != null);
@@ -318,6 +345,7 @@ export const EFFECTS = [
       let shape = null;
       return {
         input: vca, output: vca,
+        dispose() { lfo.stop(); },
         set(p, t, spb, grid) {
           const key = `${p.depth}|${p.release}`;
           if (key !== shape) {
@@ -352,11 +380,12 @@ export const EFFECTS = [
       tone.connect(wet).connect(output);
       return {
         input, output,
-        set(p, t, spb) {
+        auto: { mix: { param: wet.gain, map: (v) => v } },
+        set(p, t, spb, grid, skip) {
           const beats = ECHO_TIMES.find((x) => x.id === p.time)?.beats ?? 0.75;
           ramp(delay.delayTime, Math.min(4, beats * spb), t);
           ramp(fb.gain, p.feedback, t);
-          ramp(wet.gain, p.mix, t);
+          if (!skip?.mix) ramp(wet.gain, p.mix, t);
         },
       };
     },
@@ -377,8 +406,9 @@ export const EFFECTS = [
       let size = null;
       return {
         input, output,
-        set(p, t) {
-          ramp(wet.gain, p.mix, t);
+        auto: { mix: { param: wet.gain, map: (v) => v } },
+        set(p, t, spb, grid, skip) {
+          if (!skip?.mix) ramp(wet.gain, p.mix, t);
           const s = Math.round(p.size * 20) / 20; // Impulsantwort nur in 5-%-Schritten neu erzeugen
           if (s !== size) { size = s; conv.buffer = hallImpulse(ctx.sampleRate, s); }
         },
@@ -452,7 +482,8 @@ export function withFx(fx) {
   return base;
 }
 
-// Baut die Effektkette für den aktuellen Zustand. Nur eingeschaltete Effekte liegen im Signalweg.
+// Baut die Effektkette für den aktuellen Zustand. Nur eingeschaltete Effekte liegen im Signalweg. Alle Parameter bekommen
+// ihren Reglerwert als Startwert; Kurven plant die Engine gleich danach darüber (Offline ab 0, live ab jetzt).
 export function buildFxChain(ctx, fxState, spb, grid = 0) {
   const fx = withFx(fxState);
   const input = ctx.createGain();
@@ -468,12 +499,14 @@ export function buildFxChain(ctx, fxState, spb, grid = 0) {
     units[e.id] = u;
   }
   last.connect(output);
-  return { input, output, units, key: fxKey(fx) };
+  const dispose = () => { for (const u of Object.values(units)) u.dispose?.(); };
+  return { input, output, units, key: fxKey(fx), dispose };
 }
 
 export const fxKey = (fx) => EFFECT_IDS.filter((id) => fx?.[id]?.on).join('+');
 
-export function updateFxParams(chain, fxState, t, spb, grid = 0) {
+// skip = { <effekt>: { <param>: true } }: Parameter, die gerade einer Kurve gehören
+export function updateFxParams(chain, fxState, t, spb, grid = 0, skip = null) {
   const fx = withFx(fxState);
-  for (const [id, u] of Object.entries(chain.units)) u.set(fx[id], t, spb, grid);
+  for (const [id, u] of Object.entries(chain.units)) u.set(fx[id], t, spb, grid, skip?.[id]);
 }
