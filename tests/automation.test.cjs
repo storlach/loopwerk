@@ -1,5 +1,5 @@
-// Automation Scheibe 1 (Spec v2.12, Testplan 1, 2, 4, 5, 6, 7, 10): Spur-Lautstärke als Kurve, samplegenau gemessen,
-// plus Kurven wandern mit Clips (Zusatz von Martin).
+// Automation Scheibe 1 + 2 (Spec v2.12, Testplan 1–8, 10): Spur-Lautstärke und Panorama als Kurve, Stufen, Besitz je
+// AudioParam, samplegenau gemessen, plus Kurven wandern mit Clips (Zusatz von Martin).
 // node tests/automation.test.cjs
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -388,6 +388,163 @@ async function pureTests() {
     });
     check('7 Live: nach 300 ms folgt der Parameter der neuen Kurve', Math.abs(lv.got - lv.want) < 0.02 && Math.abs(lv.p0 - 0.2) < 0.01, JSON.stringify(lv));
     check('7 Live: Wiedergabe läuft weiter, keine Stimme abgebrochen', lv.playing && lv.kills === 0 && lv.voices > 0 && lv.voicesAfter > 0, `Abbrüche ${lv.kills}, Stimmen ${lv.voices} → ${lv.voicesAfter}`);
+
+    // ================= Stufe (3) =================
+    const step = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const A = await import('./src/automation.js');
+      const p = {
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: 4, loop: { on: false, startBeat: 0, endBeat: 16 }, master: { volume: 1 },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0, mute: false, solo: false, clips: [{ id: 'c1', sampleId: 'test-dc', startBeat: 0, lengthBeats: 16, offsetBeats: 0 }],
+          automation: { volume: [{ beat: 4, value: 0.2, curve: 'step' }, { beat: 8, value: 1 }, { beat: 12, value: 0.6, curve: 'step' }, { beat: 14, value: 0.1 }] } }],
+      };
+      const d = (await renderProject(p, library, { limiter: false, toBeat: 16 })).getChannelData(0);
+      const sr = 44100;
+      const idx = (b) => Math.round(b * 0.5 * sr);
+      // Beginn (erste Probe weg vom alten Wert) und Ende (erste Probe am neuen Wert) des Sprungs
+      const jump = (from, to, lo, hi) => {
+        let i0 = -1;
+        let i1 = -1;
+        for (let i = idx(from); i < idx(to); i++) {
+          if (i0 < 0 && Math.abs(d[i] - lo) > 1e-4) i0 = i;
+          if (i1 < 0 && Math.abs(d[i] - hi) < 1e-4) { i1 = i; break; }
+        }
+        let maxStep = 0;
+        for (let i = idx(from); i < idx(to); i++) maxStep = Math.max(maxStep, Math.abs(d[i + 1] - d[i]));
+        return { dur: i1 - i0, i0, i1, maxStep };
+      };
+      return {
+        want: A.STEP_BEATS * 0.5 * sr,
+        up: jump(6, 10, 0.2, 1), down: jump(12.5, 14.5, 0.6, 0.1),
+        hold: [5, 7, 7.98, 12.5, 13.98].map((b) => d[idx(b)]),
+      };
+    });
+    for (const [name, j, delta] of [['hoch 0,2 → 1', step.up, 0.8], ['runter 0,6 → 0,1', step.down, 0.5]]) {
+      const lim = (delta / step.want) * 1.05;
+      check(`3 Stufe ${name}: Sprung dauert 1/128 Schlag (± 1 Probe)`, Math.abs(j.dur - step.want) <= 1, `${j.dur} Proben (${j.i0}–${j.i1}), erwartet ${step.want.toFixed(2)}`);
+      check(`3 Stufe ${name}: knackfrei (größter Schritt ≤ Δ / Sprungdauer · 1,05)`, j.maxStep <= lim, `größter Schritt ${j.maxStep.toFixed(5)}, Grenze ${lim.toFixed(5)}`);
+    }
+    check('3 Stufe hält den Wert bis kurz vor dem nächsten Punkt', [0.2, 0.2, 0.2, 0.6, 0.6].every((v, i) => Math.abs(step.hold[i] - v) < 1e-4), step.hold.map((v) => v.toFixed(5)).join(' '));
+
+    // ================= Besitz (8): Panorama-Kurve, Regler, Lautstärke × Fader =================
+    // StereoPanner mit Stereo-Eingang (Gleichspannung 1 auf beiden Kanälen)
+    const panOut = (p) => {
+      const x = (p <= 0 ? p + 1 : p) * Math.PI / 2;
+      return p <= 0 ? [1 + Math.cos(x), Math.sin(x)] : [Math.cos(x), 1 + Math.sin(x)];
+    };
+    const own = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const M = await import('./src/model.js');
+      const proj = (pan, automation, volume = 1) => ({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: 4, loop: { on: false, startBeat: 0, endBeat: 16 }, master: { volume: 1 },
+        tracks: [{ id: 't1', name: 'T', volume, pan, mute: false, solo: false, clips: [{ id: 'c1', sampleId: 'test-dc', startBeat: 0, lengthBeats: 16, offsetBeats: 0 }], ...(automation ? { automation } : {}) }],
+      });
+      const render = async (p) => { const b = await renderProject(p, library, { limiter: false, toBeat: 16 }); return [b.getChannelData(0), b.getChannelData(1)]; };
+      const idx = (b) => Math.round(b * 22050);
+      const pan = [{ beat: 0, value: -1 }, { beat: 4, value: -0.5 }, { beat: 8, value: 0.5 }, { beat: 12, value: 1, curve: 'step' }, { beat: 14, value: -0.25 }];
+      const a = await render(proj(0, { pan }));
+      const b = await render(proj(0.8, { pan }));
+      let diff = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < a[c].length; i++) diff = Math.max(diff, Math.abs(a[c][i] - b[c][i]));
+      const at = [2, 4, 6, 8, 10, 13, 15].map((x) => ({ b: x, l: a[0][idx(x)], r: a[1][idx(x)] }));
+      // Kurve löschen über den Store: der Reglerwert (0,8) klingt wieder
+      const st = new M.Store(proj(0.8, { pan }), { sampleBeats: () => 4 });
+      st.clearAutomation('t1', 'pan');
+      const free = await render(st.project);
+      // Lautstärke-Kurve × Fader 0,5
+      const vol = [{ beat: 0, value: 0 }, { beat: 8, value: 1 }];
+      const half = await render(proj(0, { volume: vol }, 0.5));
+      return { diff, at, free: [free[0][idx(6)], free[1][idx(6)]], gone: !('automation' in st.project.tracks[0]), steps: st.undoStack.length,
+        half: [2, 4, 8, 12].map((x) => ({ b: x, got: half[0][idx(x)] })) };
+    });
+    const A = await import(pathToFileURL(path.join(__dirname, '../src/automation.js')).href);
+    const panPts = [{ beat: 0, value: -1 }, { beat: 4, value: -0.5 }, { beat: 8, value: 0.5 }, { beat: 12, value: 1, curve: 'step' }, { beat: 14, value: -0.25 }];
+    check('8 Pan-Kurve aktiv: anderer Reglerwert ändert den Klang nicht (offline bitgleich)', own.diff === 0, `max. Differenz ${own.diff}`);
+    const panDev = Math.max(...own.at.map((x) => { const [l, r] = panOut(A.autoValueAt(panPts, x.b)); return Math.max(Math.abs(x.l - l), Math.abs(x.r - r)); }));
+    check('8 Pan-Kurve klingt an den Punkten und dazwischen (StereoPanner-Formel, auch Stufe)', panDev < 1e-4, `max. Abweichung ${panDev.toExponential(2)}`);
+    const [fl, fr] = panOut(0.8);
+    check('8 Kurve löschen (ein Schritt): Reglerwert 0,8 klingt wieder', own.gone && own.steps === 1 && Math.abs(own.free[0] - fl) < 1e-4 && Math.abs(own.free[1] - fr) < 1e-4, `${own.free.map((v) => v.toFixed(4))} erwartet ${[fl, fr].map((v) => v.toFixed(4))}`);
+    check('8 Lautstärke-Kurve × Fader 0,5 = halber Pegel', own.half.every((x) => Math.abs(x.got - 0.5 * Math.min(1, x.b / 8)) < 1e-4), own.half.map((x) => `${x.b}: ${x.got.toFixed(4)}`).join(', '));
+
+    // Realtime: Regler gesperrt, Übergabe beim Löschen (auch ohne cancelAndHoldAtTime wie in Firefox), Realtime = Export
+    const rtPan = await page.evaluate(async () => {
+      const { store, engine, library, renderProject } = window.loopwerk;
+      const A = await import('./src/automation.js');
+      const pts = [{ beat: 0, value: -1 }, { beat: 4, value: 1 }, { beat: 8, value: -1 }];
+      const proj = () => ({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: 8, loop: { on: true, startBeat: 0, endBeat: 8 }, master: { volume: 1 },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0.3, mute: false, solo: false, clips: [{ id: 'c1', sampleId: 'test-dc', startBeat: 0, lengthBeats: 32, offsetBeats: 0 }], automation: { pan: pts } }],
+      });
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const param = () => engine.mix.tracks.get('t1').pan.pan;
+      const near = (beat) => beat > 0.15 && beat < 7.85 && Math.abs(beat - 4) > 0.15; // nicht an Knicken oder am Loop-Sprung
+      const out = { locked: [], samples: [], release: [] };
+      store.replace(proj());
+      await engine.play(2);
+      await wait(200);
+      // Regler bewegen, während die Kurve läuft: der Parameter bleibt auf der Kurve
+      for (let k = 0; k < 8; k++) {
+        store.setTrack('t1', { pan: k % 2 ? -0.9 : 0.9 }, 'pan-t1');
+        await wait(70);
+        const beat = engine.currentBeat();
+        if (near(beat)) out.locked.push({ beat, got: param().value, want: A.autoValueAt(pts, beat) });
+      }
+      for (let k = 0; k < 14; k++) {
+        await wait(130);
+        const beat = engine.currentBeat();
+        if (near(beat)) out.samples.push({ beat, got: param().value });
+      }
+      // Kurve löschen mitten im Lauf: der Regler (−0,9) übernimmt in wenigen Millisekunden
+      for (const firefox of [false, true]) {
+        const proto = AudioParam.prototype;
+        const keep = proto.cancelAndHoldAtTime;
+        if (firefox) proto.cancelAndHoldAtTime = undefined;
+        store.setTrack('t1', { pan: -0.9 });
+        // weit weg vom Reglerwert löschen (Kurve > 0, also zwischen Schlag 2 und 6)
+        for (let k = 0; k < 160; k++) { const b = engine.currentBeat(); if (b > 2.2 && b < 5.2) break; await wait(25); }
+        const before = { beat: engine.currentBeat(), got: param().value };
+        store.clearAutomation('t1', 'pan');
+        await wait(60);
+        const at60 = param().value;
+        await wait(200);
+        const at260 = param().value;
+        // Kurve kommt zurück (Rückgängig): der Parameter folgt ihr wieder
+        store.undo();
+        await wait(250);
+        const beat = engine.currentBeat();
+        out.release.push({ firefox, before, want: A.autoValueAt(pts, before.beat), at60, at260, back: { beat, got: param().value, want: A.autoValueAt(pts, beat) } });
+        if (firefox) proto.cancelAndHoldAtTime = keep;
+      }
+      engine.stop();
+      await wait(100);
+      // Stillstand mit Kurve: der gehaltene Wert gehört der Kurve, der Regler schreibt nicht hinein
+      const held = param().value;
+      store.setTrack('t1', { pan: held > 0 ? -0.8 : 0.8 }, 'pan-t1');
+      await wait(120);
+      out.stoppedLocked = { held, after: param().value };
+      // Stillstand: Kurve löschen gibt den Regler mit seinem Wert zurück
+      store.setTrack('t1', { pan: 0.4 });
+      store.clearAutomation('t1', 'pan');
+      await wait(120);
+      out.stopped = param().value;
+      store.replace(proj());
+      const off = await renderProject(store.project, library, { limiter: false, toBeat: 32 });
+      const L = off.getChannelData(0);
+      const R = off.getChannelData(1);
+      for (const s of out.samples) { const i = Math.round(s.beat * 22050); s.l = L[i]; s.r = R[i]; }
+      return out;
+    });
+    const dLock = Math.max(...rtPan.locked.map((x) => Math.abs(x.got - x.want)));
+    check('8 Realtime: Pan-Kurve aktiv, Regler bewegen ändert den Parameter nicht', rtPan.locked.length >= 4 && dLock < 0.02, `max. Abweichung ${dLock.toFixed(4)} bei ${rtPan.locked.length} Proben`);
+    const dRtOff = Math.max(...rtPan.samples.map((x) => { const [l, r] = panOut(x.got); return Math.max(Math.abs(x.l - l), Math.abs(x.r - r)); }));
+    check('8 Pan-Kurve realtime = offline (Export klingt wie der Parameter in der Wiedergabe)', rtPan.samples.length >= 8 && dRtOff < 0.03, `max. Abweichung ${dRtOff.toFixed(4)} bei ${rtPan.samples.length} Proben`);
+    for (const r of rtPan.release) {
+      const tag = r.firefox ? ' (ohne cancelAndHoldAtTime)' : '';
+      check(`8 Kurve löschen im Lauf${tag}: Regler −0,9 klingt nach 60 ms`, Math.abs(r.at60 + 0.9) < 0.03 && Math.abs(r.at260 + 0.9) < 1e-3 && Math.abs(r.want + 0.9) > 0.5, JSON.stringify(r));
+      check(`8 Rückgängig${tag}: Kurve übernimmt wieder`, Math.abs(r.back.got - r.back.want) < 0.03, JSON.stringify(r.back));
+    }
+    check('8 Stillstand mit Pan-Kurve: Regler bewegen ändert den gehaltenen Wert nicht', Math.abs(rtPan.stoppedLocked.after - rtPan.stoppedLocked.held) < 1e-4, JSON.stringify(rtPan.stoppedLocked));
+    check('8 Stillstand: Kurve löschen gibt den Reglerwert zurück', Math.abs(rtPan.stopped - 0.4) < 1e-3, `${rtPan.stopped}`);
 
     check('Keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {

@@ -6,7 +6,7 @@ import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
-import { AUTO_PARAMS, autoKeys, laneOf, autoValueAt, planLane, autoWindow, handover } from './automation.js';
+import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 const TICK_MS = 25;
@@ -32,19 +32,23 @@ function createStrip(ctx, dest, { pan = true } = {}) {
   return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set() };
 }
 
-// AudioParams der Kanalzug-Kurven (Panorama folgt in Scheibe 2, Effekte über u.auto in Scheibe 3)
-const STRIP_PARAMS = { volume: (strip) => strip.auto.gain };
+// AudioParams der Kanalzug-Kurven (Effekte über u.auto in Scheibe 3). Ein Besitzer je AudioParam: auto.gain gehört
+// immer der Automation, das Panorama nur, solange die Spur eine Pan-Kurve hat (sonst syncStrip).
+const STRIP_PARAMS = { volume: (strip) => strip.auto.gain, pan: (strip) => strip.pan?.pan };
 
-// Kurven eines Kanalzugs: [{ key, param, map, points, def }]
+// Kurven eines Kanalzugs: [{ key, param, map, points, def, absolute }]; def = Ruhewert ohne Kurve (Panorama: Regler)
 function stripLanes(strip, owner, target) {
   const out = [];
   for (const key of autoKeys(target)) {
     const spec = AUTO_PARAMS[key];
     const param = STRIP_PARAMS[key]?.(strip);
-    if (spec.target === 'strip' && param) out.push({ key, param, map: spec.map, points: laneOf(owner, key), def: spec.def });
+    if (spec.target === 'strip' && param) out.push({ key, param, map: spec.map, points: laneOf(owner, key), def: autoRest(owner, key), absolute: spec.owner === 'absolute' });
   }
   return out;
 }
+
+// Regler-Parameter, die eine Kurve gerade übernimmt (syncStrip lässt sie aus)
+const skipOf = (owner) => ({ pan: laneOf(owner, 'pan').length > 0 });
 
 // AudioWorklet-Modul (Mastering, Lo-Fi) einmal je Kontext laden; false, wenn es nicht geht
 const FX_WORKLET = new URL('./dsp/fx-worklet.js', import.meta.url);
@@ -85,10 +89,10 @@ function installChain(ctx, strip, fx, spb, live, grid) {
   strip.xf = xf;
 }
 
-function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid) {
+function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid, skip = {}) {
   const t = live ? ctx.currentTime : null;
   if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
-  if (strip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
+  if (strip.pan && !skip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
   if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live, grid);
   else updateFxParams(strip.chain, fx, t, spb, grid);
 }
@@ -222,7 +226,7 @@ export function syncMix(ctx, project, mix, spb, live = true) {
       mix.tracks.set(track.id, strip);
       mix.onStrip?.(track.id, strip);
     }
-    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid);
+    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid, skipOf(track));
   }
   const m = masterOf(project);
   syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid);
@@ -626,7 +630,10 @@ export class Engine extends Emitter {
     // Master (Scheibe 4) muss dagegen auf 1 zurück, weil das Vorhören über ihn läuft.
     const beat = this.currentBeat(t);
     this._eachLane((l, strip) => {
-      if (strip.autoOn.has(l.key)) handover(l.param, t, l.map(autoValueAt(l.points, beat, l.def)));
+      if (!strip.autoOn.has(l.key)) return;
+      const v = l.map(autoValueAt(l.points, beat, l.def));
+      handover(l.param, t, v);
+      (strip.autoHeld ||= {})[l.key] = v;
     });
     for (const v of this.voices) this._kill(v, t);
     this.voices.clear();
@@ -699,14 +706,41 @@ export class Engine extends Emitter {
       const on = strip.autoOn.has(l.key);
       if (!l.points.length && !on) return;
       if (!l.points.length) {
-        planLane(l.param, l.map, [], w.b0, w.b1, w.t0, this.spb, w.entry === 'set' ? 'set' : 'cont');
+        // Kurve weg: auf den Ruhewert zurück (absolute Parameter gibt schon _releaseAuto an den Regler zurück)
+        planLane(l.param, l.map, [{ beat: 0, value: l.def }], w.b0, w.b1, w.t0, this.spb, w.entry === 'set' ? 'set' : 'cont');
         strip.autoOn.delete(l.key);
         return;
       }
       if (!on && w.entry !== 'set') l.param.setValueAtTime(l.map(l.def), w.t0);
       planLane(l.param, l.map, l.points, w.b0, w.b1, w.t0, this.spb, on || w.entry === 'set' ? w.entry : 'cont');
       strip.autoOn.add(l.key);
+      (strip.autoPts ||= {})[l.key] = l.points;
+      if (strip.autoHeld) delete strip.autoHeld[l.key];
     });
+  }
+
+  // Besitzwechsel vor syncMix: Verschwindet eine absolute Kurve (Panorama), hält die Automation ihren Wert jetzt an
+  // (Firefox ohne cancelAndHoldAtTime: Wert aus der eigenen Planung) und gibt den Parameter an den Regler zurück –
+  // syncStrip rampt danach mit setTargetAtTime auf den Reglerwert.
+  _releaseAuto() {
+    if (!this.mix) return;
+    const t = this.ctx.currentTime;
+    const beat = this.currentBeat(t);
+    for (const [id, strip] of this.mix.tracks) {
+      for (const key of [...strip.autoOn]) {
+        if (AUTO_PARAMS[key]?.owner !== 'absolute') continue;
+        const track = this.project.tracks.find((x) => x.id === id);
+        if (track && laneOf(track, key).length) continue;
+        const param = STRIP_PARAMS[key]?.(strip);
+        const pts = strip.autoPts?.[key];
+        if (param) {
+          const held = this.playing && pts?.length ? AUTO_PARAMS[key].map(autoValueAt(pts, beat)) : strip.autoHeld?.[key] ?? param.value;
+          handover(param, t, held);
+        }
+        strip.autoOn.delete(key);
+        if (strip.autoHeld) delete strip.autoHeld[key];
+      }
+    }
   }
 
   // ---------- Einplanen ----------
@@ -818,6 +852,7 @@ export class Engine extends Emitter {
 
   _onChange(reason) {
     this._aud = null;
+    if (this.ctx) this._releaseAuto();
     this._lanes = null;
     if (!this.ctx) return;
     syncMix(this.ctx, this.project, this.mix, this.spb, true);

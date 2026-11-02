@@ -2,11 +2,13 @@
 // nutzen dieselben Funktionen.
 //
 // API (Auszug für die Oberfläche):
-//   AUTO_PARAMS[key]                     { key, label, min, max, def, owner: 'relative'|'absolute', target, track, master, format(v) }
+//   AUTO_PARAMS[key]                     { key, label, min, max, def, owner: 'relative'|'absolute', target, track, master, format(v), rest? }
 //   autoKeys(target)                     Schlüssel, die eine Spur (target = Spur-ID) bzw. 'master' kennt
 //   laneOf(owner, key)                   Punkte [{ beat, value, curve? }] einer Spur/des Masters: sortiert, geklemmt, ein Punkt je Schlag
+//   autoRest(owner, key)                 Wert ohne Kurve: Lautstärke 1, absolute Parameter der Regler (Panorama: track.pan)
 //   autoValueAt(points, beat, def)       Wert der Kurve an einem Schlag (ohne Punkte: def)
-//   autoValueOf(owner, key, beat)        dasselbe direkt am Besitzer (Regler-Anzeige an der Marke)
+//   autoValueOf(owner, key, beat)        dasselbe direkt am Besitzer (Regler-Anzeige an der Marke; ohne Kurve: autoRest)
+//   isAutomated(owner, key)              absolute Kurve vorhanden → der Regler folgt ihr und ist gesperrt
 //   autoBreaks(points, b0, b1)           Stützstellen [[beat, value], …] inkl. b0 und b1
 //   formatAutoValue(key, v)              Text fürs Fähnchen („−6,0 dB“)
 //   AUTO_TEMPLATES, TEMPLATE_BARS        Vorlagen (fadeIn, fadeOut) und Längen-Chips in Takten
@@ -25,6 +27,19 @@ export const AUTO_PARAMS = {
     format: (v) => (v <= 1e-4 ? '−∞ dB' : num(20 * Math.log10(v)) + ' dB'),
     map: (v) => v,
   },
+  // Panorama ist der Wert selbst: mit Kurve folgt der Regler ihr, ohne Kurve gilt track.pan
+  pan: {
+    key: 'pan', label: 'Panorama', min: -1, max: 1, def: 0, owner: 'absolute', target: 'strip', track: true, master: false,
+    format: (v) => { const n = Math.round(Math.abs(v) * 100); return n === 0 ? 'Mitte' : `${v < 0 ? 'L' : 'R'} ${n} %`; },
+    map: (v) => v,
+    rest: (owner) => (Number.isFinite(owner?.pan) ? clamp(owner.pan, -1, 1) : 0),
+    center: 0,
+  },
+};
+
+export const autoRest = (owner, key) => {
+  const s = AUTO_PARAMS[key];
+  return s?.rest ? s.rest(owner) : s?.def ?? 0;
 };
 
 export function autoKeys(target) {
@@ -91,8 +106,10 @@ export function autoValueAt(points, beat, def = 1) {
 }
 
 export function autoValueOf(owner, key, beat) {
-  return autoValueAt(laneOf(owner, key), beat, AUTO_PARAMS[key]?.def ?? 0);
+  return autoValueAt(laneOf(owner, key), beat, autoRest(owner, key));
 }
+
+export const isAutomated = (owner, key) => AUTO_PARAMS[key]?.owner === 'absolute' && laneOf(owner, key).length > 0;
 
 export function autoBreaks(points, b0, b1, def = 1) {
   const vs = vertices(points);
@@ -231,12 +248,12 @@ export function carryAutomation(moves, { copy = false } = {}) {
       const inner = src.filter((p) => p.beat >= m.s0 - EPS && p.beat < m.e0 - EPS);
       if (!inner.length) continue;
       lane(m.to, key);
-      const def = AUTO_PARAMS[key].def;
+      const def = autoRest(m.from, key);
       const d = m.s1 - m.s0;
       const content = inner.map((p) => ({ ...p, beat: p.beat + d }));
       if (inner[0].beat > m.s0 + EPS) content.unshift({ beat: m.s1, value: autoValueAt(src, m.s0, def) });
       content.push({ beat: m.e0 + d, value: autoValueAt(src, m.e0, def) });
-      jobs.push({ m, key, content, def });
+      jobs.push({ m, key, content, def, defTo: autoRest(m.to, key) });
     }
   }
   if (!jobs.length) return false;
@@ -252,7 +269,7 @@ export function carryAutomation(moves, { copy = false } = {}) {
     }
   }
   // Ziele: Bereich ersetzen, außerhalb bleibt der Verlauf
-  for (const { m, key, content, def } of jobs) {
+  for (const { m, key, content, defTo: def } of jobs) {
     const base = cur(m.to, key);
     const s1 = m.s1;
     const e1 = content[content.length - 1].beat;
