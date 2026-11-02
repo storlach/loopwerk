@@ -20,6 +20,21 @@ export const DRUM_ROWS = [
   { id: 'crash', label: 'Becken' },
 ];
 
+// MIDI-Anschlag (1–127) → Anschlag der Note (0,1–1): leicht gekrümmt, damit auch leises Spiel hörbar bleibt
+export const midiVelocity = (v) => Math.min(1, Math.max(0.1, (Math.max(0, v) / 127) ** 0.8));
+
+// General-MIDI-Schlagzeug → Zeile des Beat-Editors (Kanal egal; unbekannte Noten gibt es nicht)
+export const GM_DRUMS = {
+  35: 'kick', 36: 'kick',
+  37: 'snare', 38: 'snare', 40: 'snare',
+  39: 'clap',
+  42: 'hat', 44: 'hat',
+  46: 'open',
+  41: 'tomLo', 43: 'tomLo', 45: 'tomLo',
+  47: 'tomHi', 48: 'tomHi', 50: 'tomHi',
+  49: 'crash', 51: 'crash', 52: 'crash', 55: 'crash', 57: 'crash', 59: 'crash',
+};
+
 export const KITS = [
   { id: 'elektro', label: 'Elektro (synthetisch)' },
   {
@@ -80,9 +95,9 @@ export function preparePreset(preset) {
 
 // Wie ein Klang eine Note spielt (b = Schlag, len = Länge in Schlägen, v = Stärke)
 const PLAY = {
-  lead: (k, p, b, len) => k.lead(b, p, len),
+  lead: (k, p, b, len, v) => k.lead(b, p, len, v),
   bass: (k, p, b, len, v) => k.bass(b, p, len, v),
-  pad: (k, p, b, len) => k.pad(b, [p], len),
+  pad: (k, p, b, len, v) => k.pad(b, [p], len, v),
   piano: (k, p, b, len, v) => k.piano(b, p, len, v),
   organ: (k, p, b, len, v) => k.organ(b, p, len, v),
   flute: (k, p, b, len, v) => k.flute(b, p, len, v),
@@ -348,29 +363,40 @@ function playGuitar(ctx, dest, preset, pitch, seconds, when) {
   return src;
 }
 
-export function previewNote(ctx, dest, preset, pitch) {
+// vel (0–1): Anschlag; leiser gespielt klingt es auch beim Vorhören leiser
+export function previewNote(ctx, dest, preset, pitch, vel = 1) {
   const { kit, out } = previewKit(ctx, dest);
   const t = ctx.currentTime + 0.01;
   const s = liveSampler(preset);
-  if (s.loaded) { playSampled(ctx, out, s.loaded, pitch, t, 0.4, 1); return; }
-  if (isGuitarPreset(s.preset)) { playGuitar(ctx, out, s.preset, pitch, 0.4, t); return; }
-  playNote(kit, s.preset, pitch, t, s.preset === 'pad' || s.preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
+  if (s.loaded) { playSampled(ctx, out, s.loaded, pitch, t, 0.4, vel); return; }
+  // Eigener Ausgang für leisere Töne: die Stärke gilt dann für jeden Klang gleich
+  let bus = out;
+  let k = kit;
+  if (vel < 0.999) {
+    bus = ctx.createGain();
+    bus.gain.value = vel;
+    bus.connect(out);
+    k = createKit(ctx, bus, 1);
+    setTimeout(() => bus.disconnect(), 2500);
+  }
+  if (isGuitarPreset(s.preset)) { playGuitar(ctx, bus, s.preset, pitch, 0.4, t); return; }
+  playNote(k, s.preset, pitch, t, s.preset === 'pad' || s.preset === 'strings' ? 0.6 : 0.4, 1, 0.75);
 }
 
 // Gehaltener Ton (Klaviatur, Tasten, Finger): klingt bis stop(), höchstens 12 s. Eigener Ausgang je Ton,
 // damit sich ein einzelner Ton weich beenden lässt.
 const HOLD_MAX = 12;
 const GUITAR_HOLD = 3; // Gitarre klingt ohnehin aus
-export function startNote(ctx, dest, preset, pitch) {
+export function startNote(ctx, dest, preset, pitch, vel = 1) {
   const s = liveSampler(preset);
   if (s.loaded) {
-    const voice = playSampled(ctx, previewKit(ctx, dest).out, s.loaded, pitch, ctx.currentTime + 0.005, null, 1);
+    const voice = playSampled(ctx, previewKit(ctx, dest).out, s.loaded, pitch, ctx.currentTime + 0.005, null, vel);
     return { stop: () => voice.release(ctx.currentTime) };
   }
   preset = s.preset;
   const g = ctx.createGain();
   g.connect(dest);
-  g.gain.value = 0.8;
+  g.gain.value = 0.8 * vel;
   const t = ctx.currentTime + 0.005;
   if (isGuitarPreset(preset)) playGuitar(ctx, g, preset, pitch, GUITAR_HOLD, t);
   else playNote(createKit(ctx, g, 1), preset, pitch, t, HOLD_MAX, 1, 1);
@@ -389,18 +415,22 @@ export function startNote(ctx, dest, preset, pitch) {
 }
 
 // when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort
-export function previewDrum(ctx, dest, kitId, rowId, library, when) {
+export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1) {
   const map = KITS.find((k) => k.id === kitId)?.map;
   if (map) {
     const s = library.get(map[rowId]);
     if (!s?.orig) return;
     const src = ctx.createBufferSource();
     src.buffer = s.orig;
-    src.connect(dest);
+    if (vel < 0.999) {
+      const g = ctx.createGain();
+      g.gain.value = vel;
+      src.connect(g).connect(dest);
+    } else src.connect(dest);
     src.start(when ?? 0);
     return;
   }
   const k = previewKit(ctx, dest).kit;
   const t = when ?? ctx.currentTime + 0.01;
-  (SYNTH_DRUMS[kitId] || SYNTH_DRUMS.elektro)[rowId]?.(k, t, 1);
+  (SYNTH_DRUMS[kitId] || SYNTH_DRUMS.elektro)[rowId]?.(k, t, vel);
 }

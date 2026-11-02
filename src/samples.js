@@ -346,11 +346,11 @@ export function createKit(ctx, out, spb, semis = 0) {
       o.start(t);
       o.stop(t + d + 0.1);
     },
-    pad(beat, midis, lenBeats) {
+    pad(beat, midis, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
       const lp = biquad('lowpass', 1400, 0.8);
-      lp.connect(holdGain(t, d, 0.3, 0.35, 0.6));
+      lp.connect(holdGain(t, d, 0.3 * vel, 0.35, 0.6));
       for (const m of midis) {
         for (const det of [-9, 9]) {
           const o = osc('sawtooth', tf(m));
@@ -374,7 +374,7 @@ export function createKit(ctx, out, spb, semis = 0) {
     stab(beat, midis, vel = 1) {
       for (const m of midis) kit.pluck(beat, m, vel * 0.7, 0.16);
     },
-    lead(beat, midi, lenBeats) {
+    lead(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
       const o1 = osc('sawtooth', tf(midi));
@@ -391,7 +391,7 @@ export function createKit(ctx, out, spb, semis = 0) {
       mix.gain.value = 0.5;
       o1.connect(mix);
       o2.connect(mix);
-      mix.connect(biquad('lowpass', 2600, 2)).connect(holdGain(t, d, 0.45, 0.012, 0.1));
+      mix.connect(biquad('lowpass', 2600, 2)).connect(holdGain(t, d, 0.45 * vel, 0.012, 0.1));
       for (const o of [o1, o2, lfo]) { o.start(t); o.stop(t + d + 0.1); }
     },
     riser(beat, lenBeats) {
