@@ -13,6 +13,7 @@ import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
 import { mountMasteringControls } from './mastering.js';
+import { templateControls } from './auto-lane.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -132,7 +133,15 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const mixerLink = el('button', 'insp-link', 'Alle Spuren im Mixer vergleichen →');
   mixerLink.type = 'button';
   mixerLink.addEventListener('click', () => ui.setDock('mixer'));
-  trackSec.append(trackKind, trackTitle, trackSub, vol.row, pan.row);
+  // Verlauf: Ein-/Ausblenden der Spur als Kurve, ohne Zeichnen (Automation)
+  const autoBlock = el('div', 'insp-auto');
+  const tpl = templateControls({ store, ui, engine, getTarget: () => (trackId === MASTER ? null : trackId) });
+  const curveBtn = el('button', 'insp-link', 'Kurve zeigen');
+  curveBtn.type = 'button';
+  curveBtn.id = 'insp-auto-toggle';
+  curveBtn.addEventListener('click', () => { if (trackId && trackId !== MASTER) ui.autoLane?.toggle(trackId); });
+  autoBlock.append(el('span', 'insp-kind', 'Verlauf'), tpl.node, curveBtn);
+  trackSec.append(trackKind, trackTitle, trackSub, vol.row, pan.row, autoBlock);
 
   let trackId = null; // Spur, deren Einstellungen gerade gezeigt werden
   vol.input.addEventListener('input', () => {
@@ -310,12 +319,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(track.volume);
       vol.out.textContent = formatDb(track.volume);
       pan.row.hidden = false;
+      autoBlock.hidden = false;
+      tpl.update();
+      curveBtn.textContent = ui.autoLane?.isOpen(trackId) ? 'Kurve schließen (A)' : 'Kurve zeigen (A)';
       if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
       const pv = track.pan || 0;
       pan.out.textContent = Math.abs(pv) < 0.01 ? 'Mitte' : `${Math.round(Math.abs(pv) * 100)} % ${pv < 0 ? 'links' : 'rechts'}`;
       if (fxl.parentElement !== trackSec) trackSec.append(fxl, mixerLink);
     } else {
       trackId = MASTER;
+      autoBlock.hidden = true;
       songName.textContent = store.project.name || 'Song';
       renderKeyChanges();
       tval.textContent = String(store.project.bpm);

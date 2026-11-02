@@ -98,6 +98,7 @@
 <link rel="modulepreload" href="src/ui/touch.js">
 <link rel="modulepreload" href="src/ui/key-row.js">
 <link rel="modulepreload" href="src/ui/chord-row.js">
+<link rel="modulepreload" href="src/ui/auto-lane.js">
 <link rel="modulepreload" href="src/ui/zoombars.js">
 <link rel="modulepreload" href="src/ui/transport.js">
 <link rel="modulepreload" href="src/ui/project-io.js">
@@ -2027,7 +2028,7 @@
   .loop-band.off { opacity: 0.25; box-shadow: none; }
   .loop-shade { background: rgb(255 255 255 / 0.025); border-color: rgb(255 255 255 / 0.18); }
   .track-head, .group-head, .add-track { background: var(--head-bg); }
-  .track-row, .group-row { border-bottom-color: rgb(255 255 255 / 0.05); }
+  .track-row, .group-row, .auto-row { border-bottom-color: rgb(255 255 255 / 0.05); }
   .track-name { font: 600 13.5px/1.2 var(--font-body); letter-spacing: -0.005em; }
   .track-dot { width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; opacity: 0.8; box-shadow: 0 0 6px var(--cat, transparent); }
   .track-row.silent .track-name { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
@@ -2687,6 +2688,81 @@
     #editor .ed-actions { order: 0; width: auto; margin-left: auto; gap: 4px; }
     #ed-apply { padding: 0 10px; }
   }
+  /* ---------- Automation: Kurvenzeile unter der Spur (Spec v2.12). Kurve = Einstellung = Haarlinie; Punkte sind Ringe ---------- */
+  .auto-row { position: relative; display: flex; box-sizing: border-box; border-bottom: 1px solid var(--line); }
+  .auto-row[hidden] { display: none; }
+  .auto-head {
+    position: sticky; left: 0; z-index: 3; flex: 0 0 var(--head-w); width: var(--head-w); box-sizing: border-box;
+    display: flex; align-items: center; gap: 4px; padding: 0 4px 0 12px;
+    background: var(--head-bg); border-right: 1px solid var(--line);
+  }
+  .auto-chip {
+    flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 5px 8px; border-radius: var(--radius); box-shadow: var(--key-shadow);
+    font: 500 10px/1 var(--font-mono); letter-spacing: 0.02em; color: var(--ink);
+  }
+  .auto-close {
+    flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center;
+    border: 0; border-radius: var(--radius); background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .auto-close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+  .auto-close:hover { color: var(--ink); box-shadow: var(--key-shadow); }
+  .auto-body {
+    position: relative; flex: 1 1 0; min-width: 0; outline: none; cursor: crosshair; touch-action: pan-x pan-y;
+    background-color: color-mix(in srgb, var(--well) 70%, transparent);
+    background-image:
+      repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)),
+      repeating-linear-gradient(to right, var(--grid-beat) 0 1px, transparent 1px var(--ppb));
+  }
+  .arr-grid.coarse .auto-body { background-image: repeating-linear-gradient(to right, var(--grid-bar) 0 1px, transparent 1px var(--bar)); }
+  .auto-body:focus-visible { box-shadow: inset 0 0 0 1px var(--focus); }
+  .auto-svg { position: absolute; left: 0; top: 0; display: block; overflow: hidden; pointer-events: none; }
+  .auto-base { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
+  .auto-curve { fill: none; stroke: var(--amber-dim); stroke-width: 1; stroke-linejoin: round; }
+  .auto-row.dragging { cursor: grabbing; }
+  .auto-pt { position: absolute; z-index: 1; width: 20px; height: 20px; margin: -10px 0 0 -10px; outline: none; cursor: grab; touch-action: none; }
+  .auto-pt::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; box-sizing: border-box;
+    border-radius: 50%; border: 1.5px solid var(--amber-dim); background: var(--bg);
+  }
+  .auto-pt:hover::before { border-color: var(--amber); }
+  .auto-pt.sel, .auto-pt.drag { z-index: 2; }
+  .auto-pt.sel::before, .auto-pt.drag::before { border-color: var(--amber); background: var(--amber); box-shadow: var(--beam-glow); }
+  .auto-pt:focus-visible::before { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .auto-flag {
+    position: absolute; z-index: 4; transform: translate(-50%, -100%); pointer-events: none; white-space: nowrap;
+    padding: 4px 7px; border-radius: var(--radius); background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--key-line);
+    font: 500 11px/1 var(--font-mono); color: var(--ink);
+  }
+  .auto-flag.below { transform: translate(-50%, 0); }
+  .auto-flag[hidden] { display: none; }
+  /* Geschlossene Zeile: Kurve als dünne Linie über den Clips, nur Anzeige */
+  .auto-over { position: absolute; left: 0; top: 0; z-index: 500; pointer-events: none; overflow: hidden; }
+  .auto-over path { fill: none; stroke: var(--amber-dim); stroke-width: 1; opacity: 0.7; stroke-linejoin: round; }
+  /* Vorlagen: Einblenden / Ausblenden mit Längen-Chips (Inspektor und Spur-Menü) */
+  .insp-auto { display: grid; gap: 8px; }
+  .insp-auto[hidden] { display: none; }
+  .auto-tpl { display: grid; gap: 6px; }
+  .auto-cap { font-size: 12px; color: var(--muted); }
+  .auto-bars { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .auto-tpl-menu { padding: 4px 6px 6px; }
+  .auto-tpl-menu .auto-tpl-btns { display: grid; gap: 2px; margin: 0 -6px; }
+  .auto-menu-back { color: var(--muted); }
+  @media (hover: none) and (pointer: coarse) {
+    .auto-head { padding-left: 10px; }
+    .auto-close { width: 44px; height: 48px; margin-right: -4px; }
+    .auto-pt { width: 44px; height: 44px; margin: -22px 0 0 -22px; }
+    .auto-pt::before { width: 12px; height: 12px; margin: -6px 0 0 -6px; }
+    .auto-flag { padding: 6px 9px; font-size: 12px; }
+    .auto-bars .key { height: 44px; min-width: 44px; }
+    .auto-tpl-menu .track-menu-item { min-height: 44px; }
+    .auto-chip { font-size: 11px; }
+  }
+  @media (max-width: 760px) {
+    .auto-head { padding-left: 6px; gap: 2px; }
+    .auto-chip { padding: 5px 4px; font-size: 10px; letter-spacing: 0; }
+    .auto-close { margin-right: -2px; }
+  }
 </style>
 
 
@@ -3199,6 +3275,7 @@
           <dt>Lineal</dt><dd>Antippen setzt die Marke, Ziehen markiert den Loop</dd>
           <dt>Spurname antippen</dt><dd>Umbenennen</dd>
           <dt>Piano-Roll</dt><dd>Antippen setzt oder löscht eine Note, lange drücken und ziehen verschiebt sie</dd>
+          <dt>Kurve</dt><dd>Spur-Menü ⋯ → Kurve: Antippen setzt einen Punkt, einen Punkt ziehen verschiebt ihn, Halten löscht ihn</dd>
         </dl>
         <dl class="keys-list for-mouse">
           <dt>Leertaste</dt><dd>Abspielen / Pause</dd>
@@ -3206,6 +3283,7 @@
           <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
           <dt>Strg+Z / Strg+Umschalt+Z</dt><dd>Rückgängig / Wiederholen</dd>
           <dt>T</dt><dd>Clip an der Abspielmarke teilen</dd>
+          <dt>A</dt><dd>Lautstärke-Kurve der gewählten Spur öffnen oder schließen (Klick setzt einen Punkt, Doppelklick löscht)</dd>
           <dt>Rahmen ziehen</dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
           <dt>Umschalt+Klick</dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>
           <dt>Strg+A</dt><dd>Alle Clips auswählen</dd>
