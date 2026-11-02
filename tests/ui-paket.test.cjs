@@ -101,7 +101,7 @@ async function inspectorTest() {
         trackName: f.track.name,
         clipLabels: lab(cs), trackLabels: lab(ts),
         sepBorder: getComputedStyle(ts).borderTopWidth,
-        speedHasRun: !!speed && /Laufzeit/.test(speed.textContent),
+        speedHasRun: !!speed && !!speed.querySelector('.insp-speed') && /Geschwindigkeit/.test(speed.textContent),
         order: cs.compareDocumentPosition(ts) & Node.DOCUMENT_POSITION_FOLLOWING ? 'clip-vor-spur' : 'falsch',
         clipCat: [...cs.classList].find((c) => c.startsWith('cat-')) || '',
         sample: library.get(f.clip.sampleId).name,
@@ -111,7 +111,7 @@ async function inspectorTest() {
     check('Überschriften „CLIP · Name“ und „SPUR · Name“', d.clipHead === `Clip·${d.sample}` && d.trackHead === `Spur·${d.trackName}`, `${d.clipHead} | ${d.trackHead}`);
     check('Eindeutige Begriffe: Clip-Lautstärke vs. Spur-Lautstärke', d.clipLabels.includes('Clip-Lautstärke') && d.trackLabels.includes('Spur-Lautstärke') && !d.clipLabels.includes('Spur-Lautstärke'), JSON.stringify([d.clipLabels, d.trackLabels]));
     check('Sichtbare Trennung zwischen den Abschnitten', parseFloat(d.sepBorder) >= 2, d.sepBorder);
-    check('Laufzeit liegt im Container .insp-clip-speed des Clip-Abschnitts', d.speedHasRun);
+    check('Geschwindigkeit liegt im Container .insp-clip-speed des Clip-Abschnitts', d.speedHasRun);
     check('Kategoriefarbe nur als Akzent (Klasse cat-… am Clip-Abschnitt)', /^cat-/.test(d.clipCat), d.clipCat);
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'paket-desktop-inspektor.png') });
     await page.evaluate(() => { const { store, ui } = window.loopwerk; ui.selectTrack(store.project.tracks[0].id); });
@@ -138,13 +138,13 @@ async function clipbarTest() {
       return {
         shown: !!lv.offsetParent, head: lv.querySelector('.lvl-head').textContent.replace(/\s+/g, ' '),
         labels: [...lv.querySelectorAll('.lvl > span:first-child')].map((n) => n.textContent),
-        speed: !!lv.querySelector('.insp-clip-speed #lvl-run-up'),
+        speed: !!lv.querySelector('#lvl-speed-row .lvl-speed'),
         scroll: document.documentElement.scrollWidth - innerWidth,
         sample: library.get(store.findClip(ui.selectedClipId).clip.sampleId).name,
       };
     });
     check('Handy: Clip-Leiste zeigt „Clip · Name“ und „Clip-Lautstärke“', d.shown && d.head === `Clip·${d.sample}` && d.labels[0] === 'Clip-Lautstärke', JSON.stringify(d));
-    check('Handy: Laufzeit liegt im Container .insp-clip-speed', d.speed);
+    check('Handy: Geschwindigkeit liegt in der Clip-Leiste (#lvl-speed-row)', d.speed);
     check('Handy: kein waagrechtes Scrollen', d.scroll <= 0, String(d.scroll));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'paket-handy-clipleiste.png') });
     check('Handy-Clip-Leiste: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));

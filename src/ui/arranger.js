@@ -1092,7 +1092,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
       showLoop(region.start, region.end, true);
     }, () => {
       if (region) store.setLoop({ on: true, startBeat: region.start, endBeat: region.end });
-      else engine.setPosition(b0);
+      else { engine.setPosition(b0); setPlayhead(b0); }
     }, () => render());
   }
 
