@@ -3,7 +3,7 @@
 
 import { anySoloOf, audibleRanges, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
-import { laneOf } from '../automation.js';
+import { AUTO_PARAMS, laneOf } from '../automation.js';
 import { makeKnob } from './knob.js';
 import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
@@ -421,7 +421,8 @@ export function mountArranger({ root, store, engine, library, ui }) {
       item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
       item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
       item(`Länge: ${ui.autoBars ?? 4} ${(ui.autoBars ?? 4) === 1 ? 'Takt' : 'Takte'} ›`, () => openFadeMenu(trackId, btn)),
-      ...(laneOf(tracks[i], 'volume').length ? [item('Kurve löschen', () => { closeMenu(); store.clearAutomation(trackId, 'volume'); })] : []),
+      // gilt für den zuletzt gewählten Parameter der Kurvenzeile
+      ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
       ...groupItems(trackId, item),
       item('Löschen', (b) => {
         if (b.classList.contains('confirm')) { closeMenu(); store.removeTrack(trackId); return; }

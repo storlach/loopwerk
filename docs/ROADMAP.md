@@ -226,11 +226,12 @@
 - Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
 - Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
 
-## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke)
+## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe)
 - Lautstärke-Kurve je Spur, linear: Modell und Engine (`src/automation.js`, `tests/automation.test.cjs`), Kurven wandern mit Clips
 - Kurvenzeile unter der Spur (`src/ui/auto-lane.js`): Spur-Menü „Kurve“ oder Taste A; Maus: Klick setzt, Ziehen verschiebt (Raster, Umschalt frei), Doppelklick/Entf löscht, Fähnchen mit Wert und Position; Finger: Antippen setzt, Punkt ziehen, Halten löscht, Wischen scrollt; geschlossen als dünne Linie über den Clips
 - Vorlagen Einblenden/Ausblenden (1 · 2 · 4 · 8 Takte): Inspektor „Spur“, am Handy Spur-Menü → „Verlauf“; Tests: `tests/automation-ui.test.cjs`
-- Offen: Panorama und Stufe (Scheibe 2), Effekt-Kurven (3), Summe (4), Verzerrer-Anteil (5); Spec: `docs/specs/v2.12-automation.md`
+- Scheibe 2: Panorama-Kurve (absolut, ein Besitzer je AudioParam: mit Kurve lässt `syncStrip` das Panorama aus; Kurve löschen gibt den Regler mit seinem Wert zurück, auch ohne `cancelAndHoldAtTime`), Stufe (Sprung in 1/128 Schlag); Parameter-Chip als Auswahl mit Leuchtpunkt, Mittellinie, Fähnchen „L 40 %“/„Mitte“; Mini-Leiste „Linear · Stufe · Löschen“ (Klick auf gewählten Punkt, Rechtsklick, Enter; Finger: Antippen); Panorama-Regler in Mixer und Inspektor folgen der Kurve, gedimmt mit Kurven-Zeichen, Klick öffnet die Zeile; Spur-Menü „…-Kurve löschen“ für den gewählten Parameter
+- Offen: Effekt-Kurven (3), Summe (4), Verzerrer-Anteil (5); Spec: `docs/specs/v2.12-automation.md`
 
 ## Korrekturen nach 2.11
 - Handy: Loop-Bereich lässt sich auf der Taktleiste ziehen (vorher hat der Browser die Geste als Scrollen abgebrochen); Taktleiste fingerhoch, Einblender beim Einschalten des Loops

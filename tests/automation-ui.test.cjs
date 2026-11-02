@@ -1,5 +1,6 @@
-// Automation Scheibe 1, Bedienung (Spec v2.12, Testplan 11): Kurvenzeile unter der Spur am Desktop (Maus, Tastatur) und am
-// Handy/Tablet (Finger), Vorlagen Einblenden/Ausblenden, Tippflächen, keine Konsolenfehler.
+// Automation Scheibe 1 + 2, Bedienung (Spec v2.12, Testplan 11): Kurvenzeile unter der Spur am Desktop (Maus, Tastatur) und
+// am Handy/Tablet (Finger), Vorlagen Einblenden/Ausblenden, Parameter Lautstärke/Panorama, Mini-Leiste Linear/Stufe/Löschen,
+// gesperrte Panorama-Regler (Mixer, Inspektor), Tippflächen, keine Konsolenfehler.
 // node tests/automation-ui.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
 const { openApp, createChecker } = require('./harness.cjs');
@@ -187,6 +188,164 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     check('Offene Zeile zeichnet nach dem Verschieben mit', await page.evaluate(() => document.querySelectorAll('.auto-pt').length) === (await state(page)).auto.length);
     await page.keyboard.press('a');
 
+    // ================= Scheibe 2: Panorama, Stufe, Mini-Leiste, gesperrte Regler =================
+    const pan = () => page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { pan: t.automation?.pan ?? null, vol: t.automation?.volume ?? null, slider: t.pan || 0 }; });
+    await page.evaluate((id) => { window.loopwerk.store.setTrack(id, { pan: -0.3 }); window.loopwerk.ui.selectTrack(id); }, t);
+    await page.keyboard.press('a');
+    await page.waitForSelector('.auto-row');
+    await page.click('.auto-chip');
+    const km = await page.evaluate(() => {
+      const m = document.querySelector('.auto-keys');
+      return { open: !!m && !m.hidden, items: [...m.querySelectorAll('.auto-key[data-key]')].map((b) => ({ key: b.dataset.key, text: b.textContent, lit: !!b.querySelector('.auto-dot.on'), checked: b.getAttribute('aria-checked') })) };
+    });
+    check('Chip ist eine Auswahl: Lautstärke, Panorama', km.open && km.items.map((x) => x.text).join() === 'Lautstärke,Panorama', JSON.stringify(km));
+    check('Chip: Lautstärke (mit Kurve) trägt einen Leuchtpunkt, Panorama (ohne) nicht', km.items[0]?.lit && !km.items[1]?.lit && km.items[0].checked === 'true', JSON.stringify(km.items));
+    await page.click('.auto-key[data-key="pan"]');
+    const panRow = await page.evaluate(() => ({
+      chip: document.querySelector('.auto-chip')?.textContent, key: document.querySelector('.auto-row')?.dataset.key,
+      menu: document.querySelector('.auto-keys').hidden, mid: document.querySelector('.auto-mid')?.getAttribute('d') || '', pts: document.querySelectorAll('.auto-pt').length,
+    }));
+    check('Chip wechselt zu Panorama: Zeile zeigt Panorama, Menü zu', panRow.chip === 'Panorama' && panRow.key === 'pan' && panRow.menu && panRow.pts === 0, JSON.stringify(panRow));
+    g = await geom(page);
+    check('Panorama: Mittellinie in der Zeile', /^M0 [\d.]+H\d+$/.test(panRow.mid) && Math.abs(Number(panRow.mid.split(' ')[1].split('H')[0]) - g.h / 2) < 1.5, panRow.mid);
+    // Punkt bei Schlag 2, Wert R 40 % (Höhe 30 % von oben innerhalb der Ränder)
+    const yPan = (v) => PAD + (1 - (v + 1) / 2) * (g.h - 2 * PAD);
+    await page.mouse.click(g.x + g.ppb * 2, g.y + yPan(0.4));
+    await page.mouse.click(g.x + g.ppb * 6, g.y + yPan(-0.5));
+    let ps = await pan();
+    check('Panorama: Klick setzt Punkte (Wert = Höhe, −1 … 1)', ps.pan?.length === 2 && near(ps.pan[0].value, 0.4, 0.03) && near(ps.pan[1].value, -0.5, 0.03) && ps.vol?.length >= 2, JSON.stringify(ps));
+    // Fähnchen beim Ziehen: „R 40 %“ / „L 50 %“ / „Mitte“
+    c = await ptCenter(page, 1);
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    let panFlag = '';
+    for (let i = 1; i <= 6; i++) {
+      await page.mouse.move(c.x, c.y + (yPan(0) - yPan(-0.5)) * (-i / 6) * -1);
+      if (i === 6) panFlag = await page.evaluate(() => document.querySelector('.auto-flag')?.textContent || '');
+    }
+    await page.mouse.up();
+    ps = await pan();
+    check('Panorama-Fähnchen zeigt „Mitte“ bzw. „L/R … %“', /^(Mitte|[LR] \d+ %) · Takt \d+/.test(panFlag) && (panFlag.startsWith('Mitte') === (Math.abs(ps.pan[1].value) < 0.005)), `${panFlag} (Wert ${ps.pan[1].value})`);
+    await page.evaluate((id) => window.loopwerk.store.moveAutoPoint(id, 'pan', 1, 6, -0.4), t);
+    await page.waitForTimeout(50);
+    const flagTexts = await page.evaluate(async () => { const A = await import('./src/automation.js'); return [-0.4, 0, 0.25].map((v) => A.formatAutoValue('pan', v)); });
+    check('Panorama-Format: L 40 % · Mitte · R 25 %', flagTexts.join(' | ') === 'L 40 % | Mitte | R 25 %', flagTexts.join(' | '));
+
+    // Mini-Leiste (Maus): Klick auf den gewählten Punkt
+    c = await ptCenter(page, 0);
+    await page.mouse.click(c.x, c.y);
+    check('Maus: erster Klick wählt den Punkt, noch keine Mini-Leiste', await page.evaluate(() => document.querySelector('.auto-bar')?.hidden !== false && window.loopwerk.ui.autoLane.selected?.i === 0));
+    await page.mouse.click(c.x, c.y);
+    const barInfo = () => page.evaluate(() => {
+      const b = document.querySelector('.auto-bar');
+      if (!b || b.hidden) return null;
+      const r = b.getBoundingClientRect();
+      return { labels: [...b.querySelectorAll('button')].map((x) => x.textContent), pressed: [...b.querySelectorAll('button')].map((x) => x.getAttribute('aria-pressed')), x: r.left + r.width / 2, top: r.top, bottom: r.bottom, w: r.width, h: r.height };
+    });
+    let bi = await barInfo();
+    check('Maus: Klick auf den gewählten Punkt zeigt die Mini-Leiste „Linear · Stufe · Löschen“', bi && bi.labels.join(' · ') === 'Linear · Stufe · Löschen' && bi.pressed[0] === 'true', JSON.stringify(bi));
+    check('Mini-Leiste steht am Punkt (über oder unter ihm, am Rand eingerückt)', bi && c.x >= bi.x - bi.w / 2 && c.x <= bi.x + bi.w / 2 && (bi.bottom <= c.y || bi.top >= c.y), JSON.stringify({ bi, c }));
+    let steps0 = (await state(page)).steps;
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-pan-desktop.png') });
+    await page.click('.auto-bar [data-act="step"]');
+    ps = await pan();
+    bi = await barInfo();
+    check('Mini-Leiste: Stufe setzt curve „step“ (ein Schritt), Leiste bleibt mit Stufe gedrückt', ps.pan[0].curve === 'step' && (await state(page)).steps === steps0 + 1 && bi?.pressed[1] === 'true', JSON.stringify(ps.pan));
+    check('Stufe: Punkt ist eckig (nicht nur über Farbe)', await page.evaluate(() => document.querySelectorAll('.auto-pt')[0].classList.contains('step') && /,\s*Stufe$/.test(document.querySelectorAll('.auto-pt')[0].getAttribute('aria-valuetext'))));
+    await page.click('.auto-bar [data-act="linear"]');
+    ps = await pan();
+    check('Mini-Leiste: Linear nimmt die Stufe zurück', !ps.pan[0].curve && (await barInfo())?.pressed[0] === 'true', JSON.stringify(ps.pan));
+    // Rechtsklick auf den anderen Punkt: wählt ihn und zeigt die Leiste dort
+    c = await ptCenter(page, 1);
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    bi = await barInfo();
+    check('Maus: Rechtsklick auf einen Punkt wählt ihn und zeigt die Mini-Leiste', bi && Math.abs(bi.x - c.x) < 4 && (await state(page)).sel?.i === 1, JSON.stringify(bi));
+    await page.keyboard.press('Escape');
+    check('Escape schließt die Mini-Leiste', !(await barInfo()));
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    steps0 = (await state(page)).steps;
+    await page.click('.auto-bar [data-act="delete"]');
+    ps = await pan();
+    check('Mini-Leiste: Löschen entfernt den Punkt (ein Schritt), Leiste zu', ps.pan?.length === 1 && (await state(page)).steps === steps0 + 1 && !(await barInfo()), JSON.stringify(ps.pan));
+    await page.keyboard.press('Control+z');
+    // Klick ins Leere schließt die Leiste und setzt wie gewohnt einen Punkt
+    c = await ptCenter(page, 0);
+    await page.mouse.click(c.x, c.y, { button: 'right' });
+    await page.mouse.click(g.x + g.ppb * 10, g.y + yPan(0));
+    ps = await pan();
+    check('Klick neben die Leiste: Leiste zu, neuer Punkt', !(await barInfo()) && ps.pan?.length === 3, JSON.stringify(ps.pan));
+    await page.keyboard.press('Delete');
+    // Tastatur: Enter auf einem Punkt öffnet die Leiste
+    await page.focus('.auto-pt');
+    await page.keyboard.press('Enter');
+    check('Tastatur: Enter auf einem Punkt öffnet die Mini-Leiste, Fokus darin', !!(await barInfo()) && await page.evaluate(() => document.activeElement?.closest('.auto-bar') != null));
+    await page.keyboard.press('Escape');
+
+    // Leuchtpunkte jetzt für beide; zuletzt gewählter Parameter bleibt beim Schließen/Öffnen
+    await page.click('.auto-chip');
+    check('Chip: beide Parameter mit Punkten leuchten', await page.evaluate(() => [...document.querySelectorAll('.auto-key[data-key] .auto-dot')].every((d) => d.classList.contains('on'))));
+    await page.keyboard.press('Escape');
+    await page.click('.auto-close');
+    await page.keyboard.press('a');
+    await page.waitForSelector('.auto-row');
+    check('Zuletzt gewählter Parameter je Spur bleibt (Panorama)', await page.evaluate(() => document.querySelector('.auto-chip').textContent === 'Panorama'));
+
+    // Gesperrter Panorama-Regler im Inspektor: gedimmt, folgt der Kurve an der Marke, Klick öffnet die Zeile
+    await page.evaluate((id) => {
+      const { store, engine } = window.loopwerk;
+      store.clearAutomation(id, 'pan');
+      store.addAutoPoint(id, 'pan', 0, -1);
+      store.addAutoPoint(id, 'pan', 8, 1);
+      engine.setPosition(6);
+    }, t);
+    await page.waitForTimeout(100);
+    const insp = () => page.evaluate(() => {
+      const lock = document.querySelector('#insp .insp-pan-box .auto-lock');
+      const r = lock?.getBoundingClientRect();
+      return { lock: !!lock && !lock.hidden && r.width > 20, dis: document.getElementById('insp-pan').disabled, value: Number(document.getElementById('insp-pan').value),
+        out: document.querySelector('#insp .insp-pan-box output').textContent, dim: document.querySelector('#insp .insp-pan-box').classList.contains('auto-locked'), vol: document.getElementById('insp-vol').disabled };
+    });
+    let ii = await insp();
+    check('Inspektor: Panorama mit Kurve gesperrt (gedimmt, Kurven-Zeichen), zeigt Kurvenwert an der Marke (Schlag 6 → R 50 %)', ii.lock && ii.dis && ii.dim && near(ii.value, 0.5, 0.011) && ii.out === '50 % rechts', JSON.stringify(ii));
+    check('Inspektor: Lautstärke bleibt frei bedienbar (Kurve ist ein Anteil)', !ii.vol);
+    await page.evaluate(() => window.loopwerk.engine.play(0));
+    await page.waitForTimeout(600);
+    const follow = await page.evaluate(async () => {
+      const { engine, store } = window.loopwerk;
+      const A = await import('./src/automation.js');
+      const got = Number(document.getElementById('insp-pan').value);
+      const want = A.autoValueOf(store.project.tracks[0], 'pan', engine.heardBeat());
+      return { got, want };
+    });
+    await page.evaluate(() => window.loopwerk.engine.stop());
+    check('Inspektor: gesperrter Regler folgt beim Abspielen der Kurve', Math.abs(follow.got - follow.want) < 0.06 && follow.got < 0.9, JSON.stringify(follow));
+    await page.click('.auto-close');
+    await page.click('#insp .insp-pan-box .auto-lock');
+    check('Inspektor: Klick auf den gesperrten Regler öffnet die Kurvenzeile mit Panorama', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'pan' && document.querySelector('.auto-chip').textContent === 'Panorama'));
+    // Mixer: gleich
+    await page.click('.auto-close');
+    await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
+    await page.waitForTimeout(150);
+    const mx = await page.evaluate((id) => {
+      const wrap = document.getElementById(`pan-${id}`).closest('.strip-pan-wrap');
+      const lock = wrap.querySelector('.auto-lock');
+      return { lock: !!lock && !lock.hidden, dis: document.getElementById(`pan-${id}`).disabled, dim: wrap.classList.contains('auto-locked'), fader: document.getElementById(`fader-${id}`).disabled, value: Number(document.getElementById(`pan-${id}`).value) };
+    }, t);
+    check('Mixer: Panorama mit Kurve gesperrt, Fader frei, Anzeige = Kurve an der Marke', mx.lock && mx.dis && mx.dim && !mx.fader && Math.abs(mx.value - (await page.evaluate(() => window.loopwerk.engine.positionBeat)) / 4 + 1) < 0.02, JSON.stringify(mx));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-pan-mixer.png') });
+    await page.click(`#mixer .strip-pan-wrap .auto-lock`);
+    check('Mixer: Klick auf den gesperrten Regler öffnet die Kurvenzeile mit Panorama', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'pan'));
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    // Spur-Menü „Kurve löschen“ gilt für den gewählten Parameter; der Regler bekommt seinen alten Wert zurück
+    await page.click('.track-row .tbtn-menu');
+    const delItem = await page.evaluate(() => [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent).find((x) => /Kurve löschen/.test(x)));
+    check('Spur-Menü: „Panorama-Kurve löschen“ für den gewählten Parameter', delItem === 'Panorama-Kurve löschen', String(delItem));
+    await page.click('.track-menu-item:text-is("Panorama-Kurve löschen")');
+    ps = await pan();
+    ii = await insp();
+    check('Kurve löschen: Panorama weg, Lautstärke-Kurve bleibt, Regler frei mit altem Wert (−0,3)', ps.pan === null && ps.vol?.length >= 2 && !ii.dis && !ii.lock && near(ii.value, -0.3, 0.011) && ii.out === '30 % links', JSON.stringify({ ps, ii }));
+    await page.keyboard.press('a');
+
     check('Desktop: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
     check('Desktop-Ablauf ohne Ausnahme', false, err.message);
@@ -291,6 +450,50 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.tap('.track-menu-item:text-is("Ausblenden")');
     s = await state(page);
     check('Handy: Spur-Menü → Ausblenden in zwei Tipps, ein Schritt, Zeile offen', s.steps === st1 + 1 && s.auto?.length >= 3 && await page.evaluate(() => document.querySelector('.track-menu').hidden && !!document.querySelector('.auto-row')), JSON.stringify(s.auto));
+    // ---------- Scheibe 2 am Finger: Parameter wählen, Mini-Leiste, gesperrter Regler im Mixer ----------
+    const panOf = () => page.evaluate(() => window.loopwerk.store.project.tracks[0].automation?.pan ?? null);
+    await page.tap('.auto-chip');
+    await page.waitForSelector('.auto-keys:not([hidden])');
+    const kt = (await page.evaluate(measureTargets)).filter((x) => /auto-key|auto-chip/.test(x.label));
+    check('Handy: Parameter-Auswahl, Tippflächen ≥ 44 px (Chip und Einträge)', kt.length >= 3 && kt.every((x) => x.w >= 44 && x.h >= 44), JSON.stringify(kt));
+    await page.tap('.auto-key[data-key="pan"]');
+    check('Handy: Chip wechselt zu Panorama', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'pan' && document.querySelector('.auto-keys').hidden));
+    g = await geom(page);
+    await tap(g.x + g.ppb * 2.2, g.y + 16);
+    await tap(g.x + g.ppb * 5.1, g.y + g.h - 16);
+    let pp = await panOf();
+    check('Handy: Antippen setzt Panorama-Punkte (oben rechts, unten links)', pp?.length === 2 && pp[0].beat === 2 && pp[0].value > 0.3 && pp[1].beat === 5 && pp[1].value < -0.3, JSON.stringify(pp));
+    // Antippen eines Punkts: Mini-Leiste
+    let q = await ptCenter(page, 0);
+    await tap(q.x, q.y);
+    await page.waitForTimeout(80);
+    const bar = () => page.evaluate(() => { const b = document.querySelector('.auto-bar'); return b && !b.hidden ? [...b.querySelectorAll('button')].map((x) => x.textContent) : null; });
+    check('Handy: Antippen eines Punkts zeigt die Mini-Leiste „Linear · Stufe · Löschen“', (await bar())?.join(' · ') === 'Linear · Stufe · Löschen' && (await panOf()).length === 2);
+    const bt = (await page.evaluate(measureTargets)).filter((x) => /auto-bar-btn/.test(x.label));
+    check('Handy: Mini-Leiste, Tippflächen ≥ 44 px', bt.length === 3 && bt.every((x) => x.w >= 44 && x.h >= 44), JSON.stringify(bt));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-pan-phone.png') });
+    await page.tap('.auto-bar [data-act="step"]');
+    pp = await panOf();
+    check('Handy: Stufe über die Mini-Leiste', pp[0].curve === 'step' && (await bar()) !== null, JSON.stringify(pp));
+    await page.tap('.auto-bar [data-act="linear"]');
+    check('Handy: Linear über die Mini-Leiste', !(await panOf())[0].curve);
+    await page.tap('.auto-bar [data-act="delete"]');
+    pp = await panOf();
+    check('Handy: Löschen über die Mini-Leiste, Leiste zu, Einblender', pp?.length === 1 && !(await bar()) && (await state(page)).flash === 'Punkt gelöscht', JSON.stringify(pp));
+    // Ziehen auf einem Punkt zeigt keine Leiste
+    q = await ptCenter(page, 0);
+    await swipe(q.x, q.y, q.x + g.ppb, q.y, 8);
+    check('Handy: Ziehen eines Punkts zeigt keine Mini-Leiste', !(await bar()) && (await panOf())[0].beat === 6, JSON.stringify(await panOf()));
+    // Gesperrter Panorama-Regler im Mixer: Antippen öffnet die Kurvenzeile (der Mixer macht Platz)
+    await page.tap('.auto-close');
+    await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
+    await page.waitForTimeout(300);
+    const lt = (await page.evaluate(measureTargets)).filter((x) => /auto-lock/.test(x.label));
+    check('Handy: gesperrter Panorama-Regler im Mixer mit Tippfläche ≥ 44 px', lt.length >= 1 && lt.every((x) => x.w >= 44 && x.h >= 44), JSON.stringify(lt));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-pan-phone-mixer.png') });
+    await page.tap('#mixer .strip-pan-wrap .auto-lock');
+    await page.waitForTimeout(200);
+    check('Handy: Antippen öffnet die Kurvenzeile mit Panorama, Mixer zu', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'pan' && window.loopwerk.ui.dock !== 'mixer'));
     check('Handy: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
     check('Handy-Ablauf ohne Ausnahme', false, err.message);
