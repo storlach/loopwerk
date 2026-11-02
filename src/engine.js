@@ -1181,6 +1181,26 @@ export class Engine extends Emitter {
     return out;
   }
 
+  // Energie des gesamten Ausgangs in drei Bändern [Bass < 200 Hz, Mitten 200 Hz–3 kHz, Höhen > 4 kHz] in dB,
+  // passend zur hörbaren Stelle verzögert (wie trackPeak); null ohne Ton-Kontext
+  spectrumDb() {
+    if (!this.outAnalyser || this.ctx.state !== 'running') return null;
+    return this._lagged('__bands', () => {
+      const a = this.outAnalyser;
+      if (!this._fftF) this._fftF = new Float32Array(a.frequencyBinCount);
+      const d = this._fftF;
+      a.getFloatFrequencyData(d);
+      const hz = this.ctx.sampleRate / a.fftSize;
+      const e = [0, 0, 0];
+      for (let i = 1; i < d.length; i++) {
+        const f = i * hz;
+        const b = f < 200 ? 0 : f < 3000 ? 1 : f >= 4000 ? 2 : -1;
+        if (b >= 0 && d[i] > -140) e[b] += 10 ** (d[i] / 10);
+      }
+      return e.map((x) => (x > 0 ? 10 * Math.log10(x) : -140));
+    });
+  }
+
   peakLevel() {
     if (!this.analyser) return 0;
     return this._lagged('__master', () => {

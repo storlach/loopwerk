@@ -71,9 +71,6 @@ async function reveal(page, sel) {
     if (!n) return;
     const pop = n.closest('.pop');
     if (pop && pop.hidden) pop.parentElement.querySelector('button').click();
-    const group = n.closest('.ed-group[data-tab]');
-    const tools = n.closest('.ed-tools');
-    if (group && tools && tools.dataset.tab !== group.dataset.tab) document.querySelector(`.ed-tab[data-tab="${group.dataset.tab}"]`)?.click();
     if (n.closest('.create-panel') && document.querySelector('.shelf').dataset.left !== 'create') document.getElementById('ltab-create').click();
     if (n.closest('.shelf-head, .shelf-list') && document.querySelector('.shelf').dataset.left === 'create') document.getElementById('ltab-sounds').click();
   }, sel);

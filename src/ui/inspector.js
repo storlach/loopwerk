@@ -1,5 +1,6 @@
 // Inspektor (Desktop, rechts): zeigt immer das Ausgewählte.
-// Clip → Lautstärke, Ein-/Ausblenden, Werkzeuge, darunter seine Spur. Spur → Lautstärke, Panorama, Effekte.
+// Clip → Abschnitt „CLIP · Name“ (Clip-Lautstärke, Ein-/Ausblenden, Werkzeuge), darunter getrennt „SPUR · Name“
+// (Spur-Lautstärke, Panorama, Verlauf, Effekte). Spur → nur der Spur-Abschnitt.
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
 import { EFFECTS, withFx } from '../effects.js';
@@ -76,13 +77,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   }
 
   // ---------- Clip ----------
-  const clipSec = el('section', 'insp-sec');
-  const clipKind = el('span', 'insp-kind', 'Clip');
+  // Zwei klar getrennte Abschnitte: „CLIP · Name“ (gilt nur für diesen Clip) und „SPUR · Name“ (gilt für alle Clips der Spur)
+  const clipSec = el('section', 'insp-sec insp-clip');
+  clipSec.setAttribute('aria-label', 'Clip-Einstellungen');
+  const clipHead = el('header', 'insp-head');
   const clipTitle = el('h2', 'insp-title');
   const clipSw = el('span', 'swatch');
   const clipName = el('span');
-  clipTitle.append(clipSw, clipName);
+  clipTitle.append(el('span', 'insp-kind', 'Clip'), el('span', 'insp-sep', '·'), clipSw, clipName);
   const clipMeta = el('p', 'insp-meta');
+  clipHead.append(clipTitle, clipMeta);
   const slider = (label, id, min, max, step) => {
     const row = el('label', 'insp-row');
     const out = el('output');
@@ -91,7 +95,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     row.append(el('span', null, label), out, input);
     return { row, input, out };
   };
-  const gain = slider('Lautstärke', 'insp-gain', 0, 1, 0.01);
+  const gain = slider('Clip-Lautstärke', 'insp-gain', 0, 1, 0.01);
   const fin = slider('Einblenden', 'insp-fadein', 0, 4, 0.25);
   const fout = slider('Ausblenden', 'insp-fadeout', 0, 4, 0.25);
   // Krümmung der Fades (wie der Bézier-Griff am Clip); nur sichtbar, wenn es den Fade gibt
@@ -101,6 +105,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   // Geschwindigkeit (früher „Laufzeit“): Regler 50–200 % und „wie Tonband“, eigenes Modul
   const run = el('div', 'insp-clip-speed');
   mountClipSpeed(run, { store, ui, library, engine });
+  const speedSlot = run;
   // Tempo des Sounds: wie schnell die Aufnahme ist. Mit Tempo wird ein Einzelklang zum Loop, der sich dem Song anpasst.
   const stempo = el('div', 'insp-row insp-stempo');
   const stOut = el('output');
@@ -125,7 +130,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   stempo.append(el('span', null, 'Sound-Tempo'), stOut, stIn, stBtns);
   const btns = el('div', 'insp-btns');
   btns.id = 'insp-clip-btns';
-  clipSec.append(clipKind, clipTitle, clipMeta, gain.row, fin.row, cin.row, fout.row, cout.row, run, stempo, btns);
+  clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: Number(gain.input.value) }, 'insp-gain-' + c.id); });
@@ -142,14 +147,17 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   void clipGroup;
 
   // ---------- Spur ----------
-  const trackSec = el('section', 'insp-sec');
-  const trackKind = el('span', 'insp-kind', 'Spur');
+  const trackSec = el('section', 'insp-sec insp-track');
+  trackSec.setAttribute('aria-label', 'Spur-Einstellungen');
+  const trackHead = el('header', 'insp-head');
   const trackTitle = el('h2', 'insp-title');
   const trackSw = el('span', 'swatch');
   const trackName = el('span');
-  trackTitle.append(trackSw, trackName);
-  const trackSub = el('p', 'insp-sub');
-  const vol = slider('Lautstärke', 'insp-vol', 0, 1, 0.01);
+  trackTitle.append(el('span', 'insp-kind', 'Spur'), el('span', 'insp-sep', '·'), trackSw, trackName);
+  const trackSub = el('p', 'insp-meta');
+  trackHead.append(trackTitle, trackSub);
+  const vol = slider('Spur-Lautstärke', 'insp-vol', 0, 1, 0.01);
+  const volLabel = vol.row.firstChild;
   const pan = slider('Panorama', 'insp-pan', -1, 1, 0.05);
   // Panorama mit Kurve: gedimmt, folgt der Kurve; Klick öffnet die Kurvenzeile
   const panBox = el('div', 'insp-pan-box');
@@ -167,7 +175,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   curveBtn.id = 'insp-auto-toggle';
   curveBtn.addEventListener('click', () => { if (trackId && trackId !== MASTER) ui.autoLane?.toggle(trackId); });
   autoBlock.append(el('span', 'insp-kind', 'Verlauf'), tpl.node, curveBtn);
-  trackSec.append(trackKind, trackTitle, trackSub, vol.row, panBox, autoBlock);
+  trackSec.append(trackHead, vol.row, panBox, autoBlock);
   // Stumm und Solo der Spur (in „calm“ am Handy nicht mehr im Spurkopf)
   let msBtns = null;
   if (calm) {
@@ -344,13 +352,13 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const { clip } = found;
       const s = library.get(clip.sampleId);
       const cat = s?.colorCat ?? s?.category ?? 'fx';
-      clipSec.className = `insp-sec cat-${cat}`;
+      clipSec.className = `insp-sec insp-clip cat-${cat}`;
       clipName.textContent = s?.name ?? 'Clip';
       const bpb = store.project.beatsPerBar;
       const from = Math.floor(clip.startBeat / bpb) + 1;
       const to = Math.ceil((clip.startBeat + clip.lengthBeats) / bpb - 1e-9);
       const bars = clip.lengthBeats / bpb;
-      clipMeta.textContent = `Spur „${track.name}“ · Takt ${from}${to > from ? `–${to}` : ''} · ${Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : fmtBeats(clip.lengthBeats)}`;
+      clipMeta.textContent = `Takt ${from}${to > from ? `–${to}` : ''} · ${Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : fmtBeats(clip.lengthBeats)}`;
       const setR = (r, v, max, text) => { r.input.max = String(max); if (document.activeElement !== r.input) r.input.value = String(v); r.out.textContent = text; };
       setR(gain, clipGain(clip), 1, formatDb(clipGain(clip)));
       setR(fin, clip.fadeInBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeInBeats || 0));
@@ -375,11 +383,14 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
     if (mode !== 'song') {
       trackId = track.id;
-      trackKind.textContent = mode === 'clip' ? '' : 'Spur';
-      trackKind.hidden = mode === 'clip';
-      trackTitle.hidden = mode === 'clip';
       trackName.textContent = track.name;
-      trackSub.textContent = mode === 'clip' ? `Spur „${track.name}“ · Klang` : 'Klang';
+      const n = track.clips.length;
+      trackSub.textContent = `Gilt für alle Clips der Spur · ${n} ${n === 1 ? 'Clip' : 'Clips'}`;
+      // Akzent wie der Farbpunkt im Spurkopf: Kategorie des ersten Clips
+      const first = track.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
+      const fs = first && library.get(first.sampleId);
+      trackSec.className = `insp-sec insp-track${fs ? ` cat-${fs.colorCat ?? fs.category}` : ''}`;
+      volLabel.textContent = 'Spur-Lautstärke';
       if (document.activeElement !== vol.input) vol.input.value = String(track.volume);
       vol.out.textContent = formatDb(track.volume);
       for (const [k, b] of msBtns || []) b.setAttribute('aria-pressed', String(!!track[k]));
@@ -396,6 +407,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     } else {
       trackId = MASTER;
       autoBlock.hidden = true;
+      volLabel.textContent = 'Master-Lautstärke';
       songName.textContent = store.project.name || 'Song';
       renderKeyChanges();
       tval.textContent = String(store.project.bpm);
