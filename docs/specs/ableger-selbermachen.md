@@ -2,6 +2,13 @@
 
 Status: Brainstorming für Martin, keine Entscheidung, keine ADR. Arbeitstitel „Loopwerk Werkstatt“.
 
+## Entscheidungen von Martin (2026-11-02)
+- Synthetische Klänge und Kits bleiben als Startmaterial (Klangerzeuger, keine Samples) – „Ohne Mikro anfangen“ ist möglich.
+- Einsatz: persönlich, Freizeit. Kein Teilen, kein Konto, keine Schul-Ausrichtung nötig.
+- Eigene Sounds zwischen Loopwerk und Ableger teilen: nicht nötig → eigene Datenbank (`loopwerk-make/sounds`), sauber getrennt.
+- Eigene Adresse oder Modus in Loopwerk: noch offen, wird später evaluiert. Die Edition-Konfiguration (Option a) hält beides offen.
+- Vorschläge aus Markt-Scout, UX und Creative Director gefallen; nächster Schritt: Prototyp der Momente „Pad-Wand mit Aufnahme + Auto-Säubern“ und „Klatsch dein Kit“, auf GitHub Pages am Handy ausprobieren.
+
 ## Ziel aus Nutzersicht
 Wer die Werkstatt öffnet, hat ein leeres Regal und baut alles selbst – aufnehmen, klatschen, singen, Synth schrauben, Beats und Melodien, Teile des eigenen Songs wieder zu neuen Sounds machen.
 
