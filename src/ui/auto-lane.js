@@ -28,6 +28,17 @@ function curvePath(points, key, total, ppb, yOf) {
 
 // ---------- Vorlagen-Knöpfe (Inspektor „Spur“ und Spur-Menü am Handy) ----------
 
+// Vorlage anwenden (Länge: zuletzt gewählte Takte, Vorgabe 4), Zeile öffnen, Einblender; auch direkt aus dem Spur-Menü
+export function applyTemplate({ store, ui, engine, id, name }) {
+  if (!id || id === 'master') return false;
+  const res = store.applyAutoTemplate(id, name, { bars: ui.autoBars ?? 4, playheadBeat: engine?.heardBeat?.() ?? 0 });
+  if (!res) { ui.flash?.('Hier ist kein Platz für diesen Verlauf.'); return false; }
+  ui.autoLane?.open(id, res.key);
+  const n = Math.round(((res.toBeat - res.fromBeat) / store.project.beatsPerBar) * 10) / 10;
+  ui.flash?.(`${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
+  return true;
+}
+
 // getTarget() liefert die Spur-ID (oder null); onDone() läuft nach einer Vorlage (z. B. Menü schließen)
 export function templateControls({ store, ui, engine, getTarget, onDone, variant = 'insp' }) {
   const node = el('div', `auto-tpl auto-tpl-${variant}`);
@@ -39,14 +50,7 @@ export function templateControls({ store, ui, engine, getTarget, onDone, variant
   node.append(btns, cap, bars);
 
   function apply(name) {
-    const id = getTarget();
-    if (!id || id === 'master') return;
-    const res = store.applyAutoTemplate(id, name, { bars: ui.autoBars ?? 4, playheadBeat: engine?.heardBeat?.() ?? 0 });
-    if (!res) { ui.flash?.('Hier ist kein Platz für diesen Verlauf.'); return; }
-    ui.autoLane?.open(id, res.key);
-    const n = Math.round(((res.toBeat - res.fromBeat) / store.project.beatsPerBar) * 10) / 10;
-    ui.flash?.(`${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
-    onDone?.();
+    if (applyTemplate({ store, ui, engine, id: getTarget(), name })) onDone?.();
   }
   for (const name of ['fadeIn', 'fadeOut']) {
     const b = el('button', variant === 'menu' ? 'track-menu-item' : 'key', AUTO_TEMPLATES[name].label);

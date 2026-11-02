@@ -9,7 +9,7 @@ import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
 import { mountChordRow } from './chord-row.js';
-import { mountAutoLanes, templateControls } from './auto-lane.js';
+import { mountAutoLanes, templateControls, applyTemplate } from './auto-lane.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
@@ -417,7 +417,10 @@ export function mountArranger({ root, store, engine, library, ui }) {
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
       item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
-      item('Verlauf ›', () => openFadeMenu(trackId, btn)),
+      // Ein- und Ausblenden direkt (zwei Tipps); „Länge ›“ für die Anzahl Takte
+      item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
+      item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
+      item(`Länge: ${ui.autoBars ?? 4} ${(ui.autoBars ?? 4) === 1 ? 'Takt' : 'Takte'} ›`, () => openFadeMenu(trackId, btn)),
       ...(laneOf(tracks[i], 'volume').length ? [item('Kurve löschen', () => { closeMenu(); store.clearAutomation(trackId, 'volume'); })] : []),
       ...groupItems(trackId, item),
       item('Löschen', (b) => {

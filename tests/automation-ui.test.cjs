@@ -210,7 +210,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
 
     // Öffnen über das Spur-Menü
     await page.tap('.track-row .tbtn-menu');
-    check('Handy: Spur-Menü hat „Kurve“ und „Verlauf“', await page.evaluate(() => { const l = [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent); return l.includes('Kurve') && l.some((x) => x.startsWith('Verlauf')); }));
+    check('Handy: Spur-Menü hat „Kurve“, „Einblenden“, „Ausblenden“ und „Länge“', await page.evaluate(() => { const l = [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent); return l.includes('Kurve') && l.includes('Einblenden') && l.includes('Ausblenden') && l.some((x) => x.startsWith('Länge')); }));
     await page.tap('.track-menu-item:text-is("Kurve")');
     await page.waitForSelector('.auto-row');
     let g = await geom(page);
@@ -274,7 +274,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.tap('.auto-close');
     const st0 = (await state(page)).steps;
     await page.tap('.track-row .tbtn-menu');
-    await page.tap('.track-menu-item:text-is("Verlauf ›")');
+    await page.tap('.track-menu-item:text-matches("^Länge")');
     check('Handy: Verlauf zeigt Längen-Chips 1 · 2 · 4 · 8 und beide Knöpfe', await page.evaluate(() => [...document.querySelectorAll('.track-menu .auto-bars button')].map((b) => b.textContent).join() === '1,2,4,8' && !!document.querySelector('.track-menu [data-template="fadeIn"]') && !!document.querySelector('.track-menu [data-template="fadeOut"]')));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-phone-menu.png') });
     const mt = (await page.evaluate(measureTargets)).filter((x) => /track-menu-item|„\d Takte?“/.test(x.label));
@@ -284,6 +284,13 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     s = await state(page);
     check('Handy: Menü → Einblenden über 2 Takte = ein Schritt, Menü zu, Zeile offen', s.auto?.length === 2 && s.auto[1].beat === 8 && s.steps === st0 + 1 && await page.evaluate(() => document.querySelector('.track-menu').hidden && !!document.querySelector('.auto-row')), JSON.stringify(s.auto));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-phone-fade.png') });
+    // Zwei Tipps: Spur-Menü → Ausblenden (Länge wie zuletzt gewählt: 2 Takte)
+    await page.tap('.auto-close');
+    const st1 = (await state(page)).steps;
+    await page.tap('.track-row .tbtn-menu');
+    await page.tap('.track-menu-item:text-is("Ausblenden")');
+    s = await state(page);
+    check('Handy: Spur-Menü → Ausblenden in zwei Tipps, ein Schritt, Zeile offen', s.steps === st1 + 1 && s.auto?.length >= 3 && await page.evaluate(() => document.querySelector('.track-menu').hidden && !!document.querySelector('.auto-row')), JSON.stringify(s.auto));
     check('Handy: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
     check('Handy-Ablauf ohne Ausnahme', false, err.message);
