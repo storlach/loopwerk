@@ -41,6 +41,8 @@ button { font: inherit; color: inherit; }
   display: grid; gap: 8px; padding: 12px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow), inset 0 0 0 1px var(--line);
 }
 .wset[hidden] { display: none; }
+.wtake { grid-template-columns: 1fr 1fr; top: auto; left: 0; right: 0; bottom: calc(100% + 8px); }
+.wtake .wbtn { min-height: 56px; white-space: normal; }
 .wset-row { display: grid; grid-template-columns: 48px 1fr 48px auto; gap: 8px; align-items: center; }
 .wset-bpm { font: 500 22px/1 var(--font-mono); text-align: center; color: var(--display-ink); }
 .wset-keys { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
@@ -75,7 +77,8 @@ button { font: inherit; color: inherit; }
 .wpad-name { font: 600 12px/1.15 var(--font-body); color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wpad-tags { font: 500 8.5px/1.3 var(--font-mono); letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wpad-wave { position: absolute; left: 7px; right: 7px; top: 9px; height: 34%; display: flex; align-items: center; gap: 1.5px; opacity: 0.8; }
-.wpad-wave i { flex: 1; background: var(--cat); border-radius: 1px; }
+.wpad-wave i { flex: 1; background: var(--cat); border-radius: 1px; transition: transform 0.7s cubic-bezier(.2, .8, .2, 1), opacity 0.7s ease-out, filter 0.7s ease-out; }
+.wpad.raw .wpad-wave i { transition: none; transform: translateY(calc(var(--j) * 90%)) scaleY(calc(1.3 + var(--j) * 0.9)); opacity: 0.45; filter: blur(1.5px); }
 .wpad-key { position: absolute; top: 5px; right: 6px; font: 500 9px/1 var(--font-mono); color: var(--muted); display: none; }
 @media (hover: hover) and (pointer: fine) { .wpad-key { display: block; } .wpad.full .wpad-wave { right: 18px; } }
 
@@ -121,7 +124,7 @@ button { font: inherit; color: inherit; }
 .wkit-light { width: 44%; aspect-ratio: 1; border-radius: 50%; background: var(--danger); transform: scale(calc(0.35 + var(--lvl) * 0.75)); box-shadow: 0 0 calc(10px + var(--lvl) * 60px) color-mix(in srgb, var(--danger) 60%, transparent); transition: transform 0.08s linear; }
 .wkit-time { margin: 0; font: 500 22px/1 var(--font-mono); color: var(--danger); }
 
-.wbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 0 16px; }
+.wbar { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 0 16px; }
 .wbtn {
   min-height: 48px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow);
   font: 600 11px/1.1 var(--font-mono); letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink); padding: 0 6px; white-space: nowrap;
@@ -147,5 +150,6 @@ button { font: inherit; color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   .wpad.hit, .wpad.fresh { animation: none; }
+  .wpad-wave i { transition: none; }
   #app::before, .wkit-light { transition: none; }
 }

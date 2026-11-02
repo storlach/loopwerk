@@ -20,6 +20,9 @@ function werkstattPage(skeletonHead) {
   // Seite liegt eine Ebene tiefer; <base> lässt src/ und assets/icons/ wie gewohnt auflösen
   const head = skeletonHead
     .replace('<head>', '<head><base href="../">')
+    // eigenes Icon statt dem von Loopwerk
+    .replace(/<link rel="icon"[^>]*>|<link rel="apple-touch-icon"[^>]*>/g, '')
+    .replace('<meta charset="utf-8">', '<meta charset="utf-8"><link rel="icon" href="assets/icons/krachwerk.svg" type="image/svg+xml"><link rel="icon" href="assets/icons/krachwerk-32.png" sizes="32x32" type="image/png"><link rel="apple-touch-icon" href="assets/icons/krachwerk-180.png">')
     .replace('</head>', '<title>Krachwerk</title>'
       + '<link rel="manifest" href="werkstatt/manifest.webmanifest">'
       + '<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">'
@@ -45,8 +48,9 @@ function werkstattManifest() {
     id: './', start_url: './', scope: './', display: 'standalone', orientation: 'portrait',
     background_color: bg, theme_color: bg,
     icons: [
-      { src: '../assets/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: '../assets/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { src: '../assets/icons/krachwerk-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '../assets/icons/krachwerk-180.png', sizes: '180x180', type: 'image/png' },
+      { src: '../assets/icons/krachwerk.svg', sizes: 'any', type: 'image/svg+xml' },
     ],
   }, null, 2);
 }

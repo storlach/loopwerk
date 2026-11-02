@@ -9,6 +9,9 @@ import { Groove, chooseRoles, stepHits, stepOffset, STEPS } from './groove.js';
 import { Bank, PAD_COUNT, wavToChannels } from './bank.js';
 import { Mic } from './mic.js';
 import { timeStretch } from '../dsp/stretch.js';
+import { buildHandoff, repeatToBars } from './handoff.js';
+import { encodeWav } from '../wav.js';
+import { saveFile, safeName } from '../ui/save-file.js';
 
 const KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyZ', 'KeyX', 'KeyC', 'KeyV'];
 const KEY_LABELS = ['1', '2', '3', '4', 'Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Y', 'X', 'C', 'V'];
@@ -245,7 +248,7 @@ async function freeze() {
   pads[free] = { kind: 'own', id: rec.id, name, tags, cls: 'loop', bars, bpm: song.bpm, centroid: 0, buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
   savePads();
   renderAll();
-  $('wpads').children[free].classList.add('fresh');
+  formed(free);
   pendingSwap = { pad: free, bars };
   hint(`Festgehalten: „${name}“`);
   return free;
@@ -292,7 +295,12 @@ function renderPad(i) {
   b.querySelector('.wpad-tags').textContent = p ? p.tags.slice(0, 2).join(' · ') : '';
   const wave = b.querySelector('.wpad-wave');
   wave.replaceChildren();
-  if (p?.peaks) for (const v of p.peaks) { const s = el('i'); s.style.height = `${Math.max(6, v * 100)}%`; wave.append(s); }
+  if (p?.peaks) for (const v of p.peaks) {
+    const s = el('i');
+    s.style.height = `${Math.max(6, v * 100)}%`;
+    s.style.setProperty('--j', (Math.random() * 2 - 1).toFixed(2));
+    wave.append(s);
+  }
 }
 
 function renderAll() {
@@ -300,6 +308,14 @@ function renderAll() {
   $('wgroove').disabled = !pads.some(Boolean);
   $('wagain').disabled = !pads.some(Boolean);
   renderKeys();
+}
+
+// Roh → geformt: frische Klänge erscheinen als unruhige Wolke und ordnen sich zur Wellenform
+function formed(i) {
+  const b = $('wpads').children[i];
+  b.classList.add('raw', 'fresh');
+  void b.offsetWidth;
+  requestAnimationFrame(() => requestAnimationFrame(() => b.classList.remove('raw')));
 }
 
 function flash(i) {
@@ -338,7 +354,7 @@ async function ingestPad(i, chs, sampleRate) {
   const p = await storeOnPad(i, c.chs, sampleRate, 'Mikrofon', f);
   savePads();
   renderAll();
-  $('wpads').children[i].classList.add('fresh');
+  formed(i);
   trigger(i);
   return p;
 }
@@ -355,7 +371,7 @@ async function ingestKit(chs, sampleRate) {
   }
   savePads();
   renderAll();
-  for (const i of used) $('wpads').children[i].classList.add('fresh');
+  for (const i of used) formed(i);
   await audio();
   const g = grooveOf();
   g.stop();
@@ -635,6 +651,86 @@ function tapTempo() {
 function toggleSet(open = $('wset').hidden) {
   $('wset').hidden = !open;
   $('wsong').setAttribute('aria-expanded', String(open));
+  if (open) toggleTake(false);
+}
+
+// ---------- Mitnehmen: als Loopwerk-Projekt oder als WAV ----------
+
+function toggleTake(open = $('wtake').hidden) {
+  $('wtake').hidden = !open;
+  $('wtake-btn').setAttribute('aria-expanded', String(open));
+  if (open) toggleSet(false);
+}
+
+const stamp = () => {
+  const d = new Date();
+  const z = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}-${z(d.getMinutes())}`;
+};
+
+// Ohne Schleife: den Groove (1 Takt) als Schleife rechnen, damit im Projekt etwas klingt
+async function grooveAsLoop() {
+  await audio();
+  const g = grooveOf();
+  const r = roles();
+  if (!r) return null;
+  const keep = { drums: g.drums, roles: g.roles };
+  g.drums = true;
+  g.roles = g.roles || r;
+  const saved = new Map(live);
+  live.clear();
+  try {
+    const { chs, sampleRate } = await renderNow(1);
+    return { id: 'mk-groove-' + Date.now().toString(36), name: 'Groove', buffer: toBuffer(chs, sampleRate), loop: true, bars: 1 };
+  } finally {
+    for (const [k, v] of saved) live.set(k, v);
+    Object.assign(g, keep);
+  }
+}
+
+function handoffSounds() {
+  return pads.filter((p) => p?.buffer).map((p) => ({
+    id: p.id || `mk-${p.kit}-${p.row}`, name: p.name, loop: p.cls === 'loop', bars: p.bars || 1,
+    buffer: p.cls === 'loop' ? loopBuffer(p) : p.buffer,
+  }));
+}
+
+// Am Handy über das Teilen-Menü (Dateien, AirDrop, Nachricht), sonst als Download
+async function deliver(filename, blob) {
+  const file = new File([blob], filename, { type: blob.type });
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: filename }); return true; } catch (err) { if (err?.name === 'AbortError') return false; }
+  }
+  await saveFile(filename, blob);
+  return true;
+}
+
+async function takeProject() {
+  toggleTake(false);
+  const sounds = handoffSounds();
+  if (!sounds.some((x) => x.loop)) { const g = await grooveAsLoop(); if (g) sounds.push(g); }
+  if (!sounds.length) { hint('Erst ein Pad füllen'); return null; }
+  const name = `Krachwerk ${stamp()}`;
+  const data = await buildHandoff({ name, bpm: song.bpm, root: song.root, mode: song.mode, sounds });
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  if (await deliver(`${safeName(name)}.json`, blob)) hint('Gespeichert – in Loopwerk über „Öffnen“ laden', 4000);
+  return data;
+}
+
+async function takeWav() {
+  toggleTake(false);
+  let src = pads[selected]?.cls === 'loop' ? pads[selected] : [...pads].reverse().find((p) => p?.cls === 'loop');
+  let buffer = src ? loopBuffer(src) : null;
+  let bars = src?.bars || 1;
+  let name = src?.name;
+  if (!buffer) {
+    const g = await grooveAsLoop();
+    if (!g) { hint('Erst ein Pad füllen'); return null; }
+    ({ buffer, bars, name } = g);
+  }
+  const blob = encodeWav(repeatToBars(buffer, bars));
+  if (await deliver(`${safeName(`Krachwerk ${name} ${song.bpm} BPM`)}.wav`, blob)) hint(`„${name}“ als WAV gespeichert`);
+  return blob;
 }
 
 function toggleKeys() {
@@ -732,8 +828,13 @@ function buildUi() {
       <button class="wbtn" id="wfreeze" type="button" aria-label="Was läuft als neue Schleife festhalten">Festhalten</button>
       <button class="wbtn" id="wkeys-btn" type="button" aria-pressed="false">♪ Tasten</button>
       <button class="wbtn" id="wsynth" type="button" aria-label="Synth-Kit auf freie Pads">◇ Synth</button>
-      <button class="wbtn arm-rec half" id="warm-rec" type="button" aria-pressed="false"><i aria-hidden="true"></i>Ins Pad</button>
-      <button class="wbtn arm-clear half" id="warm-clear" type="button" aria-pressed="false">✕ Leeren</button>
+      <button class="wbtn arm-rec" id="warm-rec" type="button" aria-pressed="false"><i aria-hidden="true"></i>Ins Pad</button>
+      <button class="wbtn arm-clear" id="warm-clear" type="button" aria-pressed="false">✕ Leeren</button>
+      <button class="wbtn half" id="wtake-btn" type="button" aria-expanded="false" aria-controls="wtake">⇪ Mitnehmen</button>
+      <section class="wset wtake" id="wtake" hidden aria-label="Mitnehmen">
+        <button class="wbtn" id="wtake-project" type="button">Als Loopwerk-Projekt</button>
+        <button class="wbtn" id="wtake-wav" type="button">Schleife als WAV</button>
+      </section>
     </nav>`;
   const grid = $('wpads');
   for (let i = 0; i < PAD_COUNT; i++) {
@@ -755,8 +856,14 @@ function buildUi() {
   $('wfreeze').addEventListener('click', freeze);
   $('wkeys-btn').addEventListener('click', toggleKeys);
   $('wsong').addEventListener('click', () => toggleSet());
-  // Schublade schließt beim Spielen oder Tippen daneben
-  addEventListener('pointerdown', (e) => { if (!$('wset').hidden && !e.target.closest('#wset, #wsong')) toggleSet(false); }, true);
+  // Schubladen schließen beim Spielen oder Tippen daneben
+  addEventListener('pointerdown', (e) => {
+    if (!$('wset').hidden && !e.target.closest('#wset, #wsong')) toggleSet(false);
+    if (!$('wtake').hidden && !e.target.closest('#wtake, #wtake-btn')) toggleTake(false);
+  }, true);
+  $('wtake-btn').addEventListener('click', () => toggleTake());
+  $('wtake-project').addEventListener('click', takeProject);
+  $('wtake-wav').addEventListener('click', takeWav);
   $('wbpm-down').addEventListener('click', () => setBpm(song.bpm - 5));
   $('wbpm-up').addEventListener('click', () => setBpm(song.bpm + 5));
   $('wtap').addEventListener('pointerdown', (e) => { e.preventDefault(); tapTempo(); });
@@ -804,7 +911,7 @@ async function boot() {
     get groove() { return groove.g; },
     get live() { return [...live.keys()]; },
     get selected() { return selected; },
-    song, loopBuffer: (i) => (pads[i] ? loopBuffer(pads[i]) : null), setBpm, setKey,
+    takeProject, takeWav, song, loopBuffer: (i) => (pads[i] ? loopBuffer(pads[i]) : null), setBpm, setKey,
     padBuffer: (i) => pads[i]?.buffer ?? null,
     audio, ingestPad, ingestKit, trigger, freeze, renderNow, playKey,
   };

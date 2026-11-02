@@ -357,6 +357,8 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     });
     check('Manifest im Kopf: Krachwerk, Vollbild, Start und Bereich /werkstatt/', man.m.name === 'Krachwerk' && man.m.display === 'standalone' && man.start === '/werkstatt/' && man.scope === '/werkstatt/' && /manifest\+json/.test(man.type), `${man.start} ${man.scope}`);
     check('Manifest: Icons erreichbar, Farbe = Token --bg', man.icons.every((x) => x === 200) && man.m.background_color === '#16171A', man.icons.join(','));
+    const icons = await pg.evaluate(() => ({ head: [...document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]')].map((l) => l.getAttribute('href')), man: [] }));
+    check('Eigenes Icon: Tab, iOS und Manifest zeigen Krachwerk, nicht Loopwerk', icons.head.length === 3 && icons.head.every((h) => /krachwerk/.test(h)) && man.m.icons.every((i) => /krachwerk/.test(i.src)), icons.head.join(', '));
     const reg = await pg.evaluate(async () => (await navigator.serviceWorker.ready).scope);
     check('Service Worker aktiv, nur für /werkstatt/ (Loopwerk unberührt)', reg === `${base}/werkstatt/`, reg);
     await pg.reload();
@@ -461,6 +463,72 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     check('Tempo und Tonart bleiben nach dem Neuladen', kept2.bpm === tapped && kept2.root === 0 && kept2.mode === 'dur', JSON.stringify(kept2));
     check('Tempo/Tonart: keine Konsolenfehler', tErrors.length === 0, tErrors.join(' | '));
     await T.close();
+
+    // ---------- Mitnehmen: Krachwerk → Loopwerk ----------
+    const M = await browser.newContext({ ...PHONE, acceptDownloads: true });
+    const mp = await M.newPage();
+    const mErrors = [];
+    mp.on('pageerror', (e) => mErrors.push(e.message));
+    mp.on('console', (m) => { if (m.type() === 'error') mErrors.push(m.text()); });
+    await mp.goto(`${base}/werkstatt/`);
+    await mp.waitForFunction(() => window.werkstatt?.ready);
+    await mp.evaluate(signals);
+    await mp.tap('#wsynth');
+    await mp.waitForFunction(() => window.werkstatt.pads.slice(0, 8).every((p) => p.length > 0));
+    const rawAt = await mp.evaluate(async () => {
+      const sr = 48000;
+      await window.werkstatt.ingestPad(8, [window.sig.take(sr, 1, [[window.sig.tone, 0.2, 0.5, 0.5]])], sr);
+      return document.querySelector('.wpad[data-pad="8"]').classList.contains('raw');
+    });
+    await mp.waitForTimeout(900);
+    const formed = await mp.evaluate(() => {
+      const b = document.querySelector('.wpad[data-pad="8"]');
+      return !b.classList.contains('raw') && [...b.querySelectorAll('.wpad-wave i')].every((i) => getComputedStyle(i).transform === 'none');
+    });
+    check('Roh → geformt: neuer Klang erscheint als Wolke und ordnet sich zur Wellenform', rawAt && formed);
+    // ohne Schleife: der Groove wird als Schleife mitgegeben
+    await mp.tap('#wtake-btn');
+    check('„Mitnehmen“ öffnet die Schublade', await mp.evaluate(() => !document.getElementById('wtake').hidden));
+    const [dl0] = await Promise.all([mp.waitForEvent('download'), mp.tap('#wtake-project')]);
+    const p0 = JSON.parse(fs.readFileSync(await dl0.path(), 'utf8'));
+    check('Ohne Schleife: Groove kommt als Schleife ins Projekt', p0.tracks[0].clips.length === 1 && p0.ownSounds.some((o) => o.name === 'Groove' && o.kind === 'loop'), `${p0.tracks[0].clips.length} Clips`);
+    await mp.tap('#wgroove');
+    await mp.waitForTimeout(200);
+    await mp.tap('#wfreeze');
+    await mp.waitForFunction(() => window.werkstatt.pads[9]?.cls === 'loop');
+    await mp.tap('#wgroove');
+    await mp.tap('#wtake-btn');
+    const [dl] = await Promise.all([mp.waitForEvent('download'), mp.tap('#wtake-project')]);
+    const projFile = path.join(path.dirname(wav), dl.suggestedFilename());
+    await dl.saveAs(projFile);
+    const proj = JSON.parse(fs.readFileSync(projFile, 'utf8'));
+    check('Projektdatei: Loopwerk-Format, 90 BPM, A-Moll („Am“), Name mit Krachwerk', proj.version === 1 && proj.bpm === 90 && proj.key === 'Am' && /^Krachwerk /.test(proj.name) && /\.json$/.test(dl.suggestedFilename()), dl.suggestedFilename());
+    check('Projektdatei: alle 10 Pads als eigene Sounds, Schleife als 4-Takt-Clip', proj.ownSounds.length === 10 && proj.tracks[0].clips.length === 1 && proj.tracks[0].clips[0].lengthBeats === 16 && proj.ownSounds.every((o) => o.id.startsWith('own-')), `${proj.ownSounds.length} Sounds`);
+    // WAV der Schleife
+    await mp.tap('#wtake-btn');
+    const [dw] = await Promise.all([mp.waitForEvent('download'), mp.tap('#wtake-wav')]);
+    const wb = fs.readFileSync(await dw.path());
+    const wsr = wb.readUInt32LE(24), wch = wb.readUInt16LE(22), wlen = wb.readUInt32LE(40) / (2 * wch);
+    check('WAV: Schleife 4 Takte lang (90 BPM, samplegenau)', wb.toString('ascii', 0, 4) === 'RIFF' && wlen === 4 * Math.round((60 / 90) * 4 * wsr) && /\.wav$/.test(dw.suggestedFilename()), `${wlen} Frames, ${dw.suggestedFilename()}`);
+    check('Mitnehmen: keine Konsolenfehler', mErrors.length === 0, mErrors.join(' | '));
+    // In Loopwerk öffnen
+    const lw = await M.newPage();
+    const lwErrors = [];
+    lw.on('pageerror', (e) => lwErrors.push(e.message));
+    await lw.goto(`${base}/`);
+    await lw.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 20000 });
+    await lw.setInputFiles('#open-input', projFile);
+    await lw.waitForFunction(() => /^Krachwerk /.test(window.loopwerk.store.project.name), null, { timeout: 10000 });
+    const opened = await lw.evaluate((ids) => {
+      const { store, library } = window.loopwerk;
+      const clip = store.project.tracks[0].clips[0];
+      const s = library.get(clip?.sampleId);
+      return { clips: store.project.tracks[0].clips.length, kind: s?.kind, cat: s?.category, beats: s?.beats, bpm: store.project.bpm, all: ids.every((id) => !!library.get(id)) };
+    }, proj.ownSounds.map((o) => o.id));
+    check('Loopwerk öffnet die Datei: Schleifen-Clip bleibt, Sound unter „Eigene“', opened.clips === 1 && opened.kind === 'loop' && opened.cat === 'own' && opened.beats === 4 && opened.bpm === 90, JSON.stringify(opened));
+    check('Loopwerk: alle Krachwerk-Pads stehen als eigene Sounds bereit', opened.all);
+    check('Loopwerk: keine Programmfehler beim Öffnen', lwErrors.length === 0, lwErrors.join(' | '));
+    await M.close();
 
     // GitHub-Pages-Build liefert dieselben Dateien unter werkstatt/
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });
