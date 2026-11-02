@@ -184,7 +184,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
 
   function render() {
     const q = search.value.trim().toLowerCase();
-    const all = library.list();
+    const all = library.list().filter((s) => !s.missing);
     const words = (s) => [s.name, CATEGORIES.find((c) => c.id === s.category)?.label, ...(s.genres || []).map((g) => GENRES.find((x) => x.id === g)?.label),
       ...(s.tags || []), s.kind === 'loop' ? 'loop' : 'one-shot oneshot', s.origin]
       .filter(Boolean).join(' ').toLowerCase();

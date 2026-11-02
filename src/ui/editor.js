@@ -39,7 +39,9 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     const found = store.findClip(clipId);
     if (!found) return;
     const sample = library.get(found.clip.sampleId);
-    if (!sample?.buffer) return;
+    // Eigener Sound noch nicht dekodiert (lädt erst bei Gebrauch): laden, dann öffnen
+    if (sample?.lazy) { library.ensure(sample.id).then(() => { if (!sample.lazy) open(clipId); }).catch(() => ui.flash('Dieser Sound ist im Browser nicht mehr gespeichert.')); return; }
+    if (!sample?.buffer || sample.missing) { if (sample?.missing) ui.flash('Sound fehlt – öffne die Projektdatei, um ihn zurückzuholen.'); return; }
     const base = sample.orig || sample.buffer;
     st = {
       clipId,
