@@ -5,7 +5,7 @@
 import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
   noteName, resizeDrumRows, previewNote, previewDrum, startNote, sampledPresets, allPresets, presetInfo, preparePreset,
-  GLIDE_OPTIONS, glideOf,
+  GLIDE_OPTIONS, glideOf, SWING_OPTIONS, swingOf,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
@@ -68,7 +68,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
   // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');
-  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-glide-field'), $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
+  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
     const always = [nameIn, $('pat-len-field'), $('pat-quant-field'), recBtn, $('pat-clear')].includes(node);
     place(node, always ? { wide: moreEl, narrow: moreEl } : { narrow: moreEl });
   }
@@ -85,6 +85,14 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
   }
 
   for (const g of GLIDE_OPTIONS) { const o = el('option', null, g.label); o.value = String(g.value); glideSel.append(o); }
+  // Swing gehört zum Pattern; Anschlag ist der Pinsel für neue Schritte und Noten
+  const swingSel = $('pat-swing');
+  for (const g of SWING_OPTIONS) { const o = el('option', null, g.label); o.value = String(g.value); swingSel.append(o); }
+  swingSel.addEventListener('change', () => { if (pat()) update((q) => { q.swing = Number(swingSel.value); }); });
+  const velSel = $('pat-vel');
+  let brush = 1;
+  velSel.addEventListener('change', () => { brush = Number(velSel.value) || 1; });
+  const sameVel = (v) => Math.abs((v ?? 1) - brush) < 0.01;
 
   const pat = () => (id ? store.project.patterns?.[id] : null);
   const steps = () => pat().bars * 4 * STEPS_PER_BEAT;
@@ -304,8 +312,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
       }
     }
     for (const cell of drumsEl.querySelectorAll('.pat-cell')) {
-      const on = !!p.rows?.[cell.dataset.row]?.[Number(cell.dataset.step)];
-      cell.setAttribute('aria-pressed', String(on));
+      const v = p.rows?.[cell.dataset.row]?.[Number(cell.dataset.step)] || 0;
+      cell.setAttribute('aria-pressed', String(!!v));
+      if (v && v < 1) cell.style.setProperty('--vel', String(v)); else cell.style.removeProperty('--vel');
     }
   }
 
@@ -331,13 +340,15 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (!cell || e.button !== 0 || e.pointerType === 'touch') return;
     e.preventDefault();
     const row = cell.dataset.row;
-    const on = !pat().rows?.[row]?.[Number(cell.dataset.step)];
+    // Aus oder anderer Anschlag: setzen (mit dem Pinsel); gleicher Anschlag: löschen
+    const cur = pat().rows?.[row]?.[Number(cell.dataset.step)];
+    const on = !cur || !sameVel(cur);
     painting = { row, on, done: new Set() };
     const paint = async (c) => {
       const i = Number(c.dataset.step);
       if (painting.done.has(i)) return;
       painting.done.add(i);
-      update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? 1 : 0; }, `paint-${id}-${e.timeStamp}`);
+      update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? brush : 0; }, `paint-${id}-${e.timeStamp}`);
       if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
     };
     paint(cell);
@@ -355,8 +366,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     lastTouch = false;
     const row = cell.dataset.row;
     const i = Number(cell.dataset.step);
-    const on = !pat().rows?.[row]?.[i];
-    update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? 1 : 0; });
+    const cur = pat().rows?.[row]?.[i];
+    const on = !cur || !sameVel(cur);
+    update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? brush : 0; });
     if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
   });
   let lastTouch = false;
@@ -462,7 +474,9 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         continue;
       }
       c.fillStyle = noteCol;
+      c.globalAlpha = 0.38 + 0.62 * Math.min(1, note.vel ?? 1); // leise Noten leuchten schwächer
       c.fillRect(x + 1, ny, nw, rh - 2);
+      c.globalAlpha = 1;
     }
   }
 
@@ -501,9 +515,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     if (e.pointerType === 'touch') {
       pressHold(e, {
         onTap: () => {
-          if (hit >= 0) notes.splice(hit, 1);
-          else {
-            notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 });
+          if (hit >= 0) { if (sameVel(notes[hit].vel)) notes.splice(hit, 1); else notes[hit].vel = brush; } else {
+            notes.push({ pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: brush });
             audio().then((a) => previewNote(a, engine.mix.master, p.preset, pitch));
           }
           update((q) => { q.notes = notes; });
@@ -515,7 +528,7 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
             const w = n.len * STEPS_PER_BEAT * cellW;
             lengthen = keyW() + n.start * STEPS_PER_BEAT * cellW + w - x <= Math.max(16, w * 0.3);
           } else {
-            n = { pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: 1 };
+            n = { pitch, start: beat, len: Math.min(Number(lenSel.value), total - beat), vel: brush };
             notes.push(n);
           }
           const start0 = n.start;
@@ -555,13 +568,14 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
         }
         drawRoll(p, notes);
       }, () => {
-        if (!moved) notes.splice(hit, 1);
+        // Klick ohne Ziehen: anderer Anschlag → Anschlag setzen, sonst löschen
+        if (!moved) { if (sameVel(n.vel)) notes.splice(hit, 1); else n.vel = brush; }
         update((q) => { q.notes = notes; });
       }, () => render());
       return;
     }
     const len = Math.min(Number(lenSel.value), total - beat);
-    const note = { pitch, start: beat, len, vel: 1 };
+    const note = { pitch, start: beat, len, vel: brush };
     notes.push(note);
     drawRoll(p, notes);
     // Erst das Loslassen abonnieren, dann vorhören – sonst geht ein schneller Klick verloren, solange der Klang lädt
@@ -1248,6 +1262,8 @@ export function mountPatternEditor({ root, store, engine, library, ui }) {
     const pads = drums && view === 'pads';
     if (document.activeElement !== nameIn) nameIn.value = p.name;
     barsSel.value = String(p.bars);
+    const sv = swingOf(p);
+    swingSel.value = String(SWING_OPTIONS.reduce((a, b) => (Math.abs(b.value - sv) < Math.abs(a.value - sv) ? b : a)).value);
     $('pat-kit-field').hidden = !drums;
     $('pat-preset-field').hidden = drums;
     $('pat-glide-field').hidden = drums;

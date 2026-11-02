@@ -427,9 +427,9 @@ export function createKit(ctx, out, spb, semis = 0) {
       o.start(t);
       o.stop(t + 0.45);
     },
-    crash(beat) {
+    crash(beat, vel = 1) {
       const t = T(beat);
-      noiseSource(t, 2).connect(biquad('highpass', 3800)).connect(decayGain(t, 0.5, 1.9));
+      noiseSource(t, 2).connect(biquad('highpass', 3800)).connect(decayGain(t, 0.5 * vel, 1.9));
     },
     // ---------- Instrumente für Melodien (Piano-Roll, Einsingen) ----------
     // E-Piano per FM: Modulator im Verhältnis 1:1, dessen Anteil schnell abnimmt (heller Anschlag, weicher Ausklang)

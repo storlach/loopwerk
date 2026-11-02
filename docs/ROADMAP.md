@@ -64,7 +64,7 @@
 - Spec: `docs/specs/stufe-7-instrumente.md`, Tests: `tests/stufe7.test.cjs`
 
 ### Offen aus Stufe 7
-- Anschlagstärke pro Schritt/Note, Swing, Akkord-Eingabe, Echtzeit-Aufnahme von MIDI
+- Akkord-Eingabe, Echtzeit-Aufnahme von MIDI (Anschlag und Swing: erledigt)
 
 ## ✅ 1.1 – Handy-Bedienung
 - Sound-Regal als Akkordeon: Kategorien auf- und zuklappen, am Handy immer nur eine offen, kein eigener Scrollbereich mehr, größere Tippziele
@@ -234,6 +234,7 @@
 - Clip-Editor: Name direkt im Kopf ändern; Anhören, Rückgängig, Abbrechen als Icons (nur „Übernehmen“ ausgeschrieben); Wellenform bleibt oben stehen, Werkzeuge scrollen darunter; Autotune, Roboter und „Als Loop“ als Schalter
 - Gitarren-Verzerrer: „Verzerrer“ auf der Spur hat jetzt Amp Crunch, Amp Lead, Amp Metal (Vorstufe mit Mittenanhebung, Röhrenstufen, Klangregelung, 4×12-Box; live und Export gleich); Melodie-Editor: E-Gitarre Crunch, Metal, Fuzz (`tests/amp-drive.test.cjs`)
 - iOS-Safari: Stummschalter schaltet die Musik nicht mehr ab (`audioSession` „playback“), Audio läuft nach Anruf/Sperrbildschirm beim nächsten Tippen weiter, kein Zoom beim Antippen von Feldern, Wellenform-Canvas am Touchgerät sparsamer (iOS-Canvas-Speicher), kein Popup bei langem Drücken in Deck und Leiste
+- Swing (Aus, Leicht, Mittel, Triole, Stark) und Anschlag (Laut, Mittel, Leise) im Beat- und Melodie-Editor: Swing verschiebt Offbeat-Sechzehntel beim Rendern; Anschlag ist ein Pinsel – neue Schritte/Noten bekommen ihn, Antippen mit anderem Anschlag ändert, mit gleichem löscht; leise Schritte leuchten schwächer (`tests/swing-vel.test.cjs`)
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

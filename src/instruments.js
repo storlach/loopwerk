@@ -106,7 +106,7 @@ const SYNTH_DRUMS = {
   elektro: {
     kick: (k, b, v) => k.kick(b, v), snare: (k, b, v) => k.snare(b, v), clap: (k, b, v) => k.clap(b, v),
     hat: (k, b, v) => k.hat(b, v), open: (k, b, v) => k.hat(b, v, true), tomLo: (k, b, v) => k.tom(b, 95, v),
-    tomHi: (k, b, v) => k.tom(b, 150, v), crash: (k, b) => k.crash(b),
+    tomHi: (k, b, v) => k.tom(b, 150, v), crash: (k, b, v) => k.crash(b, v),
   },
   techno: {
     kick: (k, b, v) => k.kick909(b, v), snare: (k, b, v) => k.rim(b, v), clap: (k, b, v) => k.clap(b, v),
@@ -153,6 +153,29 @@ const TAIL = 2;
 export const GLIDE_MAX = 0.3; // Sekunden bei glide = 1
 export const GLIDE_OPTIONS = [{ value: 0, label: 'Aus' }, { value: 0.25, label: 'Kurz' }, { value: 1, label: 'Lang' }];
 export const glideOf = (pattern) => Math.min(1, Math.max(0, Number(pattern?.glide) || 0));
+
+// Swing: jede zweite Sechzehntel (der Offbeat im Achtel) kommt später. swing = Anteil der ersten Sechzehntel
+// am Achtel: 0,5 gerade, 0,667 Triole, 0,75 maximal (wie MPC-Swing 50–75 %).
+export const SWING_OPTIONS = [
+  { value: 0.5, label: 'Aus' }, { value: 0.54, label: 'Leicht' }, { value: 0.58, label: 'Mittel' },
+  { value: 0.667, label: 'Triole' }, { value: 0.71, label: 'Stark' },
+];
+export const swingOf = (pattern) => Math.min(0.75, Math.max(0.5, Number(pattern?.swing) || 0.5));
+export function swingBeat(beat, swing) {
+  if (swing <= 0.5) return beat;
+  const s = beat * STEPS_PER_BEAT;
+  const r = Math.round(s);
+  if (Math.abs(s - r) > 1e-6 || r % 2 === 0) return beat;
+  return beat + (swing - 0.5) * (2 / STEPS_PER_BEAT);
+}
+// Noten auf geraden Offbeat-Sechzehnteln verschieben; ihr Ende bleibt, wo es war (keine Überlappung mit der nächsten)
+export function swingNotes(notes, swing) {
+  if (swing <= 0.5 || !notes) return notes;
+  return notes.map((n) => {
+    const start = swingBeat(n.start, swing);
+    return start === n.start ? n : { ...n, start, len: Math.max(0.05, n.len - (start - n.start)) };
+  });
+}
 
 // Noten zu Ketten verbinden: [{ pitch, start, len, vel, steps: [{ beat, pitch, len }] }]. Bei Akkorden gleitet jede
 // Stimme zum nächstgelegenen Ton; derselbe Ton noch einmal wird neu angeschlagen.
@@ -226,13 +249,15 @@ export async function renderPattern(pattern, bpm, library) {
   bus.connect(ctx.destination);
   const kit = createKit(ctx, bus, spb);
 
+  const sw = swingOf(pattern);
+  if (pattern.type !== 'drums' && sw > 0.5) pattern = { ...pattern, notes: swingNotes(pattern.notes, sw) };
   if (pattern.type === 'drums') {
     const map = KITS.find((k) => k.id === pattern.kit)?.map;
     for (const row of DRUM_ROWS) {
       const steps = pattern.rows?.[row.id] || [];
       steps.forEach((v, i) => {
         if (!v || i >= beats * STEPS_PER_BEAT) return;
-        const b = i / STEPS_PER_BEAT;
+        const b = swingBeat(i / STEPS_PER_BEAT, sw);
         if (map) {
           const s = library?.get(map[row.id]);
           if (!s?.orig) return;

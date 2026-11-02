@@ -2171,6 +2171,8 @@
   .pat-cell.alt { background: rgb(255 255 255 / 0.02); filter: none; }
   .pat-cell[aria-pressed="true"] { background: var(--cat); box-shadow: 0 0 10px color-mix(in srgb, var(--cat) 60%, transparent); }
   .pat-cell[aria-pressed="true"]::after { display: none; }
+  /* Anschlag: leise Schritte leuchten schwächer */
+  .pat-cell[aria-pressed="true"] { opacity: calc(0.38 + 0.62 * var(--vel, 1)); }
   .pat-row-label { font: 500 10px/1 var(--font-mono); }
 
   /* Mixer: Fader als Linie, Pegel als Licht */
@@ -3013,6 +3015,10 @@
         </div>
         <label class="pat-field" id="pat-kit-field">Kit <select id="pat-kit"></select></label>
         <label class="pat-field" id="pat-preset-field">Klang <select id="pat-preset"></select></label>
+        <label class="pat-field" id="pat-swing-field" title="Jede zweite Sechzehntel kommt etwas später – der Groove wird lockerer">Swing <select id="pat-swing"></select></label>
+        <label class="pat-field" id="pat-vel-field" title="So laut werden neue Schritte und Noten. Antippen eines Schritts mit anderem Anschlag ändert ihn">Anschlag
+          <select id="pat-vel"><option value="1">Laut</option><option value="0.7">Mittel</option><option value="0.4">Leise</option></select>
+        </label>
         <label class="pat-field" id="pat-glide-field" title="Töne, die direkt aufeinander folgen, gleiten ineinander statt zu springen">Gleiten <select id="pat-glide"></select></label>
         <button class="dbtn pat-glide-btn" id="pat-glide-btn" type="button" title="Gleiten zwischen Tönen: antippen wechselt Aus, Kurz, Lang">∿ Aus</button>
         <label class="pat-field" id="pat-len-field">Notenlänge
