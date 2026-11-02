@@ -151,7 +151,7 @@
 
 ## ✅ 2.1 – Mehr Griff, mehr Licht
 - Mehrfachauswahl mit dem Cursor: Rahmen aufziehen, Umschalt-Klick, Strg+A; zusammen verschieben, kopieren, löschen
-- Laufzeit eines Clips: doppelt so lang = halbes Tempo, gleiche Tonhöhe (WSOLA im Worker)
+- Laufzeit eines Clips: doppelt so lang = halbes Tempo, gleiche Tonhöhe (WSOLA im Worker) – seit „Geschwindigkeit eines Clips“ als Regler 50–200 % mit „wie Tonband“
 - Spurgruppen als Akkordeon: einklappen mit Übersicht, Gruppe stumm/solo, umbenennen, auflösen
 - Licht aus der Musik: Umgebungslicht folgt Pegel und Farben der klingenden Clips, Leuchten und Funken nur an der Abspielmarke
 - Wunsch-Agent: ein Satz → Plan (Claude im Artifact, sonst Regeln) → ein Rückgängig-Schritt
@@ -254,6 +254,12 @@
 - iOS-Safari: Stummschalter schaltet die Musik nicht mehr ab (`audioSession` „playback“), Audio läuft nach Anruf/Sperrbildschirm beim nächsten Tippen weiter, kein Zoom beim Antippen von Feldern, Wellenform-Canvas am Touchgerät sparsamer (iOS-Canvas-Speicher), kein Popup bei langem Drücken in Deck und Leiste
 - Swing (Aus, Leicht, Mittel, Triole, Stark) und Anschlag (Laut, Mittel, Leise) im Beat- und Melodie-Editor: Swing verschiebt Offbeat-Sechzehntel beim Rendern; Anschlag ist ein Pinsel – neue Schritte/Noten bekommen ihn, Antippen mit anderem Anschlag ändert, mit gleichem löscht; leise Schritte leuchten schwächer (`tests/swing-vel.test.cjs`)
 - Robustheit eigener Sounds: beim Start nur Name und Länge (aus dem WAV-Kopf), dekodiert wird beim ersten Gebrauch; Clips mit vom Browser gelöschtem Sound bleiben als „Sound fehlt“ erhalten (Hinweis, Projektdatei holt den Klang zurück); dauerhafter Speicher wird beim ersten eigenen Sound erbeten; eigene Sounds im Projekt werden direkt nach dem Start bereitgestellt (`tests/robust.test.cjs`)
+
+## ✅ Geschwindigkeit eines Clips (statt „Laufzeit“)
+- Regler 50–200 % in 5-%-Schritten (Doppelklick/Doppeltipp = 100 %, Pfeiltasten), Schnellwahl ½× · 1× · 2×, Schalter „wie Tonband“: aus = gleiche Tonhöhe (WSOLA im Worker), an = Tonhöhe ändert sich mit (playbackRate in `startVoice`, live und Export gleich, sofort ohne Rechnen). Clip-Länge passt sich an, ein Rückgängig-Schritt je Ziehvorgang
+- Modell: Geschwindigkeit = 1 / `clip.stretch` (alte Projekte unverändert), neues Feld `clip.varispeed`; Länge rastet auf 1/64 Schlag ein, wenn sie fast trifft (48 Schläge bei 150 % = genau 32). Sounds, die der Tonart folgen (tonale Patterns, Loops mit Tonart), laufen nie wie Tonband – sonst wären sie verstimmt. Erzeugte Loops und Patterns werden bei gleicher Tonhöhe im passenden Tempo neu gerendert statt gedehnt (verlustfrei, Anschläge bleiben knackig, ADR 001); WSOLA nur für Aufnahmen und Fremd-Samples. Dehn-Aufträge: der jüngste gebrauchte zuerst, alte Fassungen fallen weg
+- Inspektor (`.insp-clip-speed`) und Handy-Clip-Leiste („Pegel“) über `src/ui/clip-speed.js`; Test `tests/clip-speed.test.cjs`
+- Offen: das Etikett am Clip zeigt noch die Laufzeit (×1,5) statt der Geschwindigkeit
 
 ## 🧪 Krachwerk – Ableger „Selbermachen“ (Prototyp, Branch `werkstatt`, noch nicht auf `main`)
 - Edition `make` im selben Repo unter `/werkstatt/` (Spec `docs/specs/ableger-selbermachen.md`): nur Selbstgemachtes, Synth-Kits als Klangerzeuger, eigener Speicher

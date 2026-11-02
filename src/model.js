@@ -68,7 +68,7 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}|${clip.varispeed ? 1 : 0}`;
 }
 
 // Stapel: Liegen Clips einer Spur übereinander, klingt der obere. Der untere bleibt unverändert erhalten
@@ -124,9 +124,28 @@ export function audibleSegments(clip, sampleBeats, ranges) {
   return out;
 }
 
-// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange sie entsteht)
+// Länge nach einer Geschwindigkeitsänderung: liegt sie fast auf einer Rasterlinie (1/64 Schlag), rastet sie dort ein.
+// So bleiben aus 48 Schlägen bei 150 % genau 32 (statt 32,0016 durch die gerundete Laufzeit), und 100 % stellt die
+// Ausgangslänge wieder her. Krumme Längen (4 Schläge bei 125 % = 3,2) bleiben, damit der Sound nicht beschnitten wird.
+export function snapNear(beats, grid = 1 / 64) {
+  const g = Math.round(beats / grid) * grid;
+  return Math.abs(g - beats) <= 1e-3 + beats * 2e-4 ? g : beats;
+}
+
+// Geschwindigkeit eines Clips = 1 / Laufzeit (clip.stretch). „Wie Tonband“ (clip.varispeed): der Grund-Sound läuft mit
+// playbackRate schneller oder langsamer, die Tonhöhe ändert sich mit. Sounds, die der Tonart folgen (tonale Patterns,
+// erzeugte Loops mit Tonart), würden dabei verstimmt – sie werden stattdessen gedehnt (gleiche Tonhöhe).
+export const clipSpeed = (clip) => 1 / (clip.stretch || 1);
+export const canVarispeed = (library, sampleId) => !library?.followsKey?.(sampleId) && !library?.followsChords?.(sampleId);
+export function tapeRate(library, clip) {
+  const f = clip.stretch || 1;
+  return clip.varispeed && f !== 1 && canVarispeed(library, clip.sampleId) ? 1 / f : 1;
+}
+
+// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange sie entsteht),
+// wie Tonband der Grund-Sound (Tempo über tapeRate)
 export function sampleFor(library, clip) {
-  return clip.stretch && clip.stretch !== 1 ? library.stretched(clip.sampleId, clip.stretch) : library.get(clip.sampleId);
+  return clip.stretch && clip.stretch !== 1 && tapeRate(library, clip) === 1 ? library.stretched(clip.sampleId, clip.stretch) : library.get(clip.sampleId);
 }
 
 // Spurgruppen: eine Gruppe kann ihre Spuren gemeinsam stumm oder solo schalten (die Spuren behalten ihre eigenen Schalter)
@@ -526,25 +545,41 @@ export class Store extends Emitter {
     return this.moveClips(found.map((f) => ({ id: f.clip.id, trackId: f.track.id, startBeat: f.clip.startBeat + (end - start) })), { copy: true });
   }
 
-  // Laufzeit: der Clip spielt factor-fach so lang, ohne die Tonhöhe zu ändern (2 = halbes Tempo).
+  // Laufzeit: der Clip spielt factor-fach so lang (2 = halbes Tempo, Geschwindigkeit 50 %); ohne varispeed gleiche Tonhöhe.
   // Länge und Startpunkt im Sample wachsen mit, damit derselbe Inhalt zu hören ist.
-  setClipStretch(clipId, factor) {
+  // from: Stand des Clips zu Beginn eines Ziehvorgangs (Länge wird von dort gerechnet, auch wenn das Song-Ende sie
+  // zwischendurch kappt); coalesce: ein Rückgängig-Schritt je Ziehvorgang; varispeed: Schalter „wie Tonband“.
+  setClipStretch(clipId, factor, { coalesce, from, varispeed } = {}) {
     const found = this.findClip(clipId);
     if (!found) return;
-    const f = Math.min(4, Math.max(0.25, Math.round(factor * 100) / 100));
-    const old = found.clip.stretch || 1;
-    if (f === old) return;
+    const f = Math.min(4, Math.max(0.25, Math.round(factor * 1e4) / 1e4));
+    const ref = from ?? { ...found.clip };
+    const old = ref.stretch || 1;
+    const tape = varispeed ?? !!found.clip.varispeed;
+    if (f === (found.clip.stretch || 1) && tape === !!found.clip.varispeed) return;
     this.dispatch('stretch', () => {
       const { track, clip } = this.findClip(clipId);
       const k = f / old;
-      clip.stretch = f === 1 ? undefined : f;
-      clip.offsetBeats = (clip.offsetBeats || 0) * k;
-      clip.fadeInBeats = (clip.fadeInBeats || 0) * k;
-      clip.fadeOutBeats = (clip.fadeOutBeats || 0) * k;
-      clip.lengthBeats = this._fit(clip.startBeat, clip.lengthBeats * k).length;
+      if (f === 1) delete clip.stretch; else clip.stretch = f;
+      if (tape) clip.varispeed = true; else delete clip.varispeed;
+      clip.offsetBeats = (ref.offsetBeats || 0) * k;
+      clip.fadeInBeats = (ref.fadeInBeats || 0) * k;
+      clip.fadeOutBeats = (ref.fadeOutBeats || 0) * k;
+      clip.lengthBeats = this._fit(clip.startBeat, snapNear(ref.lengthBeats * k)).length;
       normalizeClip(clip);
       this._raise(track, clip);
-    });
+    }, { coalesce });
+  }
+
+  // Geschwindigkeit 0,5–2 (50–200 %) als Kehrwert der Laufzeit
+  setClipSpeed(clipId, speed, opts = {}) {
+    if (!(speed > 0)) return;
+    this.setClipStretch(clipId, 1 / Math.min(2, Math.max(0.5, speed)), opts);
+  }
+
+  setClipVarispeed(clipId, on) {
+    const found = this.findClip(clipId);
+    if (found) this.setClipStretch(clipId, found.clip.stretch || 1, { varispeed: !!on });
   }
 
   deleteClip(clipId) {

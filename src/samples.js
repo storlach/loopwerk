@@ -10,7 +10,7 @@ import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { GUITAR_LOOP_DEFS, GUITAR_GENRES } from './loops-guitar.js';
 import { GUITAR_CATALOG } from './catalog-guitar.js';
 import { timeStretch } from './dsp/stretch.js';
-import { keyChangesOf, keySpans, keyDelta, harmonySpans } from './model.js';
+import { keyChangesOf, keySpans, keyDelta, harmonySpans, tapeRate } from './model.js';
 import { DEGREE_IDS, REST } from './harmony.js';
 
 export const CATEGORIES = [
@@ -1627,32 +1627,87 @@ export class Library extends Emitter {
     const key = `${id}@${factor}`;
     const pendingKey = `${key}#${base.rev}`;
     if (this.pendingVariants.has(pendingKey)) return this.pendingVariants.get(pendingKey);
-    const job = (async () => {
-      const { runJob } = await import('./dsp/run.js');
-      const chs = Array.from({ length: base.buffer.numberOfChannels }, (_, c) => base.buffer.getChannelData(c));
-      const out = await runJob('stretch', { chs, sampleRate: base.buffer.sampleRate, ratio: factor, loop: base.kind === 'loop' });
-      const buffer = new AudioBuffer({ numberOfChannels: out.length, length: out[0].length, sampleRate: base.buffer.sampleRate });
-      out.forEach((d, c) => buffer.copyToChannel(d, c));
+    const rerender = this._renderAt(base);
+    const bpm = this.bpm;
+    const job = this._queueStretch(key, async () => {
+      let buffer;
+      if (rerender) {
+        // Erzeugte Loops und Patterns: im passenden Tempo neu rendern – verlustfrei wie beim Tempowechsel (ADR 001)
+        buffer = (await rerender(bpm / factor)).buffer;
+      } else {
+        const { runJob } = await import('./dsp/run.js');
+        const chs = Array.from({ length: base.buffer.numberOfChannels }, (_, c) => base.buffer.getChannelData(c));
+        const out = await runJob('stretch', { chs, sampleRate: base.buffer.sampleRate, ratio: factor, loop: base.kind === 'loop' });
+        buffer = new AudioBuffer({ numberOfChannels: out.length, length: out[0].length, sampleRate: base.buffer.sampleRate });
+        out.forEach((d, c) => buffer.copyToChannel(d, c));
+      }
       const lengthBeats = base.lengthBeats * factor;
       const v = {
-        id: key, baseId: id, factor, baseRev: base.rev, rev: base.rev * 1000 + Math.round(factor * 100),
+        id: key, baseId: id, factor, baseRev: base.rev, rev: ++this.variantRev,
         name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
         buffer, lengthBeats, peaks: computePeaks(buffer, lengthBeats),
       };
       this.variants.set(key, v);
-      this.pendingVariants.delete(pendingKey);
       this.emit();
       return v;
-    })();
+    }).finally(() => this.pendingVariants.delete(pendingKey));
     this.pendingVariants.set(pendingKey, job);
     return job;
   }
 
-  // Alle gedehnten Fassungen eines Projekts bereitstellen (vor Export und Offline-Rendering)
+  // Wie lässt sich ein Sound in einem anderen Tempo neu erzeugen? Synthetische Loops (def), Patterns (make) und ihre
+  // Tonart-/Akkord-Fassungen; null für Aufnahmen und Fremd-Samples (die werden gedehnt).
+  _renderAt(s) {
+    if (s.def) return (bpm) => renderLoop(s.def, bpm, this.semis);
+    if (s.make) return (bpm) => s.make(bpm);
+    const root = s.baseId != null && s.delta != null ? this.samples.get(s.baseId) : null;
+    if (root?.def) return (bpm) => renderLoop(root.def, bpm, this.semis + s.delta);
+    if (root?.transpose) return (bpm) => root.transpose(bpm, s.delta, s.chord);
+    return null;
+  }
+
+  // Dehn-Aufträge laufen nacheinander (ein Rechen-Worker), zuerst der jüngste, den das Projekt gerade braucht:
+  // beim Ziehen am Geschwindigkeits-Regler veralten die Zwischenwerte, die Endstellung soll nicht hinter ihnen warten.
+  _queueStretch(key, run) {
+    return new Promise((resolve, reject) => {
+      (this._stretchQueue ??= []).push({ key, run, resolve, reject });
+      this._pumpStretch();
+    });
+  }
+
+  async _pumpStretch() {
+    if (this._stretchBusy) return;
+    this._stretchBusy = true;
+    const q = this._stretchQueue;
+    try {
+      while (q.length) {
+        let i = 0;
+        for (let k = q.length - 1; k >= 0; k--) if (this.wantedStretch?.has(q[k].key)) { i = k; break; }
+        const [job] = q.splice(i, 1);
+        try { job.resolve(await job.run()); } catch (err) { job.reject(err); }
+      }
+    } finally {
+      this._stretchBusy = false;
+    }
+  }
+
+  // Alle gedehnten Fassungen eines Projekts bereitstellen (vor Export und Offline-Rendering). Wie Tonband braucht keine.
+  // Nicht mehr gebrauchte Fassungen fallen weg (bis auf die letzten paar, damit Rückgängig sofort klingt).
   async ensureProject(project) {
     await this.ensureMany(project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
     const jobs = [];
-    for (const t of project.tracks) for (const c of t.clips) if (c.stretch && c.stretch !== 1) jobs.push(this.ensureStretched(c.sampleId, c.stretch));
+    const wanted = new Set();
+    for (const t of project.tracks) {
+      for (const c of t.clips) {
+        if (!c.stretch || c.stretch === 1 || tapeRate(this, c) !== 1) continue;
+        wanted.add(`${c.sampleId}@${c.stretch}`);
+        jobs.push(this.ensureStretched(c.sampleId, c.stretch));
+      }
+    }
+    for (const n of this.keyNeeds(project)) if (n.stretch !== 1) wanted.add(`${variantKey(n.id, n.delta, n.chord)}@${n.stretch}`);
+    this.wantedStretch = wanted;
+    const unused = [...this.variants.keys()].filter((k) => !wanted.has(k));
+    for (const k of unused.slice(0, Math.max(0, unused.length - 6))) this.variants.delete(k);
     jobs.push(this.ensureKeyVariants(project));
     await Promise.all(jobs);
   }

@@ -94,15 +94,15 @@ const { check, finish } = createChecker();
     // Bedienung im Inspektor
     await page.evaluate(() => window.loopwerk.ui.select('c4'));
     const len0 = await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats);
-    await page.click('#insp-run-up');
-    await page.click('[data-run="2"]');
-    const st = await page.evaluate(() => { const c = window.loopwerk.store.findClip('c4').clip; return { s: c.stretch, len: c.lengthBeats, out: document.getElementById('insp-run-out').textContent }; });
-    check('Inspektor: Laufzeit ×2 macht den Clip doppelt so lang, Anzeige stimmt', st.s === 2 && Math.abs(st.len - Math.min(len0 * 2, 128)) < 1e-6 && /×2/.test(st.out), JSON.stringify({ len0, st }));
+    await page.click('.insp-speed [data-speed="2"]');
+    await page.click('.insp-speed [data-speed="0.5"]');
+    const st = await page.evaluate(() => { const c = window.loopwerk.store.findClip('c4').clip; return { s: c.stretch, len: c.lengthBeats, out: document.getElementById('insp-speed-out').textContent }; });
+    check('Inspektor: Geschwindigkeit ½× macht den Clip doppelt so lang, Anzeige stimmt', st.s === 2 && Math.abs(st.len - Math.min(len0 * 2, 128)) < 1e-6 && /^50 %/.test(st.out), JSON.stringify({ len0, st }));
     await page.waitForFunction(() => !!window.loopwerk.library.stretched('chords-pad', 2), null, { timeout: 20000 });
     check('Gedehnte Fassung wird im Hintergrund gerechnet', true);
     check('Clip zeigt die Laufzeit im Etikett', /×2/.test(await page.locator('.clip[data-clip-id="c4"] .clip-label').textContent()));
-    await page.click('[data-run="1"]');
-    check('Laufzeit ×1 stellt die Originallänge wieder her', await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats) === len0);
+    await page.click('.insp-speed [data-speed="1"]');
+    check('Geschwindigkeit 1× stellt die Originallänge wieder her', await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats) === len0);
     // ---------- Spurgruppen ----------
     await page.keyboard.press('Escape');
     await page.click('.track-row:has(.lane[data-track-id="t1"]) .tbtn-menu');
