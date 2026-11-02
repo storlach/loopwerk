@@ -8,6 +8,7 @@ import { sliceTake, pickKit } from './slice.js';
 import { Groove, chooseRoles, stepHits, stepOffset, STEPS } from './groove.js';
 import { Bank, PAD_COUNT, wavToChannels } from './bank.js';
 import { Mic } from './mic.js';
+import { timeStretch } from '../dsp/stretch.js';
 
 const KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyA', 'KeyS', 'KeyD', 'KeyF', 'KeyZ', 'KeyX', 'KeyC', 'KeyV'];
 const KEY_LABELS = ['1', '2', '3', '4', 'Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Y', 'X', 'C', 'V'];
@@ -24,9 +25,11 @@ const SYNTH_ROWS = [
   { row: 'crash', name: 'Becken', cls: 'hell', centroid: 7000 },
 ];
 const KIT_TAG = { elektro: 'erzeugt', techno: 'erzeugt 909' };
-// Tastenleiste: A-Moll über eine Oktave (A3 … A4); Klänge ohne Tonhöhe spielen auf A3 im Original
-const SCALE = [57, 59, 60, 62, 64, 65, 67, 69];
-const NOTE = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
+// Tastenleiste: Tonleiter der Song-Tonart über eine Oktave; Klänge ohne Tonhöhe spielen auf A3 im Original
+const NOTE = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B', 'H'];
+const MODES = { moll: [0, 2, 3, 5, 7, 8, 10, 12], dur: [0, 2, 4, 5, 7, 9, 11, 12] };
+const BPM_MIN = 60, BPM_MAX = 160;
+const SONG_KEY = 'loopwerk.make.song.v1';
 const DEFAULT_ROOT = 57;
 const RENDER_SR = 44100;
 
@@ -43,6 +46,20 @@ let selected = -1;       // zuletzt gespieltes Pad (Ziel der Tastenleiste)
 let keysOn = false;
 const live = new Map();  // laufende Schleifen: Pad → { b0, voice }
 let pendingSwap = null;  // Festgehaltenes ersetzt am nächsten Taktanfang, was gerade läuft
+const song = loadSong(); // { bpm, root (0–11), mode }
+
+function loadSong() {
+  const def = { bpm: EDITION.bpm, root: 9, mode: 'moll' };
+  try {
+    const v = JSON.parse(localStorage.getItem(SONG_KEY) || 'null');
+    if (v && v.bpm >= BPM_MIN && v.bpm <= BPM_MAX && v.root >= 0 && v.root < 12 && MODES[v.mode]) return { bpm: v.bpm, root: v.root, mode: v.mode };
+  } catch { /* Voreinstellung */ }
+  return def;
+}
+const saveSong = () => { try { localStorage.setItem(SONG_KEY, JSON.stringify(song)); } catch { /* egal */ } };
+const keyLabel = () => `${NOTE[song.root]}-${song.mode === 'moll' ? 'Moll' : 'Dur'}`;
+// Grundton der Leiste zwischen F3 und E4, damit sie in der Mitte liegt
+const scaleNotes = () => { const base = (song.root >= 5 ? 48 : 60) + song.root; return MODES[song.mode].map((d) => base + d); };
 const timing = { cleanMs: [] };
 
 // Summe: sanft verdichten, damit leise und laute Funde zusammen klingen. Echtzeit und Festhalten nutzen dieselbe Kette.
@@ -69,7 +86,7 @@ const groove = { g: null };
 function grooveOf() {
   if (!groove.g) {
     groove.g = new Groove(ctx, (i, when, v) => trigger(i, when, v));
-    groove.g.bpm = EDITION.bpm;
+    groove.g.bpm = song.bpm;
     groove.g.onBar = onBar;
     groove.g.on((g) => {
       if (!g.playing) stopLoops();
@@ -99,7 +116,7 @@ function voice(c, dest, p, when, vel = 1, semis = 0) {
     return { g, src: null };
   }
   const src = c.createBufferSource();
-  src.buffer = p.buffer;
+  src.buffer = p.cls === 'loop' ? loopBuffer(p) : p.buffer;
   src.playbackRate.value = 2 ** ((semis + (p.tune || 0)) / 12);
   src.connect(g);
   src.start(when);
@@ -120,6 +137,19 @@ function trigger(i, when, vel = 1, semis = 0) {
 // ---------- Schleifen und Festhalten ----------
 
 const loopBars = (i) => pads[i]?.bars || 1;
+
+// Schleife im Song-Tempo: gleiche Tonhöhe, andere Länge (WSOLA aus dem Loopwerk-Kern); je Tempo gemerkt
+function loopBuffer(p) {
+  const from = p.bpm || EDITION.bpm;
+  if (from === song.bpm) return p.buffer;
+  if (p.stretched?.bpm === song.bpm) return p.stretched.buffer;
+  const b = p.buffer;
+  const outLen = Math.round((p.bars || 1) * 4 * (60 / song.bpm) * b.sampleRate);
+  const chs = Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c));
+  const buffer = toBuffer(timeStretch(chs, outLen / b.length, b.sampleRate, outLen, { loop: true }), b.sampleRate);
+  p.stretched = { bpm: song.bpm, buffer };
+  return buffer;
+}
 
 function fadeOut(v, at) {
   if (!v) return;
@@ -148,7 +178,10 @@ function onBar(when, bar) {
   }
   for (const [i, l] of live) {
     if (!pads[i]) { live.delete(i); continue; }
-    if ((bar - l.b0) % loopBars(i) === 0) l.voice = trigger(i, when);
+    if ((bar - l.b0) % loopBars(i) === 0) {
+      fadeOut(l.voice, when); // nach einem Tempowechsel kann die alte Fassung länger sein
+      l.voice = trigger(i, when);
+    }
   }
 }
 
@@ -207,9 +240,9 @@ async function freeze() {
   while (used.has(`Schleife ${n}`)) n++;
   const name = `Schleife ${n}`;
   const tags = [`${bars} ${bars === 1 ? 'takt' : 'takte'}`];
-  const rec = await bank.put(chs, sampleRate, { name, tags, cls: 'loop', bars, centroid: 0, source: 'Festhalten' });
+  const rec = await bank.put(chs, sampleRate, { name, tags, cls: 'loop', bars, bpm: song.bpm, centroid: 0, source: 'Festhalten' });
   keepSafe();
-  pads[free] = { kind: 'own', id: rec.id, name, tags, cls: 'loop', bars, centroid: 0, buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
+  pads[free] = { kind: 'own', id: rec.id, name, tags, cls: 'loop', bars, bpm: song.bpm, centroid: 0, buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
   savePads();
   renderAll();
   $('wpads').children[free].classList.add('fresh');
@@ -557,7 +590,51 @@ function renderKeys() {
   $('wkeys-btn').setAttribute('aria-pressed', String(keysOn));
   const p = pads[selected];
   strip.dataset.cat = p ? catOf(p) : '';
-  $('wkeys-name').textContent = p ? p.name : '';
+  $('wkeys-name').textContent = p ? `${p.name} · ${keyLabel()}` : '';
+  const notes = scaleNotes();
+  document.querySelectorAll('.wkey').forEach((k, n) => { k.dataset.midi = notes[n]; k.textContent = noteName(notes[n]); });
+}
+
+// ---------- Tempo und Tonart ----------
+
+function renderSong() {
+  $('wsong-bpm').textContent = song.bpm;
+  $('wsong-key').textContent = keyLabel();
+  $('wbpm-val').textContent = `${song.bpm} BPM`;
+  for (const b of document.querySelectorAll('.wset [data-root]')) b.setAttribute('aria-pressed', String(Number(b.dataset.root) === song.root));
+  for (const b of document.querySelectorAll('.wset [data-mode]')) b.setAttribute('aria-pressed', String(b.dataset.mode === song.mode));
+  renderKeys();
+}
+
+function setBpm(v) {
+  song.bpm = Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(v)));
+  if (groove.g) groove.g.bpm = song.bpm; // wirkt ab dem nächsten Schritt, Schleifen ab dem nächsten Takt
+  saveSong();
+  renderSong();
+}
+
+function setKey(root, mode = song.mode) {
+  song.root = root;
+  song.mode = mode;
+  saveSong();
+  renderSong();
+}
+
+// Tempo antippen: Mittel der letzten Abstände; nach 2 s Pause beginnt es neu (nur Messung, keine Planung)
+const taps = [];
+function tapTempo() {
+  const now = performance.now();
+  if (taps.length && now - taps[taps.length - 1] > 2000) taps.length = 0;
+  taps.push(now);
+  if (taps.length > 5) taps.shift();
+  if (taps.length < 3) return;
+  const gaps = taps.slice(1).map((t, k) => t - taps[k]);
+  setBpm(60000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length));
+}
+
+function toggleSet(open = $('wset').hidden) {
+  $('wset').hidden = !open;
+  $('wsong').setAttribute('aria-expanded', String(open));
 }
 
 function toggleKeys() {
@@ -574,7 +651,9 @@ async function playKey(midi) {
   await audio();
   const p = pads[selected];
   if (!p) return null;
-  return trigger(selected, null, 1, midi - (p.root ?? DEFAULT_ROOT));
+  // Tonale Klänge auf ihrem Grundton, alle anderen liegen im Original auf der ersten Taste
+  const root = p.cls === 'ton' ? p.root : scaleNotes()[0];
+  return trigger(selected, null, 1, midi - root);
 }
 
 function refreshGroove() {
@@ -622,8 +701,18 @@ function buildUi() {
       <h1 class="wmark"><span>Krach</span><b>werk</b></h1>
       <button class="wmic" id="wmic" type="button" hidden aria-label="Mikrofon schließen">Mikro offen</button>
       <button class="winstall" id="winstall" type="button" hidden>Installieren</button>
-      <span class="wbpm" aria-label="Tempo">${EDITION.bpm}<small>BPM</small></span>
+      <button class="wbpm" id="wsong" type="button" aria-expanded="false" aria-controls="wset" aria-label="Tempo und Tonart"><span id="wsong-bpm"></span><small>BPM</small><span class="wkeylbl" id="wsong-key"></span></button>
     </header>
+    <section class="wset" id="wset" hidden aria-label="Tempo und Tonart">
+      <div class="wset-row">
+        <button class="wbtn" id="wbpm-down" type="button" aria-label="Langsamer">−</button>
+        <output class="wset-bpm" id="wbpm-val" aria-live="polite"></output>
+        <button class="wbtn" id="wbpm-up" type="button" aria-label="Schneller">+</button>
+        <button class="wbtn" id="wtap" type="button" aria-label="Tempo antippen">Tippen</button>
+      </div>
+      <div class="wset-keys" role="group" aria-label="Grundton">${NOTE.map((n, pc) => `<button class="wchip" type="button" data-root="${pc}" aria-pressed="false">${n}</button>`).join('')}</div>
+      <div class="wset-mode" role="group" aria-label="Tongeschlecht"><button class="wchip" type="button" data-mode="moll" aria-pressed="false">Moll</button><button class="wchip" type="button" data-mode="dur" aria-pressed="false">Dur</button></div>
+    </section>
     <main class="wmain">
       <p class="whint off" id="whint" role="status"></p>
       <div class="wpads" id="wpads" role="group" aria-label="Pads"></div>
@@ -634,7 +723,7 @@ function buildUi() {
     </main>
     <section class="wkeys" id="wkeys" hidden aria-label="Tasten">
       <p class="wkeys-name" id="wkeys-name"></p>
-      <div class="wkeys-row">${SCALE.map((m) => `<button class="wkey" type="button" data-midi="${m}">${noteName(m)}</button>`).join('')}</div>
+      <div class="wkeys-row">${Array.from({ length: 8 }, () => '<button class="wkey" type="button"></button>').join('')}</div>
     </section>
     <nav class="wbar" aria-label="Werkzeuge">
       <button class="wbtn primary" id="wkit-btn" type="button">Klatsch dein Kit</button>
@@ -665,6 +754,14 @@ function buildUi() {
   $('wsynth').addEventListener('click', fillSynthKit);
   $('wfreeze').addEventListener('click', freeze);
   $('wkeys-btn').addEventListener('click', toggleKeys);
+  $('wsong').addEventListener('click', () => toggleSet());
+  // Schublade schließt beim Spielen oder Tippen daneben
+  addEventListener('pointerdown', (e) => { if (!$('wset').hidden && !e.target.closest('#wset, #wsong')) toggleSet(false); }, true);
+  $('wbpm-down').addEventListener('click', () => setBpm(song.bpm - 5));
+  $('wbpm-up').addEventListener('click', () => setBpm(song.bpm + 5));
+  $('wtap').addEventListener('pointerdown', (e) => { e.preventDefault(); tapTempo(); });
+  for (const b of document.querySelectorAll('.wset [data-root]')) b.addEventListener('click', () => setKey(Number(b.dataset.root)));
+  for (const b of document.querySelectorAll('.wset [data-mode]')) b.addEventListener('click', () => setKey(song.root, b.dataset.mode));
   for (const k of document.querySelectorAll('.wkey')) {
     k.addEventListener('pointerdown', (e) => { e.preventDefault(); k.classList.remove('hit'); void k.offsetWidth; k.classList.add('hit'); playKey(Number(k.dataset.midi)); });
     k.addEventListener('animationend', () => k.classList.remove('hit'));
@@ -688,7 +785,7 @@ async function restore() {
       const rec = await bank.get(s.sound);
       if (!rec) return;
       const { chs, sampleRate } = wavToChannels(rec.wav);
-      pads[i] = { kind: 'own', id: rec.id, name: rec.name, tags: rec.tags || [], cls: rec.cls, centroid: rec.centroid ?? 1000, bars: rec.bars, ...tuning(rec.pitch), buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
+      pads[i] = { kind: 'own', id: rec.id, name: rec.name, tags: rec.tags || [], cls: rec.cls, centroid: rec.centroid ?? 1000, bars: rec.bars, bpm: rec.bpm, ...tuning(rec.pitch), buffer: toBuffer(chs, sampleRate), peaks: peaksOf(chs) };
     }
   }));
 }
@@ -699,6 +796,7 @@ async function boot() {
   setupApp();
   await restore();
   renderAll();
+  renderSong();
   if (!pads.some(Boolean)) hint('Tippe ein Pad und mach ein Geräusch');
   window.werkstatt = {
     ready: true, edition: EDITION, bank, timing, mic, app,
@@ -706,6 +804,7 @@ async function boot() {
     get groove() { return groove.g; },
     get live() { return [...live.keys()]; },
     get selected() { return selected; },
+    song, loopBuffer: (i) => (pads[i] ? loopBuffer(pads[i]) : null), setBpm, setKey,
     padBuffer: (i) => pads[i]?.buffer ?? null,
     audio, ingestPad, ingestKit, trigger, freeze, renderNow, playKey,
   };

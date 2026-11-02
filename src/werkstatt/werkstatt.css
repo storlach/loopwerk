@@ -27,8 +27,29 @@ button { font: inherit; color: inherit; }
 .wmic::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); box-shadow: var(--glow-ink); }
 .wmic[hidden] { display: none; }
 .winstall { min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); font: 600 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); cursor: pointer; }
-.wbpm { color: var(--muted); font-size: 18px; color: var(--display-ink); letter-spacing: 0; }
-.wbpm small { font-size: 9px; color: var(--lcd-label); margin-left: 4px; letter-spacing: 0.1em; }
+.wbpm {
+  font-size: 18px; color: var(--display-ink); letter-spacing: 0; min-height: 44px; padding: 0 2px 0 8px; border: 0; background: transparent;
+  display: inline-grid; grid-template-columns: auto auto; column-gap: 4px; align-items: baseline; justify-items: start; cursor: pointer; text-align: left;
+}
+.wbpm small { font-size: 9px; color: var(--lcd-label); letter-spacing: 0.1em; }
+.wkeylbl { grid-column: 1 / -1; font: 500 9px/1 var(--font-mono); letter-spacing: 0.1em; color: var(--lcd-label); text-transform: uppercase; }
+.wbpm[aria-expanded="true"] { box-shadow: inset 0 -2px 0 var(--amber); }
+
+/* Tempo und Tonart: Einstellungen sind Linien, gewählt = Weißglut */
+.wset {
+  position: absolute; z-index: 4; left: 8px; right: 8px; top: calc(56px + env(safe-area-inset-top));
+  display: grid; gap: 8px; padding: 12px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow), inset 0 0 0 1px var(--line);
+}
+.wset[hidden] { display: none; }
+.wset-row { display: grid; grid-template-columns: 48px 1fr 48px auto; gap: 8px; align-items: center; }
+.wset-bpm { font: 500 22px/1 var(--font-mono); text-align: center; color: var(--display-ink); }
+.wset-keys { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.wset-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.wchip {
+  min-height: 44px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow);
+  font: 600 12px/1 var(--font-mono); color: var(--ink); cursor: pointer; touch-action: manipulation;
+}
+.wchip[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); box-shadow: var(--glow-ink); }
 
 .wmain { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; position: relative; padding: 8px 0 16px; }
 .wpads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

@@ -230,7 +230,7 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     check('Tonaler Klang: Grundton A4 erkannt, Feinstimmung auf den Halbton (−0,3)', ton.cls === 'ton' && ton.root === 69 && Math.abs(ton.tune + 0.3) < 0.03, `${ton.name}, Stimmung ${ton.tune?.toFixed(3)}`);
     await page.tap('#wkeys-btn');
     const keysUi = await page.evaluate(() => ({ shown: !document.getElementById('wkeys').hidden, name: document.getElementById('wkeys-name').textContent, keys: document.querySelectorAll('.wkey').length, sel: document.querySelector('.wpad[data-pad="10"]').classList.contains('sel'), scroll: document.documentElement.scrollWidth - innerWidth }));
-    check('Tasten: Leiste mit 8 Tönen spielt das zuletzt gespielte Pad', keysUi.shown && keysUi.name === ton.name && keysUi.keys === 8 && keysUi.sel, keysUi.name);
+    check('Tasten: Leiste mit 8 Tönen spielt das zuletzt gespielte Pad', keysUi.shown && keysUi.name === `${ton.name} · A-Moll` && keysUi.keys === 8 && keysUi.sel, keysUi.name);
     check('Tasten: Handy ohne seitliches Scrollen', keysUi.scroll <= 0);
     await page.tap('.wkey[data-midi="64"]');
     const e4 = await page.evaluate(async () => {
@@ -396,6 +396,71 @@ async function open(server, browser, ctxOpts = PHONE, ctx = null) {
     await ip.waitForTimeout(3200);
     check('Tipp kommt nur einmal', await ip.evaluate(() => !/Home-Bildschirm/.test(document.getElementById('whint').textContent)));
     await I.close();
+
+    // ---------- Tempo und Tonart ----------
+    const T = await browser.newContext(PHONE);
+    const tp = await T.newPage();
+    const tErrors = [];
+    tp.on('pageerror', (e) => tErrors.push(e.message));
+    tp.on('console', (m) => { if (m.type() === 'error') tErrors.push(m.text()); });
+    await tp.goto(`${base}/werkstatt/`);
+    await tp.waitForFunction(() => window.werkstatt?.ready);
+    check('Start: 90 BPM, A-Moll im Kopf', await tp.evaluate(() => document.getElementById('wsong').textContent.replace(/\s+/g, ' ').trim() === '90BPMA-Moll'));
+    // Schleife bei 90 festhalten
+    await tp.tap('#wsynth');
+    await tp.waitForFunction(() => window.werkstatt.pads.slice(0, 8).every((p) => p.length > 0));
+    await tp.tap('#wgroove');
+    await tp.waitForTimeout(200);
+    await tp.tap('#wfreeze');
+    await tp.waitForFunction(() => window.werkstatt.pads[8]?.cls === 'loop');
+    await tp.waitForFunction(() => window.werkstatt.live.includes(8), null, { timeout: 4000 });
+    await tp.tap('#wsong');
+    check('Tempo/Tonart-Leiste öffnet mit einem Tipp', await tp.evaluate(() => !document.getElementById('wset').hidden && document.getElementById('wsong').getAttribute('aria-expanded') === 'true'));
+    for (let k = 0; k < 6; k++) await tp.tap('#wbpm-up');
+    const fast = await tp.evaluate(() => ({ bpm: window.werkstatt.song.bpm, step: window.werkstatt.groove.stepDur, head: document.getElementById('wsong-bpm').textContent, loop: window.werkstatt.loopBuffer(8), sr: window.werkstatt.padBuffer(8).sampleRate }));
+    check('Tempo + : 90 → 120 BPM, Groove läuft im neuen Tempo weiter', fast.bpm === 120 && Math.abs(fast.step - 0.125) < 1e-9 && fast.head === '120', `${fast.bpm}`);
+    const stretched = await tp.evaluate(() => {
+      const b = window.werkstatt.loopBuffer(8);
+      let peak = 0;
+      for (const v of b.getChannelData(0)) peak = Math.max(peak, Math.abs(v));
+      return { len: b.length, sr: b.sampleRate, peak };
+    });
+    check('Schleife folgt dem Tempo: 1 Takt bei 120 BPM = 2,0 s (samplegenau), hörbar', stretched.len === Math.round(2 * stretched.sr) && stretched.peak > 0.1, `${stretched.len} Frames`);
+    await tp.waitForTimeout(2300);
+    check('Schleife läuft nach dem Tempowechsel weiter', await tp.evaluate(() => window.werkstatt.live.includes(8) && window.werkstatt.groove.playing));
+    // Tempo antippen: 4 Tipps im Abstand 0,5 s → 120 BPM; vorher auf 100 stellen
+    for (let k = 0; k < 4; k++) await tp.tap('#wbpm-down');
+    await tp.waitForTimeout(2100);
+    await tp.evaluate(() => new Promise((done) => {
+      const b = document.getElementById('wtap');
+      let k = 0;
+      const tap = () => { b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); if (++k < 4) setTimeout(tap, 500); else done(); };
+      tap();
+    }));
+    const tapped = await tp.evaluate(() => window.werkstatt.song.bpm);
+    check('Tempo antippen: 4 Tipps im Abstand 0,5 s → etwa 120 BPM', Math.abs(tapped - 120) <= 4, `${tapped}`);
+    // Tonart: C-Dur → Tasten C4 … C5
+    await tp.tap('.wset [data-root="0"]');
+    await tp.tap('.wset [data-mode="dur"]');
+    const drawer = await tp.evaluate(() => ({ bar: document.querySelector('.wbar').getBoundingClientRect().bottom, vh: innerHeight, scroll: document.documentElement.scrollWidth - innerWidth }));
+    check('Tempo/Tonart als Schublade: Werkzeugleiste bleibt im Bild, kein seitliches Scrollen', drawer.bar <= drawer.vh && drawer.scroll <= 0, JSON.stringify(drawer));
+    if (SHOTS) await tp.screenshot({ path: path.join(DIR, 'werkstatt-tonart-handy.png') });
+    await tp.tap('.wpad[data-pad="0"]');
+    check('Pad antippen schließt die Schublade', await tp.evaluate(() => document.getElementById('wset').hidden));
+    await tp.tap('#wkeys-btn');
+    const dur = await tp.evaluate(() => ({ keys: [...document.querySelectorAll('.wkey')].map((k) => k.textContent).join(' '), head: document.getElementById('wsong-key').textContent, pressed: document.querySelector('.wset [data-root="0"]').getAttribute('aria-pressed') }));
+    check('Tonart C-Dur: Kopf und Tasten C4 D4 E4 F4 G4 A4 H4 C5', dur.head === 'C-Dur' && dur.keys === 'C4 D4 E4 F4 G4 A4 H4 C5' && dur.pressed === 'true', dur.keys);
+    const kick = await tp.evaluate(async () => (await window.werkstatt.playKey(60)).src.playbackRate.value);
+    check('Klang ohne Tonhöhe liegt im Original auf der ersten Taste', Math.abs(kick - 1) < 1e-6, kick.toFixed(4));
+    if (SHOTS) await tp.screenshot({ path: path.join(DIR, 'werkstatt-tempo-handy.png') });
+    const tScroll = await tp.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    check('Handy: Leiste offen ohne seitliches Scrollen', tScroll <= 0);
+    await tp.reload();
+    await tp.waitForFunction(() => window.werkstatt?.ready);
+    const kept2 = await tp.evaluate(() => ({ ...window.werkstatt.song }));
+    check('Tempo und Tonart bleiben nach dem Neuladen', kept2.bpm === tapped && kept2.root === 0 && kept2.mode === 'dur', JSON.stringify(kept2));
+    check('Tempo/Tonart: keine Konsolenfehler', tErrors.length === 0, tErrors.join(' | '));
+    await T.close();
 
     // GitHub-Pages-Build liefert dieselben Dateien unter werkstatt/
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });

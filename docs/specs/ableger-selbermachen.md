@@ -18,7 +18,8 @@ Status: Brainstorming für Martin, keine Entscheidung, keine ADR. Arbeitstitel �
 - **Tasten**: Leiste mit A-Moll (A3–A4) spielt das zuletzt gespielte Pad. Tonale Klänge: Grundton per YIN, Feinstimmung auf den nächsten Halbton (auch beim normalen Antippen); Klänge ohne Tonhöhe liegen auf A3.
 - **Als App (PWA)**: Manifest und Service Worker unter `/werkstatt/` (erzeugt von `tools/werkstatt-page.cjs`, Bereich nur `/werkstatt/`). Netz zuerst, ohne Netz aus dem Zwischenspeicher → Start auch offline. Beim ersten eigenen Klang `navigator.storage.persist()`; iPhone im Browser bekommt einmal den Tipp „Zum Home-Bildschirm“ (iOS räumt sonst Seiten-Speicher nach Tagen ohne Besuch), Android/Chrome einen Knopf „Installieren“. Icon vorerst das von Loopwerk.
 - Flutter geprüft (02.11.2026): vorerst nein – kein Web Audio, DSP und Tonkern müssten neu, zwei Codebasen (Option b). Reihenfolge: PWA → bei Bedarf Capacitor (gleicher Code) → Flutter nur mit eigenem C++-Tonkern (auch als WASM im Browser).
-- Noch nicht drin: Tonart wählbar, Arranger/Song, Weg nach Loopwerk, Lichtwolke roh → geformt, Tempo änderbar.
+- **Tempo und Tonart**: Tipp auf „90 BPM · A-Moll“ öffnet eine Schublade (− / + in 5er-Schritten, 60–160, Tempo antippen, 12 Grundtöne, Moll/Dur), gemerkt in `loopwerk.make.song.v1`. Groove wechselt ab dem nächsten Schritt, Schleifen ab dem nächsten Takt; Schleifen merken ihr Aufnahmetempo und werden per WSOLA (`dsp/stretch.js`) samplegenau auf das Song-Tempo gestreckt, Tonhöhe bleibt. Tastenleiste = Tonleiter der Tonart (Grundton zwischen F3 und E4); Klänge ohne Tonhöhe liegen im Original auf der ersten Taste.
+- Noch nicht drin: Arranger/Song, Weg nach Loopwerk, Lichtwolke roh → geformt, eigenes Icon.
 
 ## Ziel aus Nutzersicht
 Wer die Werkstatt öffnet, hat ein leeres Regal und baut alles selbst – aufnehmen, klatschen, singen, Synth schrauben, Beats und Melodien, Teile des eigenen Songs wieder zu neuen Sounds machen.
