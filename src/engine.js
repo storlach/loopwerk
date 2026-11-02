@@ -6,7 +6,7 @@ import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
-import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover } from './automation.js';
+import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 const TICK_MS = 25;
@@ -32,23 +32,45 @@ function createStrip(ctx, dest, { pan = true } = {}) {
   return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set() };
 }
 
-// AudioParams der Kanalzug-Kurven (Effekte über u.auto in Scheibe 3). Ein Besitzer je AudioParam: auto.gain gehört
-// immer der Automation, das Panorama nur, solange die Spur eine Pan-Kurve hat (sonst syncStrip).
+// AudioParams der Kanalzug-Kurven. Ein Besitzer je AudioParam: auto.gain gehört immer der Automation, das Panorama und
+// Effekt-Parameter nur, solange es eine Kurve gibt (sonst syncStrip bzw. updateFxParams).
 const STRIP_PARAMS = { volume: (strip) => strip.auto.gain, pan: (strip) => strip.pan?.pan };
 
-// Kurven eines Kanalzugs: [{ key, param, map, points, def, absolute }]; def = Ruhewert ohne Kurve (Panorama: Regler)
+// Ziel einer Kurve: { param, map }. Effekt-Kurven wirken über u.auto der Einheit in der aktuellen Kette – ist der Effekt
+// aus, gibt es keine Einheit und die Kurve wirkt nicht.
+function laneTarget(strip, key) {
+  const spec = AUTO_PARAMS[key];
+  if (!spec) return null;
+  if (spec.fx) {
+    const a = strip.chain?.units?.[spec.fx]?.auto?.[spec.param];
+    return a ? { param: a.param, map: a.map } : null;
+  }
+  const param = STRIP_PARAMS[key]?.(strip);
+  return param ? { param, map: spec.map } : null;
+}
+
+// Kurven eines Kanalzugs: [{ key, param, map, points, def, absolute }]; def = Ruhewert ohne Kurve (Panorama, Effekte: Regler)
 function stripLanes(strip, owner, target) {
   const out = [];
   for (const key of autoKeys(target)) {
     const spec = AUTO_PARAMS[key];
-    const param = STRIP_PARAMS[key]?.(strip);
-    if (spec.target === 'strip' && param) out.push({ key, param, map: spec.map, points: laneOf(owner, key), def: autoRest(owner, key), absolute: spec.owner === 'absolute' });
+    const to = laneTarget(strip, key);
+    if (to) out.push({ key, param: to.param, map: to.map, points: laneOf(owner, key), def: autoRest(owner, key), absolute: spec.owner === 'absolute' });
   }
   return out;
 }
 
-// Regler-Parameter, die eine Kurve gerade übernimmt (syncStrip lässt sie aus)
-const skipOf = (owner) => ({ pan: laneOf(owner, 'pan').length > 0 });
+// Regler-Parameter, die eine Kurve gerade übernimmt (syncStrip/updateFxParams lassen sie aus)
+const FX_KEYS = Object.values(AUTO_PARAMS).filter((p) => p.fx);
+function skipOf(owner) {
+  const skip = { pan: laneOf(owner, 'pan').length > 0, fx: null };
+  for (const p of FX_KEYS) {
+    if (!laneOf(owner, p.key).length) continue;
+    skip.fx ||= {};
+    (skip.fx[p.fx] ||= {})[p.param] = true;
+  }
+  return skip;
+}
 
 // AudioWorklet-Modul (Mastering, Lo-Fi) einmal je Kontext laden; false, wenn es nicht geht
 const FX_WORKLET = new URL('./dsp/fx-worklet.js', import.meta.url);
@@ -79,10 +101,11 @@ function installChain(ctx, strip, fx, spb, live, grid) {
       xf.gain.linearRampToValueAtTime(1, t + 0.03);
       oldXf.gain.setValueAtTime(oldXf.gain.value, t);
       oldXf.gain.linearRampToValueAtTime(0, t + 0.03);
-      setTimeout(() => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); }, 120);
+      setTimeout(() => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); old.dispose(); }, 120);
     } else {
       strip.input.disconnect(old.input);
       oldXf.disconnect();
+      old.dispose();
     }
   }
   strip.chain = chain;
@@ -94,7 +117,7 @@ function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid, skip = {}) 
   if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
   if (strip.pan && !skip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
   if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live, grid);
-  else updateFxParams(strip.chain, fx, t, spb, grid);
+  else updateFxParams(strip.chain, fx, t, spb, grid, skip.fx);
 }
 
 export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
@@ -517,6 +540,7 @@ export class Engine extends Emitter {
       this.outAnalyser.maxDecibels = -18;
       this.out.connect(this.outAnalyser);
       this.mix = buildMix(this.ctx, this.project, { limiter: true, dest: this.out, worklets: this.worklets, mastering: this.masterGains, monitor: this.monitor });
+      this._syncAutoChains();
       this.pad = new FxPad(this.ctx, this.mix, { spb: () => this.spb, worklets: this.worklets, loopExtra });
       // Pegelmesser je Kanal für den Mixer
       this.meters = new Map();
@@ -554,6 +578,7 @@ export class Engine extends Emitter {
     this.cursorTime = t0;
     this._autoState = { beat: fromBeat };
     this._autoSmooth = false;
+    this._syncAutoChains(false);
     this._planAuto(fromBeat, fromBeat, t0, 'set');
     this.knownSigs = this._signatures();
     this._scheduleActiveAt(fromBeat, t0, this._limitFor(fromBeat));
@@ -692,7 +717,12 @@ export class Engine extends Emitter {
       const strip = this.mix.tracks.get(id);
       if (!strip) continue;
       let lanes = this._laneCache.get(id);
-      if (!lanes || lanes.strip !== strip) { lanes = stripLanes(strip, track, id); lanes.strip = strip; this._laneCache.set(id, lanes); }
+      if (!lanes || lanes.strip !== strip || lanes.chain !== strip.chain) {
+        lanes = stripLanes(strip, track, id);
+        lanes.strip = strip;
+        lanes.chain = strip.chain;
+        this._laneCache.set(id, lanes);
+      }
       for (const l of lanes) fn(l, strip);
     }
   }
@@ -731,15 +761,72 @@ export class Engine extends Emitter {
         if (AUTO_PARAMS[key]?.owner !== 'absolute') continue;
         const track = this.project.tracks.find((x) => x.id === id);
         if (track && laneOf(track, key).length) continue;
-        const param = STRIP_PARAMS[key]?.(strip);
+        const to = laneTarget(strip, key);
         const pts = strip.autoPts?.[key];
-        if (param) {
-          const held = this.playing && pts?.length ? AUTO_PARAMS[key].map(autoValueAt(pts, beat)) : strip.autoHeld?.[key] ?? param.value;
-          handover(param, t, held);
+        if (to) {
+          const held = this.playing && pts?.length ? to.map(autoValueAt(pts, beat)) : strip.autoHeld?.[key] ?? to.param.value;
+          handover(to.param, t, held);
         }
         strip.autoOn.delete(key);
         if (strip.autoHeld) delete strip.autoHeld[key];
       }
+    }
+  }
+
+  // Neue Effektkette (Effekt ein/aus, neue Spur, Aufbau): Effekt-Kurven gehören jetzt Parametern der neuen Einheiten. Im
+  // Lauf sofort für [jetzt, cursorTime] nachplanen (Ankerlauf wie _resync; Ereignisse in der Vergangenheit greifen sofort
+  // mit dem Wert auf der Rampe), im Stillstand den Wert an der Marke setzen. plan = false: nur merken (play plant gleich).
+  _syncAutoChains(plan = true) {
+    if (!this.mix) return;
+    for (const [id, strip] of this.mix.tracks) {
+      if (strip.autoChain === strip.chain) continue;
+      strip.autoChain = strip.chain;
+      for (const key of [...strip.autoOn]) {
+        if (!fxOfKey(key)) continue;
+        strip.autoOn.delete(key);
+        if (strip.autoHeld) delete strip.autoHeld[key];
+      }
+      const track = this.project.tracks.find((x) => x.id === id);
+      if (!plan || !track) continue;
+      const lanes = stripLanes(strip, track, id).filter((l) => fxOfKey(l.key) && l.points.length);
+      if (lanes.length) this._planNow(strip, lanes);
+    }
+  }
+
+  _planNow(strip, lanes) {
+    const now = this.ctx.currentTime;
+    const spb = this.spb;
+    const put = (l, b, t) => {
+      const v = l.map(autoValueAt(l.points, b, l.def));
+      l.param.setValueAtTime(v, t);
+      return v;
+    };
+    if (!this.playing || !this.anchors.length) {
+      for (const l of lanes) (strip.autoHeld ||= {})[l.key] = put(l, this.positionBeat, now);
+    } else {
+      let t = Math.max(now, this.anchors[0].time);
+      if (t >= this.cursorTime - 1e-9) {
+        for (const l of lanes) put(l, this.currentBeat(t), t);
+      } else {
+        let i = 0;
+        while (i + 1 < this.anchors.length && this.anchors[i + 1].time <= t) i++;
+        let entry = 'set';
+        while (t < this.cursorTime - 1e-9 && i < this.anchors.length) {
+          const a = this.anchors[i];
+          const next = this.anchors[i + 1];
+          const tEnd = next ? Math.min(next.time, this.cursorTime) : this.cursorTime;
+          const b0 = a.beat + (t - a.time) / spb;
+          const b1 = a.beat + (tEnd - a.time) / spb;
+          for (const l of lanes) planLane(l.param, l.map, l.points, b0, b1, t, spb, entry);
+          entry = 'smooth';
+          t = tEnd;
+          i++;
+        }
+      }
+    }
+    for (const l of lanes) {
+      strip.autoOn.add(l.key);
+      (strip.autoPts ||= {})[l.key] = l.points;
     }
   }
 
@@ -856,6 +943,7 @@ export class Engine extends Emitter {
     this._lanes = null;
     if (!this.ctx) return;
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
+    this._syncAutoChains();
     if (this.playing) this._resync();
   }
 
@@ -900,7 +988,7 @@ export class Engine extends Emitter {
   // A/B-Vergleich: ab = null (normal), 'A' (vorher) oder 'B' (nachher); beide gleich laut (aDb/bDb ≤ 0)
   setMonitor(monitor) {
     this.monitor = { ab: null, aDb: 0, bDb: 0, ...(this.monitor || {}), ...monitor };
-    if (this.mix) { Object.assign(this.mix.monitor, this.monitor); syncMix(this.ctx, this.project, this.mix, this.spb, true); }
+    if (this.mix) { Object.assign(this.mix.monitor, this.monitor); syncMix(this.ctx, this.project, this.mix, this.spb, true); this._syncAutoChains(); }
     this.emit('monitor');
   }
 

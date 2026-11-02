@@ -14,6 +14,7 @@ import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
 import { mountMasteringControls } from './mastering.js';
 import { autoLock, lockedValue, templateControls } from './auto-lane.js';
+import { AUTO_PARAMS, isAutomated } from '../automation.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -134,7 +135,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const panBox = el('div', 'insp-pan-box');
   panBox.append(pan.row);
   const panLock = autoLock({ ui, key: 'pan', wrap: panBox, input: pan.input, getTrackId: () => (trackId && trackId !== MASTER ? trackId : null) });
-  let panFollow = 0;
+  let follow = 0;
   const mixerLink = el('button', 'insp-link', 'Alle Spuren im Mixer vergleichen →');
   mixerLink.type = 'button';
   mixerLink.addEventListener('click', () => ui.setDock('mixer'));
@@ -191,8 +192,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       }
       row.append(el('span', 'fx-param-label', p.label), input);
       if (out) row.append(out);
-      params.append(row);
-      ctl.set(k, { input, out });
+      // Effekt-Wert mit Kurve (Filter-Frequenz, Anteile): gedimmt, folgt der Kurve, Klick öffnet die Kurvenzeile
+      const key = `${e.id}.${k}`;
+      let lock = null;
+      if (AUTO_PARAMS[key]?.fx) {
+        const box = el('div', 'fx-param-box');
+        box.append(row);
+        lock = autoLock({ ui, key, wrap: box, input, getTrackId: () => (trackId && trackId !== MASTER ? trackId : null) });
+        params.append(box);
+      } else params.append(row);
+      ctl.set(k, { input, out, key, lock });
     }
     item.append(head, params);
     fxl.append(item);
@@ -327,7 +336,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       autoBlock.hidden = false;
       tpl.update();
       curveBtn.textContent = ui.autoLane?.isOpen(trackId) ? 'Kurve schließen (A)' : 'Kurve zeigen (A)';
-      if (panLock.update(track)) { showPan(track); if (!panFollow) panFollow = requestAnimationFrame(followPan); }
+      if (panLock.update(track)) showPan(track);
       else {
         if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
         pan.out.textContent = panText(track.pan || 0);
@@ -355,12 +364,50 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const f = fx[e.id];
       it.item.classList.toggle('on', !!f.on);
       it.sw.setAttribute('aria-pressed', String(!!f.on));
-      it.sum.textContent = fxSummary(e, f);
+      it.sum.textContent = fxSummary(e, shownFx(e, f));
       for (const [k, c] of it.ctl) {
+        if (c.lock && c.lock.update(lockTrack())) { showFx(c, e.params[k]); continue; }
         if (document.activeElement !== c.input) c.input.value = String(f[k]);
         if (c.out) c.out.textContent = formatParam(e.params[k], f[k]);
       }
     }
+    if (!follow && anyLocked()) follow = requestAnimationFrame(followLocked);
+  }
+
+  // Gesperrte Regler (Panorama, Effekt-Werte mit Kurve) zeigen den Kurvenwert an der hörbaren Marke
+  const lockTrack = () => (trackId && trackId !== MASTER && root.dataset.mode !== 'song' ? store.track(trackId) : null);
+  const fxCtl = () => EFFECTS.flatMap((e) => [...items.get(e.id).ctl].filter(([, c]) => c.lock).map(([k, c]) => [c, e.params[k]]));
+  const anyLocked = () => !!lockTrack() && !trackSec.hidden && (!panLock.btn.hidden || fxCtl().some(([c]) => !c.lock.btn.hidden));
+  function showFx(c, p) {
+    const track = lockTrack();
+    if (!track) return;
+    const v = Math.round(lockedValue(track, c.key, engine) / p.step) * p.step;
+    if (Math.abs(Number(c.input.value) - v) > 1e-9) c.input.value = String(v);
+    const text = formatParam(p, v);
+    if (c.out && c.out.textContent !== text) c.out.textContent = text;
+  }
+  // Werte eines Effekts, wie sie gerade klingen (Kurven an der Marke statt Reglerwert) – für die Kurzbeschreibung
+  function shownFx(e, f) {
+    const track = lockTrack();
+    const keys = track ? Object.keys(e.params).filter((k) => isAutomated(track, `${e.id}.${k}`)) : [];
+    if (!keys.length) return f;
+    const g = { ...f };
+    for (const k of keys) g[k] = lockedValue(track, `${e.id}.${k}`, engine);
+    return g;
+  }
+  function followLocked() {
+    const track = lockTrack();
+    if (!track || !anyLocked()) { follow = 0; return; }
+    if (panLock.update(track)) showPan(track);
+    for (const [c, p] of fxCtl()) if (c.lock.update(track)) showFx(c, p);
+    const fx = fxOf();
+    for (const e of EFFECTS) {
+      if (!fx[e.id].on) continue;
+      const text = fxSummary(e, shownFx(e, fx[e.id]));
+      const sum = items.get(e.id).sum;
+      if (sum.textContent !== text) sum.textContent = text;
+    }
+    follow = requestAnimationFrame(followLocked);
   }
 
   // Gesperrtes Panorama folgt beim Abspielen der Kurve (Wert an der hörbaren Marke)
@@ -372,12 +419,6 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     if (Number(pan.input.value) !== v) pan.input.value = String(v);
     const text = panText(v);
     if (pan.out.textContent !== text) pan.out.textContent = text;
-  }
-  function followPan() {
-    const track = trackId && trackId !== MASTER ? store.track(trackId) : null;
-    if (!track || trackSec.hidden || root.dataset.mode === 'song' || !panLock.update(track)) { panFollow = 0; return; }
-    showPan(track);
-    panFollow = requestAnimationFrame(followPan);
   }
 
   ui.on(render);

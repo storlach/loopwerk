@@ -1,6 +1,7 @@
-// Automation Scheibe 1 + 2, Bedienung (Spec v2.12, Testplan 11): Kurvenzeile unter der Spur am Desktop (Maus, Tastatur) und
-// am Handy/Tablet (Finger), Vorlagen Einblenden/Ausblenden, Parameter Lautstärke/Panorama, Mini-Leiste Linear/Stufe/Löschen,
-// gesperrte Panorama-Regler (Mixer, Inspektor), Tippflächen, keine Konsolenfehler.
+// Automation Scheibe 1–3, Bedienung (Spec v2.12, Testplan 11): Kurvenzeile unter der Spur am Desktop (Maus, Tastatur) und
+// am Handy/Tablet (Finger), Vorlagen Einblenden/Ausblenden/Filter öffnen/Filter schließen, Parameter Lautstärke, Panorama und
+// Effekt-Werte, Mini-Leiste Linear/Stufe/Löschen, gesperrte Regler (Panorama, Effekte; Mixer, Inspektor), gestrichelte
+// Kurve bei ausgeschaltetem Effekt, Tippflächen, keine Konsolenfehler.
 // node tests/automation-ui.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
 const { openApp, createChecker } = require('./harness.cjs');
@@ -198,7 +199,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
       const m = document.querySelector('.auto-keys');
       return { open: !!m && !m.hidden, items: [...m.querySelectorAll('.auto-key[data-key]')].map((b) => ({ key: b.dataset.key, text: b.textContent, lit: !!b.querySelector('.auto-dot.on'), checked: b.getAttribute('aria-checked') })) };
     });
-    check('Chip ist eine Auswahl: Lautstärke, Panorama', km.open && km.items.map((x) => x.text).join() === 'Lautstärke,Panorama', JSON.stringify(km));
+    check('Chip ist eine Auswahl: Lautstärke, Panorama, Filter-Frequenz, Hall-, Echo-, Verzerrer-Anteil', km.open && km.items.map((x) => x.text).join() === 'Lautstärke,Panorama,Filter-Frequenz,Hall-Anteil,Echo-Anteil,Verzerrer-Anteil', JSON.stringify(km.items.map((x) => x.text)));
     check('Chip: Lautstärke (mit Kurve) trägt einen Leuchtpunkt, Panorama (ohne) nicht', km.items[0]?.lit && !km.items[1]?.lit && km.items[0].checked === 'true', JSON.stringify(km.items));
     await page.click('.auto-key[data-key="pan"]');
     const panRow = await page.evaluate(() => ({
@@ -283,7 +284,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
 
     // Leuchtpunkte jetzt für beide; zuletzt gewählter Parameter bleibt beim Schließen/Öffnen
     await page.click('.auto-chip');
-    check('Chip: beide Parameter mit Punkten leuchten', await page.evaluate(() => [...document.querySelectorAll('.auto-key[data-key] .auto-dot')].every((d) => d.classList.contains('on'))));
+    check('Chip: beide Parameter mit Punkten leuchten (die anderen nicht)', await page.evaluate(() => [...document.querySelectorAll('.auto-key[data-key]')].every((b) => b.querySelector('.auto-dot').classList.contains('on') === ['volume', 'pan'].includes(b.dataset.key))));
     await page.keyboard.press('Escape');
     await page.click('.auto-close');
     await page.keyboard.press('a');
@@ -345,6 +346,81 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     ii = await insp();
     check('Kurve löschen: Panorama weg, Lautstärke-Kurve bleibt, Regler frei mit altem Wert (−0,3)', ps.pan === null && ps.vol?.length >= 2 && !ii.dis && !ii.lock && near(ii.value, -0.3, 0.011) && ii.out === '30 % links', JSON.stringify({ ps, ii }));
     await page.keyboard.press('a');
+
+    // ================= Scheibe 3: Effekt-Kurven =================
+    const fxState = () => page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { cut: t.automation?.['filter.cutoff'] ?? null, hall: t.automation?.['hall.mix'] ?? null, filter: t.fx?.filter ?? null, hallOn: !!t.fx?.hall?.on, steps: window.loopwerk.store.undoStack.length }; });
+    await page.evaluate((id) => { const { store, ui, engine } = window.loopwerk; store.clearAutomation(id); engine.setPosition(0); ui.autoBars = undefined; ui.select(null); ui.selectTrack(id); }, t);
+    await page.waitForTimeout(100);
+    if (await page.evaluate(() => !!document.querySelector('.auto-row'))) await page.click('.auto-close');
+    // Vorlage „Filter öffnen“ im Inspektor: ein Klick, ab Takt der Marke 8 Takte 0,25 → 1, Filter an (Tiefpass)
+    let f0 = await fxState();
+    check('Inspektor „Verlauf“: Einblenden · Ausblenden · Filter öffnen · Filter schließen', await page.evaluate(() => [...document.querySelectorAll('#insp .auto-tpl [data-template]')].map((b) => b.textContent).join(' · ')) === 'Einblenden · Ausblenden · Filter öffnen · Filter schließen');
+    await page.click('#insp [data-template="filterOpen"]');
+    let f1 = await fxState();
+    check('Vorlage „Filter öffnen“: 0,25 → 1 über 8 Takte ab der Marke, Filter an als Tiefpass, ein Schritt',
+      JSON.stringify(f1.cut) === JSON.stringify([{ beat: 0, value: 0.25 }, { beat: 32, value: 1 }]) && f1.filter?.on && f1.filter.type === 'lowpass' && f1.steps === f0.steps + 1, JSON.stringify(f1));
+    check('Vorlage öffnet die Zeile mit Filter-Frequenz, Einblender nennt die Länge', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'filter.cutoff' && document.querySelector('.auto-chip').textContent === 'Filter-Frequenz' && /Filter öffnen über 8 Takte/.test(window.loopwerk.ui.flashText || '')));
+    // Fähnchen beim Ziehen: Frequenz in Hz/kHz
+    let pc = await ptCenter(page, 0);
+    await page.mouse.move(pc.x, pc.y);
+    await page.mouse.down();
+    await page.mouse.move(pc.x, pc.y - 20, { steps: 4 });
+    const fFlag = await page.evaluate(() => document.querySelector('.auto-flag').textContent);
+    await page.mouse.up();
+    check('Fähnchen der Filter-Kurve zeigt die Frequenz („… Hz · Takt …“)', /^\d+(,\d)? k?Hz · Takt \d+/.test(fFlag), fFlag);
+    if ((await fxState()).steps > f1.steps) await page.evaluate(() => window.loopwerk.store.undo());
+    // Gesperrter Frequenz-Regler im Inspektor: gedimmt, Kurven-Zeichen, Wert = Kurve an der Marke (Schlag 16 → 0,625)
+    await page.evaluate(() => window.loopwerk.engine.setPosition(16));
+    await page.waitForTimeout(100);
+    const fxLock = () => page.evaluate(() => {
+      const input = document.getElementById('fx-filter-cutoff');
+      const box = input.closest('.fx-param-box');
+      const lock = box?.querySelector('.auto-lock');
+      const r = lock?.getBoundingClientRect();
+      return { dis: input.disabled, dim: box?.classList.contains('auto-locked'), lock: !!lock && !lock.hidden && r.width > 20, value: Number(input.value), out: box?.querySelector('.fx-param-value').textContent,
+        reso: document.getElementById('fx-filter-reso').disabled, label: lock?.getAttribute('aria-label') };
+    });
+    const fl = await fxLock();
+    check('Inspektor: Filter-Frequenz mit Kurve gesperrt (gedimmt, Kurven-Zeichen), zeigt Kurvenwert an der Marke', fl.dis && fl.dim && fl.lock && near(fl.value, 0.625, 0.006) && /kHz$/.test(fl.out) && !fl.reso && /Filter-Frequenz folgt der Kurve/.test(fl.label), JSON.stringify(fl));
+    await page.evaluate(() => window.loopwerk.engine.play(0));
+    await page.waitForTimeout(700);
+    const fFollow = await page.evaluate(async () => {
+      const { engine, store } = window.loopwerk;
+      const A = await import('./src/automation.js');
+      return { got: Number(document.getElementById('fx-filter-cutoff').value), want: A.autoValueOf(store.project.tracks[0], 'filter.cutoff', engine.heardBeat()) };
+    });
+    await page.evaluate(() => window.loopwerk.engine.stop());
+    check('Inspektor: gesperrter Frequenz-Regler folgt beim Abspielen der Kurve', Math.abs(fFollow.got - fFollow.want) < 0.03 && fFollow.got < 0.4, JSON.stringify(fFollow));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-desktop.png') });
+    await page.click('.auto-close');
+    await page.click('#insp .fx-param-box:has(#fx-filter-cutoff) .auto-lock');
+    check('Inspektor: Klick auf den gesperrten Frequenz-Regler öffnet die Zeile mit Filter-Frequenz', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'filter.cutoff'));
+    // Effekt aus: Kurve gestrichelt, wirkt nicht; wieder an: durchgezogen
+    await page.evaluate((id) => window.loopwerk.store.setTrackFx(id, 'filter', { on: false }), t);
+    const dash = () => page.evaluate(() => ({ inactive: document.querySelector('.auto-row').classList.contains('inactive'), dash: getComputedStyle(document.querySelector('.auto-curve')).strokeDasharray }));
+    let dd = await dash();
+    check('Effekt aus: Kurve gestrichelt', dd.inactive && dd.dash !== 'none', JSON.stringify(dd));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-off-desktop.png') });
+    await page.evaluate((id) => window.loopwerk.store.setTrackFx(id, 'filter', { on: true }), t);
+    dd = await dash();
+    check('Effekt an: Kurve durchgezogen', !dd.inactive && dd.dash === 'none', JSON.stringify(dd));
+    // Chip → Hall-Anteil: Klick setzt den ersten Punkt und schaltet den Hall ein (ein Schritt), Fähnchen in %
+    await page.click('.auto-chip');
+    await page.click('.auto-key[data-key="hall.mix"]');
+    g = await geom(page);
+    f0 = await fxState();
+    await page.mouse.click(g.x + g.ppb * 4, g.y + PAD + 0.65 * (g.h - 2 * PAD));
+    f1 = await fxState();
+    check('Hall-Anteil: erster Punkt schaltet den Hall ein, ein Schritt, Wert = Höhe', f1.hall?.length === 1 && f1.hallOn && !f0.hallOn && f1.steps === f0.steps + 1 && near(f1.hall[0].value, 0.35, 0.02), JSON.stringify(f1));
+    pc = await ptCenter(page, 0);
+    await page.mouse.move(pc.x, pc.y);
+    await page.mouse.down();
+    await page.mouse.move(pc.x, pc.y - 6, { steps: 3 });
+    const hFlag = await page.evaluate(() => document.querySelector('.auto-flag').textContent);
+    await page.mouse.up();
+    check('Fähnchen der Hall-Kurve zeigt „… % · Takt …“', /^\d+ % · Takt \d+/.test(hFlag), hFlag);
+    check('Inspektor: Hall-Anteil gesperrt, Raumgröße frei', await page.evaluate(() => document.getElementById('fx-hall-mix').disabled && !document.getElementById('fx-hall-size').disabled));
+    await page.click('.auto-close');
 
     check('Desktop: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
@@ -494,6 +570,35 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.tap('#mixer .strip-pan-wrap .auto-lock');
     await page.waitForTimeout(200);
     check('Handy: Antippen öffnet die Kurvenzeile mit Panorama, Mixer zu', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'pan' && window.loopwerk.ui.dock !== 'mixer'));
+    // ---------- Scheibe 3 am Finger: Filter öffnen über das Spur-Menü, gesperrter Effekt-Regler im Mixer ----------
+    await page.tap('.auto-close');
+    await page.evaluate(() => window.loopwerk.engine.setPosition(0));
+    const st2 = (await state(page)).steps;
+    await page.tap('.track-row .tbtn-menu');
+    const tm = await page.evaluate(() => { const m = document.querySelector('.track-menu'); const r = m.getBoundingClientRect(); return { items: [...m.querySelectorAll('.track-menu-item')].map((b) => b.textContent), top: r.top, bottom: r.bottom, vh: innerHeight }; });
+    check('Handy: Spur-Menü hat „Filter öffnen“ und „Filter schließen“ direkt, Menü liegt im Bild', tm.items.includes('Filter öffnen') && tm.items.includes('Filter schließen') && tm.top >= 0 && tm.bottom <= tm.vh, JSON.stringify(tm));
+    const mi = (await page.evaluate(measureTargets)).filter((x) => /track-menu-item/.test(x.label));
+    check('Handy: Spur-Menü-Einträge ≥ 44 px hoch', mi.length >= 8 && mi.every((x) => x.h >= 44 && x.w >= 44), JSON.stringify(mi.map((x) => `${x.label} ${x.w}×${x.h}`)));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone-menu.png') });
+    await page.tap('.track-menu-item:text-is("Filter öffnen")');
+    const fp = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { cut: t.automation?.['filter.cutoff'], filter: t.fx?.filter, steps: window.loopwerk.store.undoStack.length, key: document.querySelector('.auto-row')?.dataset.key }; });
+    check('Handy: Spur-Menü → Filter öffnen in zwei Tipps, ein Schritt, Zeile mit Filter-Frequenz offen', fp.cut?.length === 2 && fp.cut[0].value === 0.25 && fp.cut[1].value === 1 && fp.filter?.on && fp.filter.type === 'lowpass' && fp.steps === st2 + 1 && fp.key === 'filter.cutoff', JSON.stringify(fp));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone.png') });
+    // Mixer → Kanal → Effekte: Frequenz-Regler gesperrt, Antippen öffnet die Zeile
+    await page.tap('.auto-close');
+    await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
+    await page.waitForTimeout(300);
+    await page.tap(`#mixer .strip[data-strip-id="${t}"] .strip-name`);
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.getElementById('fx-filter-cutoff')?.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(150);
+    const ml = await page.evaluate(() => { const i = document.getElementById('fx-filter-cutoff'); const b = i?.closest('.fx-param-box'); return { dis: i?.disabled, dim: b?.classList.contains('auto-locked'), out: b?.querySelector('.fx-param-value').textContent }; });
+    const mlt = (await page.evaluate(measureTargets)).filter((x) => /auto-lock/.test(x.label) && /Filter-Frequenz/.test(x.label));
+    check('Handy: Mixer-Effektseite – Frequenz gesperrt, Tippfläche ≥ 44 px', ml.dis && ml.dim && mlt.length === 1 && mlt[0].w >= 44 && mlt[0].h >= 44, JSON.stringify({ ml, mlt }));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone-mixer.png') });
+    await page.tap('#mixer .fx-param-box:has(#fx-filter-cutoff) .auto-lock');
+    await page.waitForTimeout(200);
+    check('Handy: Antippen öffnet die Zeile mit Filter-Frequenz, Mixer zu', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'filter.cutoff' && window.loopwerk.ui.dock !== 'mixer'));
     check('Handy: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (err) {
     check('Handy-Ablauf ohne Ausnahme', false, err.message);

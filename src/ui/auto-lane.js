@@ -1,11 +1,11 @@
-// Kurvenzeile (Automation, Spec v2.12): eine eigene Zeile unter der Spur, in der man Lautstärke oder Panorama zeichnet
-// (Parameter-Chip wählt; Parameter mit Punkten leuchten). Maus: Klick setzt einen Punkt, Ziehen verschiebt, Doppelklick
-// und Entf löschen, Klick auf den gewählten Punkt oder Rechtsklick zeigt die Mini-Leiste „Linear · Stufe · Löschen“.
-// Finger: Antippen setzt, Antippen eines Punkts zeigt die Mini-Leiste, Ziehen nur auf einem Punkt (sonst scrollt
+// Kurvenzeile (Automation, Spec v2.12): eine eigene Zeile unter der Spur, in der man Lautstärke, Panorama oder einen
+// Effekt-Wert zeichnet (Parameter-Chip wählt; Parameter mit Punkten leuchten; ist der Effekt aus, ist die Kurve
+// gestrichelt). Maus: Klick setzt einen Punkt, Ziehen verschiebt, Doppelklick und Entf löschen, Klick auf den gewählten
+// Punkt oder Rechtsklick zeigt die Mini-Leiste „Linear · Stufe · Löschen“. Finger: Antippen setzt, Antippen eines Punkts zeigt die Mini-Leiste, Ziehen nur auf einem Punkt (sonst scrollt
 // Wischen), Halten löscht. Geschlossen liegt die Kurve als dünne Linie über den Clips.
 // Alle Änderungen laufen über Store-Aktionen; die Knoten der Punkte bleiben beim Ziehen stehen (Abgleich nach Index).
 
-import { AUTO_PARAMS, AUTO_TEMPLATES, TEMPLATE_BARS, autoBreaks, autoKeys, autoRest, autoValueAt, formatAutoValue, laneOf } from '../automation.js';
+import { AUTO_PARAMS, AUTO_TEMPLATES, TEMPLATE_BARS, autoActive, autoBreaks, autoKeys, autoRest, autoValueAt, formatAutoValue, laneOf } from '../automation.js';
 import { totalBeats } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { touch } from './place.js';
@@ -30,8 +30,8 @@ function curvePath(points, key, total, ppb, yOf) {
 }
 
 // ---------- Gesperrte Regler (Mixer, Inspektor) ----------
-// Ein Regler, dessen Wert eine Kurve bestimmt (Panorama), ist gedimmt; darüber liegt ein Knopf mit Kurven-Zeichen, der die
-// Kurvenzeile mit diesem Parameter öffnet. update(track) zeigt/verbirgt die Sperre und liefert, ob gesperrt ist.
+// Ein Regler, dessen Wert eine Kurve bestimmt (Panorama, Effekt-Werte), ist gedimmt; darüber liegt ein Knopf mit
+// Kurven-Zeichen, der die Kurvenzeile mit diesem Parameter öffnet. update(track) zeigt/verbirgt die Sperre und liefert, ob gesperrt ist.
 export function autoLock({ ui, key, wrap, input, getTrackId, onOpen }) {
   const btn = el('button', 'auto-lock');
   btn.type = 'button';
@@ -65,16 +65,19 @@ export const lockedValue = (track, key, engine) => autoValueAt(laneOf(track, key
 
 // ---------- Vorlagen-Knöpfe (Inspektor „Spur“ und Spur-Menü am Handy) ----------
 
-// Vorlage anwenden (Länge: zuletzt gewählte Takte, Vorgabe 4), Zeile öffnen, Einblender; auch direkt aus dem Spur-Menü
+// Vorlage anwenden (Länge: zuletzt gewählte Takte, sonst die Vorgabe der Vorlage – 4, „Filter öffnen“ 8), Zeile öffnen,
+// Einblender; auch direkt aus dem Spur-Menü
 export function applyTemplate({ store, ui, engine, id, name }) {
   if (!id || id === 'master') return false;
-  const res = store.applyAutoTemplate(id, name, { bars: ui.autoBars ?? 4, playheadBeat: engine?.heardBeat?.() ?? 0 });
+  const res = store.applyAutoTemplate(id, name, { bars: ui.autoBars ?? AUTO_TEMPLATES[name].bars, playheadBeat: engine?.heardBeat?.() ?? 0 });
   if (!res) { ui.flash?.('Hier ist kein Platz für diesen Verlauf.'); return false; }
   ui.autoLane?.open(id, res.key);
   const n = Math.round(((res.toBeat - res.fromBeat) / store.project.beatsPerBar) * 10) / 10;
   ui.flash?.(`${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
   return true;
 }
+
+export const TEMPLATE_ORDER = ['fadeIn', 'fadeOut', 'filterOpen', 'filterClose'];
 
 // getTarget() liefert die Spur-ID (oder null); onDone() läuft nach einer Vorlage (z. B. Menü schließen)
 export function templateControls({ store, ui, engine, getTarget, onDone, variant = 'insp' }) {
@@ -89,7 +92,7 @@ export function templateControls({ store, ui, engine, getTarget, onDone, variant
   function apply(name) {
     if (applyTemplate({ store, ui, engine, id: getTarget(), name })) onDone?.();
   }
-  for (const name of ['fadeIn', 'fadeOut']) {
+  for (const name of TEMPLATE_ORDER) {
     const b = el('button', variant === 'menu' ? 'track-menu-item' : 'key', AUTO_TEMPLATES[name].label);
     b.type = 'button';
     b.dataset.template = name;
@@ -203,7 +206,8 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     const pts = pointsOf(L);
     const name = store.track(L.target)?.name ?? 'Summe';
     const lit = autoKeys(L.target).filter((k) => laneOf(ownerOf(L.target), k).length).join();
-    const sig = `${L.key}|${Math.round(total * ppb)}|${L.h}|${total}|${ppb}|${JSON.stringify(pts)}|${name}|${lit}`;
+    const active = autoActive(ownerOf(L.target), L.key);
+    const sig = `${L.key}|${Math.round(total * ppb)}|${L.h}|${total}|${ppb}|${JSON.stringify(pts)}|${name}|${lit}|${active}`;
     if (sig === L.sig) return;
     L.sig = sig;
     const w = Math.max(1, Math.round(total * ppb));
@@ -215,7 +219,9 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     L.chip.setAttribute('aria-label', `Kurve: ${spec.label} – Parameter wählen`);
     L.chip.classList.toggle('lit', lit.length > 0);
     L.row.dataset.key = L.key;
-    L.body.setAttribute('aria-label', `${spec.label}-Kurve von ${name}: Enter setzt einen Punkt an der Abspielmarke`);
+    // Effekt aus: die Kurve wirkt nicht und ist gestrichelt (der erste Punkt schaltet den Effekt ein)
+    L.row.classList.toggle('inactive', !active);
+    L.body.setAttribute('aria-label', `${spec.label}-Kurve von ${name}${active ? '' : ' (Effekt aus, wirkt nicht)'}: Enter setzt einen Punkt an der Abspielmarke`);
     const yTop = yOf(L, spec.max).toFixed(2);
     const yBot = yOf(L, spec.min).toFixed(2);
     L.base.setAttribute('d', `M0 ${yTop}H${w}M0 ${yBot}H${w}`);
@@ -258,14 +264,14 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
         lane.append(o.svg);
         overlays.set(id, o);
       }
-      const sig = `${w}|${h}|${ppb}|${JSON.stringify(keys.map((k) => laneOf(track, k)))}`;
+      const sig = `${w}|${h}|${ppb}|${JSON.stringify(keys.map((k) => laneOf(track, k)))}|${keys.map((k) => autoActive(track, k)).join()}`;
       if (sig === o.sig) continue;
       o.sig = sig;
       o.svg.setAttribute('width', String(w));
       o.svg.setAttribute('height', String(h));
       o.svg.replaceChildren(...keys.map((k) => {
         const s = AUTO_PARAMS[k];
-        const p = svgEl('path');
+        const p = svgEl('path', autoActive(track, k) ? null : 'off');
         const y = (v) => 6 + (1 - (v - s.min) / (s.max - s.min)) * (h - 12);
         p.setAttribute('d', curvePath(laneOf(track, k), k, total, ppb, y));
         return p;
@@ -572,7 +578,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     if (keyMenu.for && !keyMenu.node.contains(e.target) && !keyMenu.for.chip.contains(e.target)) closeKeyMenu();
   }, true);
 
-  // ---------- Parameter-Auswahl (Chip): Lautstärke, Panorama; Kurven mit Punkten leuchten ----------
+  // ---------- Parameter-Auswahl (Chip): Lautstärke, Panorama, Effekt-Werte; Kurven mit Punkten leuchten ----------
   const keyMenu = { node: el('div', 'auto-keys'), for: null };
   keyMenu.node.setAttribute('role', 'menu');
   keyMenu.node.hidden = true;
@@ -626,7 +632,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
   });
   window.addEventListener('scroll', () => closeKeyMenu(), { passive: true, capture: true });
 
-  // Kurve des Parameters löschen (Chip-Menü, Spur-Menü): der Panorama-Regler bekommt seinen alten Wert zurück
+  // Kurve des Parameters löschen (Chip-Menü, Spur-Menü): Panorama- und Effekt-Regler bekommen ihren alten Wert zurück
   function clearCurve(target, key) {
     hideBar();
     if (sel?.target === target && sel.key === key) { sel = null; paintSel(); }

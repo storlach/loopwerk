@@ -2,7 +2,8 @@
 // nutzen dieselben Funktionen.
 //
 // API (Auszug für die Oberfläche):
-//   AUTO_PARAMS[key]                     { key, label, min, max, def, owner: 'relative'|'absolute', target, track, master, format(v), rest? }
+//   AUTO_PARAMS[key]                     { key, label, min, max, def, owner: 'relative'|'absolute', target, track, master, format(v), rest?,
+//                                          fx?, param? } – Effekt-Kurven (target 'fx:<id>.<param>') wirken über u.auto der Einheit
 //   autoKeys(target)                     Schlüssel, die eine Spur (target = Spur-ID) bzw. 'master' kennt
 //   laneOf(owner, key)                   Punkte [{ beat, value, curve? }] einer Spur/des Masters: sortiert, geklemmt, ein Punkt je Schlag
 //   autoRest(owner, key)                 Wert ohne Kurve: Lautstärke 1, absolute Parameter der Regler (Panorama: track.pan)
@@ -11,10 +12,14 @@
 //   isAutomated(owner, key)              absolute Kurve vorhanden → der Regler folgt ihr und ist gesperrt
 //   autoBreaks(points, b0, b1)           Stützstellen [[beat, value], …] inkl. b0 und b1
 //   formatAutoValue(key, v)              Text fürs Fähnchen („−6,0 dB“)
-//   AUTO_TEMPLATES, TEMPLATE_BARS        Vorlagen (fadeIn, fadeOut) und Längen-Chips in Takten
+//   fxOfKey(key)                         Effekt-ID einer Effekt-Kurve ('filter.cutoff' → 'filter'), sonst null
+//   autoActive(owner, key)               wirkt die Kurve? (Effekt-Kurven nur bei eingeschaltetem Effekt; sonst gestrichelt)
+//   AUTO_TEMPLATES, TEMPLATE_BARS        Vorlagen (fadeIn, fadeOut, filterOpen, filterClose) und Längen-Chips in Takten
 //   templateRange(project, target, name, { bars, playheadBeat }) → { fromBeat, toBeat } | null
 //   Store: addAutoPoint, moveAutoPoint, setAutoCurve, deleteAutoPoint, clearAutomation, applyAutoTemplate (src/model.js)
 // Engine: planLane, autoWindow, handover.
+
+import { EFFECTS, cutoffHz, formatHz } from './effects.js';
 
 export const STEP_BEATS = 1 / 128;
 const EPS = 1e-6;
@@ -36,6 +41,24 @@ export const AUTO_PARAMS = {
     center: 0,
   },
 };
+
+// Effekt-Kurven: der Wert ist der Regler selbst (absolut). Ohne Kurve gilt der Reglerwert im Projekt (fx.<id>.<param>).
+const pct = (v) => `${Math.round(v * 100)} %`;
+const fxDefault = (id, param) => EFFECTS.find((e) => e.id === id).params[param].default;
+const fxParam = (key, label, id, param, format) => {
+  const def = fxDefault(id, param);
+  AUTO_PARAMS[key] = {
+    key, label, min: 0, max: 1, def, owner: 'absolute', target: `fx:${id}.${param}`, track: true, master: false, fx: id, param, format,
+    rest: (owner) => { const v = owner?.fx?.[id]?.[param]; return Number.isFinite(v) ? clamp(v, 0, 1) : def; },
+  };
+};
+fxParam('filter.cutoff', 'Filter-Frequenz', 'filter', 'cutoff', (v) => formatHz(cutoffHz(v)));
+fxParam('hall.mix', 'Hall-Anteil', 'hall', 'mix', pct);
+fxParam('echo.mix', 'Echo-Anteil', 'echo', 'mix', pct);
+fxParam('drive.mix', 'Verzerrer-Anteil', 'drive', 'mix', pct);
+
+export const fxOfKey = (key) => AUTO_PARAMS[key]?.fx ?? null;
+export const autoActive = (owner, key) => { const id = fxOfKey(key); return !id || !!owner?.fx?.[id]?.on; };
 
 export const autoRest = (owner, key) => {
   const s = AUTO_PARAMS[key];
@@ -159,10 +182,16 @@ export function handover(param, t, fallback, to) {
 // ---------- Vorlagen ----------
 
 export const TEMPLATE_BARS = [1, 2, 4, 8];
+// from: null = aktueller Wert am Bereichsanfang (Kurve bzw. Regler; Filter aus = offen, 1)
 export const AUTO_TEMPLATES = {
   fadeIn: { name: 'fadeIn', label: 'Einblenden', key: 'volume', from: 0, to: 1, anchor: 'start', bars: 4 },
   fadeOut: { name: 'fadeOut', label: 'Ausblenden', key: 'volume', from: 1, to: 0, anchor: 'end', bars: 4 },
+  filterOpen: { name: 'filterOpen', label: 'Filter öffnen', key: 'filter.cutoff', from: 0.25, to: 1, anchor: 'playhead', bars: 8 },
+  filterClose: { name: 'filterClose', label: 'Filter schließen', key: 'filter.cutoff', from: null, to: 0.25, anchor: 'playhead', bars: 4 },
 };
+
+// Wert ohne Kurve, wie er vor einer Vorlage klingt: ein ausgeschalteter Filter ist offen (Tiefpass ganz auf)
+export const templateRest = (owner, key) => (key === 'filter.cutoff' && !owner?.fx?.filter?.on ? 1 : autoRest(owner, key));
 
 const clipsOf = (project, target) => (target === 'master' ? project.tracks : project.tracks.filter((t) => t.id === target)).flatMap((t) => t.clips);
 
@@ -188,19 +217,21 @@ export function templateRange(project, target, name, { bars, playheadBeat = 0 } 
 }
 
 // Neue Punktliste: Punkte im Bereich ersetzt, davor klingt alles wie vorher (Haltepunkt bzw. Stufe vor dem Bereich)
-export function templatePoints(points, name, fromBeat, toBeat) {
+// rest: Wert ohne Kurve (Lautstärke 1, sonst der Regler – templateRest)
+export function templatePoints(points, name, fromBeat, toBeat, rest = AUTO_PARAMS[AUTO_TEMPLATES[name].key].def) {
   const tpl = AUTO_TEMPLATES[name];
-  const def = AUTO_PARAMS[tpl.key].def;
+  const def = rest;
   const before = points.filter((p) => p.beat < fromBeat - EPS).map((p) => ({ ...p }));
   const after = points.filter((p) => p.beat > toBeat + EPS);
   const old = autoValueAt(points, fromBeat, def);
-  if (fromBeat > EPS && Math.abs(old - tpl.from) > EPS) {
+  const from = tpl.from ?? old;
+  if (fromBeat > EPS && Math.abs(old - from) > EPS) {
     const last = before[before.length - 1];
     if (!last) before.push({ beat: 0, value: old, curve: 'step' });
     else if (last.curve === 'step' || Math.abs(last.value - old) < EPS) last.curve = 'step';
     else if (fromBeat - STEP_BEATS > last.beat + EPS) before.push({ beat: fromBeat - STEP_BEATS, value: autoValueAt(points, fromBeat - STEP_BEATS, def) });
   }
-  return [...before, { beat: fromBeat, value: tpl.from }, { beat: toBeat, value: tpl.to }, ...after];
+  return [...before, { beat: fromBeat, value: from }, { beat: toBeat, value: tpl.to }, ...after];
 }
 
 // ---------- Kurven wandern mit Clips ----------
