@@ -9,6 +9,20 @@ Status: Brainstorming für Martin, keine Entscheidung, keine ADR. Arbeitstitel �
 - Eigene Adresse oder Modus in Loopwerk: noch offen, wird später evaluiert. Die Edition-Konfiguration (Option a) hält beides offen.
 - Vorschläge aus Markt-Scout, UX und Creative Director gefallen; nächster Schritt: Prototyp der Momente „Pad-Wand mit Aufnahme + Auto-Säubern“ und „Klatsch dein Kit“, auf GitHub Pages am Handy ausprobieren.
 
+## Prototyp (Branch `werkstatt`, 02.11.2026)
+- Name: **Krachwerk** (Martin). Adresse `/werkstatt/`, Edition `make` (Option a): `src/edition.js`, Oberfläche `src/werkstatt/`, Seite erzeugt von `tools/werkstatt-page.cjs` (kein zweites `index.html`).
+- Moment 1, Pad-Wand: leeres Pad antippen nimmt auf, stoppt nach Stille; `clean.js` säubert (Hochpass, Start auf dem Anschlag, Stille hinten weg, −1 dB, Doppel-Mono → mono) und benennt (Bumm/Klatsch/Ts/Ton A4 + Etiketten). „● Ins Pad“ nimmt neu auf, „✕ Leeren“ leert.
+- Moment 2, „Klatsch dein Kit“: Aufnahme bis Stille/Fertig, `slice.js` zerlegt an Anschlägen, bis zu 8 Stücke tief → hell auf freie Pads, Groove (`groove.js`, 4 Muster, „Nochmal“) startet sofort mit Kick = tief, Snare = mittel, Hi-Hat = hell.
+- Synth-Kits (elektro, 909) als „◇ Synth“ auf freie Pads, einmal offline vorgerechnet (Stärke, Tasten, Festhalten wie bei Aufnahmen). Keine Anfrage unter `assets/` (außer Icons).
+- **Festhalten** (Resampling): rechnet Groove + laufende Schleifen offline mit derselben Summenkette (`makeBus`, `voice`, `stepHits`) als Schleife (1 Takt bzw. Länge der längsten Schleife, Ausklang an den Anfang gefaltet) aufs nächste freie Pad. Am nächsten passenden Taktanfang ersetzt sie, was lief; Quell-Pads bleiben. Schleifen-Pads antippen = im Takt an/aus; „▶ Groove“ schaltet nur das Schlagzeug.
+- **Tasten**: Leiste mit A-Moll (A3–A4) spielt das zuletzt gespielte Pad. Tonale Klänge: Grundton per YIN, Feinstimmung auf den nächsten Halbton (auch beim normalen Antippen); Klänge ohne Tonhöhe liegen auf A3.
+- **Als App (PWA)**: Manifest und Service Worker unter `/werkstatt/` (erzeugt von `tools/werkstatt-page.cjs`, Bereich nur `/werkstatt/`). Netz zuerst, ohne Netz aus dem Zwischenspeicher → Start auch offline. Beim ersten eigenen Klang `navigator.storage.persist()`; iPhone im Browser bekommt einmal den Tipp „Zum Home-Bildschirm“ (iOS räumt sonst Seiten-Speicher nach Tagen ohne Besuch), Android/Chrome einen Knopf „Installieren“. Icon vorerst das von Loopwerk.
+- Flutter geprüft (02.11.2026): vorerst nein – kein Web Audio, DSP und Tonkern müssten neu, zwei Codebasen (Option b). Reihenfolge: PWA → bei Bedarf Capacitor (gleicher Code) → Flutter nur mit eigenem C++-Tonkern (auch als WASM im Browser).
+- **Tempo und Tonart**: Tipp auf „90 BPM · A-Moll“ öffnet eine Schublade (− / + in 5er-Schritten, 60–160, Tempo antippen, 12 Grundtöne, Moll/Dur), gemerkt in `loopwerk.make.song.v1`. Groove wechselt ab dem nächsten Schritt, Schleifen ab dem nächsten Takt; Schleifen merken ihr Aufnahmetempo und werden per WSOLA (`dsp/stretch.js`) samplegenau auf das Song-Tempo gestreckt, Tonhöhe bleibt. Tastenleiste = Tonleiter der Tonart (Grundton zwischen F3 und E4); Klänge ohne Tonhöhe liegen im Original auf der ersten Taste.
+- **Mitnehmen** (`handoff.js`): Loopwerk-Projektdatei (gleiches Format wie „Speichern“): Schleifen nacheinander auf Spur „Krachwerk“ (je 4 Takte), alle Pads als eigene Sounds (`own-…`, Quelle „Krachwerk“), Tempo, Tonart (Dur → parallele Moll-Tonart, weil Loopwerk Tonarten als Moll führt). Ohne Schleife wird der Groove mitgegeben. Dazu „Schleife als WAV“ (mind. 4 Takte). Am Handy über das Teilen-Menü, sonst Download. Song-Bau passiert in Loopwerk.
+- **Roh → geformt**: neue Klänge erscheinen als unruhige Wolke und ordnen sich zur Wellenform (0,7 s; bei „weniger Bewegung“ aus).
+- **Icon**: `assets/icons/krachwerk.svg` (Klatscher als Ausschlag um die Mittellinie, Pink), PNG 512/180/32 über `tools/krachwerk-icons.cjs`.
+
 ## Ziel aus Nutzersicht
 Wer die Werkstatt öffnet, hat ein leeres Regal und baut alles selbst – aufnehmen, klatschen, singen, Synth schrauben, Beats und Melodien, Teile des eigenen Songs wieder zu neuen Sounds machen.
 
