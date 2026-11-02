@@ -13,6 +13,7 @@ import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
 import { mountMasteringControls } from './mastering.js';
+import { mountClipSpeed } from './clip-speed.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
 import { AUTO_PARAMS, autoKeys, isAutomated, laneOf } from '../automation.js';
 
@@ -69,18 +70,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const cin = slider('Kurve', 'insp-curvein', -1, 1, 0.05);
   const cout = slider('Kurve', 'insp-curveout', -1, 1, 0.05);
   for (const c of [cin, cout]) c.row.classList.add('insp-sub-row');
-  // Laufzeit: der Clip spielt länger oder kürzer, ohne dass sich die Tonhöhe ändert (×2 = halbes Tempo)
-  const run = el('div', 'insp-row insp-run');
-  const runOut = el('output');
-  runOut.id = 'insp-run-out';
-  const runBtns = el('div', 'insp-run-btns');
-  const runBtn = (label, title, fn) => { const b = el('button', 'key', label); b.type = 'button'; b.title = title; b.addEventListener('click', fn); runBtns.append(b); return b; };
-  const setRun = (f) => { const c = selClip(); if (c) store.setClipStretch(c.id, f); };
-  const curRun = () => selClip()?.stretch || 1;
-  runBtn('−', 'Kürzer (schneller)', () => setRun(stepRun(curRun(), -1))).id = 'insp-run-down';
-  for (const [f, label] of [[0.5, '½'], [1, '1'], [2, '2']]) runBtn(label, `Laufzeit ×${String(f).replace('.', ',')}`, () => setRun(f)).dataset.run = String(f);
-  runBtn('+', 'Länger (langsamer, gleiche Tonhöhe)', () => setRun(stepRun(curRun(), 1))).id = 'insp-run-up';
-  run.append(el('span', null, 'Laufzeit'), runOut, runBtns);
+  // Geschwindigkeit (früher „Laufzeit“): Regler 50–200 % und „wie Tonband“, eigenes Modul
+  const run = el('div', 'insp-clip-speed');
+  mountClipSpeed(run, { store, ui, library, engine });
   // Tempo des Sounds: wie schnell die Aufnahme ist. Mit Tempo wird ein Einzelklang zum Loop, der sich dem Song anpasst.
   const stempo = el('div', 'insp-row insp-stempo');
   const stOut = el('output');
@@ -316,9 +308,6 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       setR(cout, clip.fadeOutCurve || 0, 1, formatCurve(clip.fadeOutCurve || 0));
       cin.row.hidden = !clip.fadeInBeats;
       cout.row.hidden = !clip.fadeOutBeats;
-      const f = clip.stretch || 1;
-      runOut.textContent = `×${String(f).replace('.', ',')}${f === 1 ? '' : f > 1 ? ' · langsamer' : ' · schneller'}`;
-      for (const b of runBtns.querySelectorAll('[data-run]')) b.setAttribute('aria-pressed', String(Number(b.dataset.run) === f));
       // Sound-Tempo: nur Aufnahmen; erzeugte Loops und Patterns folgen ohnehin dem Song
       const own = hasOwnTempo(s);
       stIn.hidden = !own;

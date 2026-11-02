@@ -1,7 +1,7 @@
 // Audio-Engine: plant Clips mit Vorlauf auf der AudioContext-Uhr ein (nicht per setTimeout),
 // damit alles samplegenau im Takt bleibt. Dieselbe Signalkette dient auch dem Offline-Rendern.
 
-import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
+import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, tapeRate, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, updateFxParams } from './effects.js';
@@ -319,11 +319,13 @@ function applyEnvelope(param, env) {
 // Spielt ein Stück eines Samples. An Schnittkanten (Einstieg mitten im Sample, Abschneiden vor dem Ende)
 // überlappen sich benachbarte Stimmen um ±XF mit linearen Rampen. Ist der Inhalt durchgehend (z. B. ein
 // geteilter Clip), ergänzen sich beide Rampen zu exakt 1 – das Teilen bleibt unhörbar.
-// `env` formt die Clip-Lautstärke (Gain, Fades).
-export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) {
+// `env` formt die Clip-Lautstärke (Gain, Fades). `rate` ≠ 1: wie Tonband (Tempo und Tonhöhe ändern sich gemeinsam);
+// `offset` ist dann Pufferzeit, `when`/`stopAt` bleiben Kontextzeit.
+export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null, rate = 1) {
   const XF = 96 / ctx.sampleRate;
   const src = ctx.createBufferSource();
   src.buffer = buffer;
+  if (rate !== 1) src.playbackRate.value = rate;
   const g = ctx.createGain();
   src.connect(g);
   if (env) {
@@ -333,12 +335,12 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) 
   } else {
     g.connect(dest);
   }
-  const naturalEnd = when + buffer.duration - offset;
+  const naturalEnd = when + (buffer.duration - offset) / rate;
   const cut = stopAt < naturalEnd - 1e-4;
   let start = when;
   if (offset > 1e-6) {
     const now = ctx instanceof OfflineAudioContext ? 0 : ctx.currentTime;
-    const pre = Math.max(0, Math.min(XF, offset, when - now));
+    const pre = Math.max(0, Math.min(XF, offset / rate, when - now));
     start = when - pre;
     g.gain.setValueAtTime(0, start);
     g.gain.linearRampToValueAtTime(1, when + XF);
@@ -347,7 +349,7 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) 
     g.gain.setValueAtTime(1, Math.max(start + 1e-4, when + (offset > 1e-6 ? XF : 0), stopAt - XF));
     g.gain.linearRampToValueAtTime(0, stopAt + XF);
   }
-  src.start(start, offset - (when - start));
+  src.start(start, offset - (when - start) * rate);
   if (cut) src.stop(stopAt + XF + 0.001);
   return { src, g };
 }
@@ -359,6 +361,9 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null) 
 export function clipPieces(project, library, clip, ranges, { stale = false } = {}) {
   const base = sampleFor(library, clip);
   if (!base?.buffer) return [];
+  // Wie Tonband: der Grund-Sound läuft langsamer/schneller und reicht entsprechend länger/kürzer (Tonart-Sounds nie, s. tapeRate)
+  const rate = tapeRate(library, clip);
+  if (rate !== 1) return audibleSegments(clip, base.lengthBeats / rate, ranges).map((x) => ({ ...x, sample: base, rate }));
   const segs = audibleSegments(clip, base.lengthBeats, ranges);
   // Begleit-Patterns folgen zusätzlich dem Akkord-Streifen: je Abschnitt die Fassung auf der dortigen Stufe, Pause = still
   const chords = !!library.followsChords?.(clip.sampleId);
@@ -380,10 +385,10 @@ export function clipPieces(project, library, clip, ranges, { stale = false } = {
 }
 
 // Spielt einen Clip-Ausschnitt [fromBeat, toBeat] eines Segments ab Kontextzeit `when`.
-function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) {
-  const offset = (fromBeat - seg.start + seg.offset) * spb;
+function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, rate = 1) {
+  const offset = (fromBeat - seg.start + seg.offset) * spb * rate;
   const stopAt = when + (toBeat - fromBeat) * spb;
-  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb));
+  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb), rate);
 }
 
 // Rendert das Projekt offline (Tests, Export). Tonart- und Akkord-Fassungen werden vorher bereitgestellt. Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
@@ -440,10 +445,10 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
-      for (const { seg, from, to, sample } of clipPieces(project, library, clip, audible.get(clip.id))) {
+      for (const { seg, from, to, sample, rate } of clipPieces(project, library, clip, audible.get(clip.id))) {
         if (from >= end - EPS || to <= fromBeat + EPS) continue;
         const f = Math.max(from, fromBeat);
-        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), (f - fromBeat) * spb, spb);
+        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), (f - fromBeat) * spb, spb, rate);
       }
     }
   }
@@ -909,9 +914,9 @@ export class Engine extends Emitter {
   _scheduleSpan(b0, b1, t0, limit, filter) {
     const spb = this.spb;
     this._forEachClip(filter, (track, clip, pieces, node) => {
-      for (const { seg, from, to, sample } of pieces) {
+      for (const { seg, from, to, sample, rate } of pieces) {
         if (from < b0 - EPS || from >= b1 - EPS || from >= limit - EPS) continue;
-        this._voice(track, clip, sample, node, seg, from, Math.min(to, limit), t0 + (from - b0) * spb);
+        this._voice(track, clip, sample, node, seg, from, Math.min(to, limit), t0 + (from - b0) * spb, rate);
       }
     });
   }
@@ -919,16 +924,16 @@ export class Engine extends Emitter {
   // Stücke, die bei Schlag b bereits laufen: mitten im Sample einsteigen.
   _scheduleActiveAt(b, t, limit, filter) {
     this._forEachClip(filter, (track, clip, pieces, node) => {
-      for (const { seg, from, to, sample } of pieces) {
+      for (const { seg, from, to, sample, rate } of pieces) {
         if (!(from < b - EPS && to > b + EPS)) continue;
-        this._voice(track, clip, sample, node, seg, b, Math.min(to, limit), t);
+        this._voice(track, clip, sample, node, seg, b, Math.min(to, limit), t, rate);
       }
     });
   }
 
-  _voice(track, clip, sample, node, seg, fromBeat, toBeat, when) {
+  _voice(track, clip, sample, node, seg, fromBeat, toBeat, when, rate = 1) {
     if (toBeat - fromBeat <= 1e-4) return;
-    const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb);
+    const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb, rate);
     const voice = { clipId: clip.id, sig: this._sig(track, clip), src, g };
     this.voices.add(voice);
     src.onended = () => this.voices.delete(voice);

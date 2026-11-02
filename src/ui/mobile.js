@@ -4,7 +4,7 @@
 import { clipGain } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
-import { stepRun } from './inspector.js';
+import { mountClipSpeed } from './clip-speed.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
 
@@ -54,9 +54,8 @@ export function mountMobile({ store, ui, tools, library }) {
   $('cb-dup').addEventListener('click', () => tools.duplicate());
   $('cb-del').addEventListener('click', () => tools.remove());
   levelsBtn.addEventListener('click', () => { showLevels = !showLevels; syncBar(); });
-  // Laufzeit in Stufen (gleiche Tonhöhe)
-  $('lvl-run-down').addEventListener('click', () => { const c = selected(); if (c) store.setClipStretch(c.id, stepRun(c.stretch || 1, -1)); });
-  $('lvl-run-up').addEventListener('click', () => { const c = selected(); if (c) store.setClipStretch(c.id, stepRun(c.stretch || 1, 1)); });
+  // Geschwindigkeit 50–200 %, wahlweise wie Tonband (wie im Inspektor)
+  mountClipSpeed($('lvl-speed-row'), { store, ui, library, variant: 'phone' });
 
   const selected = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   // Tempo des Sounds (wie im Inspektor am Desktop)
@@ -122,7 +121,6 @@ export function mountMobile({ store, ui, tools, library }) {
     $('lvl-gain-out').textContent = formatDb(clipGain(c));
     $('lvl-in-out').textContent = formatBeats(c.fadeInBeats || 0);
     $('lvl-out-out').textContent = formatBeats(c.fadeOutBeats || 0);
-    $('lvl-run-out').textContent = `×${String(c.stretch || 1).replace('.', ',')}`;
     const snd = library.get(c.sampleId);
     const sb = soundBpm(snd);
     $('lvl-tempo-row').hidden = !hasOwnTempo(snd);
