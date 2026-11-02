@@ -293,7 +293,8 @@ const { check, finish } = createChecker();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-tempo.png') });
     await page.tap('#bpm-input');
 
-    // ---------- Spurköpfe ----------
+    // ---------- Spurköpfe ---------- (erst wenn das Tempo-Fach zu ist: es nimmt die Ansicht beim Schließen mit)
+    await page.waitForTimeout(700);
     await page.evaluate(() => { document.getElementById('arr-scroll').scrollTop = 0; });
     const mute = await box('.track-row:nth-child(1) .tbtn-mute');
     const hitAbove = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('.tbtn-mute'), [mute.x + mute.width / 2, mute.y - 5]);
