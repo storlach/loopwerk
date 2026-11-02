@@ -1,9 +1,11 @@
 // Export des Songs als WAV oder MP3. Gerendert wird offline mit derselben Signalkette wie beim Abspielen.
 // MP3 mit LAME (lamejs, LGPL-3.0, lame.sourceforge.net) – wird erst beim ersten MP3-Export geladen.
 
-import { renderProject, masteringOf } from './engine.js';
+import { renderProject, masteringOf, trackLevel } from './engine.js';
 import { encodeWav } from './wav.js';
 import { analyzeMastering } from './mastering.js';
+import { audibleMap, trackState, EPS } from './model.js';
+import { makeZip, crc32 } from './zip.js';
 
 export const EXPORT_TAIL = 2.5; // Sekunden Ausklang für Hall und Echo
 
@@ -91,4 +93,67 @@ export async function exportSong(project, library, { format = 'wav', range = 'so
     : encodeWav(audio);
   onProgress?.(1);
   return { blob, duration: audio.duration, peak: peakOf(audio), fromBeat, toBeat, analysis, audio };
+}
+
+// ---------- Einzelspuren (Stems) ----------
+
+// Spuren mit eigenem Anteil am Mix im Bereich: nicht stumm (Solo zählt nicht), Fader über 0, ein hörbarer Clip im Bereich
+export function stemTracks(project, fromBeat, toBeat) {
+  const audible = audibleMap(project);
+  return project.tracks.filter((t) => trackLevel({ ...t, ...trackState(project, t) }, false) !== 0 && t.clips.some((c) =>
+    (audible.get(c.id) ?? [[c.startBeat, c.startBeat + c.lengthBeats]]).some(([a, b]) => a < toBeat - EPS && b > fromBeat + EPS)));
+}
+
+// „01 Drums“: Position im Arranger und Spurname, sicher für Dateisysteme
+export function stemName(project, track) {
+  const n = project.tracks.indexOf(track) + 1;
+  const name = String(track.name || '').replace(/[^\p{L}\p{N} _-]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60).trim() || `Spur ${n}`;
+  return `${String(n).padStart(2, '0')} ${name}`;
+}
+
+const aborted = () => Object.assign(new Error('Export abgebrochen.'), { code: 'aborted' });
+
+// Eine Datei je Spur in einer ZIP-Datei. withMaster: false = ohne Master-Kette (Summe der Stems = Mix ohne Master),
+// true = jede Spur durch Master-Effekte, Fader, Summen-Kurve, Limiter und (falls gewählt) Mastering mit den Verstärkungen
+// des ganzen Songs. onProgress(p, { index, count, name, phase: 'render' | 'encode' }); signal bricht zwischen Spuren ab.
+export async function exportStems(project, library, { format = 'wav', range = 'song', tail = true, withMaster = false, mastering = masteringOf(project).on, onProgress, signal } = {}) {
+  const [fromBeat, toBeat] = exportRange(project, range);
+  if (toBeat <= fromBeat) throw new Error('Im Song liegen noch keine Clips – es gibt nichts zu exportieren.');
+  const tracks = stemTracks(project, fromBeat, toBeat);
+  if (!tracks.length) throw new Error('Keine hörbare Spur im Bereich – alle stumm oder leer.');
+  await library.ensureProject?.(project);
+  const tailSeconds = tail ? EXPORT_TAIL : 0;
+  const master = withMaster && mastering && masteringOf(project).on;
+  const share = master ? 0.15 : 0;
+  let gains = false;
+  let analysis = null;
+  if (master) {
+    analysis = await analyzeMastering(project, library, { fromBeat, toBeat, tailSeconds, onProgress: (p) => onProgress?.(p * share, { index: 0, count: tracks.length, name: '', phase: 'analyze' }) });
+    gains = analysis ? { pre: analysis.pre, drive: analysis.drive } : false;
+  }
+  const renderShare = format === 'mp3' ? 0.5 : 0.95;
+  const files = [];
+  const stems = [];
+  let duration = 0;
+  for (let i = 0; i < tracks.length; i++) {
+    if (signal?.aborted) throw aborted();
+    const track = tracks[i];
+    const name = `${stemName(project, track)}.${format}`;
+    const step = (p, phase) => onProgress?.(share + (1 - share) * (i + p) / tracks.length, { index: i, count: tracks.length, name, phase });
+    const audio = await renderProject(project, library, {
+      fromBeat, toBeat, tailSeconds, onlyTrack: track.id, master: withMaster,
+      limiter: withMaster, compensate: withMaster, mastering: withMaster ? gains : false,
+      onProgress: (p) => step(p * renderShare, 'render'),
+    });
+    if (signal?.aborted) throw aborted();
+    const blob = format === 'mp3'
+      ? await encodeMp3(audio, { onProgress: (p) => step(renderShare + p * (1 - renderShare), 'encode') })
+      : encodeWav(audio);
+    files.push({ name, data: blob, crc: crc32(new Uint8Array(await blob.arrayBuffer())), size: blob.size });
+    stems.push({ name, trackId: track.id, peak: peakOf(audio) });
+    duration = audio.duration;
+  }
+  if (signal?.aborted) throw aborted();
+  onProgress?.(1, { index: tracks.length - 1, count: tracks.length, name: '', phase: 'done' });
+  return { blob: makeZip(files), stems, duration, fromBeat, toBeat, analysis, peak: Math.max(...stems.map((x) => x.peak)) };
 }

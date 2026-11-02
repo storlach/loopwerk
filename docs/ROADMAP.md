@@ -53,9 +53,10 @@
 - WAV (verlustfrei) und MP3 (192 kBit/s, LAME/lamejs) aus dem ganzen Song oder dem Loop-Bereich, mit Ausklang für Hall und Echo
 - Im Artifact als ZIP gespeichert (dort dürfen Audiodateien nur verpackt gespeichert werden)
 - Spec: `docs/specs/stufe-6-export.md`, ADR 002, Tests: `tests/stufe6.test.cjs`
+- Einzelspuren (Stems): Haken im Export-Fach → ZIP mit „01 Drums.wav“ usw. je hörbarer Spur (gemutet/leer übersprungen, Solo ignoriert), Spur mit Effekten, Fader, Panorama, Kurven, Fades; ohne Master-Kette addieren sie sich exakt zum Mix, „Mit Summe“ schickt jede durch Master und Mastering; Fortschritt je Spur, abbrechbar (`renderProject` mit `onlyTrack`, `master: false`; `tests/stems.test.cjs`)
 
 ### Offen aus Stufe 6
-- Einzelspuren (Stems) exportieren, Normalisieren beim Export
+- Normalisieren beim Export; Stems als 24/32-Bit-WAV (trockene Stems können ohne Master-Fader über 0 dBFS gehen)
 
 ## ✅ Stufe 7 – Instrumente (1.0)
 - Beat-Editor (Stepsequencer, 8 Instrumente, zwei Kits) und Melodie-Editor (Piano-Roll, vier Klänge)

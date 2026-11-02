@@ -392,7 +392,11 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb) 
 // mastering: false = ohne Mastering, { pre, drive } = Verstärkungen aus der Analyse (sonst Vorhalt des Stils).
 // analysis: Kanäle für die Mastering-Analyse – { x: Summe vor dem Mastering, a: Ausgang ohne Mastering }.
 // monitor: A/B-Abhörzustand wie in der Wiedergabe (Tests). pad(ctx, mix): Effekt-Pad einplanen (Tests).
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null } = {}) {
+// onlyTrack: nur diese Spur (Einzelspur-Export), Solo zählt dann nicht. master: false = Summe ohne Master-Kette
+// (keine Master-Effekte, Fader 1, keine Summen-Kurve, kein Mastering, kein Limiter) – so addieren sich Einzelspuren zum Mix.
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true } = {}) {
+  if (onlyTrack != null || master === false) project = renderView(project, { onlyTrack, master });
+  if (master === false) limiter = false;
   const spb = 60 / project.bpm;
   const end = toBeat ?? totalBeats(project);
   const duration = (end - fromBeat) * spb + tailSeconds;
@@ -457,6 +461,17 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   }
   onProgress?.(1);
   return out;
+}
+
+// Projekt-Ansicht fürs Rendern einer Einzelspur bzw. ohne Master-Kette (das Projekt selbst bleibt unverändert)
+function renderView(project, { onlyTrack, master }) {
+  const view = { ...project };
+  if (onlyTrack != null) {
+    view.tracks = project.tracks.filter((t) => t.id === onlyTrack).map((t) => ({ ...t, solo: false }));
+    view.groups = (project.groups || []).map((g) => ({ ...g, solo: false }));
+  }
+  if (master === false) view.master = { ...masterOf(project), volume: 1, fx: null, automation: null, mastering: { ...masteringOf(project), on: false } };
+  return view;
 }
 
 // Takt-Geber in einem Worker, damit er in Hintergrund-Tabs nicht gedrosselt wird.
