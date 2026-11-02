@@ -4,7 +4,7 @@
 import { Emitter } from './util.js';
 import { withFx } from './effects.js';
 import { isChord } from './harmony.js';
-import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, carryAutomation, AUTO_TEMPLATES, STEP_BEATS } from './automation.js';
+import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
 
 export const EPS = 1e-6;
 export const DEFAULT_TRACK_NAME = /^Spur \d+$/;
@@ -980,6 +980,16 @@ export class Store extends Emitter {
     return autoKeys(target).includes(key) && (target === 'master' || !!this.track(target));
   }
 
+  // Effekt-Kurve: den Effekt einschalten, wenn er aus ist (Filter dann als Tiefpass) – im selben Rückgängig-Schritt
+  _autoFxOn(owner, key) {
+    const id = fxOfKey(key);
+    if (!id || !owner) return;
+    owner.fx = withFx(owner.fx);
+    if (owner.fx[id].on) return;
+    owner.fx[id].on = true;
+    if (id === 'filter') owner.fx[id].type = 'lowpass';
+  }
+
   // Punkt setzen (gleicher Schlag: Wert ersetzen); liefert den Index
   addAutoPoint(target, key, beat, value) {
     if (!this._autoOk(target, key) || !Number.isFinite(beat) || !Number.isFinite(value)) return -1;
@@ -988,9 +998,14 @@ export class Store extends Emitter {
     const v = Math.min(spec.max, Math.max(spec.min, value));
     const lane = laneOf(this._autoOwner(target), key);
     const same = lane.findIndex((p) => Math.abs(p.beat - b) < EPS);
+    const first = !lane.length;
     if (same >= 0) lane[same] = { ...lane[same], value: v }; else lane.push({ beat: b, value: v });
     lane.sort((x, y) => x.beat - y.beat);
-    this.dispatch('auto-add', () => setLane(this._autoOwner(target, true), key, lane));
+    this.dispatch('auto-add', () => {
+      const o = this._autoOwner(target, true);
+      setLane(o, key, lane);
+      if (first) this._autoFxOn(o, key);
+    });
     return lane.findIndex((p) => Math.abs(p.beat - b) < EPS);
   }
 
@@ -1042,16 +1057,22 @@ export class Store extends Emitter {
     });
   }
 
-  // Vorlage (fadeIn, fadeOut) als ein Schritt. opts: { fromBeat, toBeat } oder { bars, playheadBeat } (Bereich wie
-  // templateRange). Liefert { key, fromBeat, toBeat } – die Oberfläche öffnet damit die Kurvenzeile.
+  // Vorlage (fadeIn, fadeOut, filterOpen, filterClose) als ein Schritt, Filter-Vorlagen schalten den Filter ein. opts:
+  // { fromBeat, toBeat } oder { bars, playheadBeat } (Bereich wie templateRange). Liefert { key, fromBeat, toBeat } – die
+  // Oberfläche öffnet damit die Kurvenzeile.
   applyAutoTemplate(target, name, opts = {}) {
     const tpl = AUTO_TEMPLATES[name];
     if (!tpl || !this._autoOk(target, tpl.key)) return null;
     const range = opts.fromBeat != null && opts.toBeat != null ? { fromBeat: Math.max(0, opts.fromBeat), toBeat: opts.toBeat } : templateRange(this.project, target, name, opts);
     if (!range || range.toBeat - range.fromBeat < STEP_BEATS) return null;
-    const lane = templatePoints(laneOf(this._autoOwner(target), tpl.key), name, range.fromBeat, range.toBeat);
+    const owner = this._autoOwner(target);
+    const lane = templatePoints(laneOf(owner, tpl.key), name, range.fromBeat, range.toBeat, templateRest(owner, tpl.key));
     this.batch('auto-template', () => {
-      this.dispatch('auto-template', () => setLane(this._autoOwner(target, true), tpl.key, lane));
+      this.dispatch('auto-template', () => {
+        const o = this._autoOwner(target, true);
+        setLane(o, tpl.key, lane);
+        this._autoFxOn(o, tpl.key);
+      });
     });
     return { key: tpl.key, ...range };
   }

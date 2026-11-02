@@ -226,12 +226,13 @@
 - Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
 - Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
 
-## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe)
+## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven)
 - Lautstärke-Kurve je Spur, linear: Modell und Engine (`src/automation.js`, `tests/automation.test.cjs`), Kurven wandern mit Clips
 - Kurvenzeile unter der Spur (`src/ui/auto-lane.js`): Spur-Menü „Kurve“ oder Taste A; Maus: Klick setzt, Ziehen verschiebt (Raster, Umschalt frei), Doppelklick/Entf löscht, Fähnchen mit Wert und Position; Finger: Antippen setzt, Punkt ziehen, Halten löscht, Wischen scrollt; geschlossen als dünne Linie über den Clips
 - Vorlagen Einblenden/Ausblenden (1 · 2 · 4 · 8 Takte): Inspektor „Spur“, am Handy Spur-Menü → „Verlauf“; Tests: `tests/automation-ui.test.cjs`
 - Scheibe 2: Panorama-Kurve (absolut, ein Besitzer je AudioParam: mit Kurve lässt `syncStrip` das Panorama aus; Kurve löschen gibt den Regler mit seinem Wert zurück, auch ohne `cancelAndHoldAtTime`), Stufe (Sprung in 1/128 Schlag); Parameter-Chip als Auswahl mit Leuchtpunkt, Mittellinie, Fähnchen „L 40 %“/„Mitte“; Mini-Leiste „Linear · Stufe · Löschen“ (Klick auf gewählten Punkt, Rechtsklick, Enter; Finger: Antippen); Panorama-Regler in Mixer und Inspektor folgen der Kurve, gedimmt mit Kurven-Zeichen, Klick öffnet die Zeile; Spur-Menü „…-Kurve löschen“ für den gewählten Parameter
-- Offen: Effekt-Kurven (3), Summe (4), Verzerrer-Anteil (5); Spec: `docs/specs/v2.12-automation.md`
+- Scheibe 3: Effekt-Kurven Filter-Frequenz, Hall-, Echo- und Verzerrer-Anteil (Einheiten liefern `u.auto`, `updateFxParams` lässt automatisierte Parameter aus). Filter-Frequenz läuft immer über `detune` (40 Hz · 2^(Regler · 8,81)), Null-Test alter Projekte < −88 dB; Verzerrer-Anteil als ein gemeinsamer Parameter für trocken/nass (auch Amp). Neue Effektkette im Lauf plant die Kurven sofort nach; Effekt aus = Kurve wirkt nicht, gestrichelt. Erster Punkt und Vorlagen schalten den Effekt ein (Filter: Tiefpass). Vorlagen „Filter öffnen“ (0,25 → 1, 8 Takte) und „Filter schließen“ (Wert → 0,25) im Inspektor und im Spur-Menü; gesperrte Effekt-Regler in Inspektor und Mixer-Effektseite
+- Offen: Summe (4), Effekt-Pad als Kurve aufnehmen; Spec: `docs/specs/v2.12-automation.md`
 
 ## Korrekturen nach 2.11
 - Handy: Loop-Bereich lässt sich auf der Taktleiste ziehen (vorher hat der Browser die Geste als Scrollen abgebrochen); Taktleiste fingerhoch, Einblender beim Einschalten des Loops

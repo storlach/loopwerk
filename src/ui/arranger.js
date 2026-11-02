@@ -386,6 +386,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     showMenu(btn);
   }
 
+  // Unter dem Knopf, sonst darüber; passt beides nicht (Handy, langes Menü), im Bild halten – das Menü scrollt dann selbst
+  const menuTop = (r, mh) => {
+    if (r.bottom + 4 + mh <= innerHeight - 8) return r.bottom + 4;
+    if (r.top - mh - 4 >= 8) return r.top - mh - 4;
+    return clamp(r.bottom + 4, 8, Math.max(8, innerHeight - mh - 8));
+  };
+
   function showMenu(btn) {
     menu.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
@@ -393,7 +400,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const mw = menu.offsetWidth;
     const mh = menu.offsetHeight;
     menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
-    menu.style.top = (r.bottom + 4 + mh > innerHeight - 8 ? r.top - mh - 4 : r.bottom + 4) + 'px';
+    menu.style.top = menuTop(r, mh) + 'px';
     menu.querySelector('button:not(:disabled)')?.focus();
   }
 
@@ -417,9 +424,11 @@ export function mountArranger({ root, store, engine, library, ui }) {
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
       item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
-      // Ein- und Ausblenden direkt (zwei Tipps); „Länge ›“ für die Anzahl Takte
+      // Vorlagen direkt (zwei Tipps): Ein-/Ausblenden, Filter öffnen/schließen; „Länge ›“ für die Anzahl Takte
       item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
       item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
+      item('Filter öffnen', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'filterOpen' }); }),
+      item('Filter schließen', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'filterClose' }); }),
       item(`Länge: ${ui.autoBars ?? 4} ${(ui.autoBars ?? 4) === 1 ? 'Takt' : 'Takte'} ›`, () => openFadeMenu(trackId, btn)),
       // gilt für den zuletzt gewählten Parameter der Kurvenzeile
       ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
@@ -436,11 +445,11 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const mw = menu.offsetWidth;
     const mh = menu.offsetHeight;
     menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
-    menu.style.top = (r.bottom + 4 + mh > innerHeight - 8 ? r.top - mh - 4 : r.bottom + 4) + 'px';
+    menu.style.top = menuTop(r, mh) + 'px';
     menu.querySelector('button:not(:disabled)')?.focus();
   }
 
-  // Unterseite des Spur-Menüs: Einblenden/Ausblenden mit Länge (am Handy statt Inspektor)
+  // Unterseite des Spur-Menüs: Vorlagen mit Länge (am Handy statt Inspektor)
   function openFadeMenu(trackId, btn) {
     const back = el('button', 'track-menu-item auto-menu-back', '‹ Verlauf');
     back.type = 'button';

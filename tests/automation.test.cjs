@@ -1,5 +1,6 @@
-// Automation Scheibe 1 + 2 (Spec v2.12, Testplan 1–8, 10): Spur-Lautstärke und Panorama als Kurve, Stufen, Besitz je
-// AudioParam, samplegenau gemessen, plus Kurven wandern mit Clips (Zusatz von Martin).
+// Automation Scheibe 1–3 (Spec v2.12, Testplan 1–10): Spur-Lautstärke, Panorama und Effekt-Werte (Filter-Frequenz über
+// detune, Hall-/Echo-/Verzerrer-Anteil) als Kurve, Stufen, Besitz je AudioParam, neue Effektkette im Lauf, samplegenau
+// gemessen, plus Kurven wandern mit Clips (Zusatz von Martin).
 // node tests/automation.test.cjs
 const path = require('path');
 const { pathToFileURL } = require('url');
@@ -545,6 +546,259 @@ async function pureTests() {
     }
     check('8 Stillstand mit Pan-Kurve: Regler bewegen ändert den gehaltenen Wert nicht', Math.abs(rtPan.stoppedLocked.after - rtPan.stoppedLocked.held) < 1e-4, JSON.stringify(rtPan.stoppedLocked));
     check('8 Stillstand: Kurve löschen gibt den Reglerwert zurück', Math.abs(rtPan.stopped - 0.4) < 1e-3, `${rtPan.stopped}`);
+
+    // ================= Effekte (9): Filter über detune, Filterfahrt, Anteile, neue Kette im Lauf =================
+    await page.evaluate(() => {
+      const { library } = window.loopwerk;
+      const sr = 44100;
+      let seed = 4711;
+      const rnd = () => { let t = (seed += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const noise = new AudioBuffer({ numberOfChannels: 2, length: 8 * sr, sampleRate: sr });
+      for (let c = 0; c < 2; c++) { const d = noise.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (rnd() * 2 - 1) * 0.5; }
+      library.register({ id: 'test-noise', name: 'Rauschen', category: 'fx', lengthBeats: 16, bpm: 120, buffer: noise });
+      // 220 Hz × 2 s = 440 Perioden: wiederholt sich nahtlos
+      const sine = new AudioBuffer({ numberOfChannels: 2, length: 2 * sr, sampleRate: sr });
+      for (let c = 0; c < 2; c++) { const d = sine.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = 0.5 * Math.sin((2 * Math.PI * 220 * i) / sr); }
+      library.register({ id: 'test-sine', name: 'Sinus 220 Hz', category: 'fx', lengthBeats: 4, bpm: 120, buffer: sine });
+    });
+    const fx9 = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const M = await import('./src/model.js');
+      const A = await import('./src/automation.js');
+      const E = await import('./src/effects.js');
+      const sr = 44100;
+      const spb = 0.5;
+      const proj = (fx, automation, { bars = 4, clips } = {}) => ({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: bars, loop: { on: false, startBeat: 0, endBeat: 16 }, master: { volume: 1 },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0, mute: false, solo: false, fx,
+          clips: clips ?? Array.from({ length: bars / 4 }, (_, k) => ({ id: `c${k}`, sampleId: 'test-noise', startBeat: k * 16, lengthBeats: 16, offsetBeats: 0 })),
+          ...(automation ? { automation } : {}) }],
+      });
+      const render = (p, opts = {}) => renderProject(p, library, { limiter: false, ...opts });
+      const db = (x) => 10 * Math.log10(x);
+      // Differenz relativ zur Signalenergie (beide Kanäle)
+      const diffDb = (a, b) => {
+        let e = 0;
+        let d = 0;
+        for (let c = 0; c < 2; c++) {
+          const x = a.getChannelData(c);
+          const y = b.getChannelData(c);
+          for (let i = 0; i < x.length; i++) { e += x[i] * x[i]; d += (x[i] - y[i]) ** 2; }
+        }
+        return d === 0 ? -Infinity : db(d / e);
+      };
+      const out = {};
+
+      // a) Referenz: Biquad mit frequency = cutoffHz(v) (wie vor dem Umbau), LFO auf detune, Panner in der Mitte
+      const reference = async (f, frames, ramp) => {
+        const ctx = new OfflineAudioContext(2, frames, sr);
+        const src = ctx.createBufferSource();
+        src.buffer = library.get('test-noise').buffer;
+        const bq = ctx.createBiquadFilter();
+        bq.type = f.type;
+        bq.Q.value = 0.7 + Math.pow(f.reso, 1.5) * 17;
+        bq.frequency.value = E.cutoffHz(f.cutoff);
+        if (ramp) { bq.frequency.setValueAtTime(E.cutoffHz(ramp[0]), 0); bq.frequency.exponentialRampToValueAtTime(E.cutoffHz(ramp[1]), ramp[2]); }
+        const beats = E.LFO_RATES.find((r) => r.id === f.lfo)?.beats ?? 0;
+        if (beats) {
+          const osc = ctx.createOscillator();
+          osc.frequency.value = 1 / (beats * spb);
+          const g = ctx.createGain();
+          g.gain.value = f.depth * 3600;
+          osc.connect(g).connect(bq.detune);
+          osc.start(0);
+        }
+        const pan = ctx.createStereoPanner();
+        src.connect(bq).connect(pan).connect(ctx.destination);
+        src.start(0);
+        return ctx.startRendering();
+      };
+      out.ref = [];
+      for (const type of ['lowpass', 'highpass', 'bandpass']) {
+        for (const f of [{ cutoff: 0.62, reso: 0.3, lfo: 'off', depth: 0.5 }, { cutoff: 0.35, reso: 0.8, lfo: '1/4', depth: 0.6 }, { cutoff: 1, reso: 1, lfo: '1bar', depth: 1 }, { cutoff: 0.1, reso: 0, lfo: 'off', depth: 0 }]) {
+          const fx = { filter: { on: true, type, ...f } };
+          const got = await render(proj(fx), { toBeat: 16 });
+          const want = await reference({ type, ...f }, got.length);
+          out.ref.push({ name: `${type} ${f.cutoff}/${f.reso}/${f.lfo}`, db: diffDb(want, got) });
+        }
+      }
+      // Kurve 0,25 → 1 über 16 Schläge = exponentielle Frequenzrampe (linear in Cent)
+      {
+        const f = { type: 'lowpass', cutoff: 0.7, reso: 0.5, lfo: 'off', depth: 0 };
+        const got = await render(proj({ filter: { on: true, ...f } }, { 'filter.cutoff': [{ beat: 0, value: 0.25 }, { beat: 16, value: 1 }] }), { toBeat: 16 });
+        const want = await reference(f, got.length, [0.25, 1, 8]);
+        out.rampRef = diffDb(want, got);
+      }
+
+      // b) Filterfahrt: RMS je Takt steigt, an den Punkten wie die statische Einstellung (±0,5 dB)
+      const fahrt = [{ beat: 0, value: 0.25 }, { beat: 8, value: 0.5 }, { beat: 16, value: 0.75 }, { beat: 24, value: 1 }];
+      const ffx = (cutoff) => ({ filter: { on: true, type: 'lowpass', cutoff, reso: 0.4, lfo: 'off', depth: 0.5 } });
+      const curve = (await render(proj(ffx(0.7), { 'filter.cutoff': fahrt }, { bars: 8 }))).getChannelData(0);
+      const rms = (d, b0, b1) => { let e = 0; const i0 = Math.round(b0 * spb * sr); const i1 = Math.round(b1 * spb * sr); for (let i = i0; i < i1; i++) e += d[i] * d[i]; return db(e / (i1 - i0)); };
+      out.bars = Array.from({ length: 7 }, (_, k) => rms(curve, k * 4, k * 4 + 4));
+      out.at = [];
+      for (const p of fahrt) {
+        const stat = (await render(proj(ffx(p.value), null, { bars: 8 }))).getChannelData(0);
+        const b0 = Math.max(0, p.beat - 0.25);
+        const b1 = Math.min(32, p.beat + 0.25);
+        out.at.push({ beat: p.beat, v: p.value, curve: rms(curve, b0, b1), stat: rms(stat, b0, b1) });
+      }
+      // Effekt aus: die Kurve wirkt nicht (bitgleich mit der Spur ohne Kurve)
+      const offFx = { filter: { on: false, type: 'lowpass', cutoff: 0.5 } };
+      out.offDiff = diffDb(await render(proj(offFx), { toBeat: 16 }), await render(proj(offFx, { 'filter.cutoff': fahrt }), { toBeat: 16 }));
+
+      // c) Hall-/Echo-Anteil: Fahne nach Impuls ∝ Anteil² (Stufen 0,2 · 0,45 · 0,7 · 1, Impuls kurz nach jeder Stufe)
+      const clicks = [0.5, 4.5, 8.5, 12.5].map((b, k) => ({ id: `k${k}`, sampleId: 'test-click', startBeat: b, lengthBeats: 3.5, offsetBeats: 0 }));
+      const steps = [{ beat: 0, value: 0.2, curve: 'step' }, { beat: 4, value: 0.45, curve: 'step' }, { beat: 8, value: 0.7, curve: 'step' }, { beat: 12, value: 1 }];
+      const tail = (d, b) => { let e = 0; for (let i = Math.round((b + 0.4) * spb * sr); i < Math.round((b + 3.4) * spb * sr); i++) e += d[i] * d[i]; return e; };
+      out.wet = {};
+      for (const [id, fxOn] of [['hall', { hall: { on: true, size: 0, mix: 0.25 } }], ['echo', { echo: { on: true, time: '1/8', feedback: 0.3, mix: 0.3 } }]]) {
+        const full = (await render(proj({ [id]: { ...fxOn[id], mix: 1 } }, null, { clips: clicks }), { toBeat: 16 })).getChannelData(0);
+        const auto = (await render(proj(fxOn, { [`${id}.mix`]: steps }, { clips: clicks }), { toBeat: 16 })).getChannelData(0);
+        out.wet[id] = clicks.map((c, k) => ({ v: steps[k].value, ratio: tail(auto, c.startBeat) / tail(full, c.startBeat) }));
+      }
+
+      // d) Verzerrer-Anteil 0 → 1: Ausgang = (1 − m)·trocken + m·nass, auch für den Amp (ein gemeinsamer Parameter)
+      const sineClips = [{ id: 's1', sampleId: 'test-sine', startBeat: 0, lengthBeats: 16, offsetBeats: 0 }];
+      const ramp = [{ beat: 2, value: 0 }, { beat: 14, value: 1 }];
+      out.drive = [];
+      for (const type of ['hard', 'amp-crunch']) {
+        const d = (mix) => ({ drive: { on: true, type, drive: 0.6, tone: 0.75, mix } });
+        const dry = (await render(proj(d(0), null, { clips: sineClips }), { toBeat: 16 })).getChannelData(0);
+        const wet = (await render(proj(d(1), null, { clips: sineClips }), { toBeat: 16 })).getChannelData(0);
+        const got = (await render(proj(d(0.5), { 'drive.mix': ramp }, { clips: sineClips }), { toBeat: 16 })).getChannelData(0);
+        let err = 0;
+        let peak = 0;
+        let mid = 0;
+        for (let i = 0; i < got.length; i++) {
+          const m = A.autoValueAt(ramp, i / sr / spb);
+          err = Math.max(err, Math.abs(got[i] - ((1 - m) * dry[i] + m * wet[i])));
+          peak = Math.max(peak, Math.abs(got[i]));
+          if (Math.abs(i / sr / spb - 8) < 0.25) mid = Math.max(mid, Math.abs(wet[i] - dry[i]));
+        }
+        out.drive.push({ type, err, peak, mid });
+      }
+
+      // e) Vorlagen und erster Punkt schalten den Effekt ein (ein Schritt)
+      const st = new M.Store(proj(null, null, { bars: 16 }), { sampleBeats: () => 4 });
+      const r = st.applyAutoTemplate('t1', 'filterOpen', { playheadBeat: 9 });
+      out.open = { r, steps: st.undoStack.length, lane: A.laneOf(st.project.tracks[0], 'filter.cutoff'), fx: st.project.tracks[0].fx?.filter };
+      st.undo();
+      out.open.undo = !st.project.tracks[0].fx?.filter?.on && !st.project.tracks[0].automation;
+      const st2 = new M.Store(proj({ filter: { on: true, type: 'highpass', cutoff: 0.6 } }, null, { bars: 16 }), { sampleBeats: () => 4 });
+      const r2 = st2.applyAutoTemplate('t1', 'filterClose', { playheadBeat: 17, bars: 2 });
+      out.close = { r: r2, lane: A.laneOf(st2.project.tracks[0], 'filter.cutoff'), type: st2.project.tracks[0].fx.filter.type };
+      const st3 = new M.Store(proj(null), { sampleBeats: () => 4 });
+      st3.addAutoPoint('t1', 'hall.mix', 4, 0.5);
+      out.first = { on: st3.project.tracks[0].fx?.hall?.on, steps: st3.undoStack.length };
+      st3.undo();
+      out.first.undo = !st3.project.tracks[0].fx?.hall?.on && !st3.project.tracks[0].automation;
+      out.fmt = [A.formatAutoValue('filter.cutoff', Math.log2(1200 / 40) / 8.81), A.formatAutoValue('hall.mix', 0.35), A.formatAutoValue('drive.mix', 1)];
+      return out;
+    });
+    const worstRef = Math.max(...fx9.ref.map((x) => x.db));
+    check('9 Filter über detune = Referenz-Biquad mit frequency = cutoffHz(v) (alle Arten, Resonanz, LFO): Differenz < −80 dB', worstRef < -80, fx9.ref.map((x) => `${x.name}: ${x.db === -Infinity ? '−∞' : x.db.toFixed(1)} dB`).join(', '));
+    check('9 Filter-Kurve 0,25 → 1 = exponentielle Frequenzrampe (linear in Cent): Differenz < −80 dB', fx9.rampRef < -80, `${fx9.rampRef.toFixed(1)} dB`);
+    check('9 Filterfahrt: RMS steigt je Takt', fx9.bars.every((v, i) => i === 0 || v > fx9.bars[i - 1]), fx9.bars.map((v) => v.toFixed(2)).join(' < '));
+    check('9 Filterfahrt: an den Punkten ±0,5 dB zur statischen Einstellung', fx9.at.every((x) => Math.abs(x.curve - x.stat) <= 0.5), fx9.at.map((x) => `Schlag ${x.beat} (${x.v}): ${(x.curve - x.stat).toFixed(3)} dB`).join(', '));
+    check('9 Effekt aus: Kurve wirkt nicht (bitgleich ohne Kurve)', fx9.offDiff === -Infinity, `${fx9.offDiff} dB`);
+    for (const id of ['hall', 'echo']) {
+      check(`9 ${id === 'hall' ? 'Hall' : 'Echo'}-Anteil: Fahne nach Impuls ∝ Anteil² (±10 %)`, fx9.wet[id].every((x) => Math.abs(x.ratio / (x.v * x.v) - 1) <= 0.1),
+        fx9.wet[id].map((x) => `${x.v}: ${(x.ratio / (x.v * x.v)).toFixed(5)}`).join(', '));
+    }
+    for (const d of fx9.drive) check(`9 Verzerrer-Anteil (${d.type}): Ausgang = (1 − m)·trocken + m·nass`, d.err < 1e-4 * d.peak && d.mid > 0.05, `max. Abweichung ${d.err.toExponential(2)} bei Spitze ${d.peak.toFixed(3)}, Unterschied nass/trocken ${d.mid.toFixed(3)}`);
+    check('9 Vorlage „Filter öffnen“: ab Takt der Marke 8 Takte 0,25 → 1, Filter an (Tiefpass), davor offen, ein Schritt',
+      fx9.open.steps === 1 && fx9.open.r.fromBeat === 8 && fx9.open.r.toBeat === 40 && fx9.open.fx?.on && fx9.open.fx.type === 'lowpass'
+      && JSON.stringify(fx9.open.lane) === JSON.stringify([{ beat: 0, value: 1, curve: 'step' }, { beat: 8, value: 0.25 }, { beat: 40, value: 1 }]) && fx9.open.undo, JSON.stringify(fx9.open));
+    check('9 Vorlage „Filter schließen“: aktueller Wert → 0,25, eingeschalteter Filter behält seine Art', JSON.stringify(fx9.close.lane) === JSON.stringify([{ beat: 16, value: 0.6 }, { beat: 24, value: 0.25 }]) && fx9.close.type === 'highpass', JSON.stringify(fx9.close));
+    check('9 Erster Punkt einer Effekt-Kurve schaltet den Effekt ein, ein Rückgängig-Schritt', fx9.first.on === true && fx9.first.steps === 1 && fx9.first.undo, JSON.stringify(fx9.first));
+    check('9 Fähnchen-Format: „1,2 kHz“, „35 %“, „100 %“', fx9.fmt.join(' | ') === '1,2 kHz | 35 % | 100 %', fx9.fmt.join(' | '));
+
+    // Realtime: Filter-Kurve läuft, Effektkette wird neu gebaut (EQ an), erster Hall-Punkt im Lauf; realtime = offline
+    const rt9 = await page.evaluate(async () => {
+      const { store, engine, library, renderProject } = window.loopwerk;
+      const A = await import('./src/automation.js');
+      const pts = [{ beat: 0, value: 0.2 }, { beat: 8, value: 0.9 }, { beat: 16, value: 0.3 }];
+      const proj = () => ({
+        version: 1, bpm: 120, beatsPerBar: 4, lengthBars: 4, loop: { on: true, startBeat: 0, endBeat: 16 }, master: { volume: 1 },
+        tracks: [{ id: 't1', name: 'T', volume: 1, pan: 0, mute: false, solo: false, fx: { filter: { on: true, type: 'lowpass', cutoff: 0.7, reso: 0.3 } },
+          clips: [{ id: 'c1', sampleId: 'test-noise', startBeat: 0, lengthBeats: 16, offsetBeats: 0 }], automation: { 'filter.cutoff': pts } }],
+      });
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const strip = () => engine.mix.tracks.get('t1');
+      const cut = () => strip().chain.units.filter.auto.cutoff.param.value / (8.81 * 1200);
+      const probe = () => { const beat = engine.currentBeat(); return { beat, got: cut(), want: A.autoValueAt(pts, beat) }; };
+      store.replace(proj());
+      await engine.play(0);
+      await wait(450);
+      const out = { before: [], after: [], samples: [] };
+      for (let k = 0; k < 3; k++) { out.before.push(probe()); await wait(60); }
+      // EQ einschalten: neue Kette, die Filter-Kurve läuft sofort weiter (Regler 0,7 ist weit weg)
+      const chain0 = strip().chain;
+      store.setTrackFx('t1', 'eq', { on: true });
+      out.rebuilt = strip().chain !== chain0;
+      await wait(20);
+      out.after.push(probe());
+      for (let k = 0; k < 4; k++) { await wait(50); out.after.push(probe()); }
+      // Regler bewegen ändert nichts (Besitz der Kurve), Filterart schon
+      out.locked = [];
+      for (let k = 0; k < 6; k++) {
+        store.setTrackFx('t1', 'filter', { cutoff: k % 2 ? 0.05 : 0.95, type: 'highpass' }, 'fx-x');
+        await wait(15);
+        out.locked.push(probe());
+      }
+      out.type = strip().chain.units.filter.input.type;
+      // Erster Hall-Punkt im Lauf: Hall geht an, Anteil sofort auf der Kurve
+      store.addAutoPoint('t1', 'hall.mix', 0, 0.6);
+      await wait(40);
+      out.hall = { on: store.project.tracks[0].fx.hall.on, wet: strip().chain.units.hall?.auto.mix.param.value };
+      // Filter aus: keine Einheit, Kurve wirkt nicht; wieder an: sofort auf der Kurve
+      store.setTrackFx('t1', 'filter', { on: false });
+      out.off = !strip().chain.units.filter;
+      store.setTrackFx('t1', 'filter', { on: true });
+      await wait(25);
+      out.on = probe();
+      for (let k = 0; k < 12; k++) { await wait(140); const p = probe(); if (p.beat > 0.2 && p.beat < 15.8 && Math.abs(p.beat - 8) > 0.2) out.samples.push(p); }
+      // Stillstand: der gehaltene Wert gehört der Kurve, der Regler schreibt nicht hinein. Eine stille Einheit rechnet
+      // Chromium nicht – eine Gleichspannung hält die Kette in Gang, damit .value den Zeitplan zeigt.
+      const keep = engine.ctx.createConstantSource();
+      keep.offset.value = 1e-3;
+      keep.connect(strip().input);
+      keep.start();
+      engine.stop();
+      await wait(80);
+      const held = cut();
+      store.setTrackFx('t1', 'filter', { cutoff: held > 0.5 ? 0.05 : 0.95 }, 'fx-y');
+      await wait(120);
+      out.stopped = { held, after: cut() };
+      keep.stop();
+      keep.disconnect();
+      // Offline an denselben Schlägen (Parameterwert über ctx.suspend), gleiche Kette (EQ, Hall an)
+      const p = JSON.parse(JSON.stringify(store.project));
+      const off = [];
+      await renderProject(p, library, { limiter: false, toBeat: 16, pad: (ctx, mix) => {
+        const param = mix.tracks.get('t1').chain.units.filter.auto.cutoff.param;
+        const seen = new Set();
+        for (const s of out.samples) {
+          const q = Math.round((s.beat * 0.5 * 44100) / 128) * 128;
+          if (seen.has(q)) continue;
+          seen.add(q);
+          ctx.suspend(q / 44100).then(() => { off.push({ beat: s.beat, v: param.value / (8.81 * 1200) }); ctx.resume(); });
+        }
+      } });
+      out.offline = off;
+      return out;
+    });
+    const dev9 = (xs) => Math.max(...xs.map((x) => Math.abs(x.got - x.want)));
+    check('9 Realtime: Filter-Kurve läuft (detune folgt der Kurve)', rt9.before.length === 3 && dev9(rt9.before) < 0.02, JSON.stringify(rt9.before));
+    check('9 Effektkette neu gebaut (EQ an) während der Filter-Kurve: Wert bleibt auf der Kurve, schon nach 20 ms', rt9.rebuilt && dev9(rt9.after) < 0.02 && Math.abs(rt9.after[0].want - 0.7) > 0.2, `max. Abweichung ${dev9(rt9.after).toFixed(4)}; ${JSON.stringify(rt9.after[0])}`);
+    check('9 Regler gesperrt: Frequenz-Regler ziehen ändert den Filter nicht, die Art schon', dev9(rt9.locked) < 0.02 && rt9.type === 'highpass', `max. Abweichung ${dev9(rt9.locked).toFixed(4)} bei ${rt9.locked.length} Proben`);
+    check('9 Stillstand mit Filter-Kurve: Regler bewegen ändert den gehaltenen Wert nicht', Math.abs(rt9.stopped.after - rt9.stopped.held) < 1e-4, JSON.stringify(rt9.stopped));
+    check('9 Erster Hall-Punkt im Lauf: Hall an, Anteil sofort auf der Kurve', rt9.hall.on && Math.abs(rt9.hall.wet - 0.6) < 1e-3, JSON.stringify(rt9.hall));
+    check('9 Filter aus: keine Einheit (Kurve wirkt nicht); wieder an: sofort auf der Kurve', rt9.off && Math.abs(rt9.on.got - rt9.on.want) < 0.02, JSON.stringify(rt9.on));
+    const offBy = (b) => rt9.offline.find((x) => x.beat === b)?.v;
+    const dRO = Math.max(...rt9.samples.map((x) => Math.abs(x.got - offBy(x.beat))));
+    check('9 Filter-Kurve realtime = offline an denselben Schlägen', rt9.samples.length >= 8 && rt9.offline.length >= 8 && dRO < 0.02, `max. Abweichung ${dRO.toFixed(4)} bei ${rt9.samples.length} Proben`);
 
     check('Keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
