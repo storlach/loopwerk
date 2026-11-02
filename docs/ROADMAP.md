@@ -17,7 +17,7 @@
 - Spec: `docs/specs/stufe-2-arranger-komfort.md`, Tests: `tests/stufe2.test.cjs`
 
 ### Offen aus Stufe 2
-- Mehrfachauswahl (mehrere Clips gemeinsam verschieben/löschen)
+- ~~Mehrfachauswahl~~ (erledigt in 2.1)
 - Clip-Lautstärke über 0 dB
 
 ## ✅ Stufe 3 – Bibliothek und Tempo (0.3)
@@ -27,9 +27,9 @@
 - Spec: `docs/specs/stufe-3-bibliothek-tempo.md`, Tests: `tests/stufe3.test.cjs`
 
 ### Offen aus Stufe 3
-- VCSL (echte Instrumente) – aus der Arbeitsumgebung nicht erreichbar
+- ~~VCSL (echte Instrumente)~~ (erledigt in 2.4)
 - Tempowechsel schneller (Worker, benutzte Sounds zuerst)
-- Tonart wählbar (Loops transponieren)
+- ~~Tonart wählbar~~ (erledigt, auch je Takt)
 
 ## ✅ Stufe 4 – Mixer und Effekte (0.4)
 - Mixer-Dock: Kanalzug je Spur plus Master mit Fader, Panorama, M/S, Pegelanzeige
@@ -38,7 +38,7 @@
 - Spec: `docs/specs/stufe-4-mixer-effekte.md`, Tests: `tests/stufe4.test.cjs`
 
 ### Offen aus Stufe 4
-- Freie Effekt-Slots, Send-Effekte, Automation
+- Freie Effekt-Slots, Send-Effekte (Automation: erledigt in 2.12)
 
 ## ✅ Stufe 5 – Eigene Sounds (0.5)
 - Import per Knopf oder Datei auf eine Spur ziehen; eigene Sounds bleiben im Browser gespeichert und werden in Projektdateien eingebettet
@@ -47,7 +47,7 @@
 - Spec: `docs/specs/stufe-5-aufnahme-editor.md`, Tests: `tests/stufe5.test.cjs`
 
 ### Offen aus Stufe 5
-- Manuelle Latenz-Korrektur, Mehrspur-Aufnahme, Aufnahme im Loop (Takes)
+- Manuelle Latenz-Korrektur bzw. Einmessen per Klick, Mehrspur-Aufnahme, Aufnahme im Loop (Takes)
 
 ## ✅ Stufe 6 – Export (0.6)
 - WAV (verlustfrei) und MP3 (192 kBit/s, LAME/lamejs) aus dem ganzen Song oder dem Loop-Bereich, mit Ausklang für Hall und Echo
@@ -55,7 +55,7 @@
 - Spec: `docs/specs/stufe-6-export.md`, ADR 002, Tests: `tests/stufe6.test.cjs`
 
 ### Offen aus Stufe 6
-- Einzelspuren (Stems) exportieren, Normalisieren beim Export
+- Einzelspuren (Stems) exportieren (in Arbeit) – Normalisieren beim Export: durch Mastering (2.10) abgedeckt
 
 ## ✅ Stufe 7 – Instrumente (1.0)
 - Beat-Editor (Stepsequencer, 8 Instrumente, zwei Kits) und Melodie-Editor (Piano-Roll, vier Klänge)
@@ -78,7 +78,7 @@
 - Spec: `docs/specs/mobil-ux.md`, Tests: `tests/mobil.test.cjs`
 
 ### Offen aus 1.2
-- Pinch-Zoom im Arranger, Notenlänge per Finger ziehen, Prüfung im Rahmen der Claude-App auf echten Geräten
+- ~~Pinch-Zoom im Arranger, Notenlänge per Finger ziehen~~ (erledigt: Zoomen mit zwei Fingern, Halten-und-Ziehen in der Piano-Roll) – Prüfung auf echten Geräten bleibt Martins Ohr-/Hand-Test
 
 ## ✅ 1.3 – Beat-Editor und Bildschirmtastatur
 - Beat-Editor am Handy mit Umschalter für die Takthälften (und Wischen), Tempo-Fach ohne Tastatur, Tastatur-Modus für Suche und Namen
