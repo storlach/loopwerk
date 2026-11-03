@@ -1,7 +1,8 @@
 // Mixer: ein Kanalzug pro Spur plus Master. Fader, Panorama, Mute/Solo, Effekt-Zusammenfassung, Pegel.
 // Effekte des gewählten Kanals: am Desktop im Inspektor, am Handy als eigene Seite im Mixer (mit Zurück).
 
-import { EFFECTS, withFx } from '../effects.js';
+import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, sendOf } from '../effects.js';
+import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
 import { formatDb } from './arranger.js';
@@ -28,6 +29,8 @@ export function mountMixer({ root, store, engine, ui }) {
   let selected = null;
   let detailFor = null;
   let detailControls = new Map();
+  let detailReset = null; // „Reihenfolge zurücksetzen“ auf der Effekt-Seite
+  let detailSends = []; // Karte „Busse“: [[Bus, { input, out }]]
 
   const fxOf = (id) => (id === MASTER ? withFx(masterOf(store.project).fx) : withFx(store.track(id)?.fx));
   const setFx = (id, fxId, patch, key) => (id === MASTER ? store.setMasterFx(fxId, patch, key) : store.setTrackFx(id, fxId, patch, key));
@@ -107,7 +110,7 @@ export function mountMixer({ root, store, engine, ui }) {
     strip.append(name, sum, fxBtns);
     if (pan) strip.append(knob.wrap);
     strip.append(faderRow, value, ms);
-    const s = { strip, name, sum, fxMap, pan, knob, lock, locked: false, fader, meter, value, mute, solo, peak: 0 };
+    const s = { strip, name, sum, fxBtns, fxMap, pan, knob, lock, locked: false, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);
     return s;
   }
@@ -123,6 +126,7 @@ export function mountMixer({ root, store, engine, ui }) {
       s.name.textContent = nameOf(id);
       s.strip.classList.toggle('selected', selected === id);
       for (const [fxId, b] of s.fxMap) b.setAttribute('aria-pressed', String(fx[fxId].on));
+      applyOrder(s.fxBtns, fxOrderOf(ownerOf(id)), (fxId) => s.fxMap.get(fxId));
       const nOn = EFFECTS.filter((e) => fx[e.id].on).length;
       s.sum.textContent = nOn ? `${nOn} ${nOn === 1 ? 'Effekt' : 'Effekte'}` : 'keine Effekte';
       s.sum.classList.toggle('on', nOn > 0);
@@ -171,6 +175,13 @@ export function mountMixer({ root, store, engine, ui }) {
     if (detailFor !== selected) buildDetail(selected);
     const fx = fxOf(selected);
     detailEl.querySelector('.detail-title').textContent = `Effekte: ${nameOf(selected)}`;
+    applyOrder(detailEl.querySelector('.fx-cards'), fxOrderOf(ownerOf(selected)), (fxId) => detailControls.get(fxId)?.card);
+    detailReset?.update(ownerOf(selected));
+    for (const [b, c] of detailSends) {
+      const v = sendOf(store.track(selected), b.id);
+      if (document.activeElement !== c.input) c.input.value = String(v);
+      c.out.textContent = v > 0 ? `${Math.round(v * 100)} %` : 'aus';
+    }
     for (const e of EFFECTS) {
       const c = detailControls.get(e.id);
       c.toggle.setAttribute('aria-pressed', String(fx[e.id].on));
@@ -203,6 +214,8 @@ export function mountMixer({ root, store, engine, ui }) {
       toggle.id = `fx-${e.id}-on`;
       toggle.addEventListener('click', () => setFx(id, e.id, { on: !fxOf(id)[e.id].on }));
       head.append(toggle);
+      // Der ganze Kartenkopf ist Griff: kurz antippen schaltet, lange drücken ordnet um
+      head.addEventListener('click', (ev) => { if (ev.target === head) toggle.click(); });
       card.append(head);
       const params = new Map();
       for (const [k, p] of Object.entries(e.params)) {
@@ -242,7 +255,41 @@ export function mountMixer({ root, store, engine, ui }) {
       grid.append(card);
       detailControls.set(e.id, { card, toggle, params });
     }
-    detailEl.append(grid);
+    // Reihenfolge: Kartenkopf lange drücken, dann ziehen; kurz antippen schaltet
+    const target = id === MASTER ? 'master' : id;
+    mountFxDrag(grid, {
+      ids: EFFECT_IDS,
+      grid: true,
+      itemOf: (fxId) => detailControls.get(fxId).card,
+      handleOf: (fxId) => detailControls.get(fxId).card.querySelector('.fx-card-head'),
+      getOrder: () => fxOrderOf(ownerOf(id)),
+      onMove: (fxId, to) => {
+        store.moveFx(target, fxId, to);
+        ui.flash?.(orderText(fxOrderOf(ownerOf(id)), fxId));
+      },
+    });
+    detailReset = resetLink(() => store.resetFxOrder(target));
+    // Busse der Spur (nach dem Rack): je ein Anteil zum Hall- und Echo-Bus
+    detailSends = [];
+    if (id !== MASTER) {
+      const card = el('section', 'fx-card fx-bus-card');
+      const head = el('div', 'fx-card-head');
+      head.append(el('span', 'fx-card-title', 'Busse'));
+      card.append(head);
+      for (const b of BUSES) {
+        const row = el('label', 'fx-param');
+        const input = document.createElement('input');
+        Object.assign(input, { type: 'range', min: '0', max: '1', step: '0.01', id: `fx-send-${b.id}` });
+        input.addEventListener('input', () => store.setSend(id, b.id, Number(input.value), `send-${id}-${b.id}`));
+        input.addEventListener('dblclick', () => { input.value = '0'; store.setSend(id, b.id, 0); });
+        const out = el('span', 'fx-param-value');
+        row.append(el('span', 'fx-param-label', `→ ${b.label}`), input, out);
+        card.append(row);
+        detailSends.push([b, { input, out }]);
+      }
+      grid.append(card);
+    }
+    detailEl.append(grid, detailReset.node);
   }
 
   // Gesperrter Effekt-Regler: Wert der Kurve an der Marke

@@ -121,6 +121,7 @@
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
+<link rel="modulepreload" href="src/ui/fx-order.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
 <link rel="modulepreload" href="src/ui/key-select.js">
 <link rel="modulepreload" href="src/ui/sound-tempo.js">
@@ -1219,6 +1220,25 @@
   .fxl-params { display: grid; gap: 8px; padding: 2px 10px 10px 50px; }
   .fxl-item:not(.on) .fxl-params { display: none; }
   .fxl-params .fx-param select { height: 26px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  /* Reihenfolge (2.14): am Namen ziehen; die Zeile hebt sich, die anderen rücken weg, eine Linie zeigt den Platz */
+  .fxl, .fx-cards { position: relative; }
+  .fxl-name { cursor: grab; user-select: none; -webkit-user-select: none; }
+  .fx-card-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .fx-sorting, .fx-sorting * { cursor: grabbing; }
+  .fx-sorting > .fxl-item:not(.fx-lifted), .fx-sorting > .fx-card:not(.fx-lifted) { transition: transform 0.12s ease-out; }
+  .fx-lifted { position: relative; z-index: 2; background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--amber); }
+  .fx-drop-line { position: absolute; left: 0; width: 100%; height: 2px; border-radius: 1px; background: var(--amber); box-shadow: var(--beam-glow); pointer-events: none; z-index: 3; }
+  .fx-drop-line.grid { width: 2px; }
+  .fx-drop-line[hidden] { display: none; }
+  .fx-order-reset[hidden] { display: none; }
+  /* Busse (2.14): Anteile der Spur und Rückkanal-Einstellungen im Song – Linien, aktiv in Weißglut */
+  .insp-buses { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .insp-buses .insp-row.on > span:first-child { color: var(--ink); }
+  .insp-bus { display: grid; gap: 10px; }
+  .insp-bus + .insp-bus { margin-top: 4px; }
+  .insp-grp[hidden], .insp-bus[hidden] { display: none; }
+  .insp-bus select { height: 26px; grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  .fx-card-title { font: 600 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 4px 0; }
 
   /* ---------- Erstellen: Karten zum Anklicken oder auf eine Spur ziehen ---------- */
   .create-panel { display: grid; gap: 8px; padding: 10px 12px 14px; overflow-y: auto; align-content: start; }
@@ -2915,7 +2935,7 @@
   #app[data-density="calm"] :is(.insp-title, .left-title, .deck-name, .dock-head h2, .brand-name) { font-family: var(--font-display); font-size: var(--fs-15); }
   #app[data-density="calm"] .lcd-value { font-size: var(--fs-24); }
   /* Rahmen nur an Tasten: Flächen, Abschnitte, Regler, Felder und Etiketten verlieren Rahmen und Ring */
-  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item) { border-color: transparent; box-shadow: none; }
+  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item, .insp-buses, .insp-bus, .fx-bus-card) { border-color: transparent; box-shadow: none; }
   #app[data-density="calm"] .insp-sec { border-bottom: 0; }
   /* Weißglut nur an ▶ (spielend) und am gewählten Clip */
   #app[data-density="calm"] .key.play, #app[data-density="calm"] .key.play[aria-pressed="true"]:not(.on) { background: transparent; color: var(--ink); box-shadow: var(--key-shadow); }
