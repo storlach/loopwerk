@@ -56,7 +56,7 @@
 - Einzelspuren (Stems): Haken im Export-Fach → ZIP mit „01 Drums.wav“ usw. je hörbarer Spur (gemutet/leer übersprungen, Solo ignoriert), Spur mit Effekten, Fader, Panorama, Kurven, Fades; ohne Master-Kette addieren sie sich exakt zum Mix, „Mit Summe“ schickt jede durch Master und Mastering; Fortschritt je Spur, abbrechbar (`renderProject` mit `onlyTrack`, `master: false`; `tests/stems.test.cjs`)
 
 ### Offen aus Stufe 6
-- ~~Einzelspuren (Stems)~~ (erledigt) – Normalisieren beim Export: durch Mastering (2.10) abgedeckt; offen: Stems als 24/32-Bit-WAV (trockene Stems können ohne Master-Fader über 0 dBFS gehen)
+- ~~Einzelspuren (Stems)~~ (erledigt) – Normalisieren beim Export: durch Mastering (2.10) abgedeckt; WAV mit 24 Bit oder 32 Bit Gleitkomma (übersteuert nicht) wählbar, Stems ohne Summe stellen 32 Bit voreingestellt ein (`tests/wav-bits.test.cjs`)
 
 ## ✅ Stufe 7 – Instrumente (1.0)
 - Beat-Editor (Stepsequencer, 8 Instrumente, zwei Kits) und Melodie-Editor (Piano-Roll, vier Klänge)

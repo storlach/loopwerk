@@ -3,6 +3,7 @@
 import { exportSong, exportRange, exportStems, stemTracks } from '../export.js';
 import { saveFile, safeName } from './save-file.js';
 import { formatDb } from './arranger.js';
+import { fileExt } from '../wav.js';
 import { masteringOf } from '../engine.js';
 import { mountMasteringControls } from './mastering.js';
 
@@ -33,8 +34,10 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     go.textContent = busy && abort ? 'Abbrechen' : stems.checked ? 'Spuren exportieren' : 'Exportieren';
   };
   store.on(syncMaster);
-  stems.addEventListener('change', () => { syncMaster(); describe(); });
-  stemsMaster.addEventListener('change', syncMaster);
+  // Stems ohne Summe können über 0 dBFS gehen: dann WAV mit 32 Bit Gleitkomma voreinstellen (übersteuert nicht)
+  const preferFloat = () => { if (stems.checked && !stemsMaster.checked && value('ex-format') === 'wav') $('ex-format-wav32').checked = true; };
+  stems.addEventListener('change', () => { preferFloat(); syncMaster(); describe(); });
+  stemsMaster.addEventListener('change', () => { preferFloat(); syncMaster(); });
   syncMaster();
 
   function describe() {
@@ -77,7 +80,8 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     const saved = await saveFile(`${safeName(store.project.name)} Stems.zip`, res.blob);
     const mb = num(res.blob.size / 1048576);
     const n = res.stems.length;
-    status.textContent = `Fertig: ${saved.filename} (${n === 1 ? '1 Spur' : `${n} Spuren`}, ${mb} MB, je ${num(res.duration)} s, Spitze ${formatDb(res.peak)})${res.peak > 1 ? ' – übersteuert, Fader der lautesten Spur senken' : ''}.`;
+    const over = res.peak > 1 && format !== 'wav32';
+    status.textContent = `Fertig: ${saved.filename} (${n === 1 ? '1 Spur' : `${n} Spuren`}, ${mb} MB, je ${num(res.duration)} s, Spitze ${formatDb(res.peak)})${over ? ' – übersteuert: WAV 32 Bit wählen oder Fader der lautesten Spur senken' : ''}.`;
     ui.flash(`Exportiert: ${saved.filename}`);
   }
 
@@ -103,7 +107,7 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
           status.textContent = p < (format === 'mp3' ? 0.5 : 0.95) ? `Song wird gerendert … ${Math.round(p * 100)} %` : format === 'mp3' ? `MP3 wird erzeugt … ${Math.round(p * 100)} %` : 'Datei wird geschrieben …';
         },
       });
-      const filename = `${safeName(store.project.name)}.${format}`;
+      const filename = `${safeName(store.project.name)}.${fileExt(format)}`;
       const saved = await saveFile(filename, res.blob);
       const mb = (res.blob.size / 1048576).toFixed(1).replace('.', ',');
       const loud = res.analysis ? `, ${res.analysis.outLufs.toFixed(1).replace('.', ',').replace('-', '−')} LUFS` : '';
