@@ -153,7 +153,7 @@ const { check, finish } = createChecker();
     // Pattern im Regal löschen (nicht benutzt) und Rückgängig
     const cnt = await page.evaluate(() => window.loopwerk.store.addPattern({ type: 'synth', name: 'Übrig', bars: 1, preset: 'lead', notes: [] }));
     await page.waitForFunction(() => window.loopwerk.library.list().some((s) => s.name === 'Übrig'));
-    await clickR(page, '#shelf-chips .chip[data-filter="own"]');
+    await page.evaluate(() => { const h = document.getElementById('shelf-cat-own'); if (h && h.getAttribute('aria-expanded') === 'false') h.click(); });
     const row = page.locator('#library .loop-row', { hasText: 'Übrig' });
     await row.locator('.loop-del').click();
     await row.locator('.loop-del').click();

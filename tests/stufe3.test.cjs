@@ -123,10 +123,13 @@ const { check, finish } = createChecker();
     const empty = await page.locator('#library .shelf-empty').textContent();
     check('Leere Suche erklärt sich', empty.includes('Keine Sounds gefunden'), empty);
     await page.fill('#shelf-search', '');
-    await page.click('#shelf-chips .chip[data-filter="bass"]');
-    const bassRows = await page.locator('#library .loop-item').count();
+    const closed = await page.evaluate(() => [...document.querySelectorAll('#library .shelf-cat')].every((h) => h.getAttribute('aria-expanded') === 'false'));
+    check('Regal startet mit geschlossenen Gruppen', closed, String(closed));
+    check('Filter: nur noch der Favoriten-Schalter', await page.evaluate(() => [...document.querySelectorAll('#shelf-chips .chip')].map((c) => c.dataset.filter).join(',')) === 'fav');
+    await page.click('#shelf-cat-bass');
+    const bassRows = await page.locator('#shelf-items-bass .loop-item').count();
     const basses = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'bass').length);
-    check('Filter „Bass“ zeigt nur Bass-Sounds', bassRows === basses, `${bassRows} Einträge`);
+    check('Akkordeon „Bass“ zeigt alle Bass-Sounds', bassRows === basses, `${bassRows} Einträge`);
     await page.locator('#library .loop-row').first().locator('.loop-fav').click();
     await page.click('#shelf-chips .chip[data-filter="fav"]');
     const favRows = await page.locator('#library .loop-item').count();
@@ -140,7 +143,7 @@ const { check, finish } = createChecker();
     check('Favoriten und Tempo bleiben nach Neuladen erhalten', favAfter === 1 && bpmAfter[0] === 100 && bpmAfter[1] === 100, `Favoriten ${favAfter}, Tempo ${bpmAfter.join('/')}`);
 
     if (SHOTS) {
-      await page.click('#shelf-chips .chip[data-filter="all"]');
+      await page.click('#shelf-chips .chip[data-filter="fav"]');
       await page.fill('#shelf-search', '');
       await page.screenshot({ path: path.join(SHOT_DIR, 'stufe3-light.png') });
     }

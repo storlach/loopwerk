@@ -2993,6 +2993,32 @@
   .sum-toggle:hover, .sum-toggle:focus-visible, .sum-toggle[aria-expanded="true"] { color: var(--ink); }
   .sum-toggle[aria-expanded="true"] svg { filter: drop-shadow(0 0 4px color-mix(in srgb, var(--ink) 55%, transparent)); }
   @media (prefers-reduced-motion: reduce) { .tbtn-chev svg, .sum-toggle svg { transition: none; } }
+  /* Tonart- und Akkordzeile ein-/ausblenden: Schalter „Harmonie“ in der Ecke „Takt“; ausgeblendet nehmen sie keinen Platz */
+  .harm-toggle {
+    margin-left: auto; align-self: stretch; display: inline-flex; align-items: center; gap: 5px; padding: 0 0 0 10px;
+    border: 0; background: transparent; color: var(--muted); cursor: pointer; position: relative;
+    font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .harm-toggle svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.18s ease; }
+  .harm-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .harm-toggle:hover, .harm-toggle:focus-visible { color: var(--ink); }
+  /* ausgeblendet, aber es gibt Wechsel: Leuchtpunkt */
+  .harm-toggle.has::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 6px var(--ink); }
+  .arr-grid.harm-off { --key-row-h: 0px; --chord-row-h: 0px; }
+  .arr-grid.harm-off > .key-row, .arr-grid.harm-off > .chord-row { display: none; }
+  @media (prefers-reduced-motion: reduce) { .harm-toggle svg { transition: none; } }
+  /* Obere Leiste: Einstellbares hat einen Rahmen und einen Pfeil (Tempo, Tonart), reine Anzeige (Takt, Schlag, Zeit) bleibt ohne */
+  .lcd .lcd-edit { position: relative; }
+  .lcd .lcd-edit .lcd-input, .lcd .lcd-edit .key-sel {
+    box-shadow: inset 0 0 0 1px var(--key-line); border-radius: var(--radius); padding: 0 6px; box-sizing: content-box;
+  }
+  .lcd .lcd-edit .key-sel { padding-right: 18px; }
+  .lcd .lcd-edit:hover .lcd-input, .lcd .lcd-edit:hover .key-sel, .lcd .lcd-edit :focus-visible { box-shadow: inset 0 0 0 1px var(--ink); }
+  .lcd .lcd-key.lcd-edit::after {
+    content: ""; position: absolute; right: 16px; bottom: 11px; width: 5px; height: 5px; pointer-events: none;
+    border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
+  }
+  .lcd .lcd-edit .lcd-label { color: var(--ink); }
   /* Geringe Spurhöhe: eine Zeile (Name, M, S, Menü, Pfeil), ganz niedrig nur Name und Pfeil */
   .arr-grid.rh-one .track-row .tbtn-chev { order: 5; margin-left: 0; width: 20px; }
   .arr-grid.rh-tiny .track-row .track-btns { display: contents; }
@@ -3063,8 +3089,8 @@
       <div class="lcd-cell"><span class="lcd-label">Takt</span><span class="lcd-value" id="lcd-bar">001</span></div>
       <div class="lcd-cell lcd-more" data-tier="3"><span class="lcd-label">Schlag</span><span class="lcd-value" id="lcd-beat">1</span></div>
       <div class="lcd-cell lcd-more" data-tier="3"><span class="lcd-label">Zeit</span><span class="lcd-value" id="lcd-time">0:00.0</span></div>
-      <div class="lcd-cell lcd-song"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
-      <div class="lcd-cell lcd-more lcd-key" data-tier="3" title="Tonart des Songs – die mitgelieferten Loops werden umgestimmt"><label class="lcd-label" for="key-sel">Tonart</label><select class="lcd-value key-sel" id="key-sel" data-key-select></select></div>
+      <div class="lcd-cell lcd-song lcd-edit"><label class="lcd-label" for="bpm-input">Tempo</label><input class="lcd-value lcd-input" id="bpm-input" type="number" min="60" max="200" step="1" value="120" title="Tempo in BPM (60–200): tippen oder mit den Pfeiltasten ändern"></div>
+      <div class="lcd-cell lcd-more lcd-key lcd-edit" data-tier="3" title="Tonart des Songs – die mitgelieferten Loops werden umgestimmt"><label class="lcd-label" for="key-sel">Tonart</label><select class="lcd-value key-sel" id="key-sel" data-key-select></select></div>
     </div>
 
     <span class="deck-name" id="deck-name"></span>

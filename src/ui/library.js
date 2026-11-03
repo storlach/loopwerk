@@ -17,9 +17,12 @@ const lenBucket = (s) => {
 // Auf schmalen Bildschirmen ist immer nur eine Kategorie offen (Akkordeon)
 const narrow = window.matchMedia('(max-width: 760px)');
 
+// Das große Regal startet mit geschlossenen Gruppen (die Akkordeons ersetzen die Kategorie-Filter);
+// wenige Herkunftsgruppen (groupBy) merken sich ihren Zustand
 function loadOpen(groupBy) {
+  if (!groupBy) return new Set();
   try { const v = JSON.parse(localStorage.getItem(OPEN_KEY)); if (Array.isArray(v)) return new Set(v); } catch { /* Standard */ }
-  return new Set(groupBy ? groupBy.map((g) => g.id) : ['drums']);
+  return new Set(groupBy.map((g) => g.id));
 }
 function saveOpen(open) {
   try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* Speicher nicht verfügbar */ }
@@ -83,16 +86,15 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     : CATEGORIES.map((c) => ({ id: c.id, label: c.label, cls: `cat-${c.id}`, has: (s) => s.category === c.id })));
   let groups = groupsFor(sort);
 
+  // Nur noch der Favoriten-Schalter: Kategorien bzw. Genres wählt man über die Akkordeons darunter
   function buildChips() {
     chipsEl.innerHTML = '';
-    for (const c of [{ id: 'all', label: 'Alle' }, { id: 'fav', label: '★' }, ...groups]) {
-      const chip = el('button', `chip${c.cls ? ` ${c.cls}` : ''}`, c.label);
-      chip.type = 'button';
-      chip.dataset.filter = c.id;
-      if (c.id === 'fav') { chip.title = 'Favoriten'; chip.setAttribute('aria-label', 'Favoriten'); }
-      chip.addEventListener('click', () => { filter = c.id; render(); });
-      chipsEl.append(chip);
-    }
+    const chip = el('button', 'chip chip-fav', '★ Favoriten');
+    chip.type = 'button';
+    chip.dataset.filter = 'fav';
+    chip.title = 'Nur Favoriten zeigen';
+    chip.addEventListener('click', () => { filter = filter === 'fav' ? 'all' : 'fav'; render(); });
+    chipsEl.append(chip);
   }
   const sortBtns = [...document.querySelectorAll('.shelf-sort .seg[data-sort]')];
   for (const b of sortBtns) {
@@ -102,8 +104,6 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       try { localStorage.setItem(SORT_KEY, sort); } catch { /* egal */ }
       groups = groupsFor(sort);
       if (filter !== 'all' && filter !== 'fav') filter = 'all';
-      // Erste Gruppe öffnen, damit gleich etwas zu sehen ist
-      if (!groups.some((g) => open.has(g.id))) { if (accordion()) open.clear(); open.add(groups[0].id); saveOpen(open); }
       buildChips();
       render();
     });
@@ -232,7 +232,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (cat.rank) samples.sort((a, b) => cat.rank(a) - cat.rank(b));
       if (!samples.length) continue;
       // Bei Suche oder Filter sind alle Treffer-Gruppen offen, sonst gilt der gemerkte Zustand
-      const forced = !!q || filter !== 'all' || len !== 'all';
+      const forced = !!q || len !== 'all' || filter === 'fav';
       const expanded = forced || open.has(cat.id);
       const group = el('section', `shelf-group ${cat.cls}`);
       const h = el('h3', 'shelf-cat-wrap');
