@@ -33,8 +33,8 @@ function saveFavs(favs) {
   try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch { /* Speicher nicht verfügbar */ }
 }
 
-const lengthLabel = (s) => {
-  if (s.kind !== 'loop') return 'One-Shot';
+const lengthLabel = (s, calm = false) => {
+  if (s.kind !== 'loop') return calm ? 'Einzelklang' : 'One-Shot';
   const bars = s.lengthBeats / 4;
   return bars >= 1 && Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : `${s.lengthBeats} Schläge`;
 };
@@ -164,7 +164,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     const item = el('button', 'loop-item');
     item.type = 'button';
     item.dataset.sampleId = s.id;
-    item.append(el('span', 'loop-play'), el('span', 'loop-name', s.name), el('span', 'loop-len', lengthLabel(s)));
+    item.append(el('span', 'loop-play'), el('span', 'loop-name', s.name), el('span', 'loop-len', lengthLabel(s, !!groupBy)));
     item.title = describe(s);
     bindItem(item, s);
     const star = el('button', 'loop-fav', '★');

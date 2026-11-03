@@ -8,7 +8,7 @@ import { Engine, renderProject } from './engine.js';
 import { Emitter } from './util.js';
 import { encodeWav } from './wav.js';
 import { mountLibrary } from './ui/library.js';
-import { mountArranger } from './ui/arranger.js';
+import { mountArranger, headW } from './ui/arranger.js';
 import { mountZoomBars, loadZoom } from './ui/zoombars.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
@@ -35,7 +35,7 @@ import { newDrumPattern, newSynthPattern } from './instruments.js';
 import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
-import { touch } from './ui/place.js';
+import { touch, place } from './ui/place.js';
 import { templateControls, MASTER_TEMPLATES } from './ui/auto-lane.js';
 import { doubleTapRanges } from './ui/touch.js';
 import { EDITION, lsKey } from './edition.js';
@@ -590,10 +590,27 @@ async function boot() {
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
   if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools });
   const sheets = mountSheets({ ui, arranger });
+  // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
+  if (EDITION.density === 'calm') {
+    const app0 = document.getElementById('app');
+    const fit = () => {
+      if (!app0.classList.contains('wb-wide') || !app0.classList.contains('insp-open') || narrow.matches) return;
+      const sc = document.getElementById('arr-scroll');
+      const want = (sc.clientWidth - headW() - 22) / (store.project.beatsPerBar * 4);
+      if (want > 0 && ui.pxPerBeat > want) arranger.zoomTo(want);
+    };
+    let wasWide = false;
+    new MutationObserver(() => {
+      const w = app0.classList.contains('wb-wide') && app0.classList.contains('insp-open');
+      if (w && !wasWide) setTimeout(fit, 60);
+      wasWide = w;
+    }).observe(app0, { attributes: true, attributeFilter: ['class'] });
+  }
   // Ruhige Dichte: Tonart- und Akkordzeile am Handy erst bei Wechseln – oder auf Wunsch über das Song-Fach (gemerkt)
   if (EDITION.density === 'calm') {
     const btn = document.getElementById('harm-tpl').content.firstElementChild.cloneNode(true);
     document.getElementById('song-links').prepend(btn);
+    place(btn, { calm: { narrow: document.getElementById('song-links'), wide: document.getElementById('insp-song-tools') } }); // Desktop: Song-Werkbank
     const app = document.getElementById('app');
     const set = (on) => {
       app.classList.toggle('harmony-on', on);

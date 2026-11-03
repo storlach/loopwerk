@@ -7,6 +7,8 @@ import { el, trackPointer } from '../util.js';
 import { MIN_SPAN, recipeGesture } from '../recipe.js';
 
 const BUCKETS = 1200;
+const OFF = 12; // Anschlag und Ausklang sitzen 12 px innerhalb von Anfang und Ende: bei 0 ms bleiben alle vier Griffe unterscheidbar
+const TOP = 22; // Höhe der Hüllkurven-Linie
 const peakCache = new WeakMap();
 
 // Spitzenwerte über den ganzen Puffer (einmal je Puffer)
@@ -121,8 +123,12 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
         if (!view) return;
         const d = toTime(ev.clientX - grab);
         if (which === 'start' || which === 'end') setBound(which, d);
-        else if (which === 'attack') setEnv('attack', ((d - view.ds) / Math.max(1e-6, view.de - view.ds)) * view.cooked * 1000);
-        else setEnv('release', ((view.de - d) / Math.max(1e-6, view.de - view.ds)) * view.cooked * 1000);
+        else {
+          const span = Math.max(1, view.x1 - view.x0);
+          const px = (d / view.dur) * view.W;
+          if (which === 'attack') setEnv('attack', ((px - view.x0 - OFF) / span) * view.cooked * 1000);
+          else setEnv('release', ((view.x1 - OFF - px) / span) * view.cooked * 1000);
+        }
       }, () => { h.classList.remove('drag'); gesture.end(); }, () => { h.classList.remove('drag'); gesture.end(); });
     });
     h.addEventListener('keydown', (e) => {
@@ -214,19 +220,26 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
       }
     }
     // Hüllkurve: Anschlag linear, Ausklang (1−x)²
-    const top = 12;
+    const top = TOP;
     const bot = H - 6;
-    const aPx = Math.min(x1 - x0, ((r.attack ?? 0) / 1000 / cookedT) * (x1 - x0));
-    const rPx = Math.min(x1 - x0 - aPx, ((r.release ?? 0) / 1000 / cookedT) * (x1 - x0));
+    const room = Math.max(0, x1 - x0 - 2 * OFF);
+    const aPx = Math.min(room, ((r.attack ?? 0) / 1000 / cookedT) * (x1 - x0));
+    const rPx = Math.min(room - aPx, ((r.release ?? 0) / 1000 / cookedT) * (x1 - x0));
+    // Grenzen von Anfang und Ende über die ganze Höhe
+    c.globalAlpha = 0.85;
+    c.fillStyle = getComputedStyle(box).getPropertyValue('--ink') || '#fff';
+    c.fillRect(Math.round(x0) - 1, 0, 2, H);
+    c.fillRect(Math.round(x1) - 1, 0, 2, H);
+    c.fillStyle = color;
     c.globalAlpha = 0.95;
     c.strokeStyle = color;
     c.lineWidth = 1.5;
     c.beginPath();
     c.moveTo(x0, bot);
-    c.lineTo(x0 + aPx, top);
-    c.lineTo(x1 - rPx, top);
-    const n = Math.max(2, Math.ceil(rPx / 3));
-    for (let i = 1; i <= n; i++) { const f = i / n; c.lineTo(x1 - rPx + f * rPx, top + (bot - top) * (1 - (1 - f) ** 2)); }
+    c.lineTo(x0 + OFF + aPx, top);
+    c.lineTo(x1 - OFF - rPx, top);
+    const n = Math.max(2, Math.ceil((rPx + OFF) / 3));
+    for (let i = 1; i <= n; i++) { const f = i / n; c.lineTo(x1 - OFF - rPx + f * (rPx + OFF), top + (bot - top) * (1 - (1 - f) ** 2)); }
     c.stroke();
     c.globalAlpha = 1;
     return { dur, ds, de, x0, x1, aPx, rPx, cooked: cookedT, top, W, H };
@@ -247,8 +260,8 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
     const place = (h, x, y) => { h.style.left = `${x}px`; if (y != null) h.style.top = `${y}px`; };
     place(hStart, view.x0);
     place(hEnd, view.x1);
-    place(hAtk, view.x0 + view.aPx, view.top);
-    place(hRel, view.x1 - view.rPx, view.top);
+    place(hAtk, view.x0 + OFF + view.aPx, view.top);
+    place(hRel, view.x1 - OFF - view.rPx, view.top);
     const set = (h, now, min, max, text) => {
       h.setAttribute('aria-valuemin', String(min));
       h.setAttribute('aria-valuemax', String(max));

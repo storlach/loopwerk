@@ -449,7 +449,7 @@ async function seedPadWall() {
           const fl = document.getElementById('clip-float').getBoundingClientRect();
           const sc = document.getElementById('arr-scroll').getBoundingClientRect();
           const bars = [...document.querySelectorAll('.bar-mark')].filter((m) => { const r = m.getBoundingClientRect(); return r.right <= sc.right && r.left >= sc.left; }).map((m) => parseInt(m.textContent, 10));
-          return { headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(fl.right <= r.left || fl.left >= r.right || fl.bottom <= r.top || fl.top >= r.bottom); }), bars: [1, 2, 3, 4].every((b) => bars.includes(b)), barsSeen: bars.join(',') };
+          return { headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(fl.right <= r.left || fl.left >= r.right || fl.bottom <= r.top || fl.top >= r.bottom); }), bars: [1, 2, 3, 4, 5].every((b) => bars.includes(b)), barsSeen: bars.join(',') };
         });
         if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-breit-desktop.png') });
         await page.reload();
@@ -540,7 +540,7 @@ async function seedPadWall() {
     check('Zählung 2a Handy Werkbank Mitte (Clip, Form): ≤ 26 Bedienelemente, ≤ 13 Rahmen, ≤ 5 Schriftgrößen, kleinste ≥ 11', wm.controls <= 26 && wm.frames <= 13 && wm.sizes <= 5 && wm.minFont >= 11, `${wm.controls} / ${wm.frames} / ${wm.sizes} / ${wm.minFont}`);
     const w = bench.wb;
     check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % des Raums rechts der Kiste (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
-    check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 Takte, Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
+    check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 ganze Takte (Takt 5 im Bild), Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
     check('Werkbank: Sound-Tempo-Block bei Einzelklang und gesperrte Knöpfe nicht sichtbar', !bench.stempo.block && bench.stempo.off === 0, JSON.stringify(bench.stempo));
     check('Leerer Start: Hinweis in Spur 1 („● tippen …“), Kiste „Noch nichts aufgenommen“ (Handy und Desktop)', ['desktop', 'handy'].every((d) => /tippen/.test(bench[`empty-${d}`].hint) && bench[`empty-${d}`].kiste === 'Noch nichts aufgenommen'), JSON.stringify([bench['empty-desktop'], bench['empty-handy']]));
     check('Handy: „Tonart und Akkorde“ im Song-Fach blendet beide Zeilen wieder ein', bench.harmony?.pressed === 'true' && bench.harmony.rows.every(Boolean), JSON.stringify(bench.harmony));
@@ -603,6 +603,18 @@ async function seedPadWall() {
       }));
       check('Werkbank: Kopf mit Name und „in 2 Clips“, Reiter Form · Ton · Farbe · Zeit · Clip (role=tab), Form gewählt', head.name === 'Bumm 1' && head.count === 'in 2 Clips' && head.tabs === 'Form,Ton,Farbe,Zeit,Clip' && head.sel === 'Form' && head.tablist === 'tablist', JSON.stringify(head));
       check('Welle: 4 Griffe mit role=slider (Anfang, Ende, Anschlag, Ausklang)', head.sliders === 4);
+      const geo = await page.evaluate(() => {
+        const R = (q) => document.querySelector(q).getBoundingClientRect();
+        const hs = ['.wb-h-start', '.wb-h-end', '.wb-h-atk', '.wb-h-rel'].map(R);
+        const hit = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+        const cx = (r) => r.left + r.width / 2;
+        return { big: hs.every((r) => r.width >= 44 && r.height >= 44), overlap: [[0, 2], [0, 3], [1, 2], [1, 3], [0, 1], [2, 3]].filter(([i, j]) => hit(hs[i], hs[j])).length, dx: [cx(hs[2]) - cx(hs[0]), cx(hs[1]) - cx(hs[3])] };
+      });
+      check('Welle: 4 Griffe unterscheidbar – Tippziele ≥ 44 px, nichts überlappt, Anschlag/Ausklang 12 px innerhalb von Anfang/Ende', geo.big && geo.overlap === 0 && geo.dx.every((d) => Math.abs(d - 12) < 1.5), JSON.stringify(geo));
+      const words = await page.evaluate(() => ({ gain: document.getElementById('wb-gain').closest('label').querySelector('output').textContent, label: document.getElementById('wb-gain').closest('label').firstChild.textContent, loopLen: document.querySelector('.loop-len')?.textContent }));
+      check('Wörter: „Pegel“ (Form) statt „Lautstärke“, „0 dB“ ohne Doppel-Leerzeichen, Kiste „Einzelklang“', words.gain === '0 dB' && words.label === 'Pegel' && words.loopLen === 'Einzelklang', JSON.stringify(words));
+      const rows = await page.evaluate(() => ({ key: [...document.querySelectorAll('.key-row, .chord-row')].some((e) => e.getClientRects().length > 0) }));
+      check('Desktop: Tonart- und Akkordzeile ohne Wechsel nicht sichtbar', !rows.key, JSON.stringify(rows));
       const per = await grundCounts(page);
       check('Zählung je Reiter (Desktop): Grund ≤ 5 Griffe', Object.values(per).every((n) => n >= 1 && n <= 5), JSON.stringify(per));
       // Weißglut: Flächen in --amber (Weiß); außer ▶ und Marke höchstens eine (gewählter Clip)
@@ -630,7 +642,7 @@ async function seedPadWall() {
       await page.waitForTimeout(200);
       const r1 = await recOf(page, id);
       check('Welle: ArrowRight am Anfang setzt start + 0,01 s', r1 && Math.abs(r1.start - 0.01) < 1e-6, JSON.stringify(r1));
-      const box = await page.evaluate(() => { const r = document.querySelector('.wb-h-end').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 + 30 }; });
+      const box = await page.evaluate(() => { const r = document.querySelector('.wb-h-end').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
       await page.mouse.move(box.x, box.y);
       await page.mouse.down();
@@ -690,7 +702,11 @@ async function seedPadWall() {
       });
       check('Als Variante: Clip 1 spielt „vr-…“, Clip 2 bleibt beim Original, Kopf zeigt die Variante', /^vr-/.test(va.a) && va.b === id && /Bumm 1 b/.test(va.name) && va.count === 'in 1 Clip' && /^Variante von Bumm 1 →/.test(va.tree), JSON.stringify(va));
       check('Kiste: Variante steht unter ihrem Eltern-Sound, eingerückt', va.under && va.indent, JSON.stringify(va));
+      const flashBefore = await page.evaluate(() => document.getElementById('hint-text').textContent);
       await page.evaluate(() => window.loopwerk.store.undo());
+      await page.waitForTimeout(100);
+      const flashAfter = await page.evaluate(() => document.getElementById('hint-text').textContent);
+      check('Einblender „Bumm 1 b …“ verschwindet nach Rückgängig', /Bumm 1 b/.test(flashBefore) && !/Bumm 1 b/.test(flashAfter), `${flashBefore} → ${flashAfter}`);
       const back = await page.evaluate(() => ({ c: window.loopwerk.store.project.tracks[0].clips.map((c) => c.sampleId), r: window.loopwerk.store.project.recipes ?? null }));
       check('Als Variante ist ein Undo-Schritt (Clips und Rezepte zurück)', back.c.every((x) => x === id) && !back.r, JSON.stringify(back));
       // Spur antippen: Spur-Werkbank ohne Reiter, nur aktive Effekte, „+ Effekt“
@@ -716,7 +732,7 @@ async function seedPadWall() {
         return {
           bar: ['tabbar', 'editor-tab', 'tab-song'].map((i) => vis(document.getElementById(i))),
           tw: ['mixer-btn', 'fxpad-btn', 'editor-tab', '.tabbar-end', '.tbtn-chev', '.tbtn-mute'].map((i) => !!tw[i]),
-          song: vis(document.getElementById('mixer-btn')) && vis(document.getElementById('fxpad-btn')) && vis(document.getElementById('keys-btn')),
+          song: vis(document.getElementById('mixer-btn')) && vis(document.getElementById('fxpad-btn')) && vis(document.getElementById('keys-btn')) && vis(document.getElementById('harm-btn')),
           pan: !!document.querySelector('.track-head [id*="pan"], .track-head .tbtn-pan'),
         };
       });
@@ -748,10 +764,25 @@ async function seedPadWall() {
       await page.waitForTimeout(400);
       await page.tap('#cf-werkbank');
       await page.waitForTimeout(1100);
+      const inView = await page.evaluate(async () => {
+        const wb = document.getElementById('werkbank').getBoundingClientRect();
+        const bar = document.getElementById('tabbar').getBoundingClientRect();
+        const out = {};
+        for (const t of ['form', 'ton', 'farbe', 'zeit', 'clip']) {
+          document.getElementById(`wb-tab-${t}`).click();
+          await new Promise((r) => setTimeout(r, 80));
+          const g = document.querySelector('[role=tabpanel]:not([hidden]) .wb-grund');
+          const items = [...g.querySelectorAll('button, input:not([type=hidden]), select')].filter((e) => e.getClientRects().length && !e.closest('[hidden]'));
+          out[t] = items.filter((e) => { const r = e.getBoundingClientRect(); return r.top < wb.top - 1 || r.bottom > bar.top + 1; }).length;
+        }
+        document.getElementById('wb-tab-form').click();
+        return out;
+      });
+      check('Handy auf „Mitte“: alle Grund-Griffe des aktiven Reiters liegen vollständig im Bild (je Reiter)', Object.values(inView).every((n) => n === 0), JSON.stringify(inView));
       const per = await grundCounts(page);
       check('Zählung je Reiter (Handy): Grund ≤ 5 Griffe', Object.values(per).every((n) => n >= 1 && n <= 5), JSON.stringify(per));
       const ph = await page.evaluate(() => ({ sc: document.documentElement.scrollWidth - innerWidth, top: document.getElementById('werkbank').getBoundingClientRect().top, wave: document.querySelector('.wb-wave').getBoundingClientRect().height, names: ['Bumm 1', 'Spur 2'].map((n) => { const e = [...document.querySelectorAll('.track-name')].find((x) => x.textContent === n); return e ? e.scrollWidth <= e.clientWidth : null; }) }));
-      check('Handy: Werkbank auf Mitte, Welle 96 px hoch, kein seitliches Scrollen, Spurnamen nicht gekürzt', ph.sc <= 0 && Math.abs(ph.wave - 96) <= 2 && ph.names.every((v) => v === true), JSON.stringify(ph));
+      check('Handy: Werkbank auf Mitte, Welle 72 px hoch, kein seitliches Scrollen, Spurnamen nicht gekürzt', ph.sc <= 0 && Math.abs(ph.wave - 72) <= 2 && ph.names.every((v) => v === true), JSON.stringify(ph));
       // Waagerechtes Ziehen auf der Welle verschiebt die Schublade nicht
       const cdp = await ctx.newCDPSession(page);
       const wbox = await page.evaluate(() => { const r = document.querySelector('.wb-wave-cv').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
@@ -763,7 +794,7 @@ async function seedPadWall() {
       const after = await page.evaluate(() => ({ top: document.getElementById('werkbank').getBoundingClientRect().top, open: window.loopwerk.ui.dock }));
       check('Handy: waagerechtes Ziehen auf der Welle verschiebt die Schublade nicht', Math.abs(after.top - ph.top) <= 1 && after.open === 'werkbank', `${ph.top} → ${after.top}`);
       // Griff am Finger ziehen (Ende) = Sound wird kürzer
-      const eb = await page.evaluate(() => { const r = document.querySelector('.wb-h-end').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 + 20 }; });
+      const eb = await page.evaluate(() => { const r = document.querySelector('.wb-h-end').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       await touch('touchStart', eb.x - 3, eb.y);
       for (let i = 1; i <= 10; i++) await touch('touchMove', eb.x - 3 - i * 14, eb.y);
       await touch('touchEnd');

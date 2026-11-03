@@ -30,6 +30,13 @@ const fmtHz = (v) => (v >= 1000 ? `${comma(v / 1000, 1)} kHz` : `${Math.round(v)
 const fmtMs = (v) => (v >= 1000 ? `${comma(v / 1000, 2)} s` : `${Math.round(v)} ms`);
 const fmtBeats = (b) => (b <= 0 ? 'aus' : `${comma(b, 2)} ${b === 1 ? 'Schlag' : 'Schläge'}`);
 const fmtPct = (v) => `${Math.round(v * 100)} %`;
+// Zahl in Mono, Einheit und Wort in Sans
+function setOut(out, text) {
+  const m = String(text).match(/^([+−-]?[\d.,]+)(.*)$/);
+  out.textContent = '';
+  if (!m) { out.textContent = text; return; }
+  out.append(el('span', 'wb-num', m[1]), m[2]);
+}
 const pad2 = (n) => String(n).padStart(2, '0');
 export const noteName = (midi) => `${NOTE[((Math.round(midi) % 12) + 12) % 12]}${Math.floor(Math.round(midi) / 12) - 1}`;
 
@@ -131,12 +138,18 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     rename(false);
     if (save_ && cur.id && v && v !== sound()?.name) patch({ name: v });
   });
+  let variantFlash = null;
+  // Rückgängig von „Als Variante“: der Einblender verschwindet mit der Variante
+  store.on(() => {
+    if (variantFlash && !store.project.recipes?.[variantFlash]) { variantFlash = null; ui.flashText = null; ui.emit(); }
+  });
   varBtn.addEventListener('click', () => {
     if (!cur.id) return;
     const vr = store.addVariant(cur.id, { clipId: cur.clipId });
     library.syncVariants?.(store.project);
     library.emit?.();
     ui.flash(`„${library.get(vr)?.name ?? 'Variante'}“ – eigener Klang nur für diesen Clip.`);
+    variantFlash = vr;
   });
 
   // ---------- Welle ----------
@@ -244,7 +257,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     updaters.push((ctx) => {
       const v = ctx.r[field] ?? def ?? RECIPE[field].def;
       setVal(input, toUi(v));
-      out.textContent = fmt(v);
+      setOut(out, fmt(v));
       r.hidden = show ? !show(ctx) : false;
     });
     return { r, input };
@@ -260,7 +273,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   // ---------- Form ----------
   {
     const { grund, fine } = panels.form;
-    rslider(grund, 'gain', 'Lautstärke', { min: -24, max: 12, step: 0.5, def: 0, fmt: (v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : '−'}${comma(Math.abs(v), 1)} dB`) });
+    rslider(grund, 'gain', 'Pegel', { min: -24, max: 12, step: 0.5, def: 0, fmt: (v) => (v === 0 ? '0 dB' : `${v > 0 ? '+' : '−'}${comma(Math.abs(v), 1)} dB`) });
     rslider(grund, 'attack', 'Anschlag', { min: 0, max: 1000, step: 1, def: 0, ...sqTo(2000), fmt: fmtMs });
     rslider(grund, 'release', 'Ausklang', { min: 0, max: 1000, step: 1, def: 0, ...sqTo(5000), fmt: fmtMs });
     toggle(grund, 'Rückwärts', 'wb-reverse', () => !!recipe().reverse, (on) => patch({ reverse: on ? true : null }));
@@ -281,7 +294,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
       updaters.push((ctx) => {
         const v = field === 'start' ? ctx.r.start ?? 0 : Math.min(ctx.dur, ctx.r.end ?? ctx.dur);
         setVal(input, v.toFixed(2));
-        out.textContent = `${comma(v, 2)} s`;
+        setOut(out, `${comma(v, 2)} s`);
       });
     };
     num('Anfang im Original', 'start', 'wb-start-num');
@@ -328,7 +341,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     sr.insertBefore(el('span', null, 'Halbtöne'), minus);
     sr.insertBefore(sOut, plus);
     grund.append(sr);
-    updaters.push((ctx) => { const v = ctx.r.semis ?? 0; sOut.textContent = v ? `${signed(v)} Halbtöne` : '0 Halbtöne'; minus.disabled = v <= -24; plus.disabled = v >= 24; });
+    updaters.push((ctx) => { const v = ctx.r.semis ?? 0; setOut(sOut, v ? `${signed(v)} ${Math.abs(v) === 1 ? 'Halbton' : 'Halbtöne'}` : '0 Halbtöne'); minus.disabled = v <= -24; plus.disabled = v >= 24; });
     rslider(grund, 'cents', 'Feinstimmung', { min: -100, max: 100, step: 1, def: 0, fmt: (v) => `${signed(v)} Cent` });
     const auto = btn(grund, 'Auf Tonart', 'wb-tonart', () => {
       const pc = detect()?.done;
@@ -415,10 +428,10 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
       loop.setAttribute('aria-pressed', String(isLoop));
       lenRow.hidden = !isLoop;
       const b = store.project.sampleTempo?.[cur.id] ?? s.beats;
-      lenOut.textContent = b ? fmtBeats(b) : '';
+      setOut(lenOut, b ? fmtBeats(b) : '');
       const sb = soundBpm(s);
       bpmRow.hidden = !isLoop;
-      bpmOut.textContent = sb ? `${fmtBpm(sb)} BPM` : '';
+      setOut(bpmOut, sb ? `${fmtBpm(sb)} BPM` : '');
       setVal(bpmIn, sb ? Math.round(sb * 10) / 10 : '');
       reset.hidden = store.project.sampleTempo?.[cur.id] == null;
       stretch.r.hidden = isLoop;
@@ -440,12 +453,12 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
         input.max = String(mx);
         const v = get(c);
         setVal(input, v);
-        out.textContent = fmt(v);
+        setOut(out, fmt(v));
         r.hidden = id.includes('curve') ? !(id.includes('in') ? c.fadeInBeats : c.fadeOutBeats) : false;
       });
       return { r, input };
     };
-    cslider(grund, 'Lautstärke', 'wb-clip-gain', 0, 1, 0.01, (c) => clipGain(c), (c, v, k) => store.setClip(c.id, { gain: v }, k), formatDb, 'insp-gain');
+    cslider(grund, 'Clip-Lautstärke', 'wb-clip-gain', 0, 1, 0.01, (c) => clipGain(c), (c, v, k) => store.setClip(c.id, { gain: v }, k), formatDb, 'insp-gain');
     cslider(grund, 'Einblenden', 'wb-clip-in', 0, 4, 0.25, (c) => c.fadeInBeats || 0, (c, v, k) => store.setClip(c.id, { fadeInBeats: clamp(v, 0, c.lengthBeats - (c.fadeOutBeats || 0)) }, k), fmtBeats, 'insp-in');
     cslider(grund, 'Ausblenden', 'wb-clip-out', 0, 4, 0.25, (c) => c.fadeOutBeats || 0, (c, v, k) => store.setClip(c.id, { fadeOutBeats: clamp(v, 0, c.lengthBeats - (c.fadeInBeats || 0)) }, k), fmtBeats, 'insp-out');
     const speedBox = el('div', 'insp-clip-speed');
