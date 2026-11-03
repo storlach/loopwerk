@@ -2890,6 +2890,8 @@
   .tab-werkbank, .deck-name, .kiste-btn { display: none; }
 
   /* Dichte calm */
+  /* Werkbank statt Inspektor: kein Clip-Rahmen (Loopwerk 2.x) – die Farbe zeigen Welle und Herkunftspunkt */
+  #app[data-density="calm"] .insp-sec.insp-clip, #app[data-density="calm"] .clip-levels { margin: 0; box-shadow: none; border-radius: 0; }
   /* Krachwerk, Spec krachwerk-1-geruest §5: Stufen, Schriftskala, Werkbank, Kiste, Daumenleiste, Werkzeug am Clip */
   #app[data-density="calm"] [data-tier="3"]:not([data-placed]):not([data-tier-only]) { display: none !important; }
   @media (max-width: 760px) { #app[data-density="calm"] [data-tier="3"][data-tier-only="narrow"]:not([data-placed]) { display: none !important; } }
