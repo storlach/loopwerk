@@ -2899,6 +2899,8 @@
   .tab-werkbank, .deck-name, .kiste-btn { display: none; }
 
   /* Dichte calm */
+  /* Einstellbares im Deck: Linie statt Rahmen („Einstellungen sind Linien“) */
+  #app[data-density="calm"] .lcd .lcd-edit :is(.lcd-input, .key-sel) { box-shadow: inset 0 -1px 0 var(--key-line); border-radius: 0; }
   /* Werkbank statt Inspektor: kein Clip-Rahmen (Loopwerk 2.x) – die Farbe zeigen Welle und Herkunftspunkt */
   #app[data-density="calm"] .insp-sec.insp-clip, #app[data-density="calm"] .clip-levels { margin: 0; box-shadow: none; border-radius: 0; }
   /* Krachwerk, Spec krachwerk-1-geruest §5: Stufen, Schriftskala, Werkbank, Kiste, Daumenleiste, Werkzeug am Clip */
