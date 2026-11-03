@@ -28,7 +28,7 @@
 
 ### Offen aus Stufe 3
 - ~~VCSL (echte Instrumente)~~ (erledigt in 2.4)
-- Tempowechsel schneller (Worker, benutzte Sounds zuerst)
+- ~~Tempowechsel schneller (Worker, benutzte Sounds zuerst)~~ (erledigt): `Library.setTempo(bpm, { first })` bereitet die Sounds des Songs zuerst vor (parallel), den Rest danach im Hintergrund; was dort noch nicht dran war, macht `ensure()` beim Vorhören/Einsetzen sofort. Echte Loops dehnt der Rechen-Worker (WSOLA), jeder Auftrag beginnt in einer eigenen Aufgabe – keine langen Aufgaben im Hauptthread. Ein neuer Wert verwirft ältere Aufträge (laufende Rechnungen werden fertig, aber nicht übernommen). Die Wiedergabe läuft weiter: die Engine setzt an der gehörten Stelle im neuen Tempo an; Sounds, die noch im alten Tempo vorliegen, klingen bis zur neuen Fassung mit `playbackRate` neu/alt (wie Tonband: Raster stimmt, Tonhöhe kurz verschoben) – lieber das als Stille; fertige tauscht `_resync` ohne Stopp ein. Gemessen auf der Testmaschine: Sounds des Songs nach etwa 0,35 s statt 1,2–3 s, alle geladenen nach etwa 2 s statt 3–7 s, längste Aufgabe im Hauptthread unter 50 ms statt etwa 0,9 s. Test: `tests/tempo-fast.test.cjs`.
 - ~~Tonart wählbar~~ (erledigt, auch je Takt)
 
 ## ✅ Stufe 4 – Mixer und Effekte (0.4)
@@ -267,7 +267,7 @@
 - Regal ohne Kategorie-Chips: nur „★ Favoriten“, Kategorien/Genres über die Akkordeons, die zu Beginn geschlossen sind (Zustand gilt für die Sitzung); Suchfeld und Längen-Filter passen wieder in die Leiste
 - Harmonie: Tonart- und Akkordzeile über den Schalter „Harmonie“ in der Ecke „Takt“, zu Beginn zu, Leuchtpunkt bei verborgenen Wechseln
 - Deck: einstellbare Felder (Tempo, Tonart) mit Rahmen, Tonart mit Pfeil; Takt/Schlag/Zeit reine Anzeige
-- Mastering: Schalter oben, darunter nur bei „an“ Messwert, Stil (2 × 2) und Vergleich „Aus · Vorher · Nachher“ (statt A/B-Knopf mit ×)
+- Song-Leiste in Blöcken nach dem Signalweg (Song · Master · Verlauf der Summe · Mastering) mit Abstand und Linie; Mastering als eigener Block: Überschrift links, Schalter rechts, darunter nur bei „an“ Messwert, Stil (2 × 2) und Vergleich „Aus · Vorher · Nachher“ (statt A/B-Knopf mit ×); im Handy-Fach „Song“ ebenso abgesetzt
 - Tests: `openApp` startet wie früher (Drums offen, Harmonie sichtbar), `fresh: true` zeigt den echten Start; `reveal` klappt Regal-Gruppen auf; Zählbasis Krachwerk auf den neuen Startzustand
 - Inspektor: Clip-Einstellungen ganz in der Clip-Farbe umrandet (Desktop und Handy-Clip-Leiste), Spur-Einstellungen neutral ohne Farbe – die Zuordnung ist auf einen Blick klar
 - Raumlicht: Rand-Glühen (Martins Wahl aus einer dritten Runde mit acht ruhigeren Entwürfen: Rand-Glühen, Bühnenlicht, Farbfelder, Plakat, Bokeh, Lamellen, Horizont, Wasserlicht). Man soll ablesen können, was klingt, ohne dass es von den Clips ablenkt: die Mitte bleibt ruhig (umgekehrte Vignette), an der Unterkante das ganze Spektrum von links tief nach rechts hoch mit feinem LED-Streifen, links trägt der Bass, rechts die Höhen die Seite, oben ein Hauch. Jede Stelle in der Farbe der Spur, die dort klingt (Spektrum je Spur, `engine.trackBands`); wie weit das Licht hereinreicht, zeigt den Pegel; Anstieg gut 50 ms, Ausklang gut 0,8 s, Farben gleiten in gut 0,4 s. Die Spektrum-Wand (Punktraster) ist gemerkt: Commit 293fdc2
@@ -279,6 +279,7 @@
 - ✅ Scheibe 2a „Sound-Werkbank“ (`docs/specs/krachwerk-2-werkbank.md`, ADR 010): Klang-Rezept am Sound (nicht-destruktiv, gebacken, eine Signalkette; Varianten), Werkbank mit Welle (Anfang/Ende/Anschlag/Ausklang) und Reitern Form · Ton · Farbe · Zeit · Clip, Herkunft (Material Körper/Dinge/Stimme/Strom/Schleife) mit gleicher Farbe in Kiste und Song, Stammbaum-Zeile; Zählung Desktop „Clip gewählt“ 45 / 11 / 4
 - ✅ Scheibe 2b „Zerlegen“ (`docs/specs/krachwerk-2b-zerlegen.md`): Reiter Zerlegen (An Anschlägen | In N gleiche, Empfindlichkeit, In die Kiste, Auf die Spur), verschiebbare Marken auf der Welle, Schnitte als Varianten (ein Undo), Autotune als Rezeptschritt, Trennen in der Werkbank, Werkbank direkt aus der Kiste, 56-px-Kopfzeile der Handy-Schublade, Sample-Editor in Krachwerk ersetzt (Zwillinge), eigenes Zeichen im Deck
 - Als Nächstes Scheibe 3: Takes (Aufnahme im Loop über den laufenden Song), Festhalten (Resampling), Speicher v2 und ZIP-Sicherung
+- ✅ Regal „Eine Zeile“ (Entwurf `docs/ux/filter-layouts/`, Variante 1 mit Anleihen aus 3): Suche, Regler-Knopf (Fach mit Länge und Ordnen, schließt nach der Wahl) und Favoriten-Stern in einer 44-px-Zeile für Handy und Desktop; gewählter Wert im Knopf, × setzt alles zurück, Anzahl und Pegel auf den Längen, Trefferzahl im Suchfeld, „Alle“ entfällt; Test `tests/filter-zeile.test.cjs`, Zählbasis Desktop-Start 92 → 85
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

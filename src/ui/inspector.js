@@ -349,10 +349,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   masterCurve.id = 'insp-master-curve';
   masterCurve.addEventListener('click', () => ui.autoLane?.toggle('master'));
   masterAuto.append(el('span', 'insp-kind', 'Verlauf der Summe'), masterTpl.node, masterCurve);
-  songSec.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools, masterSub);
-  // Mastering der Summe: direkt unter „Master“, vor Lautstärke und Effekten
-  const mstSlot = el('div', 'insp-mst');
-  songSec.append(mstSlot);
+  // Song-Leiste in Blöcken nach dem Signalweg: Song · Master (Lautstärke, Effekte) · Verlauf der Summe · Mastering
+  const grp = (cls) => el('div', `insp-grp ${cls}`);
+  const songGrp = grp('insp-grp-song');
+  songGrp.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools);
+  const masterGrp = grp('insp-grp-master');
+  masterGrp.append(masterSub);
+  const autoGrp = grp('insp-grp-auto');
+  autoGrp.append(masterAuto);
+  const mstSlot = grp('insp-mst');
+  songSec.append(songGrp, masterGrp, autoGrp, mstSlot);
   if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
@@ -447,7 +453,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       lenOut.textContent = `${store.project.lengthBars} Takte`;
       // Master-Lautstärke und Master-Effekte unter „Master“
       const m = masterOf(store.project);
-      if (vol.row.parentElement !== songSec) songSec.append(vol.row, masterAuto, fxl);
+      if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl);
       masterTpl.update();
       const open = !!ui.autoLane?.isOpen('master');
       const has = autoKeys('master').some((k) => laneOf(m, k).length);

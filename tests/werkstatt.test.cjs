@@ -167,7 +167,7 @@ async function seedPadWall() {
     check('Kein Code der alten Pad-Wand geladen', proto.length === 0, proto.join(', '));
     console.log(`   Startzeit bis „ready“ (Handy, lokal): ${A.startMs} ms`);
     const surf = await page.evaluate(() => {
-      const sel = ['#starter', '.ccard[data-create="accomp"]', '#pat-continue', '.sing-desc-field', '#sing-sound', '[data-link-open]', '.ccard[data-create="link"]', '#link-pop', '#tab-capture', '.shelf-sort', '.shelf-credit', '#pop-about', '#demo-btn', '#tips-reset', '#shelf-filter-btn', '#shelf-chips'];
+      const sel = ['#starter', '.ccard[data-create="accomp"]', '#pat-continue', '.sing-desc-field', '#sing-sound', '[data-link-open]', '.ccard[data-create="link"]', '#link-pop', '#tab-capture', '#shelf-filters', '.shelf-credit', '#pop-about', '#demo-btn', '#tips-reset', '#shelf-filter-btn', '#shelf-fav'];
       const off = sel.filter((q) => { const n = document.querySelector(q); return n && n.hasAttribute('data-off') && getComputedStyle(n).display === 'none'; });
       const keep = ['#import-btn', '.ccard[data-create="beat"]', '.ccard[data-create="melody"]', '.ccard[data-create="sing"]', '#rec-btn'].filter((q) => document.querySelector(q) && !document.querySelector(q).closest('[data-off]'));
       return { off: off.length, all: sel.length, missing: sel.filter((q) => !off.includes(q)), keep: keep.length };

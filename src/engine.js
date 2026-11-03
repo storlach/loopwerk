@@ -358,16 +358,20 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null, 
 // der Tonart des jeweiligen Takts – läuft ein Segment über einen Tonartwechsel, wird es an der Taktgrenze geteilt und
 // mit derselben Position in der umgestimmten Fassung fortgesetzt (Schnittkante überblendet startVoice).
 // Fehlt eine Fassung noch, klingt der Grund-Sound; die Signatur ändert sich, sobald sie da ist (Live-Resync).
+// Nach einem Tempowechsel klingt ein Sound, der noch nicht neu vorbereitet ist, im alten Puffer mit playbackRate
+// neu/alt (wie Tonband): Tempo und Raster stimmen sofort, die Tonhöhe weicht kurz ab, bis die neue Fassung da ist.
 export function clipPieces(project, library, clip, ranges, { stale = false } = {}) {
-  const base = sampleFor(library, clip);
+  const base = sampleFor(library, clip, stale);
   if (!base?.buffer) return [];
+  const tempoRate = (s) => (s.atBpm && Math.abs(s.atBpm - project.bpm) > 1e-9 ? project.bpm / s.atBpm : 1);
   // Wie Tonband: der Grund-Sound läuft langsamer/schneller und reicht entsprechend länger/kürzer (Tonart-Sounds nie, s. tapeRate)
   const rate = tapeRate(library, clip);
-  if (rate !== 1) return audibleSegments(clip, base.lengthBeats / rate, ranges).map((x) => ({ ...x, sample: base, rate }));
+  if (rate !== 1) return audibleSegments(clip, base.lengthBeats / rate, ranges).map((x) => ({ ...x, sample: base, rate: rate * tempoRate(base) }));
   const segs = audibleSegments(clip, base.lengthBeats, ranges);
+  const r0 = tempoRate(base);
   // Begleit-Patterns folgen zusätzlich dem Akkord-Streifen: je Abschnitt die Fassung auf der dortigen Stufe, Pause = still
   const chords = !!library.followsChords?.(clip.sampleId);
-  if (!chords && !(keyChangesOf(project).length && library.followsKey?.(clip.sampleId))) return segs.map((x) => ({ ...x, sample: base }));
+  if (!chords && !(keyChangesOf(project).length && library.followsKey?.(clip.sampleId))) return segs.map((x) => ({ ...x, sample: base, rate: r0 }));
   const out = [];
   for (const x of segs) {
     for (const span of chords ? harmonySpans(project, x.from, x.to) : keySpans(project, x.from, x.to)) {
@@ -378,7 +382,7 @@ export function clipPieces(project, library, clip, ranges, { stale = false } = {
       const sample = v?.buffer && Math.abs(v.lengthBeats - base.lengthBeats) < EPS ? v : base;
       const last = out[out.length - 1];
       if (last && last.seg === x.seg && last.sample === sample && Math.abs(last.to - span.from) < EPS) last.to = span.to;
-      else out.push({ seg: x.seg, from: span.from, to: span.to, sample });
+      else out.push({ seg: x.seg, from: span.from, to: span.to, sample, rate: tempoRate(sample) });
     }
   }
   return out;
@@ -633,6 +637,7 @@ export class Engine extends Emitter {
     if (countIn > 0) this._metronome(0, countIn, pre, true);
     const t0 = pre + countIn * this.spb;
     this.playing = true;
+    this._playBpm = this.project.bpm;
     this.startBeat = fromBeat;
     this.anchors = [{ time: t0, beat: fromBeat }];
     // Taktsynchrone Effekte auf den neuen Start ausrichten
@@ -680,11 +685,11 @@ export class Engine extends Emitter {
   }
 
   // Songposition zu einer Kontextzeit (Standard: jetzt, also die Planungszeit)
-  currentBeat(at = this.ctx?.currentTime) {
+  currentBeat(at = this.ctx?.currentTime, spb = this.spb) {
     if (!this.playing || !this.ctx || !this.anchors.length) return this.positionBeat;
     let a = this.anchors[0];
     for (const x of this.anchors) if (x.time <= at) a = x;
-    return Math.max(a.beat, a.beat + (at - a.time) / this.spb);
+    return Math.max(a.beat, a.beat + (at - a.time) / spb);
   }
 
   // Kontextzeit, die gerade aus dem Lautsprecher kommt. Die Uhr läuft der Ausgabe um die Ausgabelatenz voraus
@@ -1004,7 +1009,7 @@ export class Engine extends Emitter {
   // plant die Engine den Clip ohne Stopp neu.
   _sig(track, clip) {
     const ranges = this._audible().get(clip.id) ?? [];
-    const base = sampleFor(this.library, clip);
+    const base = sampleFor(this.library, clip, true);
     let sig = clipSignature(track.id, clip) + '|' + (base?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
     if (this.library.followsChords?.(clip.sampleId)) {
       // Akkord-Streifen: auch Pausen und Abschnitte auf Stufe i gehören dazu
@@ -1033,6 +1038,14 @@ export class Engine extends Emitter {
     if (this.ctx) this._releaseAuto();
     this._lanes = null;
     if (!this.ctx) return;
+    // Tempo während der Wiedergabe geändert: die Anker gelten fürs alte Tempo – an der gehörten Stelle im neuen neu ansetzen.
+    // Sounds, die noch im alten Tempo vorliegen, gleicht clipPieces aus; fertige Fassungen tauscht _resync ohne Stopp ein.
+    if (this.playing && this._playBpm && this.project.bpm !== this._playBpm) {
+      const pos = this.currentBeat(this.heardTime(), 60 / this._playBpm);
+      this._playBpm = this.project.bpm;
+      this.play(pos);
+      return;
+    }
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     this._syncAutoChains();
     if (this.playing) this._resync();

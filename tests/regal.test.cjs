@@ -16,17 +16,20 @@ const DIR = process.env.SHOT_DIR || '/tmp';
       return [...document.querySelectorAll('#library .loop-item')].map((n) => library.get(n.dataset.sampleId)).filter(Boolean)
         .map((s) => ({ kind: s.kind, bars: s.lengthBeats / 4 }));
     });
-    await page.click('.shelf-len .seg[data-len="shot"]');
+    // Länge liegt im Fach hinter dem Regler-Knopf: erst öffnen, nach der Wahl schließt es selbst
+    const pick = async (sel) => { if (await page.getAttribute('#shelf-filter-btn', 'aria-expanded') !== 'true') await page.click('#shelf-filter-btn'); await page.click(sel); };
+    await pick('.shelf-len .seg[data-len="shot"]');
     let v = await visible();
     check('Filter One-Shot: nur Einzelklänge', v.length > 50 && v.every((s) => s.kind !== 'loop'), String(v.length));
-    await page.click('.shelf-len .seg[data-len="2"]');
+    await pick('.shelf-len .seg[data-len="2"]');
     v = await visible();
     check('Filter 2 Takte: nur Loops mit 2 Takten', v.length > 3 && v.every((s) => s.kind === 'loop' && s.bars > 1 && s.bars <= 2), String(v.length));
     check('Längenfilter lässt „Ordnen“ unberührt', await page.getAttribute('.shelf-sort .seg[data-sort="cat"]', 'aria-pressed') === 'true');
-    await page.click('.shelf-len .seg[data-len="2"]');
-    check('Noch einmal tippen hebt den Filter auf', await page.getAttribute('.shelf-len .seg[data-len="all"]', 'aria-pressed') === 'true');
-    await page.click('.shelf-len .seg[data-len="1"]');
-    await page.click('.shelf-len .seg[data-len="all"]');
+    await pick('.shelf-len .seg[data-len="2"]');
+    check('Noch einmal tippen hebt den Filter auf', await page.evaluate(() => document.querySelector('.shelf-len .seg[aria-pressed="true"]') === null && document.getElementById('shelf-filter-n').textContent === ''));
+    await pick('.shelf-len .seg[data-len="1"]');
+    await page.click('#shelf-reset');
+    check('× setzt alle Filter zurück', await page.evaluate(() => document.querySelector('.shelf-len .seg[aria-pressed="true"]') === null && document.getElementById('shelf-reset').hidden));
 
     // ---------- Wellenform nur in der gewählten Zeile ----------
     check('Ohne Auswahl keine Wellenform im Regal', await page.locator('.loop-wave').count() === 0);
@@ -101,19 +104,21 @@ const DIR = process.env.SHOT_DIR || '/tmp';
       const b = document.getElementById('shelf-filter-btn').getBoundingClientRect();
       return { sameRow: Math.abs(s.top - b.top) < 4 && b.left > s.right - 1, hidden: !document.querySelector('.shelf-len').offsetParent };
     });
-    check('Handy: Knopf „Filter“ neben der Suche, Filter zunächst zu', fb.sameRow && fb.hidden, JSON.stringify(fb));
+    check('Handy: Regler-Knopf in der Suchzeile, Fach zunächst zu', fb.sameRow && fb.hidden, JSON.stringify(fb));
     await page.tap('#shelf-filter-btn');
-    await page.tap('.shelf-len .seg[data-len="shot"]');
     await page.evaluate(() => { document.querySelector('.shelf').scrollTop = 500; });
     await page.waitForTimeout(200);
     const fo = await page.evaluate(() => {
       const len = document.querySelector('.shelf-len').getBoundingClientRect();
       const sh = document.querySelector('.shelf').getBoundingClientRect();
-      return { n: document.getElementById('shelf-filter-n').textContent, visible: len.top >= sh.top && len.bottom <= sh.bottom, expanded: document.getElementById('shelf-filter-btn').getAttribute('aria-expanded') };
+      return { visible: len.top >= sh.top && len.bottom <= sh.bottom, expanded: document.getElementById('shelf-filter-btn').getAttribute('aria-expanded') };
     });
-    check('Handy: Filter offen bleiben beim Scrollen sichtbar, Zahl zeigt 1 aktiven', fo.n === '1' && fo.visible && fo.expanded === 'true', JSON.stringify(fo));
-    await page.tap('.shelf-len .seg[data-len="all"]');
-    await page.tap('#shelf-filter-btn');
+    check('Handy: offenes Fach bleibt beim Scrollen sichtbar', fo.visible && fo.expanded === 'true', JSON.stringify(fo));
+    await page.tap('.shelf-len .seg[data-len="shot"]');
+    await page.waitForTimeout(400);
+    const fc = await page.evaluate(() => ({ n: document.getElementById('shelf-filter-n').textContent, expanded: document.getElementById('shelf-filter-btn').getAttribute('aria-expanded') }));
+    check('Handy: Fach schließt nach der Wahl, Wert „Shot“ steht im Knopf', fc.n === 'Shot' && fc.expanded === 'false', JSON.stringify(fc));
+    await page.tap('#shelf-reset');
     await page.evaluate(() => { window.loopwerk.ui.setDock('mixer'); });
     await page.waitForTimeout(600);
     check('Handy: Schubladengriff groß (Strich ≥ 56 px, Fassbereich reicht unter den Griff)', grip.h >= 24 - 0.01 && grip.bar >= 56 && grip.hit, JSON.stringify(grip));
