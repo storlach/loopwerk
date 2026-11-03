@@ -18,7 +18,7 @@ import { mountSoundKey } from './sound-key.js';
 import { mountMasteringControls } from './mastering.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
-import { AUTO_PARAMS, autoKeys, isAutomated, laneOf } from '../automation.js';
+import { AUTO_PARAMS, autoKeys, busUsed, isAutomated, laneOf, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
 
 // Laufzeit-Stufen für − und +
@@ -301,8 +301,12 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     r.input.addEventListener('input', () => { if (trackId && trackId !== MASTER) store.setSend(trackId, b.id, Number(r.input.value), `send-${trackId}-${b.id}`); });
     // Doppelklick = aus; der Regler hat dann den Fokus, also den Wert selbst setzen
     r.input.addEventListener('dblclick', () => { if (trackId && trackId !== MASTER) { r.input.value = '0'; store.setSend(trackId, b.id, 0); } });
-    busBlock.append(r.row);
-    return [b, r];
+    // Send mit Kurve: gedimmt, folgt der Kurve, Klick öffnet die Kurvenzeile (wie die Effekt-Werte)
+    const box = el('div', 'insp-send-box');
+    box.append(r.row);
+    const lock = autoLock({ ui, key: sendKey(b.id), wrap: box, input: r.input, getTrackId: () => (trackId && trackId !== MASTER ? trackId : null) });
+    busBlock.append(box);
+    return [b, r, lock];
   });
   const sendText = (v) => (v > 0 ? `${Math.round(v * 100)} %` : 'aus');
 
@@ -518,7 +522,8 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         pan.out.textContent = panText(track.pan || 0);
       }
       if (fxl.parentElement !== trackSec) trackSec.append(fxl, fxReset.node, addFx, fxPick, busBlock, mixerLink);
-      for (const [b, r] of sendRows) {
+      for (const [b, r, lock] of sendRows) {
+        if (lock.update(track)) { showSend(track, b, r); continue; }
         const v = sendOf(track, b.id);
         if (document.activeElement !== r.input) r.input.value = String(v);
         r.out.textContent = sendText(v);
@@ -550,7 +555,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
       // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)
-      const used = (id) => store.project.tracks.some((t) => sendOf(t, id) > 0);
+      const used = (id) => busUsed(store.project, id);
       for (const [id, box] of busBoxes) box.hidden = !used(id);
       busGrp.hidden = ![...busBoxes.values()].some((box) => !box.hidden);
       for (const c of busCtl) {
@@ -593,8 +598,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const anyLocked = () => {
     if (!lockTrack()) return false;
     const fx = fxCtl().some(([c]) => !c.lock.btn.hidden);
-    return songMode() ? !songSec.hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx);
+    return songMode() ? !songSec.hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx || sendRows.some(([, , l]) => !l.btn.hidden));
   };
+  // Gesperrter Send: Wert der Kurve an der Marke
+  function showSend(track, b, r) {
+    const v = Math.round(lockedValue(track, sendKey(b.id), engine) * 100) / 100;
+    if (Number(r.input.value) !== v) r.input.value = String(v);
+    const text = sendText(v);
+    if (r.out.textContent !== text) r.out.textContent = text;
+    r.row.classList.toggle('on', v > 0);
+  }
   function showFx(c, p) {
     const track = lockTrack();
     if (!track) return;
@@ -616,6 +629,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const track = lockTrack();
     if (!track || !anyLocked()) { follow = 0; return; }
     if (!songMode() && panLock.update(track)) showPan(track);
+    if (!songMode()) for (const [b, r, lock] of sendRows) if (lock.update(track)) showSend(track, b, r);
     for (const [c, p] of fxCtl()) if (c.lock.update(track)) showFx(c, p);
     const fx = fxOf();
     for (const e of EFFECTS) {

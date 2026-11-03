@@ -6,7 +6,7 @@ import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS, BUSES, busOf, sendOf, createBus } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
-import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey } from './automation.js';
+import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey, sendKey, sendActive } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 // Stillstand mit ausgeblendeter Summe: so lange hält die Master-Kurve, damit Hall-/Echo-Fahnen nicht wieder aufleben
@@ -44,6 +44,11 @@ const STRIP_PARAMS = { volume: (strip) => strip.auto.gain, pan: (strip) => strip
 function laneTarget(strip, key) {
   const spec = AUTO_PARAMS[key];
   if (!spec) return null;
+  // Send-Kurve: Gain des Sends dieser Spur zum Bus – gibt es ihn (noch) nicht, wirkt die Kurve nicht
+  if (spec.send) {
+    const g = strip.sends?.[spec.send];
+    return g ? { param: g.gain, map: spec.map } : null;
+  }
   if (spec.fx) {
     const a = strip.chain?.units?.[spec.fx]?.auto?.[spec.param];
     return a ? { param: a.param, map: a.map } : null;
@@ -75,7 +80,8 @@ function autoStrips(project, mix) {
 // Regler-Parameter, die eine Kurve gerade übernimmt (syncStrip/updateFxParams lassen sie aus)
 const FX_KEYS = Object.values(AUTO_PARAMS).filter((p) => p.fx);
 function skipOf(owner) {
-  const skip = { pan: laneOf(owner, 'pan').length > 0, fx: null };
+  const skip = { pan: laneOf(owner, 'pan').length > 0, fx: null, sends: {} };
+  for (const b of BUSES) if (laneOf(owner, sendKey(b.id)).length) skip.sends[b.id] = true;
   for (const p of FX_KEYS) {
     if (!laneOf(owner, p.key).length) continue;
     skip.fx ||= {};
@@ -308,7 +314,7 @@ function syncBuses(ctx, project, mix, spb, live) {
     let bus = mix.buses.get(b.id);
     const fresh = !bus;
     if (!bus) {
-      if (!project.tracks.some((tr) => sendOf(tr, b.id) > 0)) continue;
+      if (!project.tracks.some((tr) => sendActive(tr, b.id))) continue;
       bus = createBus(ctx, b.id);
       bus.output.connect(mix.master);
       mix.buses.set(b.id, bus);
@@ -324,18 +330,22 @@ function syncBuses(ctx, project, mix, spb, live) {
     if (!strip) continue;
     for (const b of BUSES) {
       const v = sendOf(track, b.id);
+      // Mit Kurve gehört der Gain der Automation (ein Besitzer je AudioParam): der Regler schreibt nicht hinein
+      const curve = laneOf(track, sendKey(b.id)).length > 0;
       const bus = mix.buses.get(b.id);
       let g = strip.sends[b.id];
-      if (v > 0 && bus) {
+      if ((v > 0 || curve) && bus) {
         if (!g) {
           g = ctx.createGain();
-          g.gain.value = live ? 0 : v;
+          g.gain.value = live && !curve ? 0 : v;
           strip.out.connect(g).connect(bus.input);
           strip.sends[b.id] = g;
+          strip.sendGen = (strip.sendGen || 0) + 1; // neuer Knoten: _syncAutoChains plant die Kurve darauf
         }
-        to(g.gain, v);
+        if (!curve) to(g.gain, v);
       } else if (g) {
         delete strip.sends[b.id];
+        strip.sendGen = (strip.sendGen || 0) + 1;
         const drop = () => { try { strip.out.disconnect(g); } catch { /* schon getrennt */ } g.disconnect(); };
         if (live) { to(g.gain, 0); later(ctx, 0.1, drop); } else drop();
       }
@@ -674,6 +684,16 @@ export class Engine extends Emitter {
       };
       this.mix.onStrip = tapStrip;
       for (const [id, strip] of this.mix.tracks) tapStrip(id, strip);
+      // Pegel der Rückkanäle (Ausgang des Busses, hinter seinem Fader); ein Bus entsteht erst mit dem ersten Send
+      this.busMeters = new Map();
+      const tapBus = (id, bus) => {
+        const a = this.ctx.createAnalyser();
+        a.fftSize = 512;
+        bus.output.connect(a);
+        this.busMeters.set(id, { analyser: a, data: new Float32Array(a.fftSize) });
+      };
+      this.mix.onBus = tapBus;
+      for (const [id, bus] of this.mix.buses) tapBus(id, bus);
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
       this.mix.output.connect(this.analyser);
@@ -857,10 +877,11 @@ export class Engine extends Emitter {
       const strip = id === MASTER_TARGET ? this.mix.masterStrip : this.mix.tracks.get(id);
       if (!strip) continue;
       let lanes = this._laneCache.get(id);
-      if (!lanes || lanes.strip !== strip || lanes.chain !== strip.chain) {
+      if (!lanes || lanes.strip !== strip || lanes.chain !== strip.chain || lanes.sendGen !== strip.sendGen) {
         lanes = stripLanes(strip, track, id);
         lanes.strip = strip;
         lanes.chain = strip.chain;
+        lanes.sendGen = strip.sendGen;
         this._laneCache.set(id, lanes);
       }
       for (const l of lanes) fn(l, strip);
@@ -919,16 +940,21 @@ export class Engine extends Emitter {
   _syncAutoChains(plan = true) {
     if (!this.mix) return;
     for (const [id, strip] of this._strips()) {
-      if (strip.autoChain === strip.chain) continue;
+      // Neue Kette (Effekt-Kurven) oder neue/entfernte Send-Knoten (Send-Kurven): die betroffenen Kurven gehören neuen Parametern
+      const chainNew = strip.autoChain !== strip.chain;
+      const sendsNew = (strip.autoSends ?? 0) !== (strip.sendGen ?? 0);
+      if (!chainNew && !sendsNew) continue;
       strip.autoChain = strip.chain;
+      strip.autoSends = strip.sendGen ?? 0;
+      const hit = (key) => (chainNew && !!fxOfKey(key)) || (sendsNew && !!AUTO_PARAMS[key]?.send);
       for (const key of [...strip.autoOn]) {
-        if (!fxOfKey(key)) continue;
+        if (!hit(key)) continue;
         strip.autoOn.delete(key);
         if (strip.autoHeld) delete strip.autoHeld[key];
       }
       const track = this._autoOwner(id);
       if (!plan || !track) continue;
-      const lanes = stripLanes(strip, track, id).filter((l) => fxOfKey(l.key) && l.points.length);
+      const lanes = stripLanes(strip, track, id).filter((l) => hit(l.key) && l.points.length);
       if (lanes.length) this._planNow(strip, lanes);
     }
   }
@@ -1250,6 +1276,18 @@ export class Engine extends Emitter {
     const m = this.meters?.get(trackId);
     if (!m) return 0;
     return this._lagged(trackId, () => {
+      m.analyser.getFloatTimeDomainData(m.data);
+      let p = 0;
+      for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
+      return p;
+    });
+  }
+
+  // Pegel eines Rückkanals (Hall-/Echo-Bus); 0, solange der Bus noch nicht gebaut ist
+  busPeak(busId) {
+    const m = this.busMeters?.get(busId);
+    if (!m) return 0;
+    return this._lagged(`bus:${busId}`, () => {
       m.analyser.getFloatTimeDomainData(m.data);
       let p = 0;
       for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }

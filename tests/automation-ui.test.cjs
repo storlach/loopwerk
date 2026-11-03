@@ -202,7 +202,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
       const m = document.querySelector('.auto-keys');
       return { open: !!m && !m.hidden, items: [...m.querySelectorAll('.auto-key[data-key]')].map((b) => ({ key: b.dataset.key, text: b.textContent, lit: !!b.querySelector('.auto-dot.on'), checked: b.getAttribute('aria-checked') })) };
     });
-    check('Chip ist eine Auswahl: Lautstärke, Panorama, Filter-Frequenz, Hall-, Echo-, Verzerrer-Anteil', km.open && km.items.map((x) => x.text).join() === 'Lautstärke,Panorama,Filter-Frequenz,Hall-Anteil,Echo-Anteil,Verzerrer-Anteil', JSON.stringify(km.items.map((x) => x.text)));
+    check('Chip ist eine Auswahl: Lautstärke, Panorama, Filter-Frequenz, Hall-, Echo-, Verzerrer-Anteil, → Hall-Bus, → Echo-Bus (2.14)', km.open && km.items.map((x) => x.text).join() === 'Lautstärke,Panorama,Filter-Frequenz,Hall-Anteil,Echo-Anteil,Verzerrer-Anteil,→ Hall-Bus,→ Echo-Bus', JSON.stringify(km.items.map((x) => x.text)));
     check('Chip: Lautstärke (mit Kurve) trägt einen Leuchtpunkt, Panorama (ohne) nicht', km.items[0]?.lit && !km.items[1]?.lit && km.items[0].checked === 'true', JSON.stringify(km.items));
     await page.click('.auto-key[data-key="pan"]');
     const panRow = await page.evaluate(() => ({
