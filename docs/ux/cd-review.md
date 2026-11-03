@@ -4,6 +4,57 @@ Neueste Prüfung oben.
 
 ---
 
+## Krachwerk Scheiben 3a–5 (03.11.2026)
+
+**Geprüft:** `shots-3a/` (Festhalten Handy und Desktop, Sicherung im alten Song-Fach), `shots-4/` (Start mit Startkarte, Kit, Pad-Wand und Instrument am Handy, Kit und Pad-Wand am Desktop), `shots-5/` (Song-Werkbank je Reiter an beiden Geräten, Export mit Zutatenzeile, Projekt-Feinheiten, `lw-calm-*`). Grundlage: `synthese.md`, Specs `krachwerk-3-festhalten.md`, `-4-kit.md`, `-5-song.md`. **Zählung Endziel:** Desktop *Clip gewählt* 45/13/4/11 (Ziel ≤ 45/≤ 35, Start war 112/117), Handy 17/8/4/11 (Ziel ≤ 22/≤ 15, Start 44/60), Handy *Song Mitte* 22/6. Takes (3b) fehlen, sie warten auf v2.13.
+
+### Gesamturteil
+
+**Ja, Krachwerk trägt Martins Wunsch.** Es ist Loopwerk mit Song, Spuren, Clips, Mischen und Export. Das Material entsteht aber nur aus dem Mikro, und die Oberfläche ist um 60 bis 90 % leiser, ohne dass eine Funktion fehlt (Inventar-Test). Schwach sind zwei Stellen, an denen die Marke sichtbar werden müsste: Das **Kit** wirkt wie ein Formular aus braunen Kacheln mit „Klang 1 · 3“ statt wie die eigenen Schläge. Und der **Export**, also der letzte Schritt, widerspricht sich selbst. Ganze Tracks über den laufenden Song einsingen kann man erst mit den Takes.
+
+**Freigabe zur Durchsicht an Martin: ja, mit Auflagen.** Die fünf Punkte mit „jetzt“ unten werden vorher behoben. Keiner braucht eine neue Spec. Als „Krachwerk 1.0“ würde ich es erst mit 3b bezeichnen (siehe Entscheidung 5).
+
+### Gelungen
+
+1. **Die Zahlen sind erreicht, und man sieht es.** 112 → 45 Bedienelemente und 117 → 13 Rahmen am Desktop, am Handy 44 → 17 und 60 → 8. Neben `kw-sicherung-handy.png` (3a: zwei weiße Pillen, Punktzeilen mit Links, „Leeren“ in Rot, Summe ein/aus) zeigt `kw-song-handy-song.png` den Unterschied: Kopf mit einer Weißglut-Fläche, fünf Reiter, vier Griffe, Feinheiten. Die Gefahr aus der Synthese („die Werkbank wird der neue Inspektor“) ist nicht eingetreten. Achtung: Am Desktop steht der Wert genau auf der Grenze 45, Luft gibt es keine mehr. Jedes neue Bedienelement muss ein anderes ersetzen.
+2. **Festhalten ist Resampling ohne Dialog.** Es gibt eine Linie „Festhalten“ am Lineal und keinen Kasten. Danach liegt „Schleife 1“ in Schleifen-Grün auf einer neuen Spur direkt unter den Quellen, die Quellen ruhen auf 50 %. Am Desktop ist „Bumm“ an der Bereichsgrenze sichtbar geteilt (links gedimmt, rechts klingt er weiter). Der Einblender sagt in vier Wörtern, was passiert ist. Ein fertiges Loopwerk hat das so nicht, eine Werkbank schon.
+3. **Die Startkarte lädt ein.** Auf Spur 1 steht eine einzige weiße Fläche, „● Mach ein Geräusch“, darunter zwei Linien. Sie liegt im Song und nicht in einem Dialog darüber, und sie verschwindet mit dem ersten Clip. Am Ende des Kit-Ablaufs spielt der Groove schon, und der Einblender sagt „7 Schläge – dein Kit spielt.“ Das ist die Spielfreude, die die Marke verspricht.
+4. **„2 Geräusche · 0 fremde Samples“.** Diese eine Zeile im Reiter Fertig und nach dem Export ist der Markenkern von Krachwerk in Zahlen. Mit der Zutatenliste in der Teilen-Nachricht und im WAV entsteht etwas, das man gern herzeigt.
+5. **Die Ruhe-Schicht funktioniert in Loopwerk.** `lw-calm-desktop.png` ist erkennbar Loopwerk (Katalog, acht Spuren, bunte Kategorien), aber mit Deck, Kiste und eingeklappter Werkbank aus Krachwerk. Die Basis von `/` bleibt dabei exakt. Martin kann über Ruhe für Loopwerk also an einem echten Bild entscheiden statt an einem Mockup.
+
+### Stört
+
+| # | Befund (an den Bildern) | Vorschlag | Wann |
+|---|---|---|---|
+| 1 | **Der Export widerspricht dem Kopf.** Über „Exportieren“ steht „32 Takte · 1:25“, die Datei ist aber 5,2 s (Handy) bzw. 7,8 s (Desktop) lang. Der Kopf zeigt `lengthBars`, während `exportRange` bis zum Ende des letzten Clips rendert (`src/export.js` `songEndBeat`). Der Regler „Länge“ im Grund des Reiters Song ändert am Export also nichts. Martin wird glauben, der Export sei kaputt. | Der Kopf zeigt, was der Export liefert: „2 Takte · 0:05“ (Bereich + Ausklang), bei „Nur Loop-Bereich“ dessen Länge. „Länge“ wandert in die Feinheiten und heißt dort „Arbeitsfläche“, damit Tempo · Tonart · Klick Grund bleiben. Test: Der Text im Kopf entspricht der WAV-Länge ± 0,1 s. | **jetzt** |
+| 2 | **Die Pads zeigen nicht deine Klänge.** Am Handy heißen alle „Klang 1 · 1“ bis „· 7“, obwohl das Kit „Klatschen 1“ heißt. Am Desktop steht „Klopfen · 6, 4, 5, 1“, also durcheinander. Alle sieben Pads haben dieselbe braune Fläche, die Herkunftsfarbe mit Deckkraft. Der Kit-Punkt im Kopf ist dagegen gelb, die Instrument-Tasten sind grau. „Still ist schwarz“ gilt hier nicht, und die Pads sehen nicht nach den eigenen Schlägen aus. | Pads sind still dunkel, wie leere Tasten. Unten haben sie eine Lichtkante in Herkunftsfarbe, beim Anschlag leuchtet die ganze Fläche kurz (motion-designer). Gewählt = Weißglut-Rahmen wie heute. Die Schnitte eines Klatsch-Kits heißen nach dem Kit („Klatschen 1 · 3“), die Nummer folgt der Pad-Reihenfolge (Kick = 1). Die Rolle bleibt als kleine Zeile oben. Gleiches gilt für die Instrument-Tasten, damit Kit und Instrument eine Sprache sprechen. | **jetzt** |
+| 3 | **„Klatsch dein Kit“ braucht 3 Tipps, versprochen sind 2** (Spec 4 §2). | Ein Tipp auf die Karte bzw. auf „+ Neu → Kit aus Klatschen“ ist schon das ●: Die Aufnahme startet sofort, mit Zählring statt eines zweiten Ziels, und stoppt nach 2 s Stille. Die Mikrofon-Freigabe des Browsers zählt nicht, beim ersten Mal kommt sie trotzdem. | **jetzt** |
+| 4 | **Reiter Fertig: Mastering kostet einen Tipp mehr und sieht fremd aus.** Mastering + Export sind am Handy 4 statt 3 Tipps. Ohne Mastering hat die Testdatei eine Spitze von −15,4 dB, eigene Aufnahmen sind leise. Mastering „an“ ist eine petrolfarbene Fläche mit türkisem Schalter (`kw-fertig-handy.png`), der Stil ein Kasten 2×2. Phosphor sagt: aktiv = Weißglut, Einstellungen sind Linien. | In Krachwerk ist Mastering „Ausgewogen“ **voreingestellt an**. Damit ist Export immer 2 Tipps, und Abschalten ist der Sonderfall (Entscheidung 1). Der Schalter sieht aus wie die übrigen `wb-toggle` (Weißglut-Linie), der Stil ist eine Zeile mit vier Wörtern, das gewählte in Weißglut. „Ziel −14 LUFS · misst …“ wird `--muted`. | **jetzt** |
+| 5 | **Einblender liegen weiter auf Griffen** (2b-Auflage 4 ist nicht erfüllt). „7 Schläge – dein Kit spielt.“ deckt die Reiter Kit/Clip und „1 Takt“ ab, „Geteilt: Mein Song.wav“ die Feinheiten. Beides sind Zustände, die man nach jedem Erfolg sieht. | Wie in 2b beschrieben: `#hint` sitzt über der Oberkante der Schublade bzw. über dem Werkbank-Inhalt und schneidet kein sichtbares Bedienelement. Das prüft ein Test, der die Rechtecke vergleicht. | **jetzt** |
+| 6 | **Am Handy rutscht das Wichtige unter die Falz.** Bei Kit Mitte zeigen Pads und Schritte nur die Reiterzeile, der Grund (Takte, Swing, Muster) liegt darunter. Im Reiter Projekt scrollt der Kopf samt „Exportieren“ weg. Fünf gleich große Kästen sehen aus wie eine Einstellungsliste, „Sounds zurückholen“ liegt halb unter der Daumenleiste. | Die Pads werden bei Mitte niedriger (64 px), sodass „Muster“ sichtbar bleibt. Der Werkbank-Kopf bleibt beim Scrollen stehen. In Projekt sind Speichern und Öffnen Griffe, der Rest wird eine Zeile ohne Kasten. | später |
+| 7 | **Der Pattern-Clip trägt Griffe vom Sound.** Der Clip „Klatschen 1“ zeigt die Griffe für Anfang, Hülle und Ende eines Audio-Clips und ein abgeschnittenes „P“ oben rechts. Die Schritte, die drin sind, sieht man nicht. | Ein Kit-Clip zeigt seine Schläge als Punkte in Pad-Farbe, ohne Hüllkurven-Griffe. Das Kennzeichen „P“ entfällt, der Punkt im Kopf sagt schon, dass es ein Kit ist. | später |
+| 8 | **Kleinigkeiten.** Am Desktop-Start leuchten zwei weiße Flächen („Mach ein Geräusch“ und „Exportieren“ bei leerem Song). „Tonart Am · C-Dur“ liest sich wie zwei Tonarten. „in 0 Clips“. Die Reiterzeile hat einen Trennstrich vor „Aufnahme“, der Reiter zeigt bis v2.13 nur einen Schalter. | Exportieren erst ab dem ersten Clip zeigen. „Am (parallel C-Dur)“ oder nur „Am“. Bei 0 Clips steht nichts. Den Reiter Aufnahme bis v2.13 in die Feinheiten von Song legen, dann gibt es vier Reiter. | später |
+
+### Was Martin am Handy prüfen und hören soll
+
+1. **Klatsch dein Kit:** 10 s auf Tisch, Knie und Brust schlagen. Liegt das Dunkle auf Kick und das Helle auf Hi-Hat? Groovt „Gerade“, und taugen „Halb“ und „Breaks“ beim Durchtippen?
+2. **Pad-Wand live:** Schublade ganz hoch, über den laufenden Loop spielen. Kommt der Anschlag sofort, oder spürst du Verzögerung? Landet ● mit Pads auf dem Raster, wo du es gemeint hast?
+3. **Summen wird Instrument:** einen Ton summen, Ton → Als Instrument, Tasten spielen. Ist der Grundton richtig? Wie viele Tasten nach oben und unten klingt es noch nach dir und nicht nach Micky Maus?
+4. **Festhalten:** Loop mit Hall festhalten und mit ↶/↷ Quelle und Schleife vergleichen. Klingt es gleich, springt der Ausklang am Loop-Ende?
+5. **Ganzer Track bis zum Teilen:** mit Mastering „Ausgewogen“ exportieren, über Teilen an dich selbst schicken, am Handy-Lautsprecher und an Boxen hören. Laut genug, nicht gequetscht? Liest du die Zutatenliste in der Nachricht gern?
+6. **Sichern am iPhone:** „Alle eigenen Sounds sichern“ und danach „Sounds zurückholen“. Kommt die Datei in Dateien/iCloud an, und meldet der Einblender, wie viele zurück sind?
+
+### Entscheidungen für Martin
+
+1. **Mastering in Krachwerk von Anfang an an?** *Empfehlung: ja, „Ausgewogen“.* Eigene Aufnahmen sind leise (Test: −15 dB Spitze), und Export ist dann immer 2 Tipps.
+2. **Was exportiert „Exportieren“?** a) bis zum Ende des letzten Clips (heute) · b) die eingestellte Songlänge. *Empfehlung: a*, der Kopf zeigt die echte Länge, „Länge“ wird „Arbeitsfläche“ in den Feinheiten.
+3. **Ruhe in Loopwerk** (`lw-calm-*.png` ansehen): a) bleibt aus · b) Schalter in den Einstellungen · c) wird Standard. *Empfehlung: b*, nach zwei Wochen eigener Nutzung c.
+4. **Adresse:** bleibt `/werkstatt/` oder zieht nach `/krachwerk/` um (Daten bleiben, alte Adresse leitet weiter). *Empfehlung: Name „Krachwerk“ festlegen und zusammen mit 3b umziehen.* Dann ändert sich die installierte App nur einmal.
+5. **Wann heißt es „Krachwerk 1.0“?** *Empfehlung: erst mit den Takes (3b).* „Über den laufenden Song einsingen“ ist der Ablauf, der aus Geräuschen Tracks macht. Bis dahin ist es eine Vorschau.
+6. **Rollen auf den Pads:** Fachwörter (Kick, Snare, Hi-Hat) oder Klangwörter (Tief, Mitte, Hell …)? *Empfehlung: Fachwörter klein lassen*, groß steht dein Klang (Stört 2). Die Wörter sagen, wohin das Muster schlägt, und jeder Beat-Bastler kennt sie.
+
+---
+
 ## Krachwerk Scheibe 2b (03.11.2026)
 
 **Geprüft:** alle sieben Bilder in `docs/ux/krachwerk-brainstorm/shots-2b/` (Zerlegen Handy und Desktop, Kiste mit Schnitten, 56-px-Schublade, Zeichen auf Desktop, Handy und Ladeschirm), daneben `shots-2a/`. Grundlage: `docs/specs/krachwerk-2b-zerlegen.md`, `synthese.md`, meine 2a-Auflagen. **Zählwerte:** Desktop *Clip gewählt* 44/11/4/11 (Grenze 45), Handy *Mitte, Zerlegen* 26/7/4/11 (Grenze 26/13). Die Bilder vom Zerlegen sind um 08:45 entstanden, vor dem Commit mit dem Zeichen. Deshalb tragen sie noch Loopwerks bunte Balken, die Zeichen-Bilder (08:54) zeigen den Stand danach. Form-Reiter und Clip im Song mit Rezept sind in 2b nicht abgebildet. Die 2a-Auflagen #2 (vier Griffe auf zwei Punkten) und #6 (roh/geformt) konnte ich deshalb nicht nachprüfen.
