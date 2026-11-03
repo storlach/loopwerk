@@ -39,7 +39,9 @@ function fxSummary(e, f) {
   return parts.join(', ');
 }
 
-export function mountInspector({ root, store, ui, library, tools, engine, mastering }) {
+// Optionen (Krachwerk, Spec Scheibe 2a §6): clipPanel(container, deps) ersetzt den Clip-Abschnitt (Sound-Werkbank);
+// trackOnClip: false = die Spur zeigt sich nur bei eigener Spurwahl; fxCompact = nur eingeschaltete Effekte und „+ Effekt“
+export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false }) {
   const app = document.getElementById('app');
   root.innerHTML = '';
 
@@ -56,7 +58,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     if (!calm) { app.classList.toggle('insp-open'); return; }
     // Offen: schließen (Auswahl aufheben); zu: den Song zeigen
     pinned = !app.classList.contains('insp-open');
-    if (!pinned) { ui.select(null); ui.selectTrack(null); }
+    if (!pinned) { ui.select(null); ui.selectTrack(null); ui.openSound?.(null); }
     render();
   });
   root.append(toggle);
@@ -104,7 +106,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   for (const c of [cin, cout]) c.row.classList.add('insp-sub-row');
   // Geschwindigkeit (früher „Laufzeit“): Regler 50–200 % und „wie Tonband“, eigenes Modul
   const run = el('div', 'insp-clip-speed');
-  mountClipSpeed(run, { store, ui, library, engine });
+  if (!clipPanel) mountClipSpeed(run, { store, ui, library, engine });
   const speedSlot = run;
   // Tempo des Sounds: wie schnell die Aufnahme ist. Mit Tempo wird ein Einzelklang zum Loop, der sich dem Song anpasst.
   const stempo = el('div', 'insp-row insp-stempo');
@@ -130,7 +132,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   stempo.append(el('span', null, 'Sound-Tempo'), stOut, stIn, stBtns);
   const btns = el('div', 'insp-btns');
   btns.id = 'insp-clip-btns';
-  clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, btns);
+  // Mit clipPanel (Sound-Werkbank) entfällt der alte Clip-Abschnitt ganz; Teilen/Kopie/Löschen sind Werkzeug am Clip
+  const panel = clipPanel ? clipPanel(clipSec, { store, ui, library, engine, tools }) : null;
+  if (!panel) clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: sliderToGain(Number(gain.input.value)) }, 'insp-gain-' + c.id); });
@@ -143,7 +147,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
   // Die Clip-Knöpfe (Bearbeiten, Teilen, Duplizieren, Löschen) ziehen vom Deck hierher
   const clipGroup = document.querySelector('.deck .group[aria-label="Clip"]');
-  for (const id of ['edit-btn', 'split-btn', 'dup-btn', 'del-btn']) place(document.getElementById(id), { wide: btns, calm: id === 'edit-btn' ? { narrow: btns } : null });
+  if (!panel) for (const id of ['edit-btn', 'split-btn', 'dup-btn', 'del-btn']) place(document.getElementById(id), { wide: btns, calm: id === 'edit-btn' ? { narrow: btns } : null });
   void clipGroup;
 
   // ---------- Spur ----------
@@ -175,7 +179,15 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   curveBtn.id = 'insp-auto-toggle';
   curveBtn.addEventListener('click', () => { if (trackId && trackId !== MASTER) ui.autoLane?.toggle(trackId); });
   autoBlock.append(el('span', 'insp-kind', 'Verlauf'), tpl.node, curveBtn);
-  trackSec.append(trackHead, vol.row, panBox, autoBlock);
+  // Kompakt: Verlauf und Kurven erst unter „Feinheiten“
+  let autoOpen = false;
+  const fineBtn = el('button', 'wb-fine-btn', 'Feinheiten');
+  fineBtn.type = 'button';
+  fineBtn.id = 'insp-fine';
+  fineBtn.setAttribute('aria-expanded', 'false');
+  fineBtn.hidden = !fxCompact;
+  fineBtn.addEventListener('click', () => { autoOpen = !autoOpen; render(); });
+  trackSec.append(trackHead, vol.row, panBox, fineBtn, autoBlock);
   // Stumm und Solo der Spur (in „calm“ am Handy nicht mehr im Spurkopf)
   let msBtns = null;
   if (calm) {
@@ -251,6 +263,21 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     fxl.append(item);
     items.set(e.id, { item, sw, sum, ctl });
   }
+  // Kompakt (Krachwerk): nur eingeschaltete Effekte, die übrigen über „+ Effekt“
+  const addFx = el('button', 'wb-fine-btn', '+ Effekt');
+  addFx.type = 'button';
+  addFx.id = 'insp-add-fx';
+  addFx.setAttribute('aria-expanded', 'false');
+  const fxPick = el('div', 'wb-fx-pick');
+  fxPick.hidden = true;
+  for (const e of EFFECTS) {
+    const b = el('button', 'wb-btn', e.label);
+    b.type = 'button';
+    b.dataset.fx = e.id;
+    b.addEventListener('click', () => { setFx(e.id, { on: true }); fxPick.hidden = true; addFx.setAttribute('aria-expanded', 'false'); });
+    fxPick.append(b);
+  }
+  addFx.addEventListener('click', () => { fxPick.hidden = !fxPick.hidden; addFx.setAttribute('aria-expanded', String(!fxPick.hidden)); });
   // IDs (für Tastatur-Fokus und Tests) gibt es nur einmal: am Desktop hier, am Handy im Mixer-Detail
   function syncIds() {
     for (const e of EFFECTS) {
@@ -336,9 +363,11 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   function render() {
     const found = ui.selectedClipId ? store.findClip(ui.selectedClipId) : null;
     const track = found?.track ?? (ui.selectedTrackId ? store.track(ui.selectedTrackId) : null);
-    const mode = found ? 'clip' : track ? 'track' : 'song';
-    clipSec.hidden = mode !== 'clip';
-    trackSec.hidden = mode === 'song';
+    // „sound“: Werkbank für einen Sound aus der Kiste, ohne Clip (nur mit clipPanel)
+    const benchId = !found && !track && panel && ui.benchSoundId && library.get(ui.benchSoundId) ? ui.benchSoundId : null;
+    const mode = found ? 'clip' : track ? 'track' : benchId ? 'sound' : 'song';
+    clipSec.hidden = mode !== 'clip' && mode !== 'sound';
+    trackSec.hidden = mode === 'song' || mode === 'sound' || (mode === 'clip' && !trackOnClip);
     songSec.hidden = mode !== 'song';
     hintSec.hidden = mode !== 'song';
     root.dataset.mode = mode;
@@ -348,7 +377,8 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       toggle.setAttribute('aria-expanded', String(app.classList.contains('insp-open')));
     }
 
-    if (found) {
+    if (panel) panel.render();
+    if (found && !panel) {
       const { clip } = found;
       const s = library.get(clip.sampleId);
       const cat = s?.colorCat ?? s?.category ?? 'fx';
@@ -381,7 +411,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       stReset.hidden = !fixed;
     }
 
-    if (mode !== 'song') {
+    if (mode === 'clip' || mode === 'track') {
       trackId = track.id;
       trackName.textContent = track.name;
       const n = track.clips.length;
@@ -399,7 +429,13 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
         pan.out.textContent = panText(track.pan || 0);
       }
-      if (fxl.parentElement !== trackSec) trackSec.append(fxl, mixerLink);
+      if (fxl.parentElement !== trackSec) trackSec.append(fxl, addFx, fxPick, mixerLink);
+      mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
+      autoBlock.hidden = fxCompact && !autoOpen;
+      fineBtn.setAttribute('aria-expanded', String(autoOpen));
+    } else if (mode === 'sound') {
+      trackId = null;
+      autoBlock.hidden = true;
     } else {
       trackId = MASTER;
       autoBlock.hidden = true;
@@ -420,12 +456,18 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
     }
-    if (mode !== 'song' && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
+    if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();
+    const compact = fxCompact && mode === 'track';
+    addFx.hidden = !compact;
+    if (!compact) fxPick.hidden = true;
+    for (const b of fxPick.children) b.hidden = !!fx[b.dataset.fx]?.on;
+    addFx.disabled = compact && EFFECTS.every((e) => fx[e.id].on);
     for (const e of EFFECTS) {
       const it = items.get(e.id);
       const f = fx[e.id];
+      it.item.hidden = compact && !f.on;
       it.item.classList.toggle('on', !!f.on);
       it.sw.setAttribute('aria-pressed', String(!!f.on));
       it.sum.textContent = fxSummary(e, shownFx(e, f));

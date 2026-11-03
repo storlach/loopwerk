@@ -19,7 +19,8 @@ const fmtSemis = (speed) => {
 };
 
 // variant: 'insp' (rechte Spalte) oder 'phone' (Clip-Leiste, Bereich „Pegel“)
-export function mountClipSpeed(container, { store, ui, library, variant = 'insp' }) {
+// chipsIn: Container für ½× 1× 2× (Werkbank: unter „Feinheiten“); sonst sitzen sie in der Zeile
+export function mountClipSpeed(container, { store, ui, library, variant = 'insp', chipsIn = null }) {
   const phone = variant === 'phone';
   const pre = phone ? 'lvl-speed' : 'insp-speed';
   const row = el('div', phone ? 'lvl lvl-speed' : 'insp-row insp-run insp-speed');
@@ -44,7 +45,7 @@ export function mountClipSpeed(container, { store, ui, library, variant = 'insp'
       b.title = title;
       b.dataset.speed = String(v);
       b.addEventListener('click', () => { const c = sel(); if (c) store.setClipSpeed(c.id, v); });
-      btns.append(b);
+      (chipsIn ?? btns).append(b);
       chips.push(b);
     }
     btns.append(tape);

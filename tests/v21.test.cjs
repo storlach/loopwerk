@@ -100,7 +100,7 @@ const { check, finish } = createChecker();
     check('Inspektor: Geschwindigkeit ½× macht den Clip doppelt so lang, Anzeige stimmt', st.s === 2 && Math.abs(st.len - Math.min(len0 * 2, 128)) < 1e-6 && /^50 %/.test(st.out), JSON.stringify({ len0, st }));
     await page.waitForFunction(() => !!window.loopwerk.library.stretched('chords-pad', 2), null, { timeout: 20000 });
     check('Gedehnte Fassung wird im Hintergrund gerechnet', true);
-    check('Clip zeigt die Laufzeit im Etikett', /×2/.test(await page.locator('.clip[data-clip-id="c4"] .clip-label').textContent()));
+    check('Clip zeigt die Geschwindigkeit im Etikett (50 %)', /50 %/.test(await page.locator('.clip[data-clip-id="c4"] .clip-label').textContent()));
     await page.click('.insp-speed [data-speed="1"]');
     check('Geschwindigkeit 1× stellt die Originallänge wieder her', await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats) === len0);
     // ---------- Spurgruppen ----------

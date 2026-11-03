@@ -449,7 +449,7 @@ async function seedPadWall() {
           const fl = document.getElementById('clip-float').getBoundingClientRect();
           const sc = document.getElementById('arr-scroll').getBoundingClientRect();
           const bars = [...document.querySelectorAll('.bar-mark')].filter((m) => { const r = m.getBoundingClientRect(); return r.right <= sc.right && r.left >= sc.left; }).map((m) => parseInt(m.textContent, 10));
-          return { headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(fl.right <= r.left || fl.left >= r.right || fl.bottom <= r.top || fl.top >= r.bottom); }), bars: [1, 2, 3, 4].every((b) => bars.includes(b)), barsSeen: bars.join(',') };
+          return { headsHit: [...document.querySelectorAll('.track-head')].some((h) => { const r = h.getBoundingClientRect(); return !(fl.right <= r.left || fl.left >= r.right || fl.bottom <= r.top || fl.top >= r.bottom); }), bars: [1, 2, 3, 4, 5].every((b) => bars.includes(b)), barsSeen: bars.join(',') };
         });
         if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-breit-desktop.png') });
         await page.reload();
@@ -486,14 +486,15 @@ async function seedPadWall() {
         await page.evaluate(() => window.loopwerk.store.undo());
         const n4 = await nClips();
         bench.undo = [n0, n1, n2, n3, n4];
-        // M/S in der Spur-Werkbank
-        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+        // M/S in der Spur-Werkbank (2a: nur bei Spurwahl, beim Clip steht dort die Sound-Werkbank)
+        await page.evaluate(() => window.loopwerk.ui.selectTrack(window.loopwerk.store.project.tracks[0].id));
         await page.waitForTimeout(300);
         await page.click('#insp-mute');
         await page.click('#insp-solo');
         bench.ms = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { mute: !!t.mute, solo: !!t.solo, m: document.getElementById('insp-mute').getAttribute('aria-pressed'), s: document.getElementById('insp-solo').getAttribute('aria-pressed') }; });
         await page.click('#insp-mute');
         await page.click('#insp-solo');
+        await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
         // Stufe 3: jedes Element hat einen Zwilling
         bench.tiers = await page.evaluate(() => {
           const tw = window.loopwerk.edition.twins;
@@ -529,9 +530,17 @@ async function seedPadWall() {
       check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'} (Clip gewählt): ≤ ${b.controls} Bedienelemente, ≤ ${b.frames} Rahmen`, c.controls <= b.controls && c.frames <= b.frames, `${c.controls} / ${c.frames}`);
       check(`Zählung 1b ${dev === 'desktop' ? 'Desktop' : 'Handy'}: ≤ ${b.sizes} Schriftgrößen, kleinste ≥ 11 px`, c.sizes <= b.sizes && c.minFont >= 11, `${c.sizes} Größen, kleinste ${c.minFont}`);
     }
+    // Budgets 2a (Spec krachwerk-2-werkbank §7): Bedienelemente / Rahmen / Schriftgrößen / kleinste
+    const B2 = { desktop: [45, 30, 5, 11], handy: [18, 8, 5, 11] };
+    for (const [dev, [c, f, z, m]] of Object.entries(B2)) {
+      const x = counts[`${dev}-clip`];
+      check(`Zählung 2a ${dev === 'desktop' ? 'Desktop' : 'Handy'} (Clip gewählt): ≤ ${c} Bedienelemente, ≤ ${f} Rahmen, ≤ ${z} Schriftgrößen, kleinste ≥ ${m}`, x.controls <= c && x.frames <= f && x.sizes <= z && x.minFont >= m, `${x.controls} / ${x.frames} / ${x.sizes} / ${x.minFont}`);
+    }
+    const wm = counts['handy-werkbank'];
+    check('Zählung 2a Handy Werkbank Mitte (Clip, Form): ≤ 26 Bedienelemente, ≤ 13 Rahmen, ≤ 5 Schriftgrößen, kleinste ≥ 11', wm.controls <= 26 && wm.frames <= 13 && wm.sizes <= 5 && wm.minFont >= 11, `${wm.controls} / ${wm.frames} / ${wm.sizes} / ${wm.minFont}`);
     const w = bench.wb;
     check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % des Raums rechts der Kiste (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
-    check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 Takte, Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
+    check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 ganze Takte (Takt 5 im Bild), Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
     check('Werkbank: Sound-Tempo-Block bei Einzelklang und gesperrte Knöpfe nicht sichtbar', !bench.stempo.block && bench.stempo.off === 0, JSON.stringify(bench.stempo));
     check('Leerer Start: Hinweis in Spur 1 („● tippen …“), Kiste „Noch nichts aufgenommen“ (Handy und Desktop)', ['desktop', 'handy'].every((d) => /tippen/.test(bench[`empty-${d}`].hint) && bench[`empty-${d}`].kiste === 'Noch nichts aufgenommen'), JSON.stringify([bench['empty-desktop'], bench['empty-handy']]));
     check('Handy: „Tonart und Akkorde“ im Song-Fach blendet beide Zeilen wieder ein', bench.harmony?.pressed === 'true' && bench.harmony.rows.every(Boolean), JSON.stringify(bench.harmony));
@@ -548,14 +557,668 @@ async function seedPadWall() {
     check('Kopie und Löschen sind je ein Undo-Schritt', bench.undo.join() === '1,2,1,0,1', bench.undo.join());
     check('Spur-Werkbank: M und S schalten track.mute / track.solo', bench.ms.mute && bench.ms.solo && bench.ms.m === 'true' && bench.ms.s === 'true', JSON.stringify(bench.ms));
     check('Stufe 3: jedes [data-tier="3"] hat einen Zwilling in EDITION.twins', bench.tiers.n > 10 && bench.tiers.miss.length === 0, `${bench.tiers.n} Elemente, ohne Zwilling: ${bench.tiers.miss.join(', ')}`);
-    check('Kiste: Gruppen in der Reihenfolge Aufnahmen · Dateien · Schleifen · Strom', bench.kiste.join(' · ') === 'Aufnahmen · Dateien · Schleifen · Strom', bench.kiste.join(' · '));
+    check('Kiste: Gruppen nach Material in der Reihenfolge Körper · Dinge · Stimme · Strom · Schleife (hier: Dinge · Strom · Schleife)', bench.kiste.join(' · ') === 'Dinge · Strom · Schleife', bench.kiste.join(' · '));
     check('Kiste: 240 px breit, klappt auf 24 px ein und wieder aus', Math.abs(bench.kisteAuf - 240) <= 1 && bench.kisteZu.zu && bench.kisteZu.w <= 26, `${bench.kisteAuf} / ${bench.kisteZu.w}`);
+
+    // ---------- 13: Sound-Werkbank (Scheibe 2a, Spec krachwerk-2-werkbank §6 und §8) ----------
+    const bumm = (page, n = 1) => page.evaluate(async (count) => {
+      const lw = window.loopwerk;
+      const sr = 44100, d = new Float32Array(sr / 2);
+      for (let i = 0; i < d.length; i++) d[i] = Math.sin(i / 20) * Math.exp(-i / 3000);
+      const b = new AudioBuffer({ numberOfChannels: 1, length: d.length, sampleRate: sr });
+      b.copyToChannel(d, 0);
+      const smp = await lw.own.create({ name: 'Bumm 1', buffer: b, source: 'Aufnahme', from: 'mic', cls: 'tief' });
+      for (let k = 0; k < count; k++) lw.store.addClip('t1', smp.id, k * 4, 4);
+      return smp.id;
+    }, n);
+    const recOf = (page, id) => page.evaluate((i) => window.loopwerk.store.project.recipes?.[i] ?? null, id);
+    const grundCounts = (page) => page.evaluate(async () => {
+      const vis = (e) => e.getClientRects().length > 0 && !e.closest('[hidden]');
+      const out = {};
+      for (const t of ['form', 'ton', 'farbe', 'zeit', 'clip']) {
+        document.getElementById(`wb-tab-${t}`).click();
+        await new Promise((r) => setTimeout(r, 60));
+        const g = document.querySelector('[role=tabpanel]:not([hidden]) .wb-grund');
+        out[t] = [...g.querySelectorAll('button, input:not([type=hidden]), select, [role=slider]')].filter(vis).length;
+      }
+      document.getElementById('wb-tab-form').click();
+      return out;
+    });
+
+    // ----- Desktop 1400×820 -----
+    {
+      const ctx = await browser.newContext(DESK);
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      const id = await bumm(page, 2);
+      const clip0 = await page.evaluate(() => window.loopwerk.store.project.tracks[0].clips[0].id);
+      await page.evaluate((c) => window.loopwerk.ui.select(c), clip0);
+      await page.waitForTimeout(500);
+      const head = await page.evaluate(() => ({
+        name: document.getElementById('wb-name')?.textContent, count: document.getElementById('wb-count')?.textContent,
+        tabs: [...document.querySelectorAll('.wb-tabs [role=tab]:not([hidden])')].map((t) => t.textContent).join(','),
+        sel: [...document.querySelectorAll('.wb-tabs [role=tab][aria-selected=true]')].map((t) => t.textContent).join(','),
+        group: [...document.querySelectorAll('.wb-tabs')].length, tablist: document.querySelector('.wb-tabs')?.getAttribute('role'),
+        sliders: [...document.querySelectorAll('.wb-wave [role=slider]')].filter((e) => !e.closest('[hidden]')).length,
+      }));
+      check('Werkbank: Kopf mit Name und „in 2 Clips“, Reiter Form · Ton · Farbe · Zeit · Clip (role=tab), Form gewählt', head.name === 'Bumm 1' && head.count === 'in 2 Clips' && head.tabs === 'Form,Ton,Farbe,Zeit,Clip' && head.sel === 'Form' && head.tablist === 'tablist', JSON.stringify(head));
+      check('Welle: 4 Griffe mit role=slider (Anfang, Ende, Anschlag, Ausklang)', head.sliders === 4);
+      const geo = await page.evaluate(() => {
+        const R = (q) => document.querySelector(q).getBoundingClientRect();
+        const hs = ['.wb-h-start', '.wb-h-end', '.wb-h-atk', '.wb-h-rel'].map(R);
+        const hit = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+        const cx = (r) => r.left + r.width / 2;
+        return { big: hs.every((r) => r.width >= 44 && r.height >= 44), overlap: [[0, 2], [0, 3], [1, 2], [1, 3], [0, 1], [2, 3]].filter(([i, j]) => hit(hs[i], hs[j])).length, dx: [cx(hs[2]) - cx(hs[0]), cx(hs[1]) - cx(hs[3])] };
+      });
+      check('Welle: 4 Griffe unterscheidbar – Tippziele ≥ 44 px, nichts überlappt, Anschlag/Ausklang 12 px innerhalb von Anfang/Ende', geo.big && geo.overlap === 0 && geo.dx.every((d) => Math.abs(d - 12) < 1.5), JSON.stringify(geo));
+      const words = await page.evaluate(() => ({ gain: document.getElementById('wb-gain').closest('label').querySelector('output').textContent, label: document.getElementById('wb-gain').closest('label').firstChild.textContent, loopLen: document.querySelector('.loop-len')?.textContent }));
+      check('Wörter: „Pegel“ (Form) statt „Lautstärke“, „0 dB“ ohne Doppel-Leerzeichen, Kiste „Einzelklang“', words.gain === '0 dB' && words.label === 'Pegel' && words.loopLen === 'Einzelklang', JSON.stringify(words));
+      const rows = await page.evaluate(() => ({ key: [...document.querySelectorAll('.key-row, .chord-row')].some((e) => e.getClientRects().length > 0) }));
+      check('Desktop: Tonart- und Akkordzeile ohne Wechsel nicht sichtbar', !rows.key, JSON.stringify(rows));
+      const per = await grundCounts(page);
+      check('Zählung je Reiter (Desktop): Grund ≤ 5 Griffe', Object.values(per).every((n) => n >= 1 && n <= 5), JSON.stringify(per));
+      // Weißglut: Flächen in --amber (Weiß); außer ▶ und Marke höchstens eine (gewählter Clip)
+      const white = await page.evaluate(() => {
+        const t = document.createElement('i');
+        t.style.color = 'var(--amber)';
+        document.body.append(t);
+        const amber = getComputedStyle(t).color;
+        t.remove();
+        return [...document.querySelectorAll('body *')].filter((e) => e.getClientRects().length && getComputedStyle(e).backgroundColor === amber && !e.matches('#play-btn, .playhead, .ph-grip, .ph-line, #play-btn *') && e.getBoundingClientRect().width > 6).map((e) => e.id || e.className).slice(0, 6);
+      });
+      check('Weißglut: außer ▶ und Marke höchstens 1 Fläche (der gewählte Clip)', white.length <= 1, white.join(' | '));
+      // Reiter gemerkt
+      await page.click('#wb-tab-farbe');
+      await page.reload();
+      await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(500);
+      const remembered = await page.evaluate(() => document.querySelector('.wb-tabs [aria-selected=true]')?.textContent);
+      check('Reiter bleibt nach dem Neuladen gemerkt (Farbe)', remembered === 'Farbe', remembered);
+      await page.click('#wb-tab-form');
+      // Welle: Pfeiltaste am Anfang, Ende mit der Maus ziehen = ein Undo-Schritt
+      await page.focus('.wb-h-start');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+      const r1 = await recOf(page, id);
+      check('Welle: ArrowRight am Anfang setzt start + 0,01 s', r1 && Math.abs(r1.start - 0.01) < 1e-6, JSON.stringify(r1));
+      const box = await page.evaluate(() => { const r = document.querySelector('.wb-h-end').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+      await page.mouse.move(box.x, box.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 12; i++) await page.mouse.move(box.x - i * 15, box.y);
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+      const r2 = await recOf(page, id);
+      const u1 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+      check('Welle: Ende mit der Maus nach links ziehen kürzt den Sound, genau ein Undo-Schritt', r2?.end > 0.01 && r2.end < 0.45 && u1 - u0 === 1, `end ${r2?.end}, Schritte ${u1 - u0}`);
+      const bakedLen = await page.evaluate(async (i) => { await window.loopwerk.library.applyRecipes(window.loopwerk.store.project); return window.loopwerk.library.source(i)?.duration; }, id);
+      check('Kürzen wirkt: gebackener Klang ist kürzer als das Original (0,5 s)', bakedLen > 0 && bakedLen < 0.45, `${bakedLen?.toFixed(3)} s`);
+      await page.evaluate(() => { window.loopwerk.store.undo(); window.loopwerk.store.undo(); });
+      // Rückwärts in 2 Tipps ab nichts gewählt
+      await page.evaluate(() => window.loopwerk.ui.select(null));
+      await page.waitForTimeout(300);
+      await page.click('.lane[data-track-id="t1"] .clip >> nth=0', { position: { x: 30, y: 24 } });
+      await page.click('#wb-reverse');
+      await page.waitForTimeout(200);
+      const rv = await recOf(page, id);
+      check('Rückwärts in 2 Tipps: reverse gesetzt', rv?.reverse === true, JSON.stringify(rv));
+      // Material Körper, Stammbaum
+      await page.click('#wb-dot');
+      await page.click('.wb-mat-btn[data-material="koerper"]');
+      await page.waitForTimeout(500);
+      const mat = await page.evaluate(() => {
+        const probe = document.createElement('i');
+        probe.className = 'cat-drums';
+        probe.style.color = 'var(--cat)';
+        document.body.append(probe);
+        const want = getComputedStyle(probe).color;
+        probe.remove();
+        const clip = document.querySelector('.lane[data-track-id="t1"] .clip');
+        const sw = document.querySelector('#shelf-cat-koerper .swatch');
+        const swColor = sw && getComputedStyle(sw).backgroundColor;
+        const clipColor = (() => { const p = document.createElement('i'); clip.append(p); p.style.color = 'var(--cat)'; const c = getComputedStyle(p).color; p.remove(); return c; })();
+        return { cls: clip.className.includes('cat-drums'), group: !!document.querySelector('#shelf-items-koerper .loop-item'), swColor, clipColor, want, tree: document.getElementById('wb-tree').textContent, tab: document.querySelector('#shelf-items-koerper .loop-play') ? getComputedStyle(document.querySelector('#shelf-items-koerper .loop-row')).getPropertyValue('--cat') : '' };
+      });
+      check('Material Körper: Clip im Song ist cat-drums, Gruppe „Körper“ enthält den Sound', mat.cls && mat.group, JSON.stringify(mat));
+      check('Farbe gleich: Punkt der Kiste = Farbe des Clips im Song (Körper)', mat.swColor === mat.clipColor && mat.clipColor === mat.want, `${mat.swColor} / ${mat.clipColor} / ${mat.want}`);
+      check('Stammbaum: „Körper · Aufnahme … → … rückwärts“', /^Körper · Aufnahme .*→ .*rückwärts/.test(mat.tree), mat.tree);
+      await page.evaluate(() => window.loopwerk.store.undo());
+      // Rückwärts ist ein Undo-Schritt
+      await page.evaluate(() => window.loopwerk.store.undo());
+      const afterUndo = await recOf(page, id);
+      check('Ein undo() je Schritt: Material und Rückwärts lassen sich einzeln aufheben', !afterUndo || (!afterUndo.reverse && !afterUndo.material), JSON.stringify(afterUndo));
+      // Als Variante: Clip 1 wechselt, Clip 2 bleibt, Kiste zeigt sie unter dem Eltern-Sound
+      await page.evaluate((c) => window.loopwerk.ui.select(c), clip0);
+      await page.waitForTimeout(300);
+      await page.click('#wb-variant');
+      await page.waitForTimeout(800);
+      const va = await page.evaluate(() => {
+        const lw = window.loopwerk;
+        const cs = lw.store.project.tracks[0].clips;
+        const rows = [...document.querySelectorAll('#library .loop-row')];
+        const iv = rows.findIndex((r) => r.classList.contains('variant'));
+        return { a: cs[0].sampleId, b: cs[1].sampleId, name: document.getElementById('wb-name').textContent, count: document.getElementById('wb-count').textContent, under: iv > 0 && !rows[iv - 1].classList.contains('variant'), indent: iv >= 0 && parseFloat(getComputedStyle(rows[iv]).paddingLeft) > parseFloat(getComputedStyle(rows[0]).paddingLeft), wave: !!document.querySelector('.wb-wave canvas'), tree: document.getElementById('wb-tree').textContent };
+      });
+      check('Als Variante: Clip 1 spielt „vr-…“, Clip 2 bleibt beim Original, Kopf zeigt die Variante', /^vr-/.test(va.a) && va.b === id && /Bumm 1 b/.test(va.name) && va.count === 'in 1 Clip' && /^Variante von Bumm 1 →/.test(va.tree), JSON.stringify(va));
+      check('Kiste: Variante steht unter ihrem Eltern-Sound, eingerückt', va.under && va.indent, JSON.stringify(va));
+      const flashBefore = await page.evaluate(() => document.getElementById('hint-text').textContent);
+      await page.evaluate(() => window.loopwerk.store.undo());
+      await page.waitForTimeout(100);
+      const flashAfter = await page.evaluate(() => document.getElementById('hint-text').textContent);
+      check('Einblender „Bumm 1 b …“ verschwindet nach Rückgängig', /Bumm 1 b/.test(flashBefore) && !/Bumm 1 b/.test(flashAfter), `${flashBefore} → ${flashAfter}`);
+      const back = await page.evaluate(() => ({ c: window.loopwerk.store.project.tracks[0].clips.map((c) => c.sampleId), r: window.loopwerk.store.project.recipes ?? null }));
+      check('Als Variante ist ein Undo-Schritt (Clips und Rezepte zurück)', back.c.every((x) => x === id) && !back.r, JSON.stringify(back));
+      // Spur antippen: Spur-Werkbank ohne Reiter, nur aktive Effekte, „+ Effekt“
+      await page.click('.track-row:nth-child(1) .track-head .track-name');
+      await page.waitForTimeout(300);
+      const sp = await page.evaluate(() => {
+        const vis = (e) => e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none';
+        return { tabs: [...document.querySelectorAll('.wb-tabs')].filter(vis).length, track: vis(document.querySelector('.insp-track')), fxShown: [...document.querySelectorAll('.fxl-item')].filter(vis).length, add: vis(document.getElementById('insp-add-fx')), ms: vis(document.getElementById('insp-mute')) && vis(document.getElementById('insp-solo')), pan: vis(document.getElementById('insp-pan')), mixerLink: vis(document.querySelector('.insp-track .insp-link:not(#insp-auto-toggle)') || document.body) && false };
+      });
+      check('Spur antippen: Spur-Werkbank ohne Reiter, M · S · Lautstärke · Panorama, noch keine Effekte sichtbar, „+ Effekt“ da', sp.tabs === 0 && sp.track && sp.fxShown === 0 && sp.add && sp.ms && sp.pan, JSON.stringify(sp));
+      await page.click('#insp-add-fx');
+      await page.click('.wb-fx-pick .wb-btn >> nth=0');
+      await page.waitForTimeout(200);
+      const fx2 = await page.evaluate(() => [...document.querySelectorAll('.fxl-item')].filter((e) => e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none').map((e) => e.classList.contains('on')));
+      check('„+ Effekt“ schaltet einen Effekt ein; nur dieser steht danach in der Liste', fx2.length === 1 && fx2[0] === true, JSON.stringify(fx2));
+      // Desktop: Fachleiste weg, Zwillinge, Song-Werkbank mit Mischen und FX-Pad
+      await page.evaluate(() => { window.loopwerk.ui.select(null); window.loopwerk.ui.selectTrack(null); });
+      await page.click('.insp-toggle');
+      await page.waitForTimeout(400);
+      const dk = await page.evaluate(() => {
+        const vis = (e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden';
+        const tw = window.loopwerk.edition.twins;
+        return {
+          bar: ['tabbar', 'editor-tab', 'tab-song'].map((i) => vis(document.getElementById(i))),
+          tw: ['mixer-btn', 'fxpad-btn', 'editor-tab', '.tabbar-end', '.tbtn-chev', '.tbtn-mute'].map((i) => !!tw[i]),
+          song: vis(document.getElementById('mixer-btn')) && vis(document.getElementById('fxpad-btn')) && vis(document.getElementById('keys-btn')) && vis(document.getElementById('harm-btn')),
+          pan: !!document.querySelector('.track-head [id*="pan"], .track-head .tbtn-pan'),
+        };
+      });
+      check('Desktop: Fachleiste nicht sichtbar, Zwillinge in EDITION.twins, Spurkopf ohne Panorama-Knopf', dk.bar.every((v) => !v) && dk.tw.every(Boolean) && !dk.pan, JSON.stringify(dk));
+      check('Desktop: Song-Werkbank (nichts gewählt) zeigt Mischen, FX-Pad und die Tastenkürzel', dk.song, JSON.stringify(dk));
+      if (SHOTS) {
+        await page.evaluate((c) => window.loopwerk.ui.select(c), clip0);
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: path.join(DIR, 'kw-clip-desktop.png') });
+        await page.click('#wb-tab-ton');
+        await page.click('#wb-wide');
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: path.join(DIR, 'kw-breit-desktop.png') });
+        await page.click('#wb-wide');
+      }
+      // Stoßlisten: Roh → geformt (Korn/Linie) im Song
+      check('Desktop: keine Konsolenfehler', k.errors.length === 0, k.errors.join(' | '));
+      await ctx.close();
+    }
+
+    // ----- Handy 390×844, Touch -----
+    {
+      const ctx = await browser.newContext(PHONE);
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      const id = await bumm(page, 1);
+      const clip0 = await page.evaluate(() => window.loopwerk.store.project.tracks[0].clips[0].id);
+      await page.evaluate((c) => window.loopwerk.ui.select(c), clip0);
+      await page.waitForTimeout(400);
+      await page.tap('#cf-werkbank');
+      await page.waitForTimeout(1100);
+      const inView = await page.evaluate(async () => {
+        const wb = document.getElementById('werkbank').getBoundingClientRect();
+        const bar = document.getElementById('tabbar').getBoundingClientRect();
+        const out = {};
+        for (const t of ['form', 'ton', 'farbe', 'zeit', 'clip']) {
+          document.getElementById(`wb-tab-${t}`).click();
+          await new Promise((r) => setTimeout(r, 80));
+          const g = document.querySelector('[role=tabpanel]:not([hidden]) .wb-grund');
+          const items = [...g.querySelectorAll('button, input:not([type=hidden]), select')].filter((e) => e.getClientRects().length && !e.closest('[hidden]'));
+          out[t] = items.filter((e) => { const r = e.getBoundingClientRect(); return r.top < wb.top - 1 || r.bottom > bar.top + 1; }).length;
+        }
+        document.getElementById('wb-tab-form').click();
+        return out;
+      });
+      check('Handy auf „Mitte“: alle Grund-Griffe des aktiven Reiters liegen vollständig im Bild (je Reiter)', Object.values(inView).every((n) => n === 0), JSON.stringify(inView));
+      const per = await grundCounts(page);
+      check('Zählung je Reiter (Handy): Grund ≤ 5 Griffe', Object.values(per).every((n) => n >= 1 && n <= 5), JSON.stringify(per));
+      const ph = await page.evaluate(() => ({ sc: document.documentElement.scrollWidth - innerWidth, top: document.getElementById('werkbank').getBoundingClientRect().top, wave: document.querySelector('.wb-wave').getBoundingClientRect().height, names: ['Bumm 1', 'Spur 2'].map((n) => { const e = [...document.querySelectorAll('.track-name')].find((x) => x.textContent === n); return e ? e.scrollWidth <= e.clientWidth : null; }) }));
+      check('Handy: Werkbank auf Mitte, Welle 72 px hoch, kein seitliches Scrollen, Spurnamen nicht gekürzt', ph.sc <= 0 && Math.abs(ph.wave - 72) <= 2 && ph.names.every((v) => v === true), JSON.stringify(ph));
+      // Waagerechtes Ziehen auf der Welle verschiebt die Schublade nicht
+      const cdp = await ctx.newCDPSession(page);
+      const wbox = await page.evaluate(() => { const r = document.querySelector('.wb-wave-cv').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+      await touch('touchStart', wbox.x, wbox.y);
+      for (let i = 1; i <= 10; i++) await touch('touchMove', wbox.x + i * 12, wbox.y + (i % 2));
+      await touch('touchEnd');
+      await page.waitForTimeout(700);
+      const after = await page.evaluate(() => ({ top: document.getElementById('werkbank').getBoundingClientRect().top, open: window.loopwerk.ui.dock }));
+      check('Handy: waagerechtes Ziehen auf der Welle verschiebt die Schublade nicht', Math.abs(after.top - ph.top) <= 1 && after.open === 'werkbank', `${ph.top} → ${after.top}`);
+      // Griff am Finger ziehen (Ende) = Sound wird kürzer
+      const eb = await page.evaluate(() => { const r = document.querySelector('.wb-h-end').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await touch('touchStart', eb.x - 3, eb.y);
+      for (let i = 1; i <= 10; i++) await touch('touchMove', eb.x - 3 - i * 14, eb.y);
+      await touch('touchEnd');
+      await page.waitForTimeout(400);
+      const re = await recOf(page, id);
+      check('Handy: Ende-Griff mit dem Finger ziehen kürzt den Sound', re?.end > 0.01 && re.end < 0.4, JSON.stringify(re));
+      await page.evaluate(() => window.loopwerk.store.undo());
+      // Tiefer in 3 Tipps: Clip → Ton → −
+      await page.tap('#wb-tab-ton');
+      await page.tap('#wb-semis-minus');
+      await page.waitForTimeout(200);
+      const lo = await recOf(page, id);
+      check('Tiefer: Ton → − setzt semis auf −1', lo?.semis === -1, JSON.stringify(lo));
+      if (SHOTS) {
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: path.join(DIR, 'kw-werkbank-ton-handy.png') });
+        for (const t of ['farbe', 'zeit', 'clip']) { await page.tap(`#wb-tab-${t}`); await page.waitForTimeout(250); await page.screenshot({ path: path.join(DIR, `kw-werkbank-${t}-handy.png`) }); }
+        await page.tap('#wb-tab-form');
+      }
+      check('Handy: keine Konsolenfehler', k.errors.length === 0, k.errors.join(' | '));
+      await ctx.close();
+    }
+
+    // ---------- 13b: Zerlegen (Scheibe 2b, Spec krachwerk-2b-zerlegen §8) ----------
+    // 10 s Klopfen: 8 Schläge (Rauschstöße, unregelmäßige Abstände, Pegel 0 … −12 dB) auf −56 dB Boden; Clip über 15 Schläge (= 10 s bei 90 BPM)
+    const klopfen = (page, { clip = true } = {}) => page.evaluate(async (withClip) => {
+      const lw = window.loopwerk;
+      const sr = 44100, d = new Float32Array(sr * 10);
+      let seed = 11;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+      for (let i = 0; i < d.length; i++) d[i] = 0.0015 * rnd();
+      [0.5, 1.6, 2.4, 3.9, 5.0, 6.3, 7.5, 8.8].forEach((t, k) => {
+        const g = 10 ** (-(k % 4) * 4 / 20);
+        for (let i = 0; i < sr * 0.03; i++) d[Math.round(t * sr) + i] += 0.6 * g * rnd() * Math.exp(-i / (sr * 0.01));
+      });
+      const b = new AudioBuffer({ numberOfChannels: 1, length: d.length, sampleRate: sr });
+      b.copyToChannel(d, 0);
+      const smp = await lw.own.create({ name: 'Klopfen', buffer: b, source: 'Aufnahme', from: 'mic', cls: 'tief' });
+      if (withClip) lw.store.addClip('t1', smp.id, 0, 15);
+      return smp.id;
+    }, clip);
+    const slider = (page) => page.evaluate(() => { const s = document.querySelector('.wb-mk-slider'); return { label: s?.getAttribute('aria-label'), now: Number(s?.getAttribute('aria-valuenow')), marks: document.querySelectorAll('.wb-mk').length, role: s?.getAttribute('role') }; });
+    const clipsOf2 = (page) => page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).map((c) => c.sampleId));
+
+    // ----- Desktop: Ablauf in 3 Tipps, Marken, Kiste, Editor weg -----
+    {
+      const ctx = await browser.newContext(DESK);
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      await bumm(page, 1);
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(400);
+      const shortTab = await page.evaluate(() => getComputedStyle(document.getElementById('wb-tab-zerlegen')).display === 'none' || document.getElementById('wb-tab-zerlegen').hidden);
+      check('Reiter Zerlegen fehlt bei einem Sound unter 1 s', shortTab);
+      await page.evaluate(() => { const lw = window.loopwerk; lw.store.deleteClip(lw.store.project.tracks[0].clips[0].id); lw.ui.select(null); });
+      const kid = await klopfen(page);
+      await page.waitForTimeout(500);
+      const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+      // Tipp 1: Clip, Tipp 2: Zerlegen, Marken stehen sofort da
+      await page.click('.lane[data-track-id="t1"] .clip >> nth=0', { position: { x: 60, y: 24 } });
+      await page.click('#wb-tab-zerlegen');
+      await page.waitForFunction(() => document.querySelectorAll('.wb-mk').length > 0, null, { timeout: 5000 });
+      const m0 = await slider(page);
+      check('Zerlegen: Marken erscheinen sofort, 8 Marken bei Empfindlichkeit 0,5, ein Regler „Marke 1 von 8“ (role=slider)', m0.marks === 8 && m0.label === 'Marke 1 von 8' && m0.role === 'slider', JSON.stringify(m0));
+      const hidden4 = await page.evaluate(() => ['.wb-h-start', '.wb-h-end', '.wb-h-atk', '.wb-h-rel'].every((q) => getComputedStyle(document.querySelector(q)).display === 'none'));
+      check('Marken-Modus: die 4 Griffe aus 2a sind ausgeblendet', hidden4);
+      const gr = await page.evaluate(() => document.querySelectorAll('[role=tabpanel]:not([hidden]) .wb-grund :is(button, input, select, [role=slider])').length);
+      check('Zerlegen: Grund hat 5 Griffe (An Anschlägen · In 8 gleiche · Empfindlichkeit · In die Kiste · Auf die Spur)', gr === 5, String(gr));
+      const near = await page.evaluate(() => {
+        const t = [0.5, 1.6, 2.4, 3.9, 5.0, 6.3, 7.5, 8.8];
+        const W = document.querySelector('.wb-wave').getBoundingClientRect().width;
+        const xs = [...document.querySelectorAll('.wb-mk')].map((n) => parseFloat(n.style.left) / W * 10);
+        return xs.slice(1).map((x, i) => Math.abs(x + 0.003 - t[i + 1]) * 1000);
+      });
+      check('Marken: jede Marke 3 ms vor ihrem Schlag (± 8 ms wegen Pixelraster)', near.length === 7 && near.every((e) => e < 60), near.map((e) => e.toFixed(0)).join(','));
+      // Welle in dB: ein −12-dB-Schlag (4. Schlag, 3,9 s) hat sichtbare Höhe (≥ 20 % der Wellenhöhe); −18 dB ergäbe nach der Skala 62 %
+      const hgt = await page.evaluate(() => {
+        const cv = document.querySelector('.wb-wave-cv');
+        const x = Math.round((3.95 / 10) * cv.width);
+        const d = cv.getContext('2d').getImageData(x - 2, 0, 5, cv.height).data;
+        let top = cv.height, bot = 0;
+        for (let y = 0; y < cv.height; y++) for (let xx = 0; xx < 5; xx++) if (d[(y * 5 + xx) * 4 + 3] > 40) { top = Math.min(top, y); bot = Math.max(bot, y); }
+        return { frac: (bot - top + 1) / cv.height };
+      });
+      check('Welle im Reiter Zerlegen: Hüllkurve in dB, der leise Schlag (−12 dB) füllt ≥ 20 % der Wellenhöhe', hgt.frac >= 0.2, JSON.stringify(hgt));
+      const wgt = await page.evaluate(() => {
+        const cs = (q) => getComputedStyle(document.querySelector(q));
+        const amber = (() => { const t = document.createElement('i'); t.style.color = 'var(--amber)'; document.body.append(t); const c = getComputedStyle(t).color; t.remove(); return c; })();
+        return { track: cs('#wb-cut-track').backgroundColor === amber, boxFill: cs('#wb-cut-box').backgroundColor, tog: cs('#wb-cut-onsets').color === amber, togBg: cs('#wb-cut-onsets').backgroundColor, off: cs('#wb-cut-even').color !== amber };
+      });
+      check('Gewicht: „Auf die Spur“ gefüllt in Weißglut, „In die Kiste“ ohne Fläche, gewählter Umschalter in Weißglut ohne Fläche', wgt.track && /rgba\(0, 0, 0, 0\)|transparent/.test(wgt.boxFill) && wgt.tog && /rgba\(0, 0, 0, 0\)|transparent/.test(wgt.togBg) && wgt.off, JSON.stringify(wgt));
+      // Tastatur: Pfeil rechts +5 ms, runter wechselt, Entf löscht
+      await page.focus('.wb-mk-slider');
+      await page.keyboard.press('ArrowDown');
+      const a1 = await slider(page);
+      await page.keyboard.press('ArrowRight');
+      const a2 = await slider(page);
+      check('Marken-Slider: ArrowDown wechselt zu „Marke 2 von 8“, ArrowRight verschiebt um 5 ms', a1.label === 'Marke 2 von 8' && Math.abs(a2.now - a1.now - 0.005) < 0.0011, `${a1.now} → ${a2.now}`);
+      await page.keyboard.press('Shift+ArrowLeft');
+      const a3 = await slider(page);
+      check('Marken-Slider: Umschalt+ArrowLeft verschiebt um 50 ms', Math.abs(a2.now - a3.now - 0.05) < 0.0011, `${a2.now} → ${a3.now}`);
+      await page.keyboard.press('Delete');
+      const a4 = await slider(page);
+      check('Marken-Slider: Entf löscht die Marke (7 Schnitte), der Regler bleibt im Fokus', a4.marks === 7 && /von 7$/.test(a4.label) && await page.evaluate(() => document.activeElement?.classList.contains('wb-mk-slider')), JSON.stringify(a4));
+      // Doppeltipp löscht ebenfalls, Zug verschiebt; dann Empfindlichkeit setzt die Marken neu
+      const mk3 = await page.evaluate(() => { const r = document.querySelectorAll('.wb-mk')[3].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await page.mouse.move(mk3.x, mk3.y);
+      await page.mouse.down();
+      for (let i = 1; i <= 6; i++) await page.mouse.move(mk3.x + i * 4, mk3.y);
+      await page.mouse.up();
+      const a5 = await slider(page);
+      check('Marke mit der Maus ziehen verschiebt sie (und wählt sie)', /Marke 4 von 7/.test(a5.label) && a5.marks === 7, JSON.stringify(a5));
+      const mk3b = await page.evaluate(() => { const r = document.querySelectorAll('.wb-mk')[3].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await page.mouse.dblclick(mk3b.x, mk3b.y);
+      const a6 = await slider(page);
+      check('Doppeltipp auf eine Marke löscht sie (6 Schnitte)', a6.marks === 6, JSON.stringify(a6));
+      await page.evaluate(() => { const i = document.getElementById('wb-cut-sens'); i.value = '0.5'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+      await page.waitForFunction(() => document.querySelectorAll('.wb-mk').length === 8, null, { timeout: 5000 });
+      const sensKey = await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.make.cutSens')));
+      check('Empfindlichkeit setzt die Marken neu (wieder 8), Wert in lsKey „loopwerk.cutSens“ gemerkt', sensKey?.v === 0.5, JSON.stringify(sensKey));
+      const cnt = (v) => page.evaluate((x) => { const i = document.getElementById('wb-cut-sens'); i.value = String(x); i.dispatchEvent(new Event('input', { bubbles: true })); return new Promise((r) => setTimeout(() => r(document.querySelectorAll('.wb-mk').length), 500)); }, v);
+      const lo = await cnt(0.05), hi = await cnt(1);
+      await cnt(0.5);
+      check('Empfindlichkeit: Marken folgen live (0,05 und 1 geben je ≥ 1 Marke, hoch nie weniger als niedrig)', lo >= 1 && hi >= lo, `0,05 → ${lo}, 1 → ${hi}`);
+      // Tipp 3: Auf die Spur
+      await page.click('#wb-cut-track');
+      await page.waitForTimeout(700);
+      const done = await page.evaluate(() => {
+        const lw = window.loopwerk;
+        const clips = lw.store.project.tracks[0].clips;
+        const names = clips.map((c) => lw.library.get(c.sampleId)?.name);
+        return { n: clips.length, ids: clips.every((c) => /^vr-/.test(c.sampleId)), names, undo: lw.store.undoStack.length, kiste: document.querySelector('.loop-group-btn')?.textContent, hint: document.getElementById('hint-text').textContent };
+      });
+      const u1 = done.undo - u0;
+      check('Ablauf: Clip → Zerlegen → Auf die Spur = 3 Tipps ergibt 8 Clips mit vr-…, Namen „Klopfen · 1“ … „· 8“', done.n === 8 && done.ids && done.names.join('|') === [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Klopfen · ${n}`).join('|'), JSON.stringify(done));
+      check('Kiste: eine eingerückte Zeile „Klopfen · 8 Schnitte“, Einblender „8 Schnitte auf der Spur“, ein Undo-Schritt', /Klopfen · 8 Schnitte/.test(done.kiste) && /8 Schnitte/.test(done.hint) && u1 === 1, `${done.kiste} / ${done.hint} / ${u1}`);
+      const narrowL = await page.evaluate(() => [...document.querySelectorAll('.lane[data-track-id="t1"] .clip .clip-label')].map((l) => l.textContent));
+      await page.evaluate(() => window.loopwerk.arranger.zoomTo(60));
+      await page.waitForTimeout(300);
+      const nums = await page.evaluate(() => [...document.querySelectorAll('.lane[data-track-id="t1"] .clip .clip-label')].map((l) => l.textContent));
+      check('Schnitt-Clips im Song: Nummer vorn („4 · Klopfen“), schmale nur die Nummer', nums.length === 8 && nums.includes('4 · Klopfen') && narrowL.every((t) => /^\d$/.test(t)), `${nums.join(' | ')} / schmal: ${narrowL.join(',')}`);
+      await page.evaluate(() => window.loopwerk.arranger.zoomTo(24));
+      const cutRec = await page.evaluate((id) => { const rs = window.loopwerk.store.project.recipes; return { orig: !!rs[id] === false, groups: new Set(Object.values(rs).map((r) => r.group)).size, own: window.loopwerk.own.list?.().length }; }, kid);
+      check('Alle 8 Schnitte tragen dieselbe Gruppe, der Sound selbst bekam kein Rezept', cutRec.orig && cutRec.groups === 1, JSON.stringify(cutRec));
+      await page.evaluate(() => window.loopwerk.store.undo());
+      await page.waitForTimeout(150);
+      const undone = await page.evaluate(() => ({ hint: document.getElementById('hint-text').textContent, n: window.loopwerk.store.project.tracks[0].clips.length, r: window.loopwerk.store.project.recipes ?? null }));
+      check('Nach undo() zeigt der Einblender „Rückgängig: Zerlegen“, Clip und Rezepte sind zurück', undone.hint === 'Rückgängig: Zerlegen' && undone.n === 1 && !undone.r, JSON.stringify(undone));
+      await page.evaluate(() => window.loopwerk.store.redo());
+      // Kiste: Gruppe klappt auf; Doppelklick auf einen Schnitt öffnet die Werkbank ohne Reiter Clip
+      await page.click('.loop-group-btn');
+      const kids = await page.evaluate(() => document.querySelectorAll('#library .loop-row.group-kid .loop-item').length);
+      check('Kiste: Tipp auf die Gruppenzeile klappt die 8 Schnitte auf', kids === 8, String(kids));
+      if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-kiste-schnitte.png') });
+      await page.evaluate(() => window.loopwerk.ui.select(null));
+      await page.dblclick(`#library .loop-item[data-sample-id="${kid}"]`);
+      await page.waitForTimeout(500);
+      const kb = await page.evaluate(() => ({ clipTab: document.getElementById('wb-tab-clip').hidden, name: document.getElementById('wb-name').textContent, mode: document.getElementById('insp').dataset.mode, bench: window.loopwerk.ui.benchSoundId }));
+      check('Kiste: Doppelklick auf einen Sound öffnet die Werkbank ohne Reiter Clip', kb.clipTab && kb.mode === 'sound' && !!kb.bench && /Klopfen/.test(kb.name), JSON.stringify(kb));
+      // Aus der Kiste: den Ursprungs-Sound „Klopfen“ öffnen und „In die Kiste“
+      await page.evaluate((id) => window.loopwerk.ui.openSound(id), kid);
+      await page.click('#wb-tab-zerlegen');
+      await page.waitForFunction(() => document.querySelectorAll('.wb-mk').length > 0, null, { timeout: 5000 });
+      const g0 = await page.evaluate(() => new Set(Object.values(window.loopwerk.store.project.recipes).map((r) => r.group)).size);
+      await page.click('#wb-cut-box');
+      await page.waitForTimeout(500);
+      const g1 = await page.evaluate(() => ({ groups: new Set(Object.values(window.loopwerk.store.project.recipes).map((r) => r.group)).size, clips: window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length, hint: document.getElementById('hint-text').textContent }));
+      check('Aus der Kiste: „In die Kiste“ legt eine zweite Gruppe an, Einblender „8 Schnitte in der Kiste“, Clips unverändert', g1.groups === g0 + 1 && g1.clips === 8 && /8 Schnitte in der Kiste/.test(g1.hint), JSON.stringify(g1));
+      // Autotune in den Ton-Feinheiten; Trennen in den Zerlegen-Feinheiten
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(300);
+      await page.click('#wb-tab-ton');
+      const fineVis = await page.evaluate(() => !document.querySelector('#wb-panel-ton .wb-fine').hidden);
+      if (!fineVis) await page.click('#wb-fine-btn-ton');
+      await page.click('#wb-tune');
+      await page.waitForTimeout(200);
+      const tuned = await page.evaluate(() => { const lw = window.loopwerk; const id = lw.store.project.tracks[0].clips[0].sampleId; return { r: lw.store.project.recipes[id], key: document.getElementById('wb-tune-key')?.value }; });
+      check('Autotune: Schalter in den Ton-Feinheiten setzt tune 1 und tuneKey auf die Tonart des Songs', tuned.r?.tune === 1 && tuned.r.tuneKey === 'Am' && tuned.key === 'Am', JSON.stringify(tuned));
+      await page.evaluate(() => { window.loopwerk.store.undo(); window.loopwerk.ui.select(null); window.loopwerk.ui.openSound(Object.values(window.loopwerk.store.project.recipes)[0].parent); });
+      await page.waitForTimeout(300);
+      await page.click('#wb-tab-zerlegen');
+      if (await page.evaluate(() => document.querySelector('#wb-panel-zerlegen .wb-fine').hidden)) await page.click('#wb-fine-btn-zerlegen');
+      const sep = await page.evaluate(() => ['wb-sep-novocal', 'wb-sep-vocal', 'wb-sep-stems'].map((i) => document.getElementById(i)?.textContent));
+      check('Trennen: Stimme weg · Nur Stimme · In 4 Ebenen stehen in den Zerlegen-Feinheiten', sep.join(' · ') === 'Stimme weg · Nur Stimme · In 4 Ebenen', sep.join(' · '));
+      // Desktop-Zählung (Clip gewählt, 10-s-Sound, Reiter Form) in einem frischen Fenster, wie die 2a-Szene: ein Sound in der Kiste
+      {
+        const c2 = await browser.newContext(DESK);
+        const k2 = await openKw(base, c2);
+        await klopfen(k2.page);
+        await scene(k2.page, 'clip');
+        await k2.page.click('#wb-tab-form');
+        counts['desktop-klopfen'] = await countUi(k2.page);
+        if (SHOTS) {
+          await k2.page.click('#wb-tab-zerlegen');
+          await k2.page.waitForFunction(() => document.querySelectorAll('.wb-mk').length > 0, null, { timeout: 5000 });
+          await k2.page.waitForTimeout(300);
+          await k2.page.screenshot({ path: path.join(DIR, 'kw-zerlegen-desktop.png') });
+        }
+        await c2.close();
+      }
+      // Editor weg, jede Funktion hat einen Zwilling
+      const ed = await page.evaluate(() => {
+        const vis = (e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none';
+        const tw = window.loopwerk.edition.twins;
+        const ids = [...document.querySelectorAll('#editor button[id^="ed-"], #editor input[id^="ed-"], #editor select[id^="ed-"]')].map((e) => e.id).filter((i) => i !== 'ed-cancel');
+        return { btn: vis(document.getElementById('edit-btn')), tab: vis(document.getElementById('editor-tab')), dock: vis(document.getElementById('editor')), n: ids.length, miss: ids.filter((i) => !tw[i]), surf: window.loopwerk.edition.surfaces.editor, twEdit: !!tw['edit-btn'] };
+      });
+      check('Editor weg: #edit-btn, #editor-tab, Dock unsichtbar, surfaces.editor false', !ed.btn && !ed.tab && !ed.dock && ed.surf === false, JSON.stringify(ed));
+      check('Editor weg: jeder Knopf mit id ed-… (außer ed-cancel) hat einen Zwilling in EDITION.twins', ed.n >= 20 && ed.miss.length === 0 && ed.twEdit, `${ed.n} Knöpfe, ohne Zwilling: ${ed.miss.join(',')}`);
+      check('Zerlegen Desktop: keine Konsolenfehler', k.errors.length === 0, k.errors.join(' | '));
+      await ctx.close();
+    }
+
+    // ----- Handy: Marken ziehen, 56 px, lange drücken, Zählung, Bilder -----
+    {
+      const ctx = await browser.newContext(PHONE);
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      await klopfen(page);
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(400);
+      await page.tap('#cf-werkbank');
+      await page.waitForTimeout(1100);
+      await page.tap('#wb-tab-zerlegen');
+      await page.waitForFunction(() => document.querySelectorAll('.wb-mk').length > 0, null, { timeout: 5000 });
+      await page.waitForTimeout(400);
+      counts['handy-zerlegen'] = await countUi(page);
+      const inView = await page.evaluate(() => {
+        const wb = document.getElementById('werkbank').getBoundingClientRect();
+        const bar = document.getElementById('tabbar').getBoundingClientRect();
+        const items = [...document.querySelectorAll('[role=tabpanel]:not([hidden]) .wb-grund :is(button, input)')].filter((e) => e.getClientRects().length);
+        return items.filter((e) => { const r = e.getBoundingClientRect(); return r.top < wb.top - 1 || r.bottom > bar.top + 1; }).length;
+      });
+      check('Handy Zerlegen auf „Mitte“: alle 5 Grund-Griffe liegen vollständig im Bild', inView === 0, String(inView));
+      if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-zerlegen-handy.png') });
+      const top0 = await page.evaluate(() => document.getElementById('werkbank').getBoundingClientRect().top);
+      const cdp = await ctx.newCDPSession(page);
+      const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+      const m3 = await page.evaluate(() => { const r = document.querySelectorAll('.wb-mk')[3].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      const before = (await slider(page)).now;
+      await touch('touchStart', m3.x, m3.y);
+      for (let i = 1; i <= 8; i++) await touch('touchMove', m3.x + i * 5, m3.y + (i % 2));
+      await touch('touchEnd');
+      await page.waitForTimeout(500);
+      const dragged = await page.evaluate(() => ({ top: document.getElementById('werkbank').getBoundingClientRect().top, label: document.querySelector('.wb-mk-slider').getAttribute('aria-label'), now: Number(document.querySelector('.wb-mk-slider').getAttribute('aria-valuenow')) }));
+      const moved = (await page.evaluate(() => [...document.querySelectorAll('.wb-mk')].map((n) => parseFloat(n.style.left))))[3];
+      check('Handy: waagerechter Zug an einer Marke verschiebt sie und nicht die Schublade', /Marke 4 von 8/.test(dragged.label) && Math.abs(dragged.top - top0) <= 1 && dragged.now > before - 1 && moved > 0, `${JSON.stringify(dragged)} Marke bei ${moved}`);
+      // Handy: Auf die Spur mit Tippen
+      await page.tap('#wb-cut-track');
+      await page.waitForTimeout(700);
+      const hc = await page.evaluate(() => window.loopwerk.store.project.tracks[0].clips.length);
+      check('Handy: Auf die Spur ergibt 8 Clips', hc === 8, String(hc));
+      // 56 px: wieder auf einen langen Sound, Schublade nach unten wischen
+      await page.evaluate(() => { const lw = window.loopwerk; lw.store.undo(); lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(500);
+      const grip = await page.evaluate(() => { const r = document.querySelector('#werkbank .sheet-grip').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await touch('touchStart', grip.x, grip.y);
+      for (let i = 1; i <= 10; i++) { await touch('touchMove', grip.x, grip.y + i * 30); await page.waitForTimeout(16); }
+      await page.waitForTimeout(160);
+      await touch('touchEnd');
+      await page.waitForTimeout(1200);
+      const zu = await page.evaluate(() => {
+        const wb = document.getElementById('werkbank');
+        const r = wb.getBoundingClientRect();
+        const vis = (q) => { const e = wb.querySelector(q); const b = e?.getBoundingClientRect(); return !!b && b.width > 0 && b.top >= r.top - 1 && b.bottom <= r.bottom + 1 && getComputedStyle(e).display !== 'none'; };
+        return { h: r.height, head: vis('.wb-name'), variant: vis('#wb-variant'), dock: window.loopwerk.ui.dock, bottom: r.bottom, bar: document.getElementById('tabbar').getBoundingClientRect().top };
+      });
+      check('Handy: Werkbank „zu“ (Herunterwischen) = 56 px (± 1), zeigt Kopf und „Als Variante“, liegt über der Daumenleiste', Math.abs(zu.h - 56) <= 1 && zu.head && zu.variant && zu.dock === 'werkbank' && Math.abs(zu.bottom - zu.bar) <= 2, JSON.stringify(zu));
+      await page.evaluate(() => window.loopwerk.ui.flash('Rückgängig: Zerlegen'));
+      await page.waitForTimeout(400);
+      const ov = await page.evaluate(() => {
+        const a = document.getElementById('hint').getBoundingClientRect();
+        const b = document.getElementById('werkbank').getBoundingClientRect();
+        return { shown: document.getElementById('hint').classList.contains('show'), hit: !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom) };
+      });
+      check('Handy: der Einblender sitzt über der 56-px-Schublade und überlappt ihren Kopf nicht', ov.shown && !ov.hit, JSON.stringify(ov));
+      if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-zu-handy.png') });
+      // Tipp auf den Griff holt sie wieder auf Mitte; nochmal wischen + wischen schließt
+      await page.evaluate(() => { const r = document.querySelector('#werkbank .sheet-grip').getBoundingClientRect(); window.__g = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      const g = await page.evaluate(() => window.__g);
+      await touch('touchStart', g.x, g.y);
+      await page.waitForTimeout(70);
+      await touch('touchEnd');
+      await page.waitForTimeout(1000);
+      const mitte = await page.evaluate(() => document.getElementById('werkbank').getBoundingClientRect().height);
+      check('Handy: Tipp auf den Griff holt die Werkbank aus der Kopfzeile zurück (Mitte)', mitte > 200, `${mitte.toFixed(0)} px`);
+      // Kiste: lange drücken öffnet die Werkbank ohne Reiter Clip
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(null); lw.ui.setDock('sounds'); });
+      await page.waitForTimeout(900);
+      const it = await page.evaluate(() => { const r = document.querySelector('#library .loop-item').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await touch('touchStart', it.x, it.y);
+      await page.waitForTimeout(700);
+      await touch('touchEnd');
+      await page.waitForTimeout(1100);
+      const lp = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, clipTab: document.getElementById('wb-tab-clip')?.hidden, bench: !!window.loopwerk.ui.benchSoundId, armed: window.loopwerk.ui.armedSampleId }));
+      check('Handy: lange drücken auf einen Sound der Kiste öffnet die Werkbank ohne Reiter Clip', lp.dock === 'werkbank' && lp.clipTab && lp.bench && !lp.armed, JSON.stringify(lp));
+      check('Handy: kein seitliches Scrollen im Reiter Zerlegen', await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) <= 0);
+      check('Zerlegen Handy: keine Konsolenfehler', k.errors.length === 0, k.errors.join(' | '));
+      await ctx.close();
+    }
+    if (SHOTS) {
+      // Bilder für den CD: Form mit 0-ms-Hüllkurve (vier Griffe), roh neben geformt im Song
+      for (const [dev, opts] of [['desktop', DESK], ['handy', PHONE]]) {
+        const ctx = await browser.newContext(opts);
+        const k = await openKw(base, ctx);
+        const page = k.page;
+        const id = await bumm(page, 2);
+        await page.evaluate((i) => {
+          const lw = window.loopwerk;
+          const c2 = lw.store.project.tracks[0].clips[1].id;
+          const vr = lw.store.addVariant(i, { clipId: c2 });
+          lw.library.syncVariants(lw.store.project);
+          lw.store.setRecipe(vr, { semis: -3, lp: 1800, warm: 0.5 });
+          lw.ui.select(lw.store.project.tracks[0].clips[0].id);
+        }, id);
+        await page.waitForTimeout(1200);
+        if (dev === 'handy') { await page.tap('#cf-werkbank'); await page.waitForTimeout(1200); }
+        await page.screenshot({ path: path.join(DIR, `kw-form-${dev}.png`) });
+        if (dev === 'desktop') await page.screenshot({ path: path.join(DIR, 'kw-roh-geformt-desktop.png'), clip: { x: 250, y: 90, width: 650, height: 230 } });
+        await ctx.close();
+      }
+    }
+    {
+      const c = counts['desktop-klopfen'];
+      check('Zählung 2b Desktop (Clip gewählt, 10-s-Sound, Reiter Form): ≤ 45 Bedienelemente, ≤ 30 Rahmen, ≤ 5 Schriftgrößen, kleinste ≥ 11', c.controls <= 45 && c.frames <= 30 && c.sizes <= 5 && c.minFont >= 11, `${c.controls} / ${c.frames} / ${c.sizes} / ${c.minFont}`);
+      const z = counts['handy-zerlegen'];
+      check('Zählung 2b Handy Werkbank Mitte, Reiter Zerlegen (10-s-Sound, 8 Marken): ≤ 26 Bedienelemente, ≤ 13 Rahmen, ≤ 5 Schriftgrößen, kleinste ≥ 11', z.controls <= 26 && z.frames <= 13 && z.sizes <= 5 && z.minFont >= 11, `${z.controls} / ${z.frames} / ${z.sizes} / ${z.minFont}`);
+    }
+
+    // ----- Loopwerk unverändert: kein Werkbank-Reiter -----
+    {
+      const ctx = await browser.newContext(DESK);
+      const pg = await ctx.newPage();
+      const errs = [];
+      pg.on('pageerror', (e) => errs.push(e.message));
+      await pg.goto(`${base}/`);
+      await pg.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+      await pg.evaluate(() => window.loopwerk.library.catalogReady);
+      await scene(pg, 'clip');
+      const lw2 = await pg.evaluate(() => ({ speed: !!document.getElementById('insp-speed')?.offsetParent, tabs: document.querySelectorAll('.wb-tabs').length, track: !!document.querySelector('.insp-track')?.offsetParent }));
+      check('Loopwerk: bei gewähltem Clip #insp-speed da, kein .wb-tabs, Spur-Abschnitt wie bisher', lw2.speed && lw2.tabs === 0 && lw2.track && errs.length === 0, JSON.stringify(lw2) + errs.join('|'));
+      await pg.click('#edit-btn');
+      await pg.waitForTimeout(400);
+      const lwEd = await pg.evaluate(() => ({ dock: window.loopwerk.ui.dock, btn: !!document.getElementById('edit-btn')?.offsetParent }));
+      check('Loopwerk: Sample-Editor öffnet wie heute (Bearbeiten sichtbar, Dock „editor“)', lwEd.dock === 'editor' && lwEd.btn, JSON.stringify(lwEd));
+      await ctx.close();
+    }
+
+    // ---------- 14: Zeichen im Deck (Klatscher, src/ui/brand-meter.js mit Option mark) ----------
+    {
+      // Klatscher: Rauschstoß direkt in den gemeinsamen Ausgang, alle 0,5 s
+      const clap = (n) => pk.evaluate(async (n) => {
+        const e = window.loopwerk.engine;
+        await e._ensure();
+        const sr = e.ctx.sampleRate, buf = e.ctx.createBuffer(1, sr * 0.4, sr), d = buf.getChannelData(0);
+        let seed = 3;
+        for (let i = 0; i < d.length; i++) d[i] = (((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1) * 0.6 * Math.exp(-i / (sr * 0.05));
+        const t0 = e.ctx.currentTime + 0.1;
+        for (let k = 0; k < n; k++) { const s = e.ctx.createBufferSource(); s.buffer = buf; s.connect(e.out); s.start(t0 + k * 0.5); }
+      }, n);
+      // pro Bild: Ausschlag (scaleY) je Balken, Mittellinie, Layout-Höhe
+      const track = (ms) => pk.evaluate((ms) => new Promise((res) => {
+        const root = document.getElementById('brand-bars');
+        const bars = [...root.children];
+        const out = [];
+        const t0 = performance.now();
+        const f = () => {
+          const r = root.getBoundingClientRect();
+          out.push({ live: root.classList.contains('live'), s: bars.map((b) => +(/scaleY\(([\d.]+)\)/.exec(b.style.transform)?.[1] ?? NaN)),
+            mid: bars.map((b) => { const q = b.getBoundingClientRect(); return Math.round(Math.abs(q.top + q.height / 2 - (r.top + r.height / 2)) * 10) / 10; }),
+            hpx: bars.map((b) => b.offsetHeight) });
+          if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(out);
+        };
+        requestAnimationFrame(f);
+      }), ms);
+      const K = await browser.newContext(DESK);
+      const pk = await K.newPage();
+      await pk.goto(`${base}/werkstatt/`);
+      await pk.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+      const mark = await pk.evaluate(() => {
+        const root = document.getElementById('brand-bars');
+        const c = getComputedStyle(root.children[0]);
+        return { mark: root.dataset.mark, n: root.children.length, splash: !!document.querySelector('#boot .splash-bars.splash-klatscher'),
+          color: c.backgroundColor, own: getComputedStyle(document.documentElement).getPropertyValue('--cat-own').trim() };
+      });
+      const idle = (await track(100)).at(-1);
+      const IDLE = [8, 20, 46, 34, 24, 14, 6].map((h) => h / 46);
+      check('Krachwerk: Deck zeigt den Klatscher (7 Balken, Pink aus --cat-own), Ladescreen seine Grundform', mark.mark === 'klatscher' && mark.n === 7 && mark.splash && /255, 98, 165/.test(mark.color) && /FF62A5/i.test(mark.own), JSON.stringify(mark));
+      check('Klatscher ohne Ton: Grundform wie im Icon, symmetrisch um die Mittellinie', idle.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005) && idle.mid.every((m) => m <= 0.5) && !idle.live, JSON.stringify(idle));
+      await clap(3);
+      const run = await track(1500);
+      const live = run.filter((x) => x.live);
+      const spread = Math.max(...run.map((x) => Math.max(...x.s.map((v, i) => Math.abs(v - IDLE[i])))));
+      let jump = 0;
+      for (let i = 1; i < run.length; i++) for (let b = 0; b < 7; b++) jump = Math.max(jump, Math.abs(run[i].s[b] - run[i - 1].s[b]) * 22);
+      check('Pegel bewegt den Klatscher: Ausschlag mit dem Ton, nur transform (keine Layout-Höhe), Mitte bleibt', live.length > 5 && spread > 0.25 && run.every((x) => x.hpx.every((h) => h === run[0].hpx[0]) && x.mid.every((m) => m <= 0.5)), `${live.length} Bilder laut, Ausschlag ${spread.toFixed(2)}`);
+      check('Klatscher ohne Sprung: höchstens 8 px Änderung je Bild', jump <= 8, `${jump.toFixed(1)} px`);
+      await pk.waitForTimeout(1600);
+      const back = (await track(60)).at(-1);
+      check('Nach dem Ton zurück in die Grundform', back.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005) && !back.live, JSON.stringify(back.s));
+      if (SHOTS) { await clap(1); await pk.waitForTimeout(160); await pk.screenshot({ path: path.join(DIR, 'kw-zeichen-desktop.png') }); }
+      await pk.emulateMedia({ reducedMotion: 'reduce' });
+      await pk.waitForTimeout(1200);
+      await clap(2);
+      const calm = await track(900);
+      check('Weniger Bewegung: Klatscher leuchtet auf, bleibt aber in der Grundform', calm.some((x) => x.live) && calm.every((x) => x.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005)), `${calm.filter((x) => x.live).length} Bilder laut`);
+      await K.close();
+      if (SHOTS) {
+        const H = await browser.newContext(PHONE);
+        const ph = await H.newPage();
+        await ph.goto(`${base}/werkstatt/`);
+        await ph.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+        await ph.evaluate(() => window.loopwerk.ui.setDock('song'));
+        await ph.waitForTimeout(700);
+        await ph.screenshot({ path: path.join(DIR, 'kw-zeichen-handy.png') });
+        await H.close();
+      }
+    }
 
     // ---------- 10: Pages-Build ----------
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });
     const site = path.join(__dirname, '..', '_site', 'werkstatt');
     const html = fs.readFileSync(path.join(site, 'index.html'), 'utf8');
-    check('Pages-Build: /werkstatt/ ist die volle App mit Edition „make“', html.includes("LOOPWERK_EDITION = 'make'") && html.includes('src/main.js') && html.includes('Krach<b>werk</b>') && !html.includes('src/werkstatt/main.js') && fs.existsSync(path.join(site, 'sw.js')) && fs.existsSync(path.join(site, 'manifest.webmanifest')));
+    check('Pages-Build: /werkstatt/ ist die volle App mit Edition „make“', html.includes("LOOPWERK_EDITION = 'make'") && html.includes('src/main.js') && html.includes('Krach<b>werk</b>') && html.includes('splash-bars splash-klatscher') && !html.includes('src/werkstatt/main.js') && fs.existsSync(path.join(site, 'sw.js')) && fs.existsSync(path.join(site, 'manifest.webmanifest')));
 
     // ---------- 11: Loopwerk unverändert ----------
     const L = await browser.newContext(DESK);
@@ -565,11 +1228,11 @@ async function seedPadWall() {
     const lwInfo = await lw.evaluate(() => {
       localStorage.setItem('loopwerk.snap', localStorage.getItem('loopwerk.snap') || '1');
       window.loopwerk.store.setProjectName('Prüfung'); // Projekt wird erst nach einer Änderung gesichert
-      return { off: document.querySelectorAll('[data-off]').length, ed: document.getElementById('app').dataset.edition, dens: document.getElementById('app').dataset.density, title: document.title, sw: !!navigator.serviceWorker.controller };
+      return { bars: document.querySelectorAll('#brand-bars > i').length, mark: document.getElementById('brand-bars').dataset.mark || '', splash: document.querySelectorAll('#boot .splash-klatscher').length, off: document.querySelectorAll('[data-off]').length, ed: document.getElementById('app').dataset.edition, dens: document.getElementById('app').dataset.density, title: document.title, sw: !!navigator.serviceWorker.controller };
     });
     await lw.waitForTimeout(600);
     const keys = await lw.evaluate(() => Object.keys(localStorage));
-    check('Loopwerk: keine abgeschalteten Flächen, Edition „full“, kein Service Worker', lwInfo.off === 0 && lwInfo.ed === 'full' && lwInfo.dens !== 'calm' && /Loopwerk$/.test(lwInfo.title) && !lwInfo.sw, JSON.stringify(lwInfo));
+    check('Loopwerk: keine abgeschalteten Flächen, Edition „full“, kein Service Worker, Bildmarke mit 5 Balken', lwInfo.off === 0 && lwInfo.bars === 5 && !lwInfo.mark && !lwInfo.splash && lwInfo.ed === 'full' && lwInfo.dens !== 'calm' && /Loopwerk$/.test(lwInfo.title) && !lwInfo.sw, JSON.stringify(lwInfo));
     check('Loopwerk: Schlüssel wie bisher (loopwerk.project.v1, loopwerk.snap)', keys.includes('loopwerk.project.v1') && keys.includes('loopwerk.snap') && !keys.some((k) => k.startsWith('loopwerk.make.')), keys.join(','));
     await L.close();
     const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'count-baseline.json'), 'utf8'));

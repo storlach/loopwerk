@@ -8,13 +8,14 @@ import { Engine, renderProject } from './engine.js';
 import { Emitter } from './util.js';
 import { encodeWav } from './wav.js';
 import { mountLibrary } from './ui/library.js';
-import { mountArranger } from './ui/arranger.js';
+import { mountArranger, headW } from './ui/arranger.js';
 import { mountZoomBars, loadZoom } from './ui/zoombars.js';
 import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
 import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
 import { mountInspector } from './ui/inspector.js';
+import { mountSoundBench } from './ui/sound-bench.js';
 import { mountCreate } from './ui/create.js';
 import { mountSheets } from './ui/sheets.js';
 import { mountTips } from './ui/tips.js';
@@ -34,7 +35,7 @@ import { newDrumPattern, newSynthPattern } from './instruments.js';
 import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
-import { touch } from './ui/place.js';
+import { touch, place } from './ui/place.js';
 import { templateControls, MASTER_TEMPLATES } from './ui/auto-lane.js';
 import { doubleTapRanges } from './ui/touch.js';
 import { EDITION, lsKey } from './edition.js';
@@ -68,6 +69,7 @@ async function loadSaved(library, patterns) {
     const p = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!isValidProject(p)) return null;
     await patterns.sync(p);
+    library.syncVariants(p); // Varianten (Klang-Rezept) vor dem Platzhalter-Check
     // Fehlt ein Sound (z. B. vom Browser gelöscht), bleibt der Clip als stummer Platzhalter „Sound fehlt“ –
     // sonst wäre das Arrangement beim nächsten Speichern für immer weg. Eine Projektdatei bringt den Klang zurück.
     for (const t of p.tracks) for (const c of t.clips) if (!library.get(c.sampleId)) missingSound(library, c);
@@ -87,25 +89,40 @@ function createUi() {
     snapBeats: 1,
     selectedClipId: null,
     selectedTrackId: null,
+    benchSoundId: null, // Krachwerk: Werkbank für einen Sound aus der Kiste (ohne Clip)
     armedSampleId: null,
     statusText: null,
     flashText: null,
     dock: null,
-    setDock(name) { if (ui.dock !== name) { ui.dock = name; ui.emit(); } },
+    setDock(name) {
+      if (ui.dock === name) return;
+      ui.dock = name;
+      if (name !== 'werkbank' && ui.benchSoundId && narrow.matches) ui.benchSoundId = null; // Handy: Schublade zu = Sound-Werkbank zu
+      ui.emit();
+    },
     // Mehrfachauswahl: multi enthält alle ausgewählten Clips (ab zwei); selectedClipId ist der zuletzt gewählte
     multi: [],
     select(id) {
-      if (ui.selectedClipId === id && !ui.multi.length && (!id || !ui.selectedTrackId)) return;
+      if (ui.selectedClipId === id && !ui.multi.length && (!id || !ui.selectedTrackId) && !ui.benchSoundId) return;
       ui.multi = [];
       ui.selectedClipId = id;
+      ui.benchSoundId = null;
       if (id) ui.selectedTrackId = null;
+      ui.emit();
+    },
+    // Werkbank für einen Sound aus der Kiste (Doppelklick/lange drücken); null schließt sie
+    openSound(id) {
+      if (ui.benchSoundId === (id || null) && !ui.selectedClipId && !ui.selectedTrackId) return;
+      ui.benchSoundId = id || null;
+      if (id) { ui.selectedClipId = null; ui.selectedTrackId = null; ui.multi = []; }
       ui.emit();
     },
     // Spur im Inspektor zeigen (hebt die Clip-Auswahl auf)
     selectTrack(id) {
-      if (ui.selectedTrackId === id && !ui.selectedClipId) return;
+      if (ui.selectedTrackId === id && !ui.selectedClipId && !ui.benchSoundId) return;
       ui.selectedTrackId = id;
       ui.selectedClipId = null;
+      ui.benchSoundId = null;
       ui.multi = [];
       ui.emit();
     },
@@ -113,7 +130,7 @@ function createUi() {
       const list = [...new Set(ids)];
       ui.multi = list.length > 1 ? list : [];
       ui.selectedClipId = list.length ? list[list.length - 1] : null;
-      if (list.length) ui.selectedTrackId = null;
+      if (list.length) { ui.selectedTrackId = null; ui.benchSoundId = null; }
       ui.emit();
     },
     selectedIds() { return ui.multi.length ? ui.multi.slice() : ui.selectedClipId ? [ui.selectedClipId] : []; },
@@ -270,11 +287,21 @@ function mountTempo({ store, engine, library, ui, arranger }) {
   return { apply, get busy() { return !!running; } };
 }
 
-// Tempo einzelner Sounds (Inspektor): Aufnahme neu einpassen, Wiedergabe an derselben Stelle fortsetzen
-function mountSampleTempo({ store, engine, library, ui, arranger }) {
+// Klang eines Sounds aus dem Projekt, in einer Kette: erst Klang-Rezepte (ADR 010: backen, live ohne Stopp neu einplanen),
+// dann Sound-Tempo (Aufnahme neu einpassen, Wiedergabe an derselben Stelle fortsetzen)
+function mountSoundState({ store, engine, library, ui, arranger }) {
   let last = '';
   let chain = Promise.resolve();
-  store.on(() => {
+  const run = (initial = false) => {
+    chain = chain.then(async () => {
+      if (await library.applyRecipes(store.project)) {
+        library.emit();
+        arranger.render();
+        engine.refresh();
+        ui.emit?.();
+      }
+    }).catch((err) => console.warn('Klang-Rezept:', err?.message || err));
+    if (initial === true) return; // Sound-Tempo wie bisher erst ab der ersten Änderung
     const map = store.project.sampleTempo || {};
     const key = JSON.stringify(map);
     if (key === last) return;
@@ -286,7 +313,9 @@ function mountSampleTempo({ store, engine, library, ui, arranger }) {
       if (engine.playing) { const pos = engine.heardBeat(); engine.stop(); engine.play(pos); }
       ui.emit?.();
     }).catch((err) => console.warn('Sound-Tempo:', err?.message || err));
-  });
+  };
+  store.on(() => run());
+  run(true);
 }
 
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
@@ -424,6 +453,7 @@ async function boot() {
     catalogs: EDITION.catalogs,
     onProgress: (done, total) => splash.set(0.05 + 0.75 * (done / total), `Sounds werden geladen – ${done} von ${total}`),
   });
+  library.materialColors = EDITION.materialColors; // Herkunftsfarbe in Kiste und Song (Krachwerk)
   splash.set(0.82, 'Eigene Sounds …');
   const own = new OwnSounds(library, { db: EDITION.db });
   await own.loadAll();
@@ -432,16 +462,25 @@ async function boot() {
   const store = new Store((await loadSaved(library, patterns)) ?? startProject(), {
     sampleBeats: (id) => library.get(id)?.lengthBeats ?? 4,
     sampleName: (id) => library.get(id)?.name,
+    soundDuration: (id) => library.get(id)?.orig?.duration ?? library.get(id)?.duration ?? null,
   });
   const engine = new Engine(store, library);
   const ui = createUi();
 
   // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, harmonyToggle: EDITION.density !== 'calm' });
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm' });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
+    onBench: EDITION.workbench === 'sound' ? (id) => { ui.openSound(id); if (narrow.matches) ui.setDock('werkbank'); } : null,
     onDeleteOwn: async (id) => {
+      if (store.project.recipes?.[id]?.parent) {
+        // Variante: nur ohne Clips entfernen
+        const n = store.clipsOf(id);
+        if (!store.removeVariant(id)) ui.flash(`Wird noch in ${n} ${n === 1 ? 'Clip' : 'Clips'} benutzt.`);
+        else ui.flash('Variante gelöscht (Strg+Z holt sie zurück).');
+        return;
+      }
       if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
         ui.flash('Dieser Sound wird im Projekt benutzt. Entferne erst die Clips.');
         return;
@@ -463,7 +502,9 @@ async function boot() {
   const openClip = (clipId) => {
     const c = store.findClip(clipId)?.clip;
     const pid = c && library.get(c.sampleId)?.patternId;
-    if (pid) patternEditor.open(pid); else editor.open(clipId);
+    if (pid) patternEditor.open(pid);
+    else if (EDITION.surfaces.editor !== false) editor.open(clipId);
+    else if (narrow.matches) ui.setDock('werkbank'); // Krachwerk: die Werkbank ersetzt den Sample-Editor
   };
   tools.onEdit = openClip;
   document.getElementById('arr-scroll').addEventListener('dblclick', (e) => {
@@ -514,12 +555,12 @@ async function boot() {
   const recording = mountRecording({ store, engine, ui, arranger, recorder, mode: EDITION.record });
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
-  mountBrandMeter(engine);
+  mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
   const glow = mountGlow({ engine, store, library, ui });
   doubleTapRanges();
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
-  mountSampleTempo({ store, engine, library, ui, arranger });
+  mountSoundState({ store, engine, library, ui, arranger });
   const mastering = mountMasteringAnalysis({ store, engine, library });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering });
   const fxpad = mountFxPad({ root: document.getElementById('fxpad'), store, engine, ui });
@@ -530,7 +571,11 @@ async function boot() {
   // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
   const songAuto = templateControls({ store, ui, engine, getTarget: () => 'master', names: MASTER_TEMPLATES, bars: false, variant: 'song', onDone: () => ui.setDock(null) });
   document.getElementById('song-auto-slot').append(songAuto.node);
-  const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools, engine, mastering });
+  const inspector = mountInspector({
+    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering,
+    // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
+    ...(EDITION.workbench === 'sound' ? { clipPanel: (box, deps) => mountSoundBench(box, { ...deps, own }), trackOnClip: false, fxCompact: true } : {}),
+  });
   const layout = mountLayout({
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
@@ -564,10 +609,27 @@ async function boot() {
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
   if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools });
   const sheets = mountSheets({ ui, arranger });
+  // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
+  if (EDITION.density === 'calm') {
+    const app0 = document.getElementById('app');
+    const fit = () => {
+      if (!app0.classList.contains('wb-wide') || !app0.classList.contains('insp-open') || narrow.matches) return;
+      const sc = document.getElementById('arr-scroll');
+      const want = (sc.clientWidth - headW() - 22) / (store.project.beatsPerBar * 4);
+      if (want > 0 && ui.pxPerBeat > want) arranger.zoomTo(want);
+    };
+    let wasWide = false;
+    new MutationObserver(() => {
+      const w = app0.classList.contains('wb-wide') && app0.classList.contains('insp-open');
+      if (w && !wasWide) setTimeout(fit, 60);
+      wasWide = w;
+    }).observe(app0, { attributes: true, attributeFilter: ['class'] });
+  }
   // Ruhige Dichte: Tonart- und Akkordzeile am Handy erst bei Wechseln – oder auf Wunsch über das Song-Fach (gemerkt)
   if (EDITION.density === 'calm') {
     const btn = document.getElementById('harm-tpl').content.firstElementChild.cloneNode(true);
     document.getElementById('song-links').prepend(btn);
+    place(btn, { calm: { narrow: document.getElementById('song-links'), wide: document.getElementById('insp-song-tools') } }); // Desktop: Song-Werkbank
     const app = document.getElementById('app');
     const set = (on) => {
       app.classList.toggle('harmony-on', on);

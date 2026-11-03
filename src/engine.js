@@ -407,6 +407,8 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const duration = (end - fromBeat) * spb + tailSeconds;
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
   const wantMaster = !analysis && mastering !== false && masteringOf(project).on;
+  // Klang-Rezepte übernehmen (gleicher Stand → sofort fertig), damit Export und Tests nach dem aktuellen Rezept klingen
+  await library.applyRecipes?.(project);
   // Tonart je Takt und Akkord-Streifen: Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
   await library.ensureKeyVariants?.(project);
   const lat = !compensate ? 0 : wantMaster ? masterLatency(sampleRate) : limiter ? await limiterLatency(sampleRate) : 0;

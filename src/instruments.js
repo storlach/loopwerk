@@ -277,7 +277,7 @@ export async function renderPattern(pattern, bpm, library) {
           const s = library?.get(map[row.id]);
           if (!s?.orig) return;
           const src = ctx.createBufferSource();
-          src.buffer = s.orig;
+          src.buffer = library.source?.(s) ?? s.orig;
           const g = ctx.createGain();
           g.gain.value = v;
           src.connect(g).connect(bus);
@@ -421,7 +421,7 @@ export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1) {
     const s = library.get(map[rowId]);
     if (!s?.orig) return;
     const src = ctx.createBufferSource();
-    src.buffer = s.orig;
+    src.buffer = library.source?.(s) ?? s.orig;
     if (vel < 0.999) {
       const g = ctx.createGain();
       g.gain.value = vel;

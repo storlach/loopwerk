@@ -4,6 +4,7 @@
 import { Emitter } from './util.js';
 import { withFx } from './effects.js';
 import { isChord } from './harmony.js';
+import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
 
 export const EPS = 1e-6;
@@ -142,10 +143,11 @@ export function tapeRate(library, clip) {
   return clip.varispeed && f !== 1 && canVarispeed(library, clip.sampleId) ? 1 / f : 1;
 }
 
-// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange sie entsteht),
+// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange die erste entsteht;
+// danach gilt bis zur neuen die vorige, wenn sie gleich lang ist – z. B. beim Ziehen am Rezept),
 // wie Tonband der Grund-Sound (Tempo über tapeRate)
 export function sampleFor(library, clip) {
-  return clip.stretch && clip.stretch !== 1 && tapeRate(library, clip) === 1 ? library.stretched(clip.sampleId, clip.stretch) : library.get(clip.sampleId);
+  return clip.stretch && clip.stretch !== 1 && tapeRate(library, clip) === 1 ? library.stretched(clip.sampleId, clip.stretch, { stale: true }) : library.get(clip.sampleId);
 }
 
 // Spurgruppen: eine Gruppe kann ihre Spuren gemeinsam stumm oder solo schalten (die Spuren behalten ihre eigenen Schalter)
@@ -325,17 +327,21 @@ export const transposePattern = (pattern, delta) => ({ ...pattern, notes: (patte
 
 // Automation ist optional (PROJECT_VERSION bleibt 1); abgelehnt wird nur ein Feld, das kein Objekt ist
 const autoOk = (a) => a == null || (typeof a === 'object' && !Array.isArray(a));
+// Klang-Rezepte (ADR 010) ebenso optional: nur als Objekt
+const recipesOk = autoOk;
 
 export function isValidProject(p) {
   return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation))
-    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation);
+    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation) && recipesOk(p.recipes);
 }
 
 export class Store extends Emitter {
-  constructor(project, { sampleBeats, sampleName }) {
+  // soundDuration(id) → Sekunden des Originals (optional): Ausschnitt eines Rezepts passt sich der Länge an
+  constructor(project, { sampleBeats, sampleName, soundDuration }) {
     super();
     this.sampleBeats = sampleBeats;
     this.sampleName = sampleName;
+    this.soundDuration = soundDuration;
     this.replace(project, 'init');
   }
 
@@ -912,6 +918,147 @@ export class Store extends Emitter {
     });
   }
 
+  // ---------- Klang-Rezept (ADR 010) ----------
+  // Rezept eines Sounds ändern: null im Patch = Standard. Gilt für alle Clips dieses Sounds; ein leeres Rezept fällt weg.
+  // coalesce: ein Rückgängig-Schritt je Ziehvorgang (Schlüssel aus recipeGesture in src/recipe.js).
+  setRecipe(sampleId, patch, { coalesce } = {}) {
+    const cur = this.project.recipes?.[sampleId] ?? null;
+    const merged = { ...(cur || {}) };
+    for (const [k, v] of Object.entries(patch || {})) { if (v == null) delete merged[k]; else merged[k] = v; }
+    // Eine Variante bleibt Variante (Eltern-Sound und Name sind Pflicht)
+    if (cur?.parent) { merged.parent = cur.parent; merged.name ??= cur.name; }
+    const next = normalizeRecipe(merged, { duration: this.soundDuration?.(sampleId) });
+    const before = normalizeRecipe(cur, { duration: this.soundDuration?.(sampleId) });
+    if (JSON.stringify(next) === JSON.stringify(before) && JSON.stringify(cur) === JSON.stringify(before)) return;
+    this.dispatch('recipe', (p) => {
+      p.recipes = { ...(p.recipes || {}) };
+      if (next) p.recipes[sampleId] = next; else delete p.recipes[sampleId];
+      if (!Object.keys(p.recipes).length) delete p.recipes;
+    }, { coalesce });
+  }
+
+  // „Als Variante“: eigener Klang ohne eigenes Audio (Ton aus dem Original der Wurzel). Kopiert das Rezept der Vorlage
+  // und ihr Sound-Tempo; mit clipId spielt dieser Clip danach die Variante. Ein Rückgängig-Schritt. Rückgabe: ID.
+  addVariant(sampleId, { clipId } = {}) {
+    const rs = this.project.recipes || {};
+    const src = rs[sampleId] ?? null;
+    const root = src?.parent ?? sampleId;
+    const base = String(this.sampleName?.(root) || rs[root]?.name || 'Sound');
+    const taken = new Set(Object.values(rs).map((r) => r?.name));
+    let name = null;
+    for (let i = 1; i < 26 && !name; i++) { const n = `${base.slice(0, 38)} ${String.fromCharCode(97 + i)}`; if (!taken.has(n)) name = n; }
+    name ??= `${base.slice(0, 34)} ${taken.size + 2}`;
+    const vr = newVariantId();
+    const material = src?.material ?? rs[root]?.material;
+    const rec = normalizeRecipe({ ...soundFields(src), material, parent: root, name });
+    this.dispatch('Als Variante', (p) => {
+      p.recipes = { ...(p.recipes || {}), [vr]: rec };
+      const tempo = p.sampleTempo?.[sampleId];
+      if (tempo != null) p.sampleTempo = { ...p.sampleTempo, [vr]: tempo };
+      if (clipId) for (const t of p.tracks) for (const c of t.clips) if (c.id === clipId) c.sampleId = vr;
+    });
+    return vr;
+  }
+
+  // Variante entfernen – nur, wenn kein Clip sie benutzt. Rückgabe: ob entfernt
+  removeVariant(sampleId) {
+    if (!this.project.recipes?.[sampleId]?.parent) return false;
+    if (this.project.tracks.some((t) => t.clips.some((c) => c.sampleId === sampleId))) return false;
+    this.dispatch('recipe', (p) => {
+      p.recipes = { ...p.recipes };
+      delete p.recipes[sampleId];
+      if (!Object.keys(p.recipes).length) delete p.recipes;
+      if (p.sampleTempo?.[sampleId] != null) { p.sampleTempo = { ...p.sampleTempo }; delete p.sampleTempo[sampleId]; }
+    });
+    return true;
+  }
+
+  // Zerlegen (Krachwerk 2b): Schnitte als Varianten einer Gruppe. cuts = [{ start, end, clips?: [{ beat, len, offset }],
+  // beat?, len?, stretch? }] (Sekunden im Original der Wurzel; Lage aus layoutCuts in src/cuts.js). Kopiert die Klangfelder
+  // der Quelle außer Ausschnitt und Hüllkurve. place 'clip': clipId fällt weg, die Schnitt-Clips liegen auf seiner Spur
+  // (erben Lautstärke, Geschwindigkeit, Tonband, Stapel; Einblenden nur der erste, Ausblenden nur der letzte).
+  // place 'track': auf trackId (ohne: neue Spur) ab atBeat. Ein Rückgängig-Schritt. Rückgabe { group, ids, clipIds } | null
+  cutSound(sampleId, cuts, { clipId = null, trackId = null, atBeat = 0, place = null } = {}) {
+    const list = (Array.isArray(cuts) ? cuts : [])
+      .filter((c) => Number.isFinite(c?.start) && Number.isFinite(c?.end) && c.end - c.start >= MIN_SPAN - 1e-9)
+      .sort((x, y) => x.start - y.start);
+    if (!list.length || /^pat-/.test(String(sampleId))) return null;
+    const rs = this.project.recipes || {};
+    const src = rs[sampleId] ?? null;
+    const root = src?.parent ?? sampleId;
+    const fields = soundFields(src);
+    for (const k of ['start', 'end', 'attack', 'release']) delete fields[k];
+    const material = src?.material ?? rs[root]?.material;
+    const base = String(this.sampleName?.(sampleId) || src?.name || 'Sound');
+    const taken = new Set(Object.values(rs).map((r) => r?.name));
+    const duration = this.soundDuration?.(root);
+    const group = newGroupId();
+    const ids = [];
+    const recs = {};
+    let k = 1;
+    for (const c of list) {
+      let name;
+      do { const tail = ` · ${k++}`; name = base.slice(0, 40 - tail.length) + tail; } while (taken.has(name));
+      taken.add(name);
+      let id;
+      do id = newVariantId(); while (rs[id] || recs[id]);
+      ids.push(id);
+      recs[id] = normalizeRecipe({ ...fields, material, parent: root, name, group, start: c.start, end: c.end }, { duration });
+    }
+    const clipIds = [];
+    this.batch('Zerlegen', () => {
+      this.dispatch('Zerlegen', (p) => { p.recipes = { ...(p.recipes || {}), ...recs }; });
+      const found = place === 'clip' && clipId ? this.findClip(clipId) : null;
+      let track = found?.track ?? null;
+      if (place === 'track') track = this.track(trackId) ?? this.track(this.addTrack());
+      if (!track) return;
+      const like = found?.clip ?? null;
+      const total = totalBeats(this.project);
+      const made = [];
+      list.forEach((c, i) => {
+        const spots = c.clips ?? (Number.isFinite(c.beat) && c.len > 0 ? [{ beat: c.beat, len: c.len, offset: 0 }] : []);
+        for (const sp of spots) {
+          const beat = (place === 'track' ? atBeat : 0) + sp.beat;
+          if (beat < -EPS || beat >= total - EPS) continue;
+          const clip = { id: this.newId(), sampleId: ids[i], startBeat: Math.max(0, beat), lengthBeats: Math.min(sp.len, total - beat), offsetBeats: sp.offset > EPS ? sp.offset : 0 };
+          const stretch = c.stretch ?? like?.stretch ?? 1;
+          if (Math.abs(stretch - 1) > 1e-9) clip.stretch = stretch;
+          if (like) {
+            if (like.gain != null) clip.gain = like.gain;
+            if (like.varispeed) clip.varispeed = true;
+            if (like.z != null) clip.z = like.z;
+          }
+          made.push(clip);
+        }
+      });
+      if (!made.length) return;
+      made.sort((x, y) => x.startBeat - y.startBeat);
+      if (like) {
+        const first = made[0];
+        const last = made.reduce((m, x) => (x.startBeat + x.lengthBeats > m.startBeat + m.lengthBeats - EPS ? x : m), made[0]);
+        if (like.fadeInBeats) { first.fadeInBeats = like.fadeInBeats; if (like.fadeInCurve != null) first.fadeInCurve = like.fadeInCurve; }
+        if (like.fadeOutBeats) { last.fadeOutBeats = like.fadeOutBeats; if (like.fadeOutCurve != null) last.fadeOutCurve = like.fadeOutCurve; }
+      }
+      this.dispatch('Zerlegen', () => {
+        if (found) track.clips = track.clips.filter((x) => x.id !== clipId);
+        for (const clip of made) {
+          normalizeClip(clip);
+          track.clips.push(clip);
+          clipIds.push(clip.id);
+          if (like) track.clips.sort((x, y) => x.startBeat - y.startBeat); else this._raise(track, clip);
+        }
+      });
+    });
+    return { group, ids, clipIds };
+  }
+
+  // Wie oft ein Sound im Song steckt („in 3 Clips“)
+  clipsOf(sampleId) {
+    let n = 0;
+    for (const t of this.project.tracks) for (const c of t.clips) if (c.sampleId === sampleId) n++;
+    return n;
+  }
+
   // Tonart ab Takt `bar` (1 = Grundtonart). Dieselbe Tonart wie davor entfernt den Wechsel.
   setKeyAt(bar, key) {
     bar = Math.round(bar);
@@ -990,6 +1137,7 @@ export class Store extends Emitter {
       delete p.keyChanges;
       delete p.chords;
       delete p.sampleTempo;
+      delete p.recipes;
       if (p.master) delete p.master.automation;
       p.loop = { on: false, startBeat: 0, endBeat: 16 };
     });
