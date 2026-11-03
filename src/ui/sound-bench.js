@@ -341,7 +341,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     sr.insertBefore(el('span', null, 'Halbtöne'), minus);
     sr.insertBefore(sOut, plus);
     grund.append(sr);
-    updaters.push((ctx) => { const v = ctx.r.semis ?? 0; setOut(sOut, v ? `${signed(v)} ${Math.abs(v) === 1 ? 'Halbton' : 'Halbtöne'}` : '0 Halbtöne'); minus.disabled = v <= -24; plus.disabled = v >= 24; });
+    updaters.push((ctx) => { const v = ctx.r.semis ?? 0; setOut(sOut, v ? signed(v) : '0'); minus.disabled = v <= -24; plus.disabled = v >= 24; });
     rslider(grund, 'cents', 'Feinstimmung', { min: -100, max: 100, step: 1, def: 0, fmt: (v) => `${signed(v)} Cent` });
     const auto = btn(grund, 'Auf Tonart', 'wb-tonart', () => {
       const pc = detect()?.done;
