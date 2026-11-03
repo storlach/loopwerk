@@ -4,7 +4,7 @@
 import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, tapeRate, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
-import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS } from './effects.js';
+import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS, BUSES, busOf, sendOf, createBus } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
 import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey } from './automation.js';
 
@@ -23,7 +23,7 @@ export function trackLevel(track, anySolo) {
 
 // Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Automation (auto, gehört
 // nur der Lautstärke-Kurve, ohne Kurve 1) → Einschleifpunkt fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel
-// dazu) → Panorama → Ziel
+// dazu) → Panorama → Ziel. sends: { hall|echo: Gain } am Ausgang (hinter Fader, Kurve, Pad und Panorama) zu den Bussen
 function createStrip(ctx, dest, { pan = true } = {}) {
   const input = ctx.createGain();
   const out = pan ? ctx.createStereoPanner() : ctx.createGain();
@@ -32,7 +32,7 @@ function createStrip(ctx, dest, { pan = true } = {}) {
   const dry = ctx.createGain();
   auto.connect(pre).connect(dry).connect(out);
   out.connect(dest);
-  return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set() };
+  return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set(), sends: {} };
 }
 
 // AudioParams der Kanalzug-Kurven. Ein Besitzer je AudioParam: auto.gain gehört immer der Automation, das Panorama und
@@ -208,7 +208,7 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
   const masterStrip = createStrip(ctx, post, { pan: false });
   const style = masteringOf(project).style;
   const mix = {
-    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, tracks: new Map(), grid,
+    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, tracks: new Map(), buses: new Map(), grid,
     canMaster: worklets && mastering !== false, mst: null,
     gains: mastering && typeof mastering === 'object' ? { ...mastering } : defaultMasterGains(style),
     monitor: { ab: null, aDb: 0, bDb: 0, ...(monitor || {}) },
@@ -293,8 +293,54 @@ export function syncMix(ctx, project, mix, spb, live = true) {
   }
   const m = masterOf(project);
   syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, fxOrderOf(m), spb, live && mix.masterStrip.chain != null, mix.grid, skipOf(m));
+  syncBuses(ctx, project, mix, spb, live && mix.synced === true);
   syncMastering(ctx, project, mix, live && mix.masterStrip.chain != null && mix.synced === true);
   mix.synced = true;
+}
+
+// Send-Busse (ADR 008): Ein Bus entsteht, sobald eine Spur zu ihm sendet, und bleibt im laufenden Mix (die Fahne reißt
+// nicht ab, ein stiller Bus kostet nichts). Send-Gains entstehen und verschwinden mit dem Wert; live mit Rampe.
+// Rückkanäle sind keine Spuren: Solo stellt sie nicht stumm (die Sends der stummen Spuren sind ohnehin still).
+function syncBuses(ctx, project, mix, spb, live) {
+  const t = ctx.currentTime;
+  const to = (param, v) => { if (live) param.setTargetAtTime(v, t, 0.012); else param.value = v; };
+  for (const b of BUSES) {
+    let bus = mix.buses.get(b.id);
+    const fresh = !bus;
+    if (!bus) {
+      if (!project.tracks.some((tr) => sendOf(tr, b.id) > 0)) continue;
+      bus = createBus(ctx, b.id);
+      bus.output.connect(mix.master);
+      mix.buses.set(b.id, bus);
+      mix.onBus?.(b.id, bus);
+    }
+    const cfg = busOf(project, b.id);
+    bus.set(cfg, live && !fresh ? t : null, spb, mix.grid);
+    const level = cfg.mute ? 0 : cfg.volume;
+    if (fresh) bus.level.gain.value = level; else to(bus.level.gain, level);
+  }
+  for (const track of project.tracks) {
+    const strip = mix.tracks.get(track.id);
+    if (!strip) continue;
+    for (const b of BUSES) {
+      const v = sendOf(track, b.id);
+      const bus = mix.buses.get(b.id);
+      let g = strip.sends[b.id];
+      if (v > 0 && bus) {
+        if (!g) {
+          g = ctx.createGain();
+          g.gain.value = live ? 0 : v;
+          strip.out.connect(g).connect(bus.input);
+          strip.sends[b.id] = g;
+        }
+        to(g.gain, v);
+      } else if (g) {
+        delete strip.sends[b.id];
+        const drop = () => { try { strip.out.disconnect(g); } catch { /* schon getrennt */ } g.disconnect(); };
+        if (live) { to(g.gain, 0); later(ctx, 0.1, drop); } else drop();
+      }
+    }
+  }
 }
 
 // Automation der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat] ab Kontextzeit `when`:

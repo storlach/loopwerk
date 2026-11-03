@@ -1231,6 +1231,14 @@
   .fx-drop-line.grid { width: 2px; }
   .fx-drop-line[hidden] { display: none; }
   .fx-order-reset[hidden] { display: none; }
+  /* Busse (2.14): Anteile der Spur und Rückkanal-Einstellungen im Song – Linien, aktiv in Weißglut */
+  .insp-buses { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .insp-buses .insp-row.on > span:first-child { color: var(--ink); }
+  .insp-bus { display: grid; gap: 10px; }
+  .insp-bus + .insp-bus { margin-top: 4px; }
+  .insp-grp[hidden], .insp-bus[hidden] { display: none; }
+  .insp-bus select { height: 26px; grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  .fx-card-title { font: 600 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 4px 0; }
 
   /* ---------- Erstellen: Karten zum Anklicken oder auf eine Spur ziehen ---------- */
   .create-panel { display: grid; gap: 8px; padding: 10px 12px 14px; overflow-y: auto; align-content: start; }
@@ -2927,7 +2935,7 @@
   #app[data-density="calm"] :is(.insp-title, .left-title, .deck-name, .dock-head h2, .brand-name) { font-family: var(--font-display); font-size: var(--fs-15); }
   #app[data-density="calm"] .lcd-value { font-size: var(--fs-24); }
   /* Rahmen nur an Tasten: Flächen, Abschnitte, Regler, Felder und Etiketten verlieren Rahmen und Ring */
-  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item) { border-color: transparent; box-shadow: none; }
+  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item, .insp-buses, .insp-bus, .fx-bus-card) { border-color: transparent; box-shadow: none; }
   #app[data-density="calm"] .insp-sec { border-bottom: 0; }
   /* Weißglut nur an ▶ (spielend) und am gewählten Clip */
   #app[data-density="calm"] .key.play, #app[data-density="calm"] .key.play[aria-pressed="true"]:not(.on) { background: transparent; color: var(--ink); box-shadow: var(--key-shadow); }

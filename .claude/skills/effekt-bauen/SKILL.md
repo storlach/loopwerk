@@ -27,6 +27,7 @@ export const delay = {
 - Spur und Master haben `fx` als Objekt mit einem Eintrag je Effekttyp (`fx.filter = { on, cutoff, … }`, `withFx` füllt auf). Änderungen über `setTrackFx`/`setMasterFx` (mit `coalesce` beim Drehen).
 - Reihenfolge: optionales `fxOrder` (Liste von Effekt-IDs) an Spur und `project.master`; `fxOrderOf(owner)` bereinigt (Unbekannte/Doppelte weg, Fehlende hinten in `EFFECT_IDS`). Store: `moveFx(target, fxId, toIndex)`, `resetFxOrder(target)`; die Grundreihenfolge speichert kein Feld. Jeder Effekt steht höchstens einmal in der Kette.
 - Ein neuer Effekt kommt in `EFFECTS` (Grundreihenfolge) und damit automatisch in jede Reihenfolge (hinten an, wenn eine Spur schon eine eigene hat).
+- Send-Busse: `track.sends = { hall?, echo? }` (0…1, 0 fällt weg), `project.buses = { hall?: { volume, mute, size }, echo?: { volume, mute, time, feedback } }`; `BUSES`, `busOf`, `sendOf` in `effects.js`, Store `setSend`/`setBus`. Effekte, die als Bus taugen (Hall, Echo), kennen `create(ctx, { dry: false })`: kein trockener Weg, Anteil fest 1.
 
 ## 3. Engine
 - `buildMix` hängt die Kette zwischen Spur-Gain und Panner ein, `buildFxChain(ctx, fx, spb, grid, order)` in der Reihenfolge `order`. Änderungen an der Kette während der Wiedergabe ohne Aussetzer (neue Kette aufbauen, überblenden, alte entsorgen). Wechselt nur die Reihenfolge (`fxKey` mit gleicher Menge), blendet `installChain(…, { keepTail: true })` die Eingänge über und lässt die alte Kette ausklingen (Hall/Echo-Fahne bleibt).

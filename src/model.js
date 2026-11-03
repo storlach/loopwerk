@@ -3,7 +3,7 @@
 
 import { Emitter } from './util.js';
 import { KEYS, KEY_MAJOR, minorOf, wrapSemis, isSoundKey } from './keys.js';
-import { withFx, fxOrderOf, isDefaultOrder } from './effects.js';
+import { withFx, fxOrderOf, isDefaultOrder, busDef, ECHO_TIMES } from './effects.js';
 import { isChord } from './harmony.js';
 import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
@@ -335,13 +335,14 @@ const autoOk = (a) => a == null || (typeof a === 'object' && !Array.isArray(a));
 // Klang-Rezepte (ADR 010) ebenso optional: nur als Objekt
 const recipesOk = autoOk;
 
-// Effekt-Reihenfolge (ADR 008): Liste oder fehlt
+// Effekt-Reihenfolge (ADR 008): Liste oder fehlt; Sends und Busse: Objekt oder fehlt
 const orderOk = (o) => o == null || Array.isArray(o);
+const objOk = autoOk;
 
 export function isValidProject(p) {
-  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation) && orderOk(t.fxOrder))
+  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation) && orderOk(t.fxOrder) && objOk(t.sends))
     && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation) && recipesOk(p.recipes)
-    && orderOk(p.master?.fxOrder);
+    && orderOk(p.master?.fxOrder) && objOk(p.buses);
 }
 
 export class Store extends Emitter {
@@ -800,6 +801,8 @@ export class Store extends Emitter {
           id, name: s.name.slice(0, 32), volume: track.volume, pan: track.pan || 0, mute: false, solo: false, autoName: false,
           clips: [normalizeClip({ ...clip, id: this.newId(), sampleId: s.sampleId })],
           ...(track.automation ? { automation: JSON.parse(JSON.stringify(track.automation)) } : {}),
+          // Getrennte Ebenen bleiben im selben Raum (Send-Busse)
+          ...(track.sends ? { sends: { ...track.sends } } : {}),
         });
       }
       track.clips = track.clips.filter((c) => c.id !== clipId);
@@ -917,6 +920,40 @@ export class Store extends Emitter {
     const owner = this._autoOwner(target);
     if (!owner?.fxOrder) return;
     this.dispatch('fx-order', () => { delete this._autoOwner(target).fxOrder; });
+  }
+
+  // Send-Anteil einer Spur zu einem Bus (0…1); 0 löscht den Eintrag, ein leeres Objekt fällt weg
+  setSend(trackId, bus, amount, coalesce) {
+    const t = this.track(trackId);
+    if (!t || !busDef(bus)) return;
+    const v = Math.max(0, Math.min(1, Number(amount) || 0));
+    if ((t.sends?.[bus] ?? 0) === v) return;
+    this.dispatch('send', () => {
+      const tr = this.track(trackId);
+      const s = { ...(tr.sends || {}) };
+      if (v > 0) s[bus] = v; else delete s[bus];
+      if (Object.keys(s).length) tr.sends = s; else delete tr.sends;
+    }, { coalesce });
+  }
+
+  // Einstellungen eines Busses: volume, mute und die Effekt-Parameter (Hall: size; Echo: time, feedback)
+  setBus(bus, patch, coalesce) {
+    const def = busDef(bus);
+    if (!def) return;
+    const clamp01 = (x, max = 1) => Math.max(0, Math.min(max, Number(x) || 0));
+    const clean = {};
+    for (const k of Object.keys(patch)) {
+      if (k === 'volume') clean[k] = clamp01(patch[k]);
+      else if (k === 'size' && def.params.includes(k)) clean[k] = clamp01(patch[k]);
+      else if (k === 'mute') clean[k] = !!patch[k];
+      else if (k === 'feedback' && def.params.includes(k)) clean[k] = clamp01(patch[k], 0.85);
+      else if (k === 'time' && def.params.includes(k) && ECHO_TIMES.some((x) => x.id === patch[k])) clean[k] = patch[k];
+    }
+    if (!Object.keys(clean).length) return;
+    this.dispatch('bus', (p) => {
+      p.buses = { ...(p.buses || {}) };
+      p.buses[bus] = { ...(p.buses[bus] || {}), ...clean };
+    }, { coalesce });
   }
 
   setMasterFx(fxId, patch, coalesce) {

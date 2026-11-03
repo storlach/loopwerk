@@ -3,7 +3,7 @@
 // (Spur-Lautstärke, Panorama, Verlauf, Effekte). Spur → nur der Spur-Abschnitt.
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
-import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf } from '../effects.js';
+import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busOf, sendOf, busParamDef } from '../effects.js';
 import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
@@ -292,6 +292,20 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const fxReset = resetLink(() => { if (trackId) store.resetFxOrder(fxTarget()); });
   fxReset.node.id = 'insp-fx-reset';
 
+  // Busse der Spur (hinter Fader und Panorama abgegriffen): je ein Anteil zum Hall- und Echo-Bus, 0 = aus
+  const busBlock = el('div', 'insp-buses');
+  busBlock.append(el('span', 'insp-kind', 'Busse'));
+  const sendRows = BUSES.map((b) => {
+    const r = slider(`→ ${b.label}`, `insp-send-${b.id}`, 0, 1, 0.01);
+    r.input.title = `Anteil zum ${b.label} (Doppelklick = aus)`;
+    r.input.addEventListener('input', () => { if (trackId && trackId !== MASTER) store.setSend(trackId, b.id, Number(r.input.value), `send-${trackId}-${b.id}`); });
+    // Doppelklick = aus; der Regler hat dann den Fokus, also den Wert selbst setzen
+    r.input.addEventListener('dblclick', () => { if (trackId && trackId !== MASTER) { r.input.value = '0'; store.setSend(trackId, b.id, 0); } });
+    busBlock.append(r.row);
+    return [b, r];
+  });
+  const sendText = (v) => (v > 0 ? `${Math.round(v * 100)} %` : 'aus');
+
   // Kompakt (Krachwerk): nur eingeschaltete Effekte, die übrigen über „+ Effekt“
   const addFx = el('button', 'wb-fine-btn', '+ Effekt');
   addFx.type = 'button';
@@ -386,8 +400,46 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   masterGrp.append(masterSub);
   const autoGrp = grp('insp-grp-auto');
   autoGrp.append(masterAuto);
+  // Busse: Rückkanal-Lautstärke und Effekt-Einstellungen (der einzige Ort dafür am Desktop)
+  const busGrp = grp('insp-grp-buses');
+  busGrp.id = 'insp-buses';
+  busGrp.append(el('p', 'insp-sub', 'Busse'));
+  const busCtl = [];
+  const busBoxes = new Map();
+  for (const b of BUSES) {
+    const box = el('div', 'insp-bus');
+    box.id = `insp-bus-${b.id}`;
+    busBoxes.set(b.id, box);
+    box.append(el('span', 'insp-kind', b.label));
+    const add = (key, input, out, def) => busCtl.push({ b, key, input, out, def });
+    const v = slider('Lautstärke', `insp-bus-${b.id}-volume`, 0, 1, 0.01);
+    v.input.addEventListener('input', () => store.setBus(b.id, { volume: Number(v.input.value) }, `bus-${b.id}-volume`));
+    v.input.addEventListener('dblclick', () => { v.input.value = String(b.defaults.volume); store.setBus(b.id, { volume: b.defaults.volume }); });
+    box.append(v.row);
+    add('volume', v.input, v.out, null);
+    for (const key of b.params) {
+      const p = busParamDef(b.id, key);
+      if (p.options) {
+        const row = el('label', 'insp-row');
+        const sel = document.createElement('select');
+        sel.id = `insp-bus-${b.id}-${key}`;
+        for (const o of p.options) { const op = el('option', null, o.label); op.value = o.id; sel.append(op); }
+        sel.addEventListener('change', () => store.setBus(b.id, { [key]: sel.value }));
+        row.append(el('span', null, p.label), sel);
+        box.append(row);
+        add(key, sel, null, p);
+      } else {
+        const r = slider(p.label, `insp-bus-${b.id}-${key}`, p.min, p.max, p.step);
+        r.input.addEventListener('input', () => store.setBus(b.id, { [key]: Number(r.input.value) }, `bus-${b.id}-${key}`));
+        r.input.addEventListener('dblclick', () => { r.input.value = String(b.defaults[key]); store.setBus(b.id, { [key]: b.defaults[key] }); });
+        box.append(r.row);
+        add(key, r.input, r.out, p);
+      }
+    }
+    busGrp.append(box);
+  }
   const mstSlot = grp('insp-mst');
-  songSec.append(songGrp, masterGrp, autoGrp, mstSlot);
+  songSec.append(songGrp, masterGrp, busGrp, autoGrp, mstSlot);
   if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
@@ -465,7 +517,13 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
         pan.out.textContent = panText(track.pan || 0);
       }
-      if (fxl.parentElement !== trackSec) trackSec.append(fxl, fxReset.node, addFx, fxPick, mixerLink);
+      if (fxl.parentElement !== trackSec) trackSec.append(fxl, fxReset.node, addFx, fxPick, busBlock, mixerLink);
+      for (const [b, r] of sendRows) {
+        const v = sendOf(track, b.id);
+        if (document.activeElement !== r.input) r.input.value = String(v);
+        r.out.textContent = sendText(v);
+        r.row.classList.toggle('on', v > 0);
+      }
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
       autoBlock.hidden = fxCompact && !autoOpen;
       fineBtn.setAttribute('aria-expanded', String(autoOpen));
@@ -491,6 +549,15 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       masterCurve.classList.toggle('lit', has);
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
+      // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)
+      const used = (id) => store.project.tracks.some((t) => sendOf(t, id) > 0);
+      for (const [id, box] of busBoxes) box.hidden = !used(id);
+      busGrp.hidden = ![...busBoxes.values()].some((box) => !box.hidden);
+      for (const c of busCtl) {
+        const v = busOf(store.project, c.b.id)[c.key];
+        if (document.activeElement !== c.input) c.input.value = String(v);
+        if (c.out) c.out.textContent = c.key === 'volume' ? formatDb(v) : formatParam(c.def, v);
+      }
     }
     if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 

@@ -112,7 +112,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
       const b = await renderProject(mk(true), library, o);
       const ctx = new OfflineAudioContext(2, 128, 44100);
       const mix = buildMix(ctx, mk(true), { limiter: false });
-      return { repeat: F.diffDb(a, a2), fields: F.diffDb(a, b), peak: F.peak(a), buses: mix.buses?.size ?? 0, key: mix.tracks.get('t1').chain.key };
+      return { repeat: F.diffDb(a, a2), fields: F.diffDb(a, b), peak: F.peak(a), buses: mix.buses instanceof Map ? mix.buses.size : -1, key: mix.tracks.get('t1').chain.key };
     });
     check('1 Wiederholung bitgleich (Testsignale, alle Effekte)', same.repeat === -Infinity && same.peak > 0.05, `${fmtDb(same.repeat)}, Spitze ${same.peak.toFixed(3)}`);
     check('1 fxOrder = Grundreihenfolge und sends: {} klingen bitgleich wie ohne Felder', same.fields === -Infinity, fmtDb(same.fields));

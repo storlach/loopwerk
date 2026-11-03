@@ -365,7 +365,8 @@ export const EFFECTS = [
       feedback: { label: 'Wiederholungen', min: 0, max: 0.85, step: 0.01, default: 0.35, unit: '%' },
       mix: { label: 'Anteil', min: 0, max: 1, step: 0.01, default: 0.3, unit: '%' },
     },
-    create(ctx) {
+    // dry: false = nur nass (Send-Bus): der Eingang liegt nicht auf dem Ausgang, der Anteil bleibt fest bei 1
+    create(ctx, { dry = true } = {}) {
       const input = ctx.createGain();
       const output = ctx.createGain();
       const delay = ctx.createDelay(4);
@@ -374,7 +375,7 @@ export const EFFECTS = [
       tone.frequency.value = 5000;
       const fb = ctx.createGain();
       const wet = ctx.createGain();
-      input.connect(output);
+      if (dry) input.connect(output);
       input.connect(delay);
       delay.connect(tone);
       tone.connect(fb).connect(delay);
@@ -386,7 +387,7 @@ export const EFFECTS = [
           const beats = ECHO_TIMES.find((x) => x.id === p.time)?.beats ?? 0.75;
           ramp(delay.delayTime, Math.min(4, beats * spb), t);
           ramp(fb.gain, p.feedback, t);
-          if (!skip?.mix) ramp(wet.gain, p.mix, t);
+          if (!skip?.mix) ramp(wet.gain, dry ? p.mix : 1, t);
         },
       };
     },
@@ -397,19 +398,19 @@ export const EFFECTS = [
       size: { label: 'Raumgröße', min: 0, max: 1, step: 0.01, default: 0.5, unit: '%' },
       mix: { label: 'Anteil', min: 0, max: 1, step: 0.01, default: 0.25, unit: '%' },
     },
-    create(ctx) {
+    create(ctx, { dry = true } = {}) {
       const input = ctx.createGain();
       const output = ctx.createGain();
       const conv = ctx.createConvolver();
       const wet = ctx.createGain();
-      input.connect(output);
+      if (dry) input.connect(output);
       input.connect(conv).connect(wet).connect(output);
       let size = null;
       return {
         input, output,
         auto: { mix: { param: wet.gain, map: (v) => v } },
         set(p, t, spb, grid, skip) {
-          if (!skip?.mix) ramp(wet.gain, p.mix, t);
+          if (!skip?.mix) ramp(wet.gain, dry ? p.mix : 1, t);
           const s = Math.round(p.size * 20) / 20; // Impulsantwort nur in 5-%-Schritten neu erzeugen
           if (s !== size) { size = s; conv.buffer = hallImpulse(ctx.sampleRate, s); }
         },
@@ -523,6 +524,40 @@ export function buildFxChain(ctx, fxState, spb, grid = 0, order = EFFECT_IDS) {
 export const fxKey = (fx, order = EFFECT_IDS) => order.filter((id) => fx?.[id]?.on).join('+');
 // Dieselbe Menge eingeschalteter Effekte (nur die Reihenfolge ist anders)?
 export const sameFxSet = (a, b) => a.split('+').sort().join('+') === b.split('+').sort().join('+');
+
+// ---------- Send-Busse (ADR 008): zwei feste Busse, Effekt „nur nass“, eigener Fader ----------
+// params: Effekt-Parameter des Busses (Bereiche und Format aus EFFECTS); volume/mute sind der Fader des Rückkanals
+export const BUSES = [
+  { id: 'hall', fx: 'hall', label: 'Hall-Bus', params: ['size'], defaults: { volume: 0.8, mute: false, size: 0.6 } },
+  { id: 'echo', fx: 'echo', label: 'Echo-Bus', params: ['time', 'feedback'], defaults: { volume: 0.8, mute: false, time: '1/8d', feedback: 0.4 } },
+];
+export const BUS_IDS = BUSES.map((b) => b.id);
+export const busDef = (id) => BUSES.find((b) => b.id === id) || null;
+export const busParamDef = (id, key) => EFFECT_BY_ID[busDef(id).fx].params[key];
+// Einstellungen eines Busses mit Voreinstellungen
+export function busOf(project, id) {
+  const b = busDef(id);
+  return b ? { ...b.defaults, ...(project?.buses?.[id] || {}) } : null;
+}
+// Send-Anteil einer Spur (0…1, fehlend = aus)
+export function sendOf(track, id) {
+  const v = Number(track?.sends?.[id]);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+}
+// Bus-Knoten: input → Effekt (nur nass) → level (Fader · Stumm) → Summe
+export function createBus(ctx, id) {
+  const b = busDef(id);
+  const input = ctx.createGain();
+  const unit = EFFECT_BY_ID[b.fx].create(ctx, { dry: false });
+  const level = ctx.createGain();
+  input.connect(unit.input);
+  unit.output.connect(level);
+  return {
+    id, input, unit, level, output: level,
+    set(cfg, t, spb, grid) { unit.set({ ...withFx(null)[b.fx], ...cfg, mix: 1 }, t, spb, grid); },
+    dispose() { unit.dispose?.(); },
+  };
+}
 
 // skip = { <effekt>: { <param>: true } }: Parameter, die gerade einer Kurve gehören
 export function updateFxParams(chain, fxState, t, spb, grid = 0, skip = null) {
