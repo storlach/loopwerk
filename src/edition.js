@@ -7,7 +7,7 @@ export const EDITIONS = {
     id: 'full', title: 'Loopwerk', db: 'loopwerk', keyPrefix: 'loopwerk.',
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
     pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
-    workbench: null, materialColors: false, grainWave: false,
+    workbench: null, materialColors: false, grainWave: false, brandMark: null,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -42,6 +42,8 @@ export const EDITIONS = {
     },
     // Klang-Rezept (Scheibe 2a, ADR 008): Sound-Werkbank im Clip-Abschnitt, Herkunftsfarben in Kiste und Song, Roh = Korn
     workbench: 'sound', materialColors: true, grainWave: true,
+    // Zeichen im Deck: Klatscher als Ausschlag um die Mittellinie (assets/icons/krachwerk.svg), src/ui/brand-meter.js
+    brandMark: 'klatscher',
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
       { id: 'koerper', label: 'Körper', cat: 'drums' },

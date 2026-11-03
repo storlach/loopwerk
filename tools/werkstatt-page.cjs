@@ -11,6 +11,7 @@ const WORDS = [
   ['<title>Loopwerk</title>', '<title>Krachwerk</title>', 1],
   ['Loopwerk wird geladen', 'Krachwerk wird geladen', 1],
   ['Loop<b>werk</b>', 'Krach<b>werk</b>', 2],
+  ['<div class="splash-bars" aria-hidden="true">', '<div class="splash-bars splash-klatscher" aria-hidden="true">', 1],
   ['I Like To Loop it Loop it', 'Mach aus jedem Geräusch ein Instrument.', 1],
   ['<link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">', '<link rel="icon" href="assets/icons/krachwerk.svg" type="image/svg+xml">', 1],
   ['<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">', '<link rel="apple-touch-icon" href="assets/icons/krachwerk-180.png">', 1],

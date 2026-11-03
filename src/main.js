@@ -554,7 +554,7 @@ async function boot() {
   const recording = mountRecording({ store, engine, ui, arranger, recorder, mode: EDITION.record });
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
-  mountBrandMeter(engine);
+  mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
   const glow = mountGlow({ engine, store, library, ui });
   doubleTapRanges();
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
