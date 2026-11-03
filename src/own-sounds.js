@@ -79,6 +79,8 @@ function toSample(rec, orig, duration = orig?.duration) {
     origin: 'Eigene',
     source: rec.source || '',
     license: null,
+    created: rec.created ?? null,
+    material: rec.material ?? null, // zuletzt gewählte Herkunft: nur Vorschlag (Rezept gewinnt)
     orig,
     duration,
   };
@@ -163,6 +165,21 @@ export class OwnSounds {
     }
     const name = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Import';
     return this.create({ name, buffer, source: `Import: ${file.name}` });
+  }
+
+  // Zuletzt gesetztes Material als Vorschlag am Datensatz merken (außerhalb von Rückgängig, nur Vorbelegung)
+  async rememberMaterial(id, material) {
+    const s = this.library.get(id);
+    if (!s || s.parentId || s.category !== 'own') return;
+    s.material = material;
+    if (!this.available) return;
+    try {
+      await this.tx('readwrite', (st) => new Promise((res) => {
+        const g = st.get(id);
+        g.onsuccess = () => { if (g.result) st.put({ ...g.result, material }); res(); };
+        g.onerror = () => res();
+      }));
+    } catch { /* egal */ }
   }
 
   async remove(id) {

@@ -143,6 +143,8 @@
 <link rel="modulepreload" href="src/ui/surfaces.js">
 <link rel="modulepreload" href="src/pwa.js">
 <link rel="modulepreload" href="src/ui/clip-float.js">
+<link rel="modulepreload" href="src/ui/sound-bench.js">
+<link rel="modulepreload" href="src/ui/wave-handles.js">
 <link rel="modulepreload" href="src/recipe.js">
 <link rel="modulepreload" href="src/dsp/recipe.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
@@ -2904,6 +2906,66 @@
   #app[data-density="calm"] .insp-song-tools:empty { display: none; }
   #app[data-density="calm"] .insp-song-tools .key { height: 44px; width: 100%; }
 
+  /* Werkbank (Scheibe 2a): Kopf, Stammbaum, Welle mit Griffen, Reiter. Nur Tokens; Rahmen nur an Tasten, Weißglut nur am Gewählten */
+  #app[data-density="calm"] .wb { display: grid; gap: 10px; min-width: 0; padding-top: 6px; }
+  #app[data-density="calm"] .wb [hidden], #app[data-density="calm"] .fxl-item[hidden] { display: none !important; }
+  #app[data-density="calm"] .wb-head { display: flex; align-items: center; gap: 4px; min-width: 0; margin: 0 -6px; }
+  #app[data-density="calm"] .wb-dot, #app[data-density="calm"] .wb-mat-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; border: 0; background: transparent; color: var(--ink); cursor: pointer; }
+  #app[data-density="calm"] .wb-dot { justify-content: center; min-width: 44px; padding: 0; }
+  #app[data-density="calm"] .wb-dot-i { width: 12px; height: 12px; border-radius: 50%; background: var(--cat, var(--muted)); box-shadow: 0 0 8px color-mix(in srgb, var(--cat, var(--muted)) 60%, transparent); flex: none; }
+  #app[data-density="calm"] .wb-name { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--ink); font-family: var(--font-display); font-size: var(--fs-15); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+  #app[data-density="calm"] .wb-name-in { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--ink); font-size: 16px; box-shadow: inset 0 -1px 0 var(--ink); }
+  #app[data-density="calm"] .wb-count { flex: none; color: var(--muted); font-size: var(--fs-11); white-space: nowrap; }
+  #app[data-density="calm"] .wb-var, #app[data-density="calm"] .wb-btn { min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: var(--deck-2); color: var(--ink); cursor: pointer; white-space: nowrap; }
+  #app[data-density="calm"] .wb-var { flex: none; margin-left: 4px; }
+  #app[data-density="calm"] .wb-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 22%, var(--deck-2)); font-weight: 600; }
+  #app[data-density="calm"] .wb-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 12%, var(--deck-2)); }
+  #app[data-density="calm"] .wb-tree { margin: -6px 0 0; padding: 0 6px; color: var(--muted); font-size: var(--fs-11); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #app[data-density="calm"] .wb-mat { display: flex; flex-wrap: wrap; gap: 2px 6px; }
+  #app[data-density="calm"] .wb-mat-btn { padding: 0 10px 0 6px; border-radius: var(--radius); }
+  #app[data-density="calm"] .wb-mat-btn[aria-pressed="true"] { background: var(--deck-2); font-weight: 600; }
+  /* Welle: Lichtstrich in Herkunftsfarbe, Griffe als Linien und Punkte (Tippfläche 44 px, nur waagerechte Züge) */
+  #app[data-density="calm"] .wb-wave { position: relative; height: 120px; margin: 0 -4px; color: var(--cat, var(--ink)); touch-action: pan-y; user-select: none; }
+  #app[data-density="calm"] .wb-wave.empty { background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 8px) center / 100% 1px no-repeat; }
+  #app[data-density="calm"] .wb-wave-cv { position: absolute; inset: 0; display: block; touch-action: pan-y; cursor: pointer; }
+  #app[data-density="calm"] .wb-wave-mark { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--ink); box-shadow: 0 0 8px var(--ink); pointer-events: none; }
+  #app[data-density="calm"] .wb-h { position: absolute; z-index: 2; width: 44px; margin-left: -22px; touch-action: pan-y; cursor: ew-resize; outline: none; }
+  #app[data-density="calm"] .wb-h::before { content: ""; position: absolute; left: 50%; background: var(--ink); }
+  #app[data-density="calm"] .wb-h-start, #app[data-density="calm"] .wb-h-end { top: 0; bottom: 0; }
+  #app[data-density="calm"] .wb-h-start::before, #app[data-density="calm"] .wb-h-end::before { top: 0; bottom: 0; width: 2px; margin-left: -1px; opacity: 0.85; }
+  #app[data-density="calm"] .wb-h-atk, #app[data-density="calm"] .wb-h-rel { height: 44px; margin-top: -22px; z-index: 3; cursor: grab; }
+  #app[data-density="calm"] .wb-h-atk::before, #app[data-density="calm"] .wb-h-rel::before { top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--cat, var(--ink)); box-shadow: 0 0 0 3px var(--panel), 0 0 10px var(--cat, var(--ink)); }
+  #app[data-density="calm"] .wb-h:focus-visible::before, #app[data-density="calm"] .wb-h.drag::before { box-shadow: 0 0 0 3px var(--panel), 0 0 14px var(--ink); }
+  /* Reiter: Text mit Linie darunter, Gewählter in Weiß */
+  #app[data-density="calm"] .wb-tabs { display: flex; gap: 2px; margin: 0 -6px; box-shadow: inset 0 -1px 0 var(--line); }
+  #app[data-density="calm"] .wb-tab { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; }
+  #app[data-density="calm"] .wb-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+  #app[data-density="calm"] .wb-tab:last-child { margin-left: 8px; border-left: 1px solid var(--line); }
+  #app[data-density="calm"] .loop-row.variant { padding-left: 18px; }
+  #app[data-density="calm"] .wb-panel { display: grid; gap: 10px; }
+  #app[data-density="calm"] .wb-grund, #app[data-density="calm"] .wb-fine { display: grid; gap: 10px; }
+  #app[data-density="calm"] .wb-fine-btn { justify-self: start; min-height: 44px; padding: 0 6px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+  #app[data-density="calm"] .wb-fine-btn::after { content: " ▾"; } #app[data-density="calm"] .wb-fine-btn[aria-expanded="true"]::after { content: " ▴"; }
+  #app[data-density="calm"] .wb :is(output, input[type="number"]) { font-family: var(--font-mono); color: var(--ink); }
+  #app[data-density="calm"] .wb-row input[type="range"] { height: 32px; }
+  #app[data-density="calm"] .wb-step { grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; }
+  #app[data-density="calm"] .wb-step output { grid-column: 3; justify-self: center; min-width: 7ch; text-align: center; }
+  #app[data-density="calm"] .wb-step .wb-btn:first-of-type { grid-column: 2; } #app[data-density="calm"] .wb-step .wb-btn:last-of-type { grid-column: 4; }
+  #app[data-density="calm"] .wb-step-btn { min-width: 44px; padding: 0 10px; }
+  #app[data-density="calm"] .wb-seg, #app[data-density="calm"] .wb-acts, #app[data-density="calm"] .wb-chips, #app[data-density="calm"] .wb-fx-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+  #app[data-density="calm"] .wb-seg .wb-btn { flex: 1 1 0; }
+  #app[data-density="calm"] .wb-note { margin: 0; color: var(--muted); font-size: var(--fs-11); }
+  #app[data-density="calm"] .wb-chips .key, #app[data-density="calm"] .wb .speed-tape { min-height: 44px; border: 0; background: var(--deck-2); box-shadow: none; color: var(--ink); }
+  #app[data-density="calm"] .wb .speed-tape[aria-pressed="true"], #app[data-density="calm"] .wb-chips .key[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 22%, var(--deck-2)); }
+  #app[data-density="calm"] .wb .insp-run-btns { display: flex; }
+  #app[data-density="calm"] .wb-grund .insp-speed { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  #app[data-density="calm"] .insp-song-tools .tab, #app[data-density="calm"] .insp-song-tools .tab-keys { display: inline-flex; align-items: center; min-height: 44px; width: 100%; padding: 0 12px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); }
+  #app[data-density="calm"] .insp-song-tools .tab svg { display: none; }
+  #app[data-density="calm"] .wb-fx-pick .wb-btn { flex: 1 1 40%; }
+  @media (max-width: 760px) { #app[data-density="calm"] .wb-wave { height: 96px; } #app[data-density="calm"] .wb { gap: 6px; } }
+  /* Clip: Griffe für Ein-/Ausblenden unter der Namenszeile (CD #7) */
+  #app[data-density="calm"] .arr-grid:not(.ch-low) { --wave-top: 24px; }
+
   /* Breit: Kiste 240 px (einklappbar), Werkbank rechts 36 % (60 % mit ⤢), ohne Auswahl 24 px */
   @media (min-width: 761px) {
     #app[data-density="calm"] { --insp-w: 24px; --kiste-w: 240px; grid-template-columns: var(--kiste-w) minmax(0, 1fr) var(--insp-w); }
@@ -2916,7 +2978,7 @@
     #app[data-density="calm"].insp-open .insp-toggle { writing-mode: horizontal-tb; justify-content: flex-start; padding: 12px 14px; }
     #app[data-density="calm"] .insp-wide { position: absolute; top: 4px; right: 6px; z-index: 2; width: 44px; height: 44px; border: 0; background: transparent; color: var(--muted); font-size: var(--fs-15); cursor: pointer; }
     #app[data-density="calm"] .insp-wide:hover, #app[data-density="calm"] .insp-wide[aria-pressed="true"] { color: var(--ink); }
-    #app[data-density="calm"] .tabbar { overflow: hidden; white-space: nowrap; }
+    #app[data-density="calm"] .tabbar { display: none; } /* Fachleiste ist Stufe 3: Mischen, FX-Pad, Hilfe in der Song-Werkbank, Editor unter Ton */
     #app[data-density="calm"] #loop-btn { padding: 0 12px; margin-left: 8px; }
     #app[data-density="calm"] .left-tabs { display: flex; align-items: center; gap: 6px; padding: 10px 8px 4px 14px; }
     #app[data-density="calm"] .left-title { margin: 0 auto 0 0; }
@@ -3514,22 +3576,22 @@
     <button class="tab" id="tab-sounds" type="button" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1.5l8-1.5v10.5a2.5 2.5 0 11-1.5-2.3V3L7.5 4v8.5A2.5 2.5 0 116 10.2z"/></svg><span class="tab-label">Sounds</span>
     </button>
-    <button class="tab" id="mixer-btn" data-tier="3" data-tier-only="narrow" type="button" title="Mixer und Effekte" aria-pressed="false">
+    <button class="tab" id="mixer-btn" data-tier="3" type="button" title="Mixer und Effekte" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v5h1.5v3H5v6H3V9H1.5V6H3zm5 0h2v9h1.5v3H10v2H8v-2H6.5v-3H8zm5 0h2v3h1v3h-1v8h-2V7h-1V4h1z"/></svg><span class="tab-label">Mixer</span>
     </button>
-    <button class="tab" id="fxpad-btn" data-tier="3" data-tier-only="narrow" type="button" title="Effekt-Pad: live auf Summe oder Spur einwirken" aria-pressed="false">
+    <button class="tab" id="fxpad-btn" data-tier="3" type="button" title="Effekt-Pad: live auf Summe oder Spur einwirken" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 1h14v14H1zm1.5 1.5v11h11v-11zM9 5a2 2 0 110 4 2 2 0 010-4z"/></svg><span class="tab-label">FX-Pad</span>
     </button>
-    <button class="tab" id="editor-tab" data-tier="3" data-tier-only="narrow" type="button" aria-pressed="false" disabled>
+    <button class="tab" id="editor-tab" data-tier="3" type="button" aria-pressed="false" disabled>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 8h3l2-5 4 10 2-5h3v1.5h-2l-3 6.5-4-10-1 2.5H1z"/></svg><span class="tab-label" id="editor-tab-label">Editor</span>
     </button>
-    <button class="tab" id="tab-song" data-tier="3" data-tier-only="narrow" type="button" aria-pressed="false">
+    <button class="tab" id="tab-song" data-tier="3" type="button" aria-pressed="false">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2.5h9v3H1zm0 4h14v3H1zm0 4h6v3H1zM9 10.5h6v3H9z"/></svg><span class="tab-label">Song</span>
     </button>
     <button class="tab tab-werkbank" id="tab-werkbank" type="button" aria-pressed="false" title="Werkbank: Einstellungen des gewählten Clips, sonst des Songs">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 3h14v2H1zm0 4h14v2H1zm0 4h14v2H1zM10 2h2v4h-2zM4 6h2v4H4zm6 4h2v4h-2z"/></svg><span class="tab-label">Werkbank</span>
     </button>
-    <div class="menu-wrap tabbar-end">
+    <div class="menu-wrap tabbar-end" data-tier="3">
       <button class="tab-keys" id="keys-btn" type="button" aria-haspopup="true" aria-expanded="false"><span class="for-mouse">? Tastenkürzel</span><span class="for-touch">? Gesten</span></button>
       <div class="pop keys-pop" id="keys-pop" hidden>
         <dl class="keys-list for-touch">

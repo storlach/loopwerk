@@ -15,6 +15,7 @@ import { mountProjectIO } from './ui/project-io.js';
 import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
 import { mountInspector } from './ui/inspector.js';
+import { mountSoundBench } from './ui/sound-bench.js';
 import { mountCreate } from './ui/create.js';
 import { mountSheets } from './ui/sheets.js';
 import { mountTips } from './ui/tips.js';
@@ -437,6 +438,7 @@ async function boot() {
     catalogs: EDITION.catalogs,
     onProgress: (done, total) => splash.set(0.05 + 0.75 * (done / total), `Sounds werden geladen – ${done} von ${total}`),
   });
+  library.materialColors = EDITION.materialColors; // Herkunftsfarbe in Kiste und Song (Krachwerk)
   splash.set(0.82, 'Eigene Sounds …');
   const own = new OwnSounds(library, { db: EDITION.db });
   await own.loadAll();
@@ -450,11 +452,18 @@ async function boot() {
   const engine = new Engine(store, library);
   const ui = createUi();
 
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui });
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
     onDeleteOwn: async (id) => {
+      if (store.project.recipes?.[id]?.parent) {
+        // Variante: nur ohne Clips entfernen
+        const n = store.clipsOf(id);
+        if (!store.removeVariant(id)) ui.flash(`Wird noch in ${n} ${n === 1 ? 'Clip' : 'Clips'} benutzt.`);
+        else ui.flash('Variante gelöscht (Strg+Z holt sie zurück).');
+        return;
+      }
       if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
         ui.flash('Dieser Sound wird im Projekt benutzt. Entferne erst die Clips.');
         return;
@@ -543,7 +552,11 @@ async function boot() {
   // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
   const songAuto = templateControls({ store, ui, engine, getTarget: () => 'master', names: MASTER_TEMPLATES, bars: false, variant: 'song', onDone: () => ui.setDock(null) });
   document.getElementById('song-auto-slot').append(songAuto.node);
-  const inspector = mountInspector({ root: document.getElementById('insp'), store, ui, library, tools, engine, mastering });
+  const inspector = mountInspector({
+    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering,
+    // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
+    ...(EDITION.workbench === 'sound' ? { clipPanel: (box, deps) => mountSoundBench(box, { ...deps, own }), trackOnClip: false, fxCompact: true } : {}),
+  });
   const layout = mountLayout({
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),

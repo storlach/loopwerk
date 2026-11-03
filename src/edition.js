@@ -7,6 +7,7 @@ export const EDITIONS = {
     id: 'full', title: 'Loopwerk', db: 'loopwerk', keyPrefix: 'loopwerk.',
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
     pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
+    workbench: null, materialColors: false, grainWave: false,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -24,14 +25,18 @@ export const EDITIONS = {
       '.tbtn-mute': 'Werkbank Spur (M)', '.tbtn-solo': 'Werkbank Spur (S)', '.track-vol-wrap': 'Werkbank Spur (Lautstärke)',
       '.key-row': 'Song-Fach (Tonart und Akkorde)', '.chord-row': 'Song-Fach (Tonart und Akkorde)',
       'clipbar': 'Werkzeug am Clip', 'split-btn': 'Werkzeug am Clip', 'dup-btn': 'Werkzeug am Clip', 'del-btn': 'Werkzeug am Clip',
-      'mixer-btn': 'Song-Fach (Mischen)', 'fxpad-btn': 'Song-Fach (FX-Pad)', 'editor-tab': 'Werkbank (Bearbeiten)', 'tab-song': 'Tipp auf das Deck',
+      'mixer-btn': 'Song-Fach (Mischen)', 'fxpad-btn': 'Song-Fach (FX-Pad)', 'editor-tab': 'Werkbank Ton (Im Editor)', 'tab-song': 'Tipp auf das Deck',
+      '.tabbar-end': 'Song-Werkbank (Hilfe)', '.tbtn-chev': 'Werkbank Spur (Feinheiten, Kurve)',
     },
-    // Kiste: Gruppen nach Herkunft (Reihenfolge = Anzeige); cat = Farbe des Punkts, wenn nichts Genaueres bekannt ist
+    // Klang-Rezept (Scheibe 2a, ADR 008): Sound-Werkbank im Clip-Abschnitt, Herkunftsfarben in Kiste und Song, Roh = Korn
+    workbench: 'sound', materialColors: true, grainWave: true,
+    // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
-      { id: 'mic', label: 'Aufnahmen', cat: 'fx' },
-      { id: 'file', label: 'Dateien', cat: 'fx' },
-      { id: 'loop', label: 'Schleifen', cat: 'chords' },
-      { id: 'pat', label: 'Strom', cat: 'bass' },
+      { id: 'koerper', label: 'Körper', cat: 'drums' },
+      { id: 'dinge', label: 'Dinge', cat: 'fx' },
+      { id: 'stimme', label: 'Stimme', cat: 'synth' },
+      { id: 'strom', label: 'Strom', cat: 'bass' },
+      { id: 'schleife', label: 'Schleife', cat: 'chords' },
     ],
   },
 };

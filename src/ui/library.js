@@ -3,6 +3,7 @@
 import { CATEGORIES, GENRES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
 import { lsKey } from '../edition.js';
+import { suggestMaterial } from '../recipe.js';
 
 const FAV_KEY = lsKey('loopwerk.favs');
 const OPEN_KEY = lsKey('loopwerk.shelfOpen');
@@ -47,16 +48,10 @@ const describe = (s) => {
   return parts.join(' · ');
 };
 
-// Herkunftsgruppen der Kiste (Edition mit shelfGroups): Aufnahme, Datei, Schleife, Strom (Pattern)
-const FROM = {
-  mic: (s) => s.category === 'own' && !isStrom(s) && (s.made?.from ?? 'mic') === 'mic',
-  file: (s) => s.category === 'own' && !isStrom(s) && s.made?.from === 'file',
-  loop: (s) => s.category === 'own' && !isStrom(s) && s.made?.from === 'loop',
-  pat: (s) => isStrom(s),
-};
-const isStrom = (s) => /^pat-/.test(s.id);
-// Farbe des Punkts: Ton → Stimme, sonst Dinge; Schleife und Strom haben eigene
-const originCat = (s, g) => (g.id === 'loop' || g.id === 'pat' ? g.cat : s.made?.cls === 'ton' ? 'synth' : g.cat);
+// Herkunftsgruppen der Kiste (Edition mit shelfGroups): nach Material – Körper, Dinge, Stimme, Strom, Schleife.
+// Reihenfolge der Wahl: Rezept (vom Nutzer gesetzt) → Eltern-Sound → letzte Wahl am Datensatz → Vorschlag aus der Herkunft
+const materialIn = (s, store, library) => store.project.recipes?.[s.id]?.material
+  ?? (s.parentId ? library.get(s.parentId)?.material : null) ?? s.material ?? suggestMaterial(s);
 
 export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null }) {
   const search = document.getElementById('shelf-search');
@@ -73,7 +68,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   let sort = 'cat';
   try { if (localStorage.getItem(SORT_KEY) === 'genre') sort = 'genre'; } catch { /* Standard */ }
   const groupsFor = (mode) => (groupBy
-    ? groupBy.map((g) => ({ ...g, cls: `cat-${g.cat}`, has: FROM[g.id] ?? (() => false) }))
+    ? groupBy.map((g) => ({ ...g, cls: `cat-${g.cat}`, has: (s) => (s.category === 'own' || /^pat-/.test(s.id)) && materialIn(s, store, library) === g.id }))
     : mode === 'genre'
     ? [
       // Sounds, deren Hauptgenre das ist, stehen oben
@@ -230,6 +225,14 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (filter !== 'all' && filter !== 'fav' && filter !== cat.id) continue;
       const samples = shown.filter(cat.has);
       if (cat.rank) samples.sort((a, b) => cat.rank(a) - cat.rank(b));
+      // Varianten stehen direkt unter ihrem Eltern-Sound (eingerückt), auch wenn sie später entstanden sind
+      if (groupBy) {
+        const roots = samples.filter((x) => !x.parentId);
+        const kids = (id) => samples.filter((x) => x.parentId === id);
+        const ordered = roots.flatMap((x) => [x, ...kids(x.id)]);
+        for (const x of samples) if (!ordered.includes(x)) ordered.push(x);
+        samples.splice(0, samples.length, ...ordered);
+      }
       if (!samples.length) continue;
       // Bei Suche oder Filter sind alle Treffer-Gruppen offen, sonst gilt der gemerkte Zustand
       const forced = !!q || filter !== 'all' || len !== 'all';
@@ -259,7 +262,8 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
           lastSection = section(s);
           list.append(el('div', 'shelf-sub', `${lastSection} · ${samples.filter((x) => section(x) === lastSection).length}`));
         }
-        const { row, star } = makeItem(s, groupBy ? originCat(s, cat) : s.category);
+        const { row, star } = makeItem(s, groupBy ? cat.cat : s.category);
+        if (s.parentId) row.classList.add('variant');
         if (!items.has(s.id)) items.set(s.id, []);
         items.get(s.id).push(row);
         const fav = favs.has(s.id);

@@ -1752,8 +1752,14 @@ export class Library extends Emitter {
   }
 
   // Sound mit Original-Puffer aufnehmen; Länge in Schlägen ergibt sich aus dem aktuellen Tempo.
+  // Krachwerk: Herkunftsfarbe gleich beim Anlegen (Rezept-Material kommt mit applyRecipes dazu)
+  _tint(s) {
+    if (this.materialColors && s.category === 'own') s.colorCat = materialOf(s.material)?.cat ?? materialOf(suggestMaterial(s)).cat;
+  }
+
   async add(sample) {
     this._recipesJson = null;
+    this._tint(sample);
     this.samples.set(sample.id, sample);
     await this._prepare(sample, this.bpm);
     this.emit();
@@ -1767,6 +1773,7 @@ export class Library extends Emitter {
     sample.lazy = true;
     sample._load = load;
     sample.lengthBeats ??= sample.beats ?? 4;
+    this._tint(sample);
     this.samples.set(sample.id, sample);
     return sample;
   }
