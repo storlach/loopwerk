@@ -114,7 +114,13 @@ export function playNote(kit, preset, pitch, beat, len, vel, spb) {
 
 export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
 export const noteName = (m) => `${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
-export const drumLabel = (kitId, rowId) => KITS.find((k) => k.id === kitId)?.labels?.[rowId] ?? DRUM_ROWS.find((r) => r.id === rowId)?.label ?? rowId;
+// kit: Kit-ID (KITS) oder Kit-Map eines Projekt-Kits (ADR 012); nameOf(sampleId) benennt ein belegtes Pad nach seinem Sound
+export const drumLabel = (kit, rowId, nameOf = null) => {
+  if (kit && typeof kit === 'object') return (kit[rowId] && nameOf?.(kit[rowId])) || DRUM_ROWS.find((r) => r.id === rowId)?.label || rowId;
+  return KITS.find((k) => k.id === kit)?.labels?.[rowId] ?? DRUM_ROWS.find((r) => r.id === rowId)?.label ?? rowId;
+};
+// Map eines Kits: Projekt-Kit (kitMap am aufgelösten Pattern bzw. Map direkt) vor mitgelieferten Sample-Kits
+const kitMapOf = (kit) => (kit && typeof kit === 'object' ? kit : KITS.find((k) => k.id === kit)?.map ?? null);
 
 // Synthetische Kits: welche Stimme des Klangbaukastens eine Zeile spielt (b = Schlag, v = Stärke)
 const SYNTH_DRUMS = {
@@ -267,7 +273,9 @@ export async function renderPattern(pattern, bpm, library) {
   const sw = swingOf(pattern);
   if (pattern.type !== 'drums' && sw > 0.5) pattern = { ...pattern, notes: swingNotes(pattern.notes, sw) };
   if (pattern.type === 'drums') {
-    const map = KITS.find((k) => k.id === pattern.kit)?.map;
+    const map = pattern.kitMap ?? kitMapOf(pattern.kit);
+    // Sounds auf Abruf (eigene Sounds, ADR 011) vor dem Rendern laden; ein fehlendes Pad schweigt
+    if (map && library?.ensure) await Promise.all(DRUM_ROWS.map((r) => map[r.id] && library.ensure(map[r.id]).catch(() => null)));
     for (const row of DRUM_ROWS) {
       const steps = pattern.rows?.[row.id] || [];
       steps.forEach((v, i) => {
@@ -275,9 +283,10 @@ export async function renderPattern(pattern, bpm, library) {
         const b = swingBeat(i / STEPS_PER_BEAT, sw);
         if (map) {
           const s = library?.get(map[row.id]);
-          if (!s?.orig) return;
+          const buf = s && (library.source?.(s) ?? s.orig);
+          if (!buf || s.missing) return;
           const src = ctx.createBufferSource();
-          src.buffer = library.source?.(s) ?? s.orig;
+          src.buffer = buf;
           const g = ctx.createGain();
           g.gain.value = v;
           src.connect(g).connect(bus);
@@ -414,14 +423,15 @@ export function startNote(ctx, dest, preset, pitch, vel = 1) {
   };
 }
 
-// when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort
+// when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort. kit: Kit-ID oder Kit-Map (Projekt-Kit)
 export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1) {
-  const map = KITS.find((k) => k.id === kitId)?.map;
+  const map = kitMapOf(kitId);
   if (map) {
     const s = library.get(map[rowId]);
-    if (!s?.orig) return;
+    const buf = s && (library.source?.(s) ?? s.orig);
+    if (!buf || s.missing) return;
     const src = ctx.createBufferSource();
-    src.buffer = library.source?.(s) ?? s.orig;
+    src.buffer = buf;
     if (vel < 0.999) {
       const g = ctx.createGain();
       g.gain.value = vel;

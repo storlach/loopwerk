@@ -139,3 +139,27 @@ export function layoutCuts(cuts, { recipe = {}, duration, sampleRate = 44100, be
   for (const c of out) if (c.clips.length) { c.beat = c.clips[0].beat; c.len = c.clips[0].len; }
   return out;
 }
+
+// Kit aus Schnitten (Krachwerk 4, Spec krachwerk-4-kit §3): items = [{ id, centroid }] (Spektralschwerpunkt des gebackenen
+// Schnitts). Über 8: gleichmäßig über die Helligkeit verteilt (wie pickKit in src/dsp/slice.js). Dunkelster → kick,
+// hellster → hat (ab 3), mittlerer → snare, die übrigen in Helligkeitsfolge → clap, tomLo, tomHi, open, crash.
+// Rückgabe { kick: id, … }
+export function pickPads(items, max = 8) {
+  const sorted = [...items].sort((p, q) => p.centroid - q.centroid);
+  if (sorted.length <= max) return sorted;
+  return Array.from({ length: max }, (_, i) => sorted[Math.round((i * (sorted.length - 1)) / (max - 1))]);
+}
+export function assignPads(items) {
+  const s = pickPads(items);
+  const n = s.length;
+  if (!n) return {};
+  const map = { kick: s[0].id };
+  if (n === 1) return map;
+  if (n === 2) return { ...map, snare: s[1].id };
+  const mid = Math.floor((n - 1) / 2); // bei gerader Zahl der dunklere der beiden mittleren
+  map.hat = s[n - 1].id;
+  map.snare = s[mid].id;
+  const rest = s.filter((_, i) => i !== 0 && i !== n - 1 && i !== mid);
+  ['clap', 'tomLo', 'tomHi', 'open', 'crash'].forEach((row, i) => { if (rest[i]) map[row] = rest[i].id; });
+  return map;
+}

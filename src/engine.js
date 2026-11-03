@@ -1176,6 +1176,12 @@ export class Engine extends Emitter {
     return preview;
   }
 
+  // Eingang einer Spur (vor Effekten, Lautstärke, Panorama): Pads und Tasten spielen live durch dieselbe Kette wie der
+  // Clip (Krachwerk 4, ADR 012). null ohne Ton-Kontext oder unbekannte Spur.
+  trackInput(trackId) {
+    return (trackId != null && this.mix?.tracks.get(trackId)?.input) || null;
+  }
+
   stopPreview() {
     if (!this.preview) return;
     const p = this.preview;

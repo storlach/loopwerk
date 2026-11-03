@@ -5,6 +5,7 @@ import { Emitter } from './util.js';
 import { withFx } from './effects.js';
 import { isChord } from './harmony.js';
 import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
+import { PAD_IDS, grooveRows, grooveOf } from './grooves.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
 
 export const EPS = 1e-6;
@@ -116,10 +117,13 @@ export function audibleMap(project) {
   return map;
 }
 
-// Alle Sounds, die das Projekt braucht: Clips (auch stumme) und die Eltern benutzter Varianten (ADR 010, kein eigenes Audio)
+// Alle Sounds, die das Projekt braucht: Clips (auch stumme), Kit-Pads und Instrument-Sounds (ADR 012) und die Eltern
+// benutzter Varianten (ADR 010, kein eigenes Audio)
 export function usedSampleIds(project) {
   const ids = new Set();
   for (const t of project.tracks || []) for (const c of t.clips || []) ids.add(c.sampleId);
+  for (const k of Object.values(project.kits || {})) for (const id of Object.values(k?.map || {})) if (typeof id === 'string') ids.add(id);
+  for (const i of Object.values(project.instruments || {})) if (typeof i?.sampleId === 'string') ids.add(i.sampleId);
   for (const id of [...ids]) { const parent = project.recipes?.[id]?.parent; if (parent) ids.add(parent); }
   return ids;
 }
@@ -345,8 +349,40 @@ const recipesOk = autoOk;
 
 export function isValidProject(p) {
   return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation))
-    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation) && recipesOk(p.recipes);
+    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation) && recipesOk(p.recipes)
+    && autoOk(p.kits) && autoOk(p.instruments);
 }
+
+// ---------- Kit und Instrument (ADR 012) ----------
+const newObjId = (prefix) => prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6).padEnd(4, '0');
+export const newKitId = () => newObjId('k-');
+export const newInstrumentId = () => newObjId('in-');
+export const isKitId = (id) => /^k-[a-z0-9]+$/.test(String(id));
+export const isInstrumentId = (id) => /^in-[a-z0-9]+$/.test(String(id));
+const cleanName = (v, def) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 40) : def);
+
+// Kit: Name, Map Pad → Sound (nur die 8 Zeilen, nur Text; Pads mit fehlendem Sound bleiben stehen und schweigen), Herkunft
+export function normalizeKit(k) {
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return null;
+  const map = {};
+  for (const r of PAD_IDS) if (typeof k.map?.[r] === 'string' && k.map[r]) map[r] = k.map[r];
+  const out = { name: cleanName(k.name, 'Kit'), map };
+  if (k.from === 'pads.v1') out.from = 'pads.v1';
+  return out;
+}
+export const INSTRUMENT_RELEASE = 0.3;
+// Instrument: ein Sound mit Grundton (MIDI 36…96) und Feinstimmung (Cent, ±50), Ausklang 0…2 s
+export function normalizeInstrument(i) {
+  if (!i || typeof i !== 'object' || typeof i.sampleId !== 'string' || !i.sampleId) return null;
+  const num = (v, lo, hi, def) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Math.min(hi, Math.max(lo, Number(v))) : def);
+  return {
+    name: cleanName(i.name, 'Instrument'), sampleId: i.sampleId,
+    root: Math.round(num(i.root, 36, 96, 60)), cents: Math.round(num(i.cents, -50, 50, 0)),
+    release: Math.round(num(i.release, 0, 2, INSTRUMENT_RELEASE) * 100) / 100,
+  };
+}
+export const kitOf = (project, id) => normalizeKit(project?.kits?.[id]);
+export const instrumentOf = (project, id) => normalizeInstrument(project?.instruments?.[id]);
 
 export class Store extends Emitter {
   // soundDuration(id) → Sekunden des Originals (optional): Ausschnitt eines Rezepts passt sich der Länge an
@@ -393,10 +429,11 @@ export class Store extends Emitter {
     return out;
   }
 
-  dispatch(label, mutate, { coalesce } = {}) {
+  // anyTime: gleicher coalesce-Schlüssel fasst ohne Zeitgrenze zusammen (ein ●-Durchgang der Pad-Aufnahme)
+  dispatch(label, mutate, { coalesce, anyTime = false } = {}) {
     if (this._batching) { mutate(this.project); return; }
     const now = performance.now();
-    const merge = coalesce && coalesce === this.lastKey && now - this.lastTime < 1500;
+    const merge = coalesce && coalesce === this.lastKey && (anyTime || now - this.lastTime < 1500);
     if (!merge) {
       this.undoStack.push(JSON.stringify(this.project));
       if (this.undoStack.length > 200) this.undoStack.shift();
@@ -904,6 +941,170 @@ export class Store extends Emitter {
     }, { coalesce });
   }
 
+  // ---------- Kits und Instrumente (ADR 012): je Aktion ein Rückgängig-Schritt ----------
+
+  _patternsUsing(key, id) { return Object.values(this.project.patterns || {}).filter((p) => p?.[key] === id).length; }
+
+  addKit({ name, map, from } = {}) {
+    const kit = normalizeKit({ name, map, from });
+    let id;
+    do id = newKitId(); while (this.project.kits?.[id]);
+    this.dispatch('add-kit', (p) => { p.kits = { ...(p.kits || {}), [id]: kit }; });
+    return id;
+  }
+
+  // patch: { name }
+  setKit(kitId, patch = {}) {
+    const cur = this.project.kits?.[kitId];
+    if (!cur) return;
+    const next = normalizeKit({ ...cur, ...(patch.name != null ? { name: patch.name } : {}) });
+    if (JSON.stringify(next) === JSON.stringify(normalizeKit(cur))) return;
+    this.dispatch('kit', (p) => { p.kits = { ...p.kits, [kitId]: next }; });
+  }
+
+  // Pad belegen (sampleId) bzw. leeren (null)
+  setKitPad(kitId, row, sampleId) {
+    const cur = this.project.kits?.[kitId];
+    if (!cur || !PAD_IDS.includes(row) || (cur.map?.[row] ?? null) === (sampleId || null)) return;
+    const map = { ...(cur.map || {}) };
+    if (sampleId) map[row] = String(sampleId); else delete map[row];
+    this.dispatch('kit-pad', (p) => { p.kits = { ...p.kits, [kitId]: normalizeKit({ ...cur, map }) }; });
+  }
+
+  // Nur ohne Pattern, das es spielt. Rückgabe true/false
+  removeKit(kitId) {
+    if (!this.project.kits?.[kitId] || this._patternsUsing('kit', kitId)) return false;
+    this.dispatch('remove-kit', (p) => {
+      const { [kitId]: _, ...rest } = p.kits;
+      if (Object.keys(rest).length) p.kits = rest; else delete p.kits;
+    });
+    return true;
+  }
+
+  addInstrument({ name, sampleId, root, cents, release } = {}) {
+    const inst = normalizeInstrument({ name, sampleId, root, cents, release });
+    if (!inst) return null;
+    let id;
+    do id = newInstrumentId(); while (this.project.instruments?.[id]);
+    this.dispatch('add-instrument', (p) => { p.instruments = { ...(p.instruments || {}), [id]: inst }; });
+    return id;
+  }
+
+  // patch: { name, root, cents, release, sampleId }; coalesce für Ziehen (Cent, Ausklang)
+  setInstrument(id, patch = {}, { coalesce } = {}) {
+    const cur = this.project.instruments?.[id];
+    if (!cur) return;
+    const next = normalizeInstrument({ ...cur, ...patch });
+    if (!next || JSON.stringify(next) === JSON.stringify(normalizeInstrument(cur))) return;
+    this.dispatch('instrument', (p) => { p.instruments = { ...p.instruments, [id]: next }; }, { coalesce });
+  }
+
+  removeInstrument(id) {
+    if (!this.project.instruments?.[id] || this._patternsUsing('preset', id)) return false;
+    this.dispatch('remove-instrument', (p) => {
+      const { [id]: _, ...rest } = p.instruments;
+      if (Object.keys(rest).length) p.instruments = rest; else delete p.instruments;
+    });
+    return true;
+  }
+
+  // Erste Spur ohne Clip in [at, at + len); sonst eine neue (null, wenn keine mehr geht)
+  _freeTrackFor(at, len) {
+    const free = this.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < at + len - EPS && c.startBeat + c.lengthBeats > at + EPS));
+    return free?.id ?? this.addTrack();
+  }
+
+  // Pattern als Clip ablegen (in einem batch): Spur, Lage, Loop über den Clip, falls er nicht schon im Loop liegt
+  _placePattern(pattern, { trackId, atBeat, loop }) {
+    const len = pattern.bars * 4;
+    const p = this.project;
+    const at = Math.max(0, atBeat ?? (p.loop?.on ? p.loop.startBeat : 0));
+    const tid = this.track(trackId)?.id ?? this._freeTrackFor(at, len);
+    if (!tid) return null;
+    const patternId = this.addPattern(pattern);
+    const clipId = this.addClip(tid, 'pat-' + patternId, at, len);
+    const l = this.project.loop;
+    if (loop && !(l.on && l.startBeat <= at + EPS && l.endBeat >= at + len - EPS)) this.setLoop({ on: true, startBeat: at, endBeat: at + len });
+    return { patternId, clipId, trackId: tid };
+  }
+
+  // Kit auf die Spur: Beat-Pattern mit kit und Muster (leere Pads ohne Schritte), Clip, Loop. Ein Schritt.
+  // Rückgabe { patternId, clipId, trackId } | null
+  placeKit(kitId, { trackId = null, atBeat = null, bars = 1, groove = 'gerade', loop = true } = {}) {
+    const kit = kitOf(this.project, kitId);
+    if (!kit) return null;
+    const b = Math.max(1, Math.min(4, Math.round(bars)));
+    const g = grooveOf(groove).id;
+    const pattern = { type: 'drums', name: kit.name.slice(0, 30), bars: b, kit: kitId, groove: g, rows: grooveRows(g, b, kit.map) };
+    return this.batch('Kit auf die Spur', () => this._placePattern(pattern, { trackId, atBeat, loop }));
+  }
+
+  // Instrument auf die Spur: leere Melodie mit preset = Instrument. Rückgabe wie placeKit
+  placeInstrument(id, { trackId = null, atBeat = null, bars = 1, loop = false } = {}) {
+    const inst = instrumentOf(this.project, id);
+    if (!inst) return null;
+    const pattern = { type: 'synth', name: inst.name.slice(0, 30), bars: Math.max(1, Math.min(8, Math.round(bars))), preset: id, notes: [] };
+    return this.batch('Instrument auf die Spur', () => this._placePattern(pattern, { trackId, atBeat, loop }));
+  }
+
+  // Muster eines Kit-Patterns wechseln: ersetzt die Schritte (leere Pads bleiben leer). Ein Schritt.
+  setGroove(patternId, groove) {
+    const pat = this.project.patterns?.[patternId];
+    if (!pat || pat.type !== 'drums') return;
+    const g = grooveOf(groove).id;
+    const map = pat.kit && this.project.kits?.[pat.kit] ? kitOf(this.project, pat.kit).map : null;
+    this.updatePattern(patternId, (q) => { q.groove = g; q.rows = grooveRows(g, q.bars, map); });
+  }
+
+  // Klatsch-Kit / Als Kit: Schnitte als Varianten (cutSound ohne Ablage) + Kit + (place) Kit auf die Spur – ein Schritt.
+  // cuts wie cutSound, map = { Pad: Index in cuts } (assignPads), opts: name, place, trackId, atBeat, groove.
+  // Rückgabe { kitId, ids, patternId, clipId } | null
+  clapKit(sampleId, cuts, map, { name = null, place = true, trackId = null, atBeat = null, groove = 'gerade', label = 'Klatsch-Kit' } = {}) {
+    return this.batch(label, () => {
+      const res = this.cutSound(sampleId, cuts);
+      if (!res) return null;
+      const pads = {};
+      for (const [row, i] of Object.entries(map || {})) if (res.ids[i]) pads[row] = res.ids[i];
+      const taken = new Set(Object.values(this.project.kits || {}).map((k) => k?.name));
+      let n = 1;
+      const base = name || 'Klatschen';
+      let kitName = name || `${base} ${n}`;
+      while (taken.has(kitName)) kitName = `${base} ${++n}`;
+      const kitId = this.addKit({ name: kitName, map: pads });
+      const placed = place ? this.placeKit(kitId, { trackId, atBeat, groove }) : null;
+      return { kitId, ids: res.ids, patternId: placed?.patternId ?? null, clipId: placed?.clipId ?? null };
+    });
+  }
+
+  // Pad-Aufnahme: Schlag auf Schritt step (Anschlag vel); pass = ●-Durchgang → ein Rückgängig-Schritt je Durchgang
+  padHit(patternId, row, step, vel = 1, pass = 1) {
+    const pat = this.project.patterns?.[patternId];
+    if (!pat || pat.type !== 'drums' || !PAD_IDS.includes(row)) return;
+    const n = pat.bars * 16;
+    const k = ((Math.round(step) % n) + n) % n;
+    const v = Math.round(Math.min(1, Math.max(0.05, vel)) * 100) / 100;
+    this.dispatch('pattern', (p) => {
+      const q = p.patterns[patternId];
+      const rows = {};
+      for (const r of PAD_IDS) rows[r] = Array.from({ length: n }, (_, i) => q.rows?.[r]?.[i] || 0);
+      rows[row][k] = v;
+      q.rows = rows;
+    }, { coalesce: 'padrec-' + pass, anyTime: true });
+  }
+
+  // Tasten-Aufnahme (Instrument): Note { pitch, start, len, vel } ins Melodie-Pattern, ein Schritt je Durchgang
+  keyHit(patternId, note, pass = 1) {
+    const pat = this.project.patterns?.[patternId];
+    if (!pat || pat.type !== 'synth' || !Number.isFinite(note?.pitch) || !Number.isFinite(note?.start)) return;
+    const beats = pat.bars * 4;
+    const start = ((Math.round(note.start * 4) / 4) % beats + beats) % beats;
+    const n = { pitch: Math.round(note.pitch), start, len: Math.max(0.25, Math.min(beats - start, note.len ?? 0.25)), vel: Math.min(1, Math.max(0.05, note.vel ?? 1)) };
+    this.dispatch('pattern', (p) => {
+      const q = p.patterns[patternId];
+      q.notes = [...(q.notes || []).filter((x) => !(x.pitch === n.pitch && Math.abs(x.start - n.start) < 1e-6)), n];
+    }, { coalesce: 'keyrec-' + pass, anyTime: true });
+  }
+
   // Klang eines Patterns auf einmal setzen: Klangfarbe, Name und Effekte der Spuren, auf denen es liegt (ein Schritt)
   applySound(patternId, { preset, name, fx }, trackIds) {
     if (!this.project.patterns?.[patternId]) return;
@@ -1203,6 +1404,8 @@ export class Store extends Emitter {
       delete p.chords;
       delete p.sampleTempo;
       delete p.recipes;
+      delete p.kits;
+      delete p.instruments;
       if (p.master) delete p.master.automation;
       p.loop = { on: false, startBeat: 0, endBeat: 16 };
     });

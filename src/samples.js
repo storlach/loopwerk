@@ -1943,10 +1943,14 @@ export class Library extends Emitter {
   applyRecipes(project) {
     const map = project?.recipes && typeof project.recipes === 'object' ? project.recipes : {};
     const json = JSON.stringify(map);
-    if (json === this._recipesJson) return this._recipeRun.then(() => false);
+    // Läuft derselbe Stand noch, erfährt jeder Aufrufer, ob sich etwas geändert hat (Patterns warten mit, ADR 012)
+    if (json === this._recipesJson) return this._recipeBusy ?? this._recipeRun.then(() => false);
     this._recipesJson = json;
     const run = this._applyRecipes(map);
-    this._recipeRun = run.catch(() => false);
+    const busy = run.catch(() => false);
+    this._recipeRun = busy;
+    this._recipeBusy = busy;
+    busy.then(() => { if (this._recipeBusy === busy) this._recipeBusy = null; });
     return run;
   }
 

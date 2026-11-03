@@ -28,12 +28,13 @@ export const loadState = (id) => (ready.has(id) ? 'ready' : pending.has(id) ? 'l
 // Ohne mitgelieferte Instrumente starten (Krachwerk)
 export function clearInstruments() { registry.clear(); pending.clear(); ready.clear(); }
 
-// Weitere Instrumente zur Laufzeit (Tests, später eigene Instrumente)
+// Weitere Instrumente zur Laufzeit (Tests, eigene Instrumente aus src/own-instruments.js)
 export function registerInstrument(def) {
   registry.set(def.id, def);
   pending.delete(def.id);
   ready.delete(def.id);
 }
+export function unregisterInstrument(id) { registry.delete(id); pending.delete(id); ready.delete(id); }
 
 // Dateiname allein → Ordner des Instruments; mit Pfad oder als URL → unverändert
 export function zoneUrl(inst, file) {
@@ -71,7 +72,17 @@ function onsetOffset(buffer) {
   return Math.max(0, i - Math.round(0.001 * buffer.sampleRate)) / buffer.sampleRate;
 }
 
+// Zone aus einem eigenen Sound (ADR 012): gebackener Klang aus der Library (inst.library), auf Abruf geladen
+async function loadOwnZone(inst, zone) {
+  const lib = inst.library;
+  const s = await lib.ensure(zone.sampleId);
+  const buffer = s && !s.missing ? lib.source(s) : null;
+  if (!buffer) throw new Error(`Sound ${zone.sampleId} fehlt`);
+  return { midi: zone.midi, cents: zone.cents || 0, buffer, offset: onsetOffset(buffer), loopStart: 0, loopEnd: 0 };
+}
+
 async function loadZone(inst, zone) {
+  if (zone.sampleId) return loadOwnZone(inst, zone);
   const ab = await fetchAsset(zoneUrl(inst, zone.file));
   const rate = wavRate(ab);
   const buffer = await decodeCtx().decodeAudioData(ab);
@@ -121,7 +132,7 @@ export function playSampled(ctx, dest, loaded, pitch, when, dur = null, vel = 1)
   const z = nearestZone(zones, pitch);
   const src = ctx.createBufferSource();
   src.buffer = z.buffer;
-  src.playbackRate.value = 2 ** ((pitch - z.midi) / 12);
+  src.playbackRate.value = 2 ** ((pitch - z.midi - (z.cents || 0) / 100) / 12);
   const looped = !!inst.sustain && z.loopEnd > z.loopStart;
   if (looped) {
     src.loop = true;
