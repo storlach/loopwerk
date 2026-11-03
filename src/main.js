@@ -467,7 +467,8 @@ async function boot() {
   const engine = new Engine(store, library);
   const ui = createUi();
 
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave });
+  // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm' });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,

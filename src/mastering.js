@@ -100,5 +100,7 @@ export function mountMasteringAnalysis({ store, engine, library, delay = 1200 })
       emit();
     },
     endAB() { engine.setMonitor({ ab: null }); emit(); },
+    // Vergleich direkt wählen: 'A' (vorher), 'B' (nachher, gleich laut) oder null (normal)
+    setAB(which) { if (!which) { this.endAB(); return; } engine.setMonitor({ ab: which, ...abLevels(state.analysis) }); emit(); },
   };
 }

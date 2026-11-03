@@ -142,7 +142,7 @@ const tmp = (name) => path.join(os.tmpdir(), name);
     check('Eigene Sounds bleiben nach Neuladen erhalten', afterReload.includes('Gesang kurz') && afterReload.includes('Mein Gesang'), JSON.stringify(afterReload));
 
     // Löschen: benutzter Sound wird geschützt, unbenutzter gelöscht
-    await page.click('#shelf-chips .chip[data-filter="own"]');
+    await page.evaluate(() => { const h = document.getElementById('shelf-cat-own'); if (h && h.getAttribute('aria-expanded') === 'false') h.click(); });
     const rowUsed = page.locator('#library .loop-row', { hasText: 'Gesang kurz' });
     await rowUsed.locator('.loop-del').click();
     await rowUsed.locator('.loop-del').click();

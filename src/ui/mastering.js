@@ -1,4 +1,4 @@
-// Mastering-Bedienung für die Summe: Schalter, Stil, A/B-Vergleich, gemessene Lautheit.
+// Mastering-Bedienung für die Summe: oben ein Schalter, darunter – nur wenn an – Stil, Vergleich und gemessene Lautheit.
 // Dieselbe Bedienung sitzt im Inspektor „Song“ (Desktop) und im Export-Fach (Desktop-Klappfeld, Handy-Fach).
 
 import { MASTER_STYLES } from '../mastering.js';
@@ -10,29 +10,27 @@ const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',').r
 export function mountMasteringControls(root, { store, engine, analysis, prefix }) {
   const box = el('div', 'mst');
   box.id = `${prefix}`;
-  const head = el('div', 'mst-head');
-  const sw = el('button', 'dbtn mst-on', 'Mastering');
+  // Kopf: Schalter wie bei den Effekten, Name, Messwert rechts
+  const head = el('label', 'mst-head');
+  const sw = el('button', 'fxl-switch mst-on');
   sw.type = 'button';
   sw.id = `${prefix}-on`;
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-label', 'Mastering ein/aus');
   sw.title = 'Summe radiotauglich machen: Klangausgleich, Bus-Kompression, Breite in den Höhen, Limiter, Ziellautheit';
-  sw.addEventListener('click', () => store.setMastering({ on: !masteringOf(store.project).on }));
-  const ab = el('button', 'dbtn mst-ab', 'A/B');
-  ab.type = 'button';
-  ab.id = `${prefix}-ab`;
-  ab.title = 'Vorher und nachher vergleichen – beide gleich laut';
-  ab.addEventListener('click', () => analysis.toggleAB());
-  const abEnd = el('button', 'dbtn mst-ab-end', '×');
-  abEnd.type = 'button';
-  abEnd.id = `${prefix}-ab-end`;
-  abEnd.setAttribute('aria-label', 'Vergleich beenden');
-  abEnd.title = 'Vergleich beenden';
-  abEnd.addEventListener('click', () => analysis.endAB());
-  head.append(sw, ab, abEnd);
-  const styles = el('div', 'mst-styles');
+  sw.addEventListener('click', (e) => { e.preventDefault(); store.setMastering({ on: !masteringOf(store.project).on }); });
+  const name = el('span', 'mst-name', 'Mastering');
+  const meter = el('output', 'mst-meter');
+  meter.id = `${prefix}-meter`;
+  head.append(sw, name, meter);
+  // Einstellungen, nur bei eingeschaltetem Mastering
+  const body = el('div', 'mst-body');
+  const row = (label, node) => { const r = el('div', 'mst-row'); r.append(el('span', 'mst-label', label), node); return r; };
+  const styles = el('div', 'mst-seg mst-styles');
   styles.setAttribute('role', 'group');
   styles.setAttribute('aria-label', 'Mastering-Stil');
   const chips = MASTER_STYLES.map((s) => {
-    const b = el('button', 'chip mst-style', s.label);
+    const b = el('button', 'seg mst-style', s.label);
     b.type = 'button';
     b.dataset.style = s.id;
     b.id = `${prefix}-style-${s.id}`;
@@ -41,22 +39,34 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
     styles.append(b);
     return b;
   });
-  const meter = el('output', 'mst-meter');
-  meter.id = `${prefix}-meter`;
-  box.append(head, styles, meter);
+  // Vergleich: Aus · Vorher · Nachher (beide gleich laut) – drei feste Stellungen statt eines wechselnden Knopfs
+  const cmp = el('div', 'mst-seg mst-cmp');
+  cmp.setAttribute('role', 'group');
+  cmp.setAttribute('aria-label', 'Vergleich');
+  const cmpBtns = [[null, 'Aus', 'ab-end'], ['A', 'Vorher', 'ab-a'], ['B', 'Nachher', 'ab-b']].map(([v, label, id]) => {
+    const b = el('button', 'seg', label);
+    b.type = 'button';
+    b.id = `${prefix}-${id}`;
+    b.dataset.ab = v ?? '';
+    b.title = v === 'A' ? 'Ohne Mastering hören – gleich laut wie mit' : v === 'B' ? 'Mit Mastering hören – gleich laut wie ohne' : 'Normal hören';
+    b.addEventListener('click', () => analysis.setAB(v));
+    cmp.append(b);
+    return b;
+  });
+  body.append(row('Stil', styles), row('Vergleich', cmp));
+  box.append(head, body);
   root.append(box);
 
   function render() {
     const m = masteringOf(store.project);
     const st = MASTER_STYLES.find((s) => s.id === m.style) ?? MASTER_STYLES[0];
     sw.setAttribute('aria-pressed', String(!!m.on));
+    sw.setAttribute('aria-checked', String(!!m.on));
     box.classList.toggle('on', !!m.on);
+    body.hidden = !m.on;
     for (const c of chips) c.setAttribute('aria-pressed', String(!!m.on && c.dataset.style === m.style));
     const mon = engine.monitor?.ab ?? null;
-    ab.disabled = !m.on;
-    ab.setAttribute('aria-pressed', String(!!m.on && !!mon));
-    ab.textContent = !m.on || !mon ? 'A/B' : mon === 'A' ? 'A · Vorher' : 'B · Nachher';
-    abEnd.hidden = !m.on || !mon;
+    for (const b of cmpBtns) b.setAttribute('aria-pressed', String((b.dataset.ab || null) === (m.on ? mon : null)));
     const an = analysis.state.analysis;
     if (!m.on) meter.textContent = '';
     else if (analysis.state.busy || !an || an.style !== m.style) meter.textContent = `Ziel ${fmt(st.target, 0)} LUFS · misst …`;

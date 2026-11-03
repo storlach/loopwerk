@@ -244,16 +244,14 @@ const { check, finish } = createChecker();
     await page.click('.shelf-sort [data-sort="genre"]');
     const genreView = await page.evaluate(() => ({
       heads: [...document.querySelectorAll('.shelf-cat')].map((h) => h.textContent.replace(/\d+$/, '')),
-      chips: [...document.querySelectorAll('#shelf-chips .chip')].map((c) => c.textContent),
       pressed: document.querySelector('.shelf-sort [data-sort="genre"]').getAttribute('aria-pressed'),
     }));
     check('Umschalter „Genre“ ordnet das Regal nach Genres', genreView.pressed === 'true' && genreView.heads[0].startsWith('Techno') && genreView.heads.some((h) => h.startsWith('Hip-Hop')), genreView.heads.join(' | '));
-    check('Filter-Chips zeigen Genres', genreView.chips.includes('Techno') && genreView.chips.includes('House') && !genreView.chips.includes('Bass'), genreView.chips.join(','));
-    await page.locator('#shelf-chips .chip', { hasText: 'Techno' }).click();
-    const tech = await page.evaluate(() => [...document.querySelectorAll('#library .loop-item')].map((n) => n.dataset.sampleId));
-    check('Genre-Filter „Techno“ zeigt Techno-Sounds aus allen Kategorien', tech.includes('techno-kick') && tech.includes('techno-acid') && tech.includes('drums-four') && tech.includes('sp-loop-garzul') && !tech.includes('drums-break'), `${tech.length} Sounds`);
+    await page.click('#shelf-cat-g-techno');
+    const tech = await page.evaluate(() => [...document.querySelectorAll('#shelf-items-g-techno .loop-item')].map((n) => n.dataset.sampleId));
+    check('Genre-Gruppe „Techno“ zeigt Techno-Sounds aus allen Kategorien', tech.includes('techno-kick') && tech.includes('techno-acid') && tech.includes('drums-four') && tech.includes('sp-loop-garzul') && !tech.includes('drums-break'), `${tech.length} Sounds`);
     check('Jeder Sound erscheint im Filter nur einmal', new Set(tech).size === tech.length);
-    await page.locator('#shelf-chips .chip', { hasText: 'Alle' }).click();
+    await page.click('#shelf-cat-g-techno');
     await page.fill('#shelf-search', 'ambient');
     const amb = await page.evaluate(() => [...document.querySelectorAll('#library .loop-item')].map((n) => n.dataset.sampleId));
     check('Suche findet auch nach Genre', amb.includes('sp-ambi-choir') && amb.includes('chords-pad'), amb.join(','));
