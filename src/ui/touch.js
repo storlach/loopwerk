@@ -5,6 +5,7 @@ import { touch } from './place.js';
 
 export const HOLD_MS = 450;
 const SLOP = 8; // so weit darf der Finger zittern, ohne dass es als Wischen gilt
+const HOLD_SLOP = 12; // beim Halten zittert ein echter Daumen mehr
 
 // Scrollen sperren, solange der Finger nach dem Halten liegt. Das geht nur über einen nicht-passiven touchmove-Hörer,
 // der schon beim Aufsetzen des Fingers da war – darum meldet holdArea() die Flächen vorher an.
@@ -30,21 +31,25 @@ export function pressHold(e, { onTap, onHold, ms = HOLD_MS }) {
   let state = 'wait';
   const cleanup = () => {
     clearTimeout(timer);
+    window.removeEventListener('contextmenu', menu, true);
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
     window.removeEventListener('pointercancel', cancel);
   };
-  const timer = setTimeout(() => {
+  const held = () => {
     if (state !== 'wait') return;
     state = 'held';
     cleanup();
     lockScroll(id);
     try { navigator.vibrate?.(12); } catch { /* ohne Vibration */ }
     onHold?.(e);
-  }, ms);
+  };
+  const timer = setTimeout(held, ms);
+  // Android meldet langes Drücken selbst (Kontextmenü, oft schon nach 400 ms) – das zählt sofort als Halten
+  const menu = (ev) => { if (state === 'wait') { ev.preventDefault(); held(); } };
   const move = (ev) => {
     if (ev.pointerId !== id || state !== 'wait') return;
-    if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > SLOP) { state = 'gone'; cleanup(); }
+    if (Math.hypot(ev.clientX - x0, ev.clientY - y0) > HOLD_SLOP) { state = 'gone'; cleanup(); }
   };
   const up = (ev) => {
     if (ev.pointerId !== id) return;
@@ -54,6 +59,7 @@ export function pressHold(e, { onTap, onHold, ms = HOLD_MS }) {
     if (tap) onTap?.(ev);
   };
   const cancel = (ev) => { if (ev.pointerId === id) { state = 'done'; cleanup(); } };
+  window.addEventListener('contextmenu', menu, true);
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
   window.addEventListener('pointercancel', cancel);

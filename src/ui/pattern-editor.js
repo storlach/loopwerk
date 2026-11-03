@@ -1187,6 +1187,13 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   });
 
   let mic = null;
+  function cancelMic() {
+    if (!mic) return;
+    mic.cancel();
+    mic = null;
+    $('sing-rec').classList.remove('recording');
+    $('sing-rec').textContent = '● Aufnehmen';
+  }
   $('sing-rec').addEventListener('click', async () => {
     const btn = $('sing-rec');
     if (mic) {
@@ -1403,7 +1410,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     shown = show;
     root.hidden = !show;
     if (show) requestAnimationFrame(render);
-    else { rec = false; looper.stop(); }
+    else { rec = false; looper.stop(); cancelMic(); }
   });
   store.on(() => {
     if (id && !store.project.patterns?.[id]) { id = null; if (ui.dock === 'pattern') ui.setDock(null); return; }
