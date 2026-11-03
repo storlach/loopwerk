@@ -28,7 +28,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   const react = createReact({ engine });
   let lastReact = null;
   // Vorläufig zum Vergleichen: Variante des Raumlichts (1 Spektrum-Wand, 2 Spur-Pulse, 3 beides),
-  // umschaltbar im Projekt-Menü oder mit der Taste L
+  // umschaltbar im Projekt-Menü, mit der Taste L oder am Handy über die Überschrift „Song“
   const PROBE_KEY = lsKey('loopwerk.licht2');
   const NV = VARIANTS.length;
   let variant = NV;
@@ -50,6 +50,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   }
   const menu = document.getElementById('project-menu');
   if (menu) menu.insertBefore(probe, document.getElementById('pop-about'));
+  // Am Handy (ohne Projekt-Menü): Antippen der Überschrift im Fach „Song“ schaltet weiter
+  document.querySelector('#song .dock-head h2')?.addEventListener('click', () => { if (shader) setVariant(variant + 1); });
   function setVariant(v, say = true) {
     variant = ((v - 1 + NV) % NV) + 1;
     try { localStorage.setItem(PROBE_KEY, String(variant)); } catch { /* ohne Speicher */ }
