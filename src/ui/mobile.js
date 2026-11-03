@@ -1,6 +1,7 @@
 // Handy-Bedienung: Fachleiste unten (Sounds, Mixer, Editor, Song), darüber ein Fach für Regal oder Dock,
 // Werkzeuge für den ausgewählten Clip. Auf breiten Bildschirmen bleibt alles, wie es ist.
 
+import { mountTakeRow, stepTake } from './take-row.js';
 import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
@@ -60,6 +61,13 @@ export function mountMobile({ store, ui, tools, library }) {
   $('cb-split').addEventListener('click', () => tools.split());
   $('cb-dup').addEventListener('click', () => tools.duplicate());
   $('cb-del').addEventListener('click', () => tools.remove());
+  // Take-Clip (2.13): Antippen schaltet zum nächsten Take, am Ende zurück zu 1; Löschen im Pegel-Fach
+  // Nur bei Take-Clips in der Leiste (sonst bleibt sie, wie sie war)
+  const takeBtn = document.createElement('button');
+  Object.assign(takeBtn, { className: 'cbtn cbtn-take', id: 'cb-take', type: 'button', title: 'Nächster Take (am Ende wieder der erste)' });
+  takeBtn.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 9h12v5H2zm1-4h10v3H3zm2-3h6v2H5z"/></svg><span class="cb-take-n">Take</span>';
+  takeBtn.addEventListener('click', () => { const c = selected(); if (c) stepTake(store, library, c.id, 1); });
+  const takeRow = mountTakeRow({ store, library, ui, variant: 'phone', idPrefix: 'lvl' });
   levelsBtn.addEventListener('click', () => { showLevels = !showLevels; syncBar(); });
   // Geschwindigkeit 50–200 %, wahlweise wie Tonband (wie im Inspektor)
   mountClipSpeed($('lvl-speed-row'), { store, ui, library, variant: 'phone' });
@@ -117,6 +125,11 @@ export function mountMobile({ store, ui, tools, library }) {
     // Mehrere Clips: Duplizieren und Löschen gelten für alle; Bearbeiten, Teilen und Pegel nur für einen
     const many = ui.multi.length > 1;
     for (const id of ['cb-edit', 'cb-split', 'cb-levels']) $(id).disabled = many;
+    const withTake = !many && !!c.takes;
+    if (withTake && !takeBtn.isConnected) levelsBtn.before(takeBtn);
+    else if (!withTake && takeBtn.isConnected) takeBtn.remove();
+    levelsBtn.parentElement.classList.toggle('with-take', withTake);
+    if (withTake) takeBtn.querySelector('.cb-take-n').textContent = `Take ${c.take + 1}/${c.takes.length}`;
     if (many) showLevels = false;
     levels.hidden = !showLevels;
     levelsBtn.setAttribute('aria-pressed', String(showLevels));
@@ -127,6 +140,10 @@ export function mountMobile({ store, ui, tools, library }) {
     };
     const snd0 = library.get(c.sampleId);
     $('lvl-head-name').textContent = snd0?.name ?? 'Clip';
+    // Zeile „Take … ×“ nur bei Take-Clips im Fach
+    if (c.takes && !takeRow.row.isConnected) levels.querySelector('.lvl-head').after(takeRow.row);
+    else if (!c.takes && takeRow.row.isConnected) takeRow.row.remove();
+    takeRow.update(c);
     levels.className = `clip-levels cat-${snd0?.colorCat ?? snd0?.category ?? 'fx'}`;
     set(gainIn, gainToSlider(clipGain(c)), GAIN_SLIDER_MAX);
     set(fadeIn, c.fadeInBeats || 0, c.lengthBeats);

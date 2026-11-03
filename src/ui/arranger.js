@@ -718,6 +718,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const label = el('span', 'clip-label', cutName ? (clip.lengthBeats * ppb() < 72 ? cutName[2] : `${cutName[2]} · ${cutName[1]}`) : sample?.name ?? 'Fehlendes Sample');
     if (cutName) label.title = sample.name;
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
+    // Take-Clip (2.13): aktiver Take / Anzahl, nur Anzeige
+    if (clip.takes?.length > 1) { const t = el('span', 'clip-tag clip-take', `${clip.take + 1}/${clip.takes.length}`); t.title = `Take ${clip.take + 1} von ${clip.takes.length} (Alt+↑/↓)`; label.append(t); }
     if (clipGain(clip) > 1.001) label.append(el('span', 'clip-tag', formatDb(clipGain(clip))));
     // Geschwindigkeit wie im Inspektor (100 % = Original); „wie Tonband“ mit Zusatz
     if (clip.stretch && Math.abs(clip.stretch - 1) > 1e-6) {

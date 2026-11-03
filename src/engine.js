@@ -857,6 +857,8 @@ export class Engine extends Emitter {
         this.anchors.push({ time: this.cursorTime, beat: loop.startBeat });
         this._scheduleActiveAt(loop.startBeat, this.cursorTime, loop.endBeat);
         this._autoSmooth = true;
+        // Anker werden nach 1 s gekürzt – wer jeden Sprung braucht (Takes im Loop), hört hier mit
+        this.emit('wrap', { time: this.cursorTime, beat: loop.startBeat });
       }
     }
     // Alte Ankerpunkte aufräumen (einer vor "jetzt" bleibt für die Positionsberechnung).
