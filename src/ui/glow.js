@@ -138,9 +138,11 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
   let preview = 0;
   function draw(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dtMs = now - last;
+    const dt = Math.min(0.05, dtMs / 1000);
     last = now;
     const live = engine.playing;
+    adaptQuality(dtMs, live);
     if (++colorAge > 60) readColors();
     // Raumlicht (Hintergrund, Leiste oben) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde, auch bei 120 Hz
     // Shader: 30 Bilder pro Sekunde, damit der Nebel fließt; in der Stille genügen 15
@@ -465,8 +467,25 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   }
 
   // Alle Werte für den Shader sammeln (dieselben wie beim Malen mit Canvas 2D) und zeichnen
-  const GL_SCALE = 0.4;
-  const GL_MAX = 720;
+  // Shader rechnet in Bildschirmauflösung (bis 1,25 Bildpunkte je CSS-Pixel), sonst wirkt er verpixelt
+  const GL_DPR = 1.25;
+  const GL_MAX = 2400;
+  const GL_LOW = 0.35; // kleinste Stufe (Software-Renderer, langsame Geräte)
+  let glQ = null;
+  let glFixed = false;
+  // Wird die App beim Spielen langsam (unter etwa 40 Bilder/s), rechnet der Shader schrittweise gröber
+  let slowFor = 0, frameMs = 16;
+  // Läuft es danach lange flüssig, geht es wieder eine Stufe hinauf (nicht bei Software-Renderern)
+  let fastFor = 0;
+  function adaptQuality(dtMs, live) {
+    if (!shader || glFixed || glQ == null) return;
+    frameMs += (Math.min(100, dtMs) - frameMs) * 0.1;
+    slowFor = live && frameMs > 25 ? slowFor + dtMs : 0;
+    fastFor = live && frameMs < 18 ? fastFor + dtMs : 0;
+    const top = shader.software ? GL_LOW : Math.min(GL_DPR, window.devicePixelRatio || 1);
+    if (slowFor > 1500 && glQ > GL_LOW) { glQ = Math.max(GL_LOW, glQ * 0.7); slowFor = 0; fastFor = 0; frameMs = 16; }
+    else if (fastFor > 20000 && glQ < top) { glQ = Math.min(top, glQ / 0.8); fastFor = 0; }
+  }
   let flow = 0;
   function drawShader({ W, H, L, dt, mix, K, A, calm, still, hue }) {
     let waveAt = null;
@@ -494,7 +513,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       col: { x: room.colX >= 0 ? room.colX / W : -1, i: room.colI, y0: (room.y0 ?? 0) / H, y1: (room.y1 ?? H) / H, c: room.colC || GREY },
       ghost: g ? { x: g.x / W, i: g.i, y0: g.y0 / H, y1: g.y1 / H } : { x: -1, i: 0, y0: 0, y1: 1 },
       waves: waveAt ? room.waves.map((w) => ({ x: w.x / L, y: w.y / L, ...waveAt(w) })) : [],
-      vig: room.vig, idle: 0.13, grey: GREY, glowMax: ambientMax,
+      vig: room.vig, px: room.px || 1, idle: 0.13, grey: GREY, glowMax: ambientMax,
     });
   }
 
@@ -516,8 +535,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const Wn = vw >= vh ? 160 : Math.max(24, Math.round((160 * vw) / vh));
     const Hn = vw >= vh ? Math.max(24, Math.round((160 * vh) / vw)) : 160;
     if (shader) {
-      // Shader in gut einem Drittel der Fensterauflösung – der Nebel ist weich, die Linien bleiben fein genug
-      const sc = Math.min(GL_SCALE, GL_MAX / Math.max(vw, vh));
+      const sc = Math.min(glQ ?? (glQ = shader.software ? GL_LOW : Math.min(GL_DPR, window.devicePixelRatio || 1)), GL_MAX / Math.max(vw, vh));
+      room.px = sc;
       const gw = Math.max(16, Math.round(vw * sc)), gh = Math.max(16, Math.round(vh * sc));
       if (amb.width !== gw || amb.height !== gh) { amb.width = gw; amb.height = gh; }
     } else if (amb.width !== Wn || amb.height !== Hn) { amb.width = Wn; amb.height = Hn; }
@@ -739,7 +758,9 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   readColors();
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader }; },
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, glQ, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader }; },
+    // Für Tests und Bildschirmfotos: Auflösungsstufe des Shaders setzen (CSS-Pixel-Faktor)
+    setQuality(q, { fixed = false } = {}) { glQ = q; glFixed = fixed; },
     // Für Tests: das Raumlicht als RGBA im Raum-Maß (lange Seite 160), gleich ob Shader oder Canvas 2D
     readRoom() {
       const W = room.W || amb.width, H = room.H || amb.height;

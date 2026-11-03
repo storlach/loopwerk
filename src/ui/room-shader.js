@@ -6,6 +6,33 @@ const VS = `#version 300 es
 in vec2 a;
 void main() { gl_Position = vec4(a, 0.0, 1.0); }`;
 
+// Erster Durchgang, klein: der teure Nebel (zweifach verzerrtes Rauschen, der Bass verbiegt ihn stärker)
+const FIELD_FS = `#version 300 es
+precision highp float;
+uniform vec2 uRes;
+uniform float uT;
+uniform float uBass;
+out vec4 o;
+float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+const mat2 R = mat2(1.6, 1.2, -1.2, 1.6);
+float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * noise(p); p = R * p; a *= 0.5; } return s; }
+void main() {
+  float L = max(uRes.x, uRes.y);
+  vec2 P = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / L;
+  vec2 s = P * 2.4;
+  vec2 q = vec2(fbm(s + vec2(0.0, uT * 0.05)), fbm(s + vec2(5.2, 1.3) - vec2(uT * 0.04, 0.0)));
+  vec2 r = vec2(fbm(s + 3.0 * q + vec2(1.7, 9.2) + uT * 0.035), fbm(s + 3.0 * q + vec2(8.3, 2.8) - uT * 0.03));
+  float f = clamp(fbm(s + (2.0 + 1.6 * uBass) * r), 0.0, 0.999);
+  float hi = floor(f * 255.0) / 255.0;
+  o = vec4(hi, (f - hi) * 255.0, 0.0, 1.0);
+}`;
+
+// Zweiter Durchgang, volle Auflösung: Licht, Farben und scharfe Höhenlinien aus dem vergrößerten Nebel
 const FS = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
@@ -28,16 +55,11 @@ uniform float uVig;
 uniform float uIdle;
 uniform vec3 uGrey;
 uniform float uGlowMax;
+uniform float uPx;
+uniform sampler2D uField;
 out vec4 o;
 
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float noise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
-}
-const mat2 R = mat2(1.6, 1.2, -1.2, 1.6);
-float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * noise(p); p = R * p; a *= 0.5; } return s; }
 vec3 toWhite(vec3 c, float k) { return mix(c, uWhite, k); }
 
 void main() {
@@ -46,11 +68,9 @@ void main() {
   vec2 P = uv * uRes / L;
   float bass = uBand.x, mids = uBand.y, highs = uBand.z;
 
-  // Nebel: zweifach verzerrtes Rauschen, der Bass verbiegt ihn stärker
-  vec2 s = P * 2.4;
-  vec2 q = vec2(fbm(s + vec2(0.0, uT * 0.05)), fbm(s + vec2(5.2, 1.3) - vec2(uT * 0.04, 0.0)));
-  vec2 r = vec2(fbm(s + 3.0 * q + vec2(1.7, 9.2) + uT * 0.035), fbm(s + 3.0 * q + vec2(8.3, 2.8) - uT * 0.03));
-  float f = fbm(s + (2.0 + 1.6 * bass) * r);
+  // Nebel aus der kleinen Textur (weich vergrößert), zwei Kanäle für 16 Bit Genauigkeit
+  vec4 tx = texture(uField, gl_FragCoord.xy / uRes);
+  float f = tx.r + tx.g / 255.0;
   float d = smoothstep(0.22, 0.82, f);
 
   // Grund: Anthrazit-Rauch, auch in der Stille
@@ -105,8 +125,9 @@ void main() {
   float lv = f * 7.0 - uT * 0.07;
   float w = max(fwidth(lv), 1e-4);
   float cd = abs(fract(lv - 0.5) - 0.5) / w;
-  float line = 1.0 - clamp(cd - 0.35, 0.0, 1.0);
-  float halo = exp(-cd * cd * 0.08);
+  float line = 1.0 - clamp(cd / uPx - 0.45, 0.0, 1.0);
+  float hc = cd / uPx;
+  float halo = exp(-hc * hc * 0.08);
   float wave = 0.0;
   for (int i = 0; i < 4; i++) {
     vec4 wv = uWave[i];
@@ -133,7 +154,7 @@ void main() {
   col *= 1.0 - uVig * vig;
 
   col = col / (1.0 + 0.35 * col);
-  col += (hash(gl_FragCoord.xy + fract(uT * 7.0)) - 0.5) / 255.0;
+  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0; // ruhiges Rauschen gegen Farbstufen
   col = clamp(col, 0.0, 1.0);
   o = vec4(col, max(col.r, max(col.g, col.b)));
 }`;
@@ -151,36 +172,76 @@ export function createRoomShader(canvas) {
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'Shader');
     return s;
   };
-  let prog;
+  const link = (fs) => {
+    const pr = gl.createProgram();
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS));
+    gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs));
+    gl.bindAttribLocation(pr, 0, 'a');
+    gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr) || 'Programm');
+    return pr;
+  };
+  let prog, fieldProg;
   try {
-    prog = gl.createProgram();
-    gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS));
-    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) || 'Programm');
+    prog = link(FS);
+    fieldProg = link(FIELD_FS);
   } catch (e) {
     console.warn('Raumlicht ohne Shader:', e.message);
     return null;
   }
-  gl.useProgram(prog);
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-  const loc = gl.getAttribLocation(prog, 'a');
-  gl.enableVertexAttribArray(loc);
-  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const U = {};
-  for (const n of ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax']) U[n] = gl.getUniformLocation(prog, n);
+  for (const n of ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax', 'uPx', 'uField']) U[n] = gl.getUniformLocation(prog, n);
+  const FU = { res: gl.getUniformLocation(fieldProg, 'uRes'), t: gl.getUniformLocation(fieldProg, 'uT'), bass: gl.getUniformLocation(fieldProg, 'uBass') };
+  // Nebel-Textur (RGBA8, weich gefiltert) mit eigenem Framebuffer
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  const fbo = gl.createFramebuffer();
+  let fw = 0, fh = 0;
   let lost = false;
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
   const cloud = new Float32Array(24), cloudC = new Float32Array(18), waves = new Float32Array(16);
   const c3 = (c) => [c[0] / 255, c[1] / 255, c[2] / 255];
 
+  // Software-Renderer (kein Grafikchip): dann rechnet glow.js mit kleinerer Auflösung
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  const renderer = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  const software = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderer);
+
   return {
+    software,
     get lost() { return lost || gl.isContextLost(); },
     // u: Werte aus glow.js, Farben 0…255, Orte in Raum-Einheiten (0…1 der langen Seite) bzw. uv (0…1)
     draw(u) {
       if (this.lost) return;
+      // 1) Nebel klein: etwa ein Drittel der CSS-Auflösung
+      const k = 1 / (3 * (u.px || 1));
+      const w = Math.max(16, Math.round(canvas.width * k)), h = Math.max(16, Math.round(canvas.height * k));
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      if (w !== fw || h !== fh) {
+        fw = w; fh = h;
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.viewport(0, 0, w, h);
+      gl.useProgram(fieldProg);
+      gl.uniform2f(FU.res, w, h);
+      gl.uniform1f(FU.t, u.t);
+      gl.uniform1f(FU.bass, u.band[0]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // 2) Licht und Linien in voller Auflösung
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.useProgram(prog);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.uniform1i(U.uField, 0);
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform2f(U.uRes, canvas.width, canvas.height);
       gl.uniform1f(U.uT, u.t);
@@ -206,6 +267,7 @@ export function createRoomShader(canvas) {
       gl.uniform1f(U.uIdle, u.idle);
       gl.uniform3f(U.uGrey, ...c3(u.grey));
       gl.uniform1f(U.uGlowMax, u.glowMax);
+      gl.uniform1f(U.uPx, u.px || 1);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -214,6 +276,7 @@ export function createRoomShader(canvas) {
     read(W, H) {
       const cw = canvas.width, ch = canvas.height;
       const px = new Uint8Array(cw * ch * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, px);
       const out = new Uint8ClampedArray(W * H * 4);
       for (let y = 0; y < H; y++) {
