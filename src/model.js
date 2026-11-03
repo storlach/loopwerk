@@ -4,7 +4,7 @@
 import { Emitter } from './util.js';
 import { withFx } from './effects.js';
 import { isChord } from './harmony.js';
-import { normalizeRecipe, soundFields, newVariantId } from './recipe.js';
+import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
 
 export const EPS = 1e-6;
@@ -966,6 +966,85 @@ export class Store extends Emitter {
       if (p.sampleTempo?.[sampleId] != null) { p.sampleTempo = { ...p.sampleTempo }; delete p.sampleTempo[sampleId]; }
     });
     return true;
+  }
+
+  // Zerlegen (Krachwerk 2b): Schnitte als Varianten einer Gruppe. cuts = [{ start, end, clips?: [{ beat, len, offset }],
+  // beat?, len?, stretch? }] (Sekunden im Original der Wurzel; Lage aus layoutCuts in src/cuts.js). Kopiert die Klangfelder
+  // der Quelle außer Ausschnitt und Hüllkurve. place 'clip': clipId fällt weg, die Schnitt-Clips liegen auf seiner Spur
+  // (erben Lautstärke, Geschwindigkeit, Tonband, Stapel; Einblenden nur der erste, Ausblenden nur der letzte).
+  // place 'track': auf trackId (ohne: neue Spur) ab atBeat. Ein Rückgängig-Schritt. Rückgabe { group, ids, clipIds } | null
+  cutSound(sampleId, cuts, { clipId = null, trackId = null, atBeat = 0, place = null } = {}) {
+    const list = (Array.isArray(cuts) ? cuts : [])
+      .filter((c) => Number.isFinite(c?.start) && Number.isFinite(c?.end) && c.end - c.start >= MIN_SPAN - 1e-9)
+      .sort((x, y) => x.start - y.start);
+    if (!list.length || /^pat-/.test(String(sampleId))) return null;
+    const rs = this.project.recipes || {};
+    const src = rs[sampleId] ?? null;
+    const root = src?.parent ?? sampleId;
+    const fields = soundFields(src);
+    for (const k of ['start', 'end', 'attack', 'release']) delete fields[k];
+    const material = src?.material ?? rs[root]?.material;
+    const base = String(this.sampleName?.(sampleId) || src?.name || 'Sound');
+    const taken = new Set(Object.values(rs).map((r) => r?.name));
+    const duration = this.soundDuration?.(root);
+    const group = newGroupId();
+    const ids = [];
+    const recs = {};
+    let k = 1;
+    for (const c of list) {
+      let name;
+      do { const tail = ` · ${k++}`; name = base.slice(0, 40 - tail.length) + tail; } while (taken.has(name));
+      taken.add(name);
+      let id;
+      do id = newVariantId(); while (rs[id] || recs[id]);
+      ids.push(id);
+      recs[id] = normalizeRecipe({ ...fields, material, parent: root, name, group, start: c.start, end: c.end }, { duration });
+    }
+    const clipIds = [];
+    this.batch('Zerlegen', () => {
+      this.dispatch('Zerlegen', (p) => { p.recipes = { ...(p.recipes || {}), ...recs }; });
+      const found = place === 'clip' && clipId ? this.findClip(clipId) : null;
+      let track = found?.track ?? null;
+      if (place === 'track') track = this.track(trackId) ?? this.track(this.addTrack());
+      if (!track) return;
+      const like = found?.clip ?? null;
+      const total = totalBeats(this.project);
+      const made = [];
+      list.forEach((c, i) => {
+        const spots = c.clips ?? (Number.isFinite(c.beat) && c.len > 0 ? [{ beat: c.beat, len: c.len, offset: 0 }] : []);
+        for (const sp of spots) {
+          const beat = (place === 'track' ? atBeat : 0) + sp.beat;
+          if (beat < -EPS || beat >= total - EPS) continue;
+          const clip = { id: this.newId(), sampleId: ids[i], startBeat: Math.max(0, beat), lengthBeats: Math.min(sp.len, total - beat), offsetBeats: sp.offset > EPS ? sp.offset : 0 };
+          const stretch = c.stretch ?? like?.stretch ?? 1;
+          if (Math.abs(stretch - 1) > 1e-9) clip.stretch = stretch;
+          if (like) {
+            if (like.gain != null) clip.gain = like.gain;
+            if (like.varispeed) clip.varispeed = true;
+            if (like.z != null) clip.z = like.z;
+          }
+          made.push(clip);
+        }
+      });
+      if (!made.length) return;
+      made.sort((x, y) => x.startBeat - y.startBeat);
+      if (like) {
+        const first = made[0];
+        const last = made.reduce((m, x) => (x.startBeat + x.lengthBeats > m.startBeat + m.lengthBeats - EPS ? x : m), made[0]);
+        if (like.fadeInBeats) { first.fadeInBeats = like.fadeInBeats; if (like.fadeInCurve != null) first.fadeInCurve = like.fadeInCurve; }
+        if (like.fadeOutBeats) { last.fadeOutBeats = like.fadeOutBeats; if (like.fadeOutCurve != null) last.fadeOutCurve = like.fadeOutCurve; }
+      }
+      this.dispatch('Zerlegen', () => {
+        if (found) track.clips = track.clips.filter((x) => x.id !== clipId);
+        for (const clip of made) {
+          normalizeClip(clip);
+          track.clips.push(clip);
+          clipIds.push(clip.id);
+          if (like) track.clips.sort((x, y) => x.startBeat - y.startBeat); else this._raise(track, clip);
+        }
+      });
+    });
+    return { group, ids, clipIds };
   }
 
   // Wie oft ein Sound im Song steckt („in 3 Clips“)

@@ -5,6 +5,8 @@ import { detectPitch, toMono } from './pitch.js';
 import { timeStretch } from './stretch.js';
 import { searchMaster } from './master-search.js';
 import { cookRecipe } from './recipe.js';
+import { detectOnsets } from './slice.js';
+import { mixMono } from './clean.js';
 
 const JOBS = {
   separate: ({ chs, sampleRate }, progress) => separate(chs, sampleRate, { onProgress: progress }),
@@ -13,6 +15,7 @@ const JOBS = {
   stretch: ({ chs, sampleRate, ratio, loop }) => timeStretch(chs, ratio, sampleRate, Math.round(chs[0].length * ratio), { loop }),
   master: ({ chs, sampleRate, style, target }) => searchMaster(chs, sampleRate, style, target),
   recipe: ({ chs, sampleRate, recipe }) => cookRecipe(chs, sampleRate, recipe),
+  onsets: ({ chs, sampleRate, sensitivity }) => detectOnsets(mixMono(chs), sampleRate, { sensitivity }),
 };
 
 self.onmessage = (e) => {

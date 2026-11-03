@@ -5,6 +5,9 @@
 
 import { el, trackPointer } from '../util.js';
 import { MIN_SPAN, recipeGesture } from '../recipe.js';
+import { cookedSeconds } from '../cuts.js';
+
+export { cookedSeconds }; // liegt seit 2b in src/cuts.js
 
 const BUCKETS = 1200;
 const OFF = 12; // Anschlag und Ausklang sitzen 12 px innerhalb von Anfang und Ende: bei 0 ms bleiben alle vier Griffe unterscheidbar
@@ -33,13 +36,6 @@ export function peaksOf(buf) {
 
 const fmtS = (v) => `${v.toFixed(2).replace('.', ',')} s`;
 const fmtMs = (v) => (v >= 1000 ? `${(v / 1000).toFixed(2).replace('.', ',')} s` : `${Math.round(v)} ms`);
-
-// Dauer des gebackenen Klangs aus dem Rezept (für die Lage der Punkte; unabhängig davon, ob schon fertig gebacken ist)
-export function cookedSeconds(r, dur) {
-  const len = Math.max(MIN_SPAN, (r.end ?? dur) - (r.start ?? 0));
-  const pf = 2 ** (((r.semis ?? 0) + (r.cents ?? 0) / 100) / 12);
-  return Math.max(MIN_SPAN, (len * (r.stretch ?? 1)) / pf);
-}
 
 export function mountWaveHandles(container, { store, library, engine, ui }) {
   const box = el('div', 'wb-wave');

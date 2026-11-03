@@ -17,9 +17,16 @@ export const RECIPE = {
   warm: { min: 0, max: 1, def: 0, step: 0.01 },
   grain: { min: 0, max: 1, def: 0, step: 0.01 },
   stretch: { min: 0.5, max: 2, def: 1, step: 0.01 },
+  // Autotune (2b): Stärke 0 = aus; Roboter und Tonart wirken nur bei tune > 0
+  tune: { min: 0, max: 1, def: 0, step: 0.01 },
+  robot: { def: false, bool: true },
+  tuneKey: { def: null, list: true },
 };
 export const SOUND_FIELDS = Object.keys(RECIPE);
-const META = ['parent', 'name', 'material'];
+const META = ['parent', 'name', 'material', 'group'];
+// Moll-Tonarten wie KEYS in model.js (Index = Grundton 0 = C … 11 = H); hier ohne Import, model.js importiert dieses Modul
+export const TUNE_KEYS = ['Cm', 'C♯m', 'Dm', 'E♭m', 'Em', 'Fm', 'F♯m', 'Gm', 'G♯m', 'Am', 'B♭m', 'Hm'];
+const TUNE_ONLY = ['robot', 'tuneKey'];
 export const MIN_SPAN = 0.01;
 
 // Herkunft (§5): Farbe über die vorhandenen Kategorie-Tokens (colorCat)
@@ -33,6 +40,7 @@ export const MATERIALS = [
 export const materialOf = (id) => MATERIALS.find((m) => m.id === id) ?? null;
 
 export const isVariantId = (id) => /^vr-/.test(String(id));
+export const newGroupId = () => 'zg-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6).padEnd(4, '0');
 export const newVariantId = () => 'vr-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6).padEnd(4, '0');
 
 const roundTo = (v, step) => Math.round(v / step) * step;
@@ -46,11 +54,13 @@ export function normalizeRecipe(r, { duration = null } = {}) {
   if (typeof r.parent === 'string' && r.parent) out.parent = r.parent;
   if (typeof r.name === 'string' && r.name.trim()) out.name = r.name.trim().slice(0, 40);
   if (materialOf(r.material)) out.material = r.material;
+  if (typeof r.group === 'string' && /^zg-[a-z0-9]+$/.test(r.group)) out.group = r.group;
   for (const k of SOUND_FIELDS) {
     const f = RECIPE[k];
     const v = r[k];
     if (v == null) continue;
     if (f.bool) { if (v === true) out[k] = true; continue; }
+    if (f.list) { if (TUNE_KEYS.includes(v)) out[k] = v; continue; }
     const n = Number(v);
     if (!Number.isFinite(n)) continue;
     const x = clean(Math.min(f.max, Math.max(f.min, n)), f.step);
@@ -71,7 +81,11 @@ export function normalizeRecipe(r, { duration = null } = {}) {
 export function recipeKey(r) {
   if (!r) return '';
   const parts = [];
-  for (const k of SOUND_FIELDS) if (r[k] != null && r[k] !== RECIPE[k].def) parts.push(`"${k}":${JSON.stringify(r[k])}`);
+  const tuned = (r.tune ?? 0) > 0;
+  for (const k of SOUND_FIELDS) {
+    if (!tuned && TUNE_ONLY.includes(k)) continue;
+    if (r[k] != null && r[k] !== RECIPE[k].def) parts.push(`"${k}":${JSON.stringify(r[k])}`);
+  }
   return parts.length ? `{${parts.join(',')}}` : '';
 }
 
@@ -105,6 +119,7 @@ export function recipeSteps(r) {
   if (r.stretch != null && r.stretch !== 1) out.push(`gedehnt ${Math.round(r.stretch * 100)} %`);
   const st = (r.semis ?? 0) + (r.cents ?? 0) / 100;
   if (st) out.push(`gestimmt ${signed(st, 2)}`);
+  if ((r.tune ?? 0) > 0) out.push(`gestimmt auf ${r.tuneKey ?? 'Am'}`);
   if ((r.lp ?? 20000) < 20000 || (r.hp ?? 20) > 20 || (r.res ?? 0) > 0) out.push('gefiltert');
   if ((r.warm ?? 0) > 0) out.push('wärmer');
   if ((r.grain ?? 0) > 0) out.push('körnig');

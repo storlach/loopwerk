@@ -1902,13 +1902,15 @@ export class Library extends Emitter {
   }
 
   // Variante: kein eigenes Audio, Original des Eltern-Sounds (derselbe Puffer), eigenes Rezept
+  // Schnitte (r.group, Zerlegen 2b) sind immer Einzelklang
   _registerVariant(id, parent, r) {
-    const tb = parent.tempoBase ?? parent;
+    const tb = r.group ? { kind: 'oneshot' } : parent.tempoBase ?? parent;
     const v = {
       id, name: r.name || `${parent.name} b`, category: 'own', origin: 'Eigene', kind: tb.kind ?? 'oneshot', beats: tb.beats ?? null, bpm: tb.bpm ?? null,
       made: parent.made, parentId: parent.id, source: parent.source, license: parent.license ?? null, created: parent.created,
-      orig: null, duration: parent.duration ?? parent.orig?.duration, lengthBeats: parent.tempoBase ? undefined : parent.lengthBeats,
+      orig: null, duration: parent.duration ?? parent.orig?.duration, lengthBeats: parent.tempoBase || r.group ? undefined : parent.lengthBeats,
     };
+    if (r.group) v.group = r.group;
     if (!v.beats) delete v.bpm;
     const was = this._recipesJson;
     this.stub(v, async (x) => {
@@ -1975,10 +1977,10 @@ export class Library extends Emitter {
     return s._baking;
   }
 
-  // Kurze Klänge ohne Dehnen im Hauptthread, sonst im Rechen-Worker
+  // Kurze Klänge ohne Dehnen und Autotune im Hauptthread, sonst im Rechen-Worker
   async _cook(orig, r) {
     const chs = Array.from({ length: orig.numberOfChannels }, (_, c) => orig.getChannelData(c));
-    const long = (r.stretch ?? 1) !== 1 || orig.duration * orig.numberOfChannels > 40;
+    const long = (r.stretch ?? 1) !== 1 || (r.tune ?? 0) > 0 || orig.duration * orig.numberOfChannels > 40;
     let out;
     if (long) {
       const { runJob } = await import('./dsp/run.js');

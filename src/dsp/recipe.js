@@ -1,9 +1,13 @@
 // Klang-Rezept backen (ADR 008): aus dem Original und dem Rezept einen neuen Puffer rechnen. Reines JS auf
 // Float32Array-Kanälen, Eingabe bleibt unverändert – läuft im Hauptthread (kurze Klänge) und im Rechen-Worker.
-// Feste Reihenfolge: Ausschnitt · rückwärts · Dehnen · Tonhöhe · Hochpass/Tiefpass · Wärme · Körnung · Gain · Hüllkurve.
+// Feste Reihenfolge: Ausschnitt · rückwärts · Dehnen · Tonhöhe · Autotune · Hochpass/Tiefpass · Wärme · Körnung · Gain ·
+// Hüllkurve.
 
 import { timeStretch } from './stretch.js';
 import { pitch } from './edit.js';
+import { autotune } from './autotune.js';
+import { pitchGrid } from '../cuts.js';
+import { TUNE_KEYS } from '../recipe.js';
 
 const EDGE_SEC = 0.002; // Mindestblende an jeder geschnittenen Kante
 
@@ -25,6 +29,25 @@ function biquad(d, type, freq, q, sr) {
     x2 = x1; x1 = x; y2 = y1; y1 = y;
     d[i] = y;
   }
+}
+
+// Neuabtastung (kubisch wie edit.js pitch) auf dem festen Raster des Originals: Stützstellen bei Vielfachen von ratio,
+// gezählt ab anchor (Lage des Ausschnitts). Schnitte treffen so dieselben Werte wie ihre Quelle (Zerlegen, 2b).
+function pitchOnGrid(chs, ratio, anchor) {
+  const { x0, count } = pitchGrid(anchor, ratio, chs[0].length);
+  return chs.map((d) => {
+    const out = new Float32Array(count);
+    const n = d.length;
+    const at = (i) => d[i < 0 ? 0 : i >= n ? n - 1 : i];
+    for (let j = 0; j < count; j++) {
+      const x = x0 + j * ratio;
+      const i = Math.floor(x);
+      const f = x - i;
+      const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+      out[j] = p1 + 0.5 * f * (p2 - p0 + f * (2 * p0 - 5 * p1 + 4 * p2 - p3 + f * (3 * (p1 - p2) + p3 - p0)));
+    }
+    return out;
+  });
 }
 
 const rmsOf = (chs) => {
@@ -53,7 +76,13 @@ export function cookRecipe(chs, sampleRate, r = {}) {
   if (semis) {
     const f = Math.pow(2, semis / 12);
     if (f > 1) for (const d of out) { biquad(d, 'lp', (0.45 * sr) / f, Math.SQRT1_2, sr); biquad(d, 'lp', (0.45 * sr) / f, Math.SQRT1_2, sr); }
-    out = pitch(out, semis);
+    out = st === 1 ? pitchOnGrid(out, f, r.reverse ? len - b : a) : pitch(out, semis);
+  }
+  // 4b. Autotune: zum nächsten Ton der Moll-Tonleiter ziehen (PSOLA, Länge bleibt)
+  const tune = r.tune ?? 0;
+  if (tune > 0) {
+    const root = Math.max(0, TUNE_KEYS.indexOf(r.tuneKey ?? 'Am'));
+    out = autotune(out, sr, { root, scale: 'minor', strength: Math.min(1, tune), speed: r.robot ? 1 : 0.6 });
   }
   // 5. Hochpass, Tiefpass (Resonanz: Q 0,707 … 8)
   if ((r.hp ?? 20) > 20) for (const d of out) biquad(d, 'hp', r.hp, Math.SQRT1_2, sr);
