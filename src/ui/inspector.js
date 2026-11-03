@@ -151,9 +151,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   trackSec.setAttribute('aria-label', 'Spur-Einstellungen');
   const trackHead = el('header', 'insp-head');
   const trackTitle = el('h2', 'insp-title');
-  const trackSw = el('span', 'swatch');
   const trackName = el('span');
-  trackTitle.append(el('span', 'insp-kind', 'Spur'), el('span', 'insp-sep', '·'), trackSw, trackName);
+  // Spur-Einstellungen neutral, ohne Farbe – die Clip-Farbe gehört nur dem Clip-Abschnitt
+  trackTitle.append(el('span', 'insp-kind', 'Spur'), el('span', 'insp-sep', '·'), trackName);
   const trackSub = el('p', 'insp-meta');
   trackHead.append(trackTitle, trackSub);
   const vol = slider('Spur-Lautstärke', 'insp-vol', 0, 1, 0.01);
@@ -386,10 +386,6 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       trackName.textContent = track.name;
       const n = track.clips.length;
       trackSub.textContent = `Gilt für alle Clips der Spur · ${n} ${n === 1 ? 'Clip' : 'Clips'}`;
-      // Akzent wie der Farbpunkt im Spurkopf: Kategorie des ersten Clips
-      const first = track.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
-      const fs = first && library.get(first.sampleId);
-      trackSec.className = `insp-sec insp-track${fs ? ` cat-${fs.colorCat ?? fs.category}` : ''}`;
       volLabel.textContent = 'Spur-Lautstärke';
       if (document.activeElement !== vol.input) vol.input.value = String(track.volume);
       vol.out.textContent = formatDb(track.volume);

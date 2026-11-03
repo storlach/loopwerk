@@ -2944,20 +2944,28 @@
     #app[data-density="calm"] #shelf-new { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); }
   }
   /* ---------- Inspektor: Clip und Spur klar getrennt ---------- */
-  /* Jeder Abschnitt hat eine Kopfzeile „ART · Name“ mit Akzentkante in der Kategoriefarbe; Clip und Spur trennt eine kräftigere Linie */
+  /* Jeder Abschnitt hat eine Kopfzeile „ART · Name“; Clip und Spur trennt eine kräftigere Linie.
+     Clip-Einstellungen sind ganz in der Clip-Farbe umrandet, Spur-Einstellungen bleiben neutral – so ist die Zuordnung klar */
   .insp-sec.insp-clip, .insp-sec.insp-track { padding-top: 0; gap: 10px; }
   .insp-head {
     margin: 0 -14px; padding: 10px 14px 9px; display: grid; gap: 3px; min-width: 0;
     background: color-mix(in srgb, var(--ink) 4%, transparent);
-    box-shadow: inset 3px 0 0 var(--cat, var(--muted)), inset 0 -1px 0 var(--line);
+    box-shadow: inset 0 -1px 0 var(--line);
   }
+  .insp-sec.insp-clip {
+    margin: 8px; border-radius: var(--radius); overflow: hidden;
+    box-shadow: inset 0 0 0 1.5px var(--cat, var(--muted)), 0 0 16px color-mix(in srgb, var(--cat, transparent) 22%, transparent);
+  }
+  .insp-track .insp-head .insp-title .insp-kind { color: var(--muted); }
   .insp-head .insp-title { gap: 6px; font: 600 15px/1.25 var(--font-body); letter-spacing: -0.005em; }
   .insp-head .insp-title .insp-kind { flex: none; color: var(--cat, var(--muted)); letter-spacing: 0.14em; }
   .insp-head .insp-title .insp-sep { flex: none; color: var(--muted); }
   .insp-head .insp-title span:last-child { flex: 0 1 auto; }
   .insp-head .insp-meta { margin: 0; font-size: 11px; }
   .insp-sec.insp-track { border-top: 2px solid var(--line); }
-  .lvl-head { margin: 0 0 2px; display: flex; align-items: baseline; gap: 6px; min-width: 0; padding-left: 8px; box-shadow: inset 3px 0 0 var(--cat, var(--muted)); font: 600 14px/1.3 var(--font-body); }
+  .lvl-head { margin: 0 0 2px; display: flex; align-items: baseline; gap: 6px; min-width: 0; padding-left: 2px; font: 600 14px/1.3 var(--font-body); }
+  /* Handy: die Clip-Leiste ist wie im Inspektor ganz in der Clip-Farbe umrandet */
+  .clip-levels { padding: 8px 10px; border-radius: var(--radius); box-shadow: inset 0 0 0 1.5px var(--cat, var(--muted)), 0 0 16px color-mix(in srgb, var(--cat, transparent) 22%, transparent); }
   .lvl-head .insp-kind { flex: none; color: var(--cat, var(--muted)); letter-spacing: 0.14em; }
   .lvl-head .insp-sep { flex: none; color: var(--muted); }
   .lvl-head #lvl-head-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
