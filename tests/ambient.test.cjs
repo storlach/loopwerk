@@ -51,9 +51,7 @@ async function solo(sampleId) {
 
 // Läuft im Browser: Helligkeit (Licht über dem Grund, 0…255) oben/unten und an Stellen der Fläche
 function sample() {
-  const c = document.querySelector('.ambient');
-  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
-  const W = c.width, H = c.height;
+  const { data: d, W, H } = window.loopwerk.glow.readRoom();
   const lum = (x, y) => { const i = (y * W + x) * 4; return ((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) * d[i + 3]) / 255; };
   const area = (x0, x1, y0, y1) => { let s = 0, n = 0; for (let y = Math.max(0, y0 | 0); y < Math.min(H, y1); y++) for (let x = Math.max(0, x0 | 0); x < Math.min(W, x1); x++) { s += lum(x, y); n++; } return n ? s / n : 0; };
   let sat = 0;
@@ -74,8 +72,6 @@ function sample() {
 // Läuft im Browser: Verlauf je Raumlicht-Bild über ms (mittlere Helligkeit, Zustand)
 function record(ms) {
   return new Promise((res) => {
-    const c = document.querySelector('.ambient');
-    const x = c.getContext('2d');
     const rows = [];
     let lastN = -1;
     const t0 = performance.now();
@@ -83,7 +79,7 @@ function record(ms) {
       const st = window.loopwerk.glow.state;
       if (st.room.n !== lastN) {
         lastN = st.room.n;
-        const d = x.getImageData(0, 0, c.width, c.height).data;
+        const d = window.loopwerk.glow.readRoom().data;
         let s = 0;
         for (let i = 0; i < d.length; i += 4) s += ((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) * d[i + 3]) / 255;
         rows.push({ t: now - t0, m: s / (d.length / 4), glow: Math.max(...st.room.glow), col: st.room.col, waves: st.room.waves });
@@ -138,8 +134,7 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     check('Lichtwelle: an der Marke heller als weiter weg', near >= 4, JSON.stringify(marks));
     const ph = await page.evaluate(() => {
       const r = document.querySelector('.playhead').getBoundingClientRect();
-      const c = document.querySelector('.ambient');
-      return { want: ((r.left + r.width / 2) / window.innerWidth) * c.width, got: window.loopwerk.glow.state.room.x };
+      return { want: ((r.left + r.width / 2) / window.innerWidth) * window.loopwerk.glow.state.room.w, got: window.loopwerk.glow.state.room.x };
     });
     check('Licht sitzt an der Abspielmarke', Math.abs(ph.want - ph.got) < 3, JSON.stringify(ph));
     const waveRows = await page.evaluate(record, 2600);
@@ -154,8 +149,7 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
       a.scrollLeft += 120;
       setTimeout(() => {
         const r = document.querySelector('.playhead').getBoundingClientRect();
-        const c = document.querySelector('.ambient');
-        res({ before, after: window.loopwerk.glow.state.room.x, want: ((r.left + r.width / 2) / window.innerWidth) * c.width, sl: a.scrollLeft });
+        res({ before, after: window.loopwerk.glow.state.room.x, want: ((r.left + r.width / 2) / window.innerWidth) * window.loopwerk.glow.state.room.w, sl: a.scrollLeft });
       }, 400);
     }));
     check('Lichtwelle folgt beim Scrollen', Math.abs(scrolled.after - scrolled.want) < 3, JSON.stringify(scrolled));
@@ -193,7 +187,9 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     const sj = stats(jumps(song));
     const fps = song.length / 6;
     check('Weich: Bild-zu-Bild-Sprung des Raumlichts begrenzt, kein Flackern', sj.max < 4.5 && sj.p95 < 3 && flicker(song) <= 2, JSON.stringify({ ...sj, flicker: flicker(song) }));
-    check('Raumlicht zeichnet höchstens 20 Bilder pro Sekunde', fps <= 21 && fps >= 12, fps.toFixed(1));
+    const gpu = await page.evaluate(() => window.loopwerk.glow.state.shader);
+    check('Raumlicht läuft als Shader (WebGL 2)', gpu);
+    check('Raumlicht zeichnet höchstens 30 Bilder pro Sekunde', fps <= 31 && fps >= 12, fps.toFixed(1));
     const rc = await page.evaluate(() => window.loopwerk.glow.state.roomCost);
     check('Raumlicht kostet wenig Rechenzeit (< 1,5 ms je Bild)', rc < 1.5, rc.toFixed(2) + ' ms');
     const lum = await page.evaluate(sample);
@@ -239,7 +235,7 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
       requestAnimationFrame(f);
     }));
     check('Handy: App läuft beim Spielen flüssig (≥ 50 Bilder/s)', m.fps >= 50, m.fps.toFixed(1));
-    check('Handy: Raumlicht höchstens 20 Bilder/s und billig', m.room <= 21 && m.cost < 1.5, JSON.stringify({ room: +m.room.toFixed(1), cost: +m.cost.toFixed(2) }));
+    check('Handy: Raumlicht höchstens 30 Bilder/s und billig', m.room <= 31 && m.cost < 1.5, JSON.stringify({ room: +m.room.toFixed(1), cost: +m.cost.toFixed(2) }));
     const s = await page.evaluate(() => { const c = document.querySelector('.ambient'); return { w: c.width, h: c.height }; });
     check('Handy: Lichtfläche im Hochformat (Kreise bleiben rund)', s.h > s.w * 1.8, JSON.stringify(s));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'ambient-handy.png') });
