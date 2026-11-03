@@ -164,10 +164,15 @@ export const MAX_TRACKS = 16;
 export const MIN_BPM = 60;
 export const MAX_BPM = 200;
 export const clipGain = (clip) => clip.gain ?? 1;
+// Clip-Lautstärke bis +12 dB. Regler und Griff: 0…1 wie bisher linear (0 dB = 1), darüber ein Fünftel Regelweg in dB
+export const MAX_CLIP_GAIN = 10 ** (12 / 20);
+export const GAIN_SLIDER_MAX = 1.25;
+export const gainToSlider = (g) => (g <= 1 ? Math.max(0, g) : 1 + 0.25 * Math.min(1, (20 * Math.log10(g)) / 12));
+export const sliderToGain = (p) => (p <= 1 ? Math.max(0, p) : 10 ** ((Math.min(0.25, p - 1) / 0.25) * 12 / 20));
 
 // Fades begrenzen: nie negativ, zusammen nie länger als der Clip.
 export function normalizeClip(clip) {
-  clip.gain = Math.min(1, Math.max(0, clipGain(clip)));
+  clip.gain = Math.min(MAX_CLIP_GAIN, Math.max(0, clipGain(clip)));
   let fi = Math.max(0, clip.fadeInBeats || 0);
   let fo = Math.max(0, clip.fadeOutBeats || 0);
   if (fi + fo > clip.lengthBeats) {

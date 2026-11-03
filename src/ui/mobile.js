@@ -1,7 +1,7 @@
 // Handy-Bedienung: Fachleiste unten (Sounds, Mixer, Editor, Song), darüber ein Fach für Regal oder Dock,
 // Werkzeuge für den ausgewählten Clip. Auf breiten Bildschirmen bleibt alles, wie es ist.
 
-import { clipGain } from '../model.js';
+import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX } from '../model.js';
 import { clamp } from '../util.js';
 import { formatDb } from './arranger.js';
 import { mountClipSpeed } from './clip-speed.js';
@@ -74,7 +74,7 @@ export function mountMobile({ store, ui, tools, library }) {
   tempoIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') tempoIn.blur(); });
   gainIn.addEventListener('input', () => {
     const c = selected();
-    if (c) store.setClip(c.id, { gain: Number(gainIn.value) }, 'lvl-gain-' + c.id);
+    if (c) store.setClip(c.id, { gain: sliderToGain(Number(gainIn.value)) }, 'lvl-gain-' + c.id);
   });
   fadeIn.addEventListener('input', () => {
     const c = selected();
@@ -124,7 +124,7 @@ export function mountMobile({ store, ui, tools, library }) {
     const snd0 = library.get(c.sampleId);
     $('lvl-head-name').textContent = snd0?.name ?? 'Clip';
     levels.className = `clip-levels cat-${snd0?.colorCat ?? snd0?.category ?? 'fx'}`;
-    set(gainIn, clipGain(c), 1);
+    set(gainIn, gainToSlider(clipGain(c)), GAIN_SLIDER_MAX);
     set(fadeIn, c.fadeInBeats || 0, c.lengthBeats);
     set(fadeOut, c.fadeOutBeats || 0, c.lengthBeats);
     $('lvl-gain-out').textContent = formatDb(clipGain(c));

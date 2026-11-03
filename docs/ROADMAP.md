@@ -18,7 +18,7 @@
 
 ### Offen aus Stufe 2
 - ~~Mehrfachauswahl~~ (erledigt in 2.1)
-- Clip-Lautstärke über 0 dB
+- ~~Clip-Lautstärke über 0 dB~~ (erledigt: bis +12 dB; Regler und Griff bis 0 dB linear, darüber ein Fünftel Regelweg in dB, Griff über den oberen Clip-Rand hinaus ziehen, Etikett „+6,0 dB“ am Clip)
 
 ## ✅ Stufe 3 – Bibliothek und Tempo (0.3)
 - 33 CC0-Sounds aus Sonic Pi (Loops, Drums, Bass, Flächen, Glocken, FX) mit Quelle und Lizenz je Sound

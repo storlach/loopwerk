@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { anySoloOf, audibleRanges, canVarispeed, chordsOf, keyChangesOf, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
+import { anySoloOf, audibleRanges, canVarispeed, chordsOf, keyChangesOf, clipEnvelope, clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { AUTO_PARAMS, laneOf } from '../automation.js';
 import { makeKnob } from './knob.js';
@@ -18,7 +18,11 @@ export const headW = () => (narrow.matches ? 136 : touch.matches ? 232 : 176);
 const CHEVRON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3"/></svg>';
 const WAVE_TOP = 17; // Abstand der Wellenform vom Clip-Oberrand (Platz für den Namen)
 
-export const formatDb = (g) => (g <= 0.0001 ? '−∞ dB' : `${(20 * Math.log10(g)).toFixed(1).replace('.', ',').replace('-', '−')} dB`);
+export const formatDb = (g) => {
+  if (g <= 0.0001) return '−∞ dB';
+  const t = (20 * Math.log10(g)).toFixed(1);
+  return `${Number(t) > 0 ? '+' : ''}${t.replace('.', ',').replace('-', '−')} dB`;
+};
 const formatBeats = (b) => `${(Math.round(b * 100) / 100).toString().replace('.', ',')} ${b === 1 ? 'Schlag' : 'Schläge'}`;
 // Krümmung eines Fades in Worten (Anzeige beim Ziehen, Inspektor)
 export const formatCurve = (c) => (!c ? 'linear' : `${c > 0 ? 'schnell' : 'langsam'} ${Math.round(Math.abs(c) * 100)} %`);
@@ -636,7 +640,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     c.globalAlpha = 1;
   }
 
-  const envY = (v, h) => 1 + (1 - v) * (h - 2);
+  const envY = (v, h) => 1 + (1 - Math.min(1, v)) * (h - 2); // über 0 dB bleibt der Griff am oberen Rand
 
   // Griffe sitzen auf der Hüllkurve: Fade-In-Ende, Mitte (Lautstärke), Fade-Out-Anfang.
   function placeHandles(node, clip) {
@@ -677,6 +681,7 @@ export function mountArranger({ root, store, engine, library, ui }) {
     node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
     const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
+    if (clipGain(clip) > 1.001) label.append(el('span', 'clip-tag', formatDb(clipGain(clip))));
     // Geschwindigkeit wie im Inspektor (100 % = Original); „wie Tonband“ mit Zusatz
     if (clip.stretch && Math.abs(clip.stretch - 1) > 1e-6) {
       const tape = clip.varispeed && canVarispeed(library, clip.sampleId);
@@ -1055,7 +1060,9 @@ export function mountArranger({ root, store, engine, library, ui }) {
     const h = node.querySelector('canvas')?.clientHeight || 30;
     dragClip(e, node, {
       preview: (clip, dx, dy) => {
-        const g = clamp(Math.round((clipGain(clip) - dy / (h - 2)) * 100) / 100, 0, 1);
+        // über den oberen Rand hinaus weiter ziehen: lauter als 0 dB (bis +12 dB)
+        const p = clamp(gainToSlider(clipGain(clip)) - dy / (h - 2), 0, GAIN_SLIDER_MAX);
+        const g = p <= 1 ? Math.round(p * 100) / 100 : sliderToGain(p);
         return { clip: { gain: g }, status: `Clip-Lautstärke: ${formatDb(g)}` };
       },
       commit: (clip, r) => store.setClip(clip.id, r),
