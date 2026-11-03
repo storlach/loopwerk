@@ -142,7 +142,7 @@ const { check, finish } = createChecker();
     const bassRows = await page.locator('#shelf-items-bass .loop-item').count();
     const basses = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'bass').length);
     check('Akkordeon „Bass“ zeigt alle Bass-Sounds', bassRows === basses, `${bassRows} Einträge`);
-    await page.locator('#library .loop-row').first().locator('.loop-fav').click();
+    await page.locator('#shelf-items-bass .loop-row').first().locator('.loop-fav').click();
     await page.click('#shelf-chips .chip[data-filter="fav"]');
     const favRows = await page.locator('#library .loop-item').count();
     check('Stern markiert einen Favoriten', favRows === 1, `${favRows} Favorit(en)`);

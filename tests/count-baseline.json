@@ -1,26 +1,26 @@
 {
   "desktop-start": {
-    "controls": 123,
-    "frames": 67,
-    "sizes": 12,
-    "minFont": 9
+    "controls": 92,
+    "frames": 56,
+    "sizes": 10,
+    "minFont": 9.5
   },
   "desktop-clip": {
-    "controls": 122,
-    "frames": 71,
-    "sizes": 11,
-    "minFont": 9
+    "controls": 95,
+    "frames": 66,
+    "sizes": 9,
+    "minFont": 9.5
   },
   "handy-start": {
     "controls": 48,
-    "frames": 24,
-    "sizes": 7,
-    "minFont": 9
+    "frames": 25,
+    "sizes": 5,
+    "minFont": 10
   },
   "handy-clip": {
-    "controls": 49,
-    "frames": 27,
-    "sizes": 7,
-    "minFont": 9
+    "controls": 52,
+    "frames": 30,
+    "sizes": 5,
+    "minFont": 10
   }
 }

@@ -3,7 +3,7 @@
 // node tests/guitar.test.cjs [--verbose]
 const { start } = require('./serve.cjs');
 const { chromium } = require('playwright');
-const { openApp, createChecker } = require('./harness.cjs');
+const { legacyStart, openApp, createChecker } = require('./harness.cjs');
 
 const VERBOSE = process.argv.includes('--verbose');
 const { check, finish } = createChecker();
@@ -105,6 +105,7 @@ async function helpers() {
   const url = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage();
+  await legacyStart(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

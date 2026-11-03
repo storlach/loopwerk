@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopwerk · Filter-Layout 3 · Pegel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@200..800&family=Funnel+Sans:wght@300..800&family=Azeret+Mono:wght@200..700&display=swap">
+<style>
+  :root {
+    /* Look „Phosphor“ (seit 2.2): Schwarz wie ein ausgeschalteter Bildschirm. Licht gibt es nur, wo Musik klingt.
+       Was klingt, leuchtet (Kategoriefarben); was eingestellt ist, ist eine Linie. Aktiv = Weißglut (--amber = Weiß). */
+    color-scheme: dark;
+    --bg: #16171A;
+    --panel: rgb(22 23 27 / 0.42);
+    --lane: #131417;
+    --lane-alt: #17181B;
+    --ink: #F2F2F0;
+    --muted: #9898A1;
+    --line: #2A2B30;
+    --grid-bar: rgb(255 255 255 / 0.07);
+    --grid-beat: rgb(255 255 255 / 0.028);
+    --deck: rgb(18 19 22 / 0.62);
+    --head-bg: rgb(16 17 20 / 0.9); /* Spurköpfe fast deckend, wie Martins Referenz */
+    --deck-2: #222328;
+    --deck-ink: #F2F2F0;
+    --deck-muted: #9898A1;
+    --lcd: transparent;
+    --amber: #FFFFFF;
+    --amber-dim: #9898A1;
+    --focus: #FFFFFF;
+    --meter-ok: #F2F2F0;
+    --meter-warm: #FFC53D;
+    --meter-hot: #FF4D4D;
+    --meter-off: #24252A;
+    --cat-drums: #FFC53D;
+    --cat-bass: #4A8CFF;
+    --cat-chords: #2EE5A3;
+    --cat-synth: #B494FF;
+    --cat-fx: #FF7F45;
+    --cat-own: #FF62A5;
+    --ambient-max: 0.64; --glow-blend: screen;
+    /* Weichzeichner für alle Fenster außer dem Arranger: Licht und Amplitude dahinter stören nicht */
+    --glass: blur(10px) saturate(1.1);
+    /* Spuren durchsichtig, damit das Umgebungslicht dahinter wirkt */
+    --lane-a: transparent;
+    --lane-alt-a: rgb(255 255 255 / 0.012);
+    --font-display: "Funnel Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-body: "Funnel Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --radius: 3px;
+    --radius-lg: 14px;
+    /* Licht */
+    --beam: #FFFFFF;
+    --beam-glow: 0 0 3px #fff, 0 0 10px rgb(255 255 255 / 0.55), 0 0 26px rgb(255 255 255 / 0.22);
+    --glow-ink: 0 0 14px rgb(255 255 255 / 0.38);
+    --glow-cat: 0 0 6px var(--cat), 0 0 18px color-mix(in srgb, var(--cat) 45%, transparent);
+    --trace-rest: 0.38;
+    --key-line: #34343A;
+    --danger: #FF6B6B;
+    /* Werkstück-Bausteine: Gummitasten, Mulden, Display, LED, Punktraster */
+    --accent-ink: #030304;
+    --key-face: transparent;
+    --key-shadow: inset 0 0 0 1px #34343A;
+    --well: #0E0F12;
+    --well-shadow: inset 0 0 0 1px #34343A;
+    --dots: none;
+    --clip-body: rgb(14 15 18 / 0.86);
+    --label-ink: #030304;
+    --lcd-face: transparent;
+    --lcd-shadow: none;
+    --lcd-sep: #222226;
+    --display-ink: #F2F2F0;
+    --lcd-label: #9898A1;
+    --sheet-bg: #1A1B1F;
+    --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -10px 26px rgb(0 0 0 / 0.5);
+    --led-off: #2A2A30;
+    --knob-hi: transparent;
+    --knob-lo: transparent;
+    --knob-edge: #3A3A40;
+    /* Klaviertasten sehen wie ein Klavier aus */
+    --key-white: #fdfdfb; --key-white-ink: #5b6475; --key-black: #1d2330; --key-black-ink: #b9c2d3;
+    --track-h: 58px;
+    /* Spurhöhe unter diesen Werten: Spurkopf einzeilig bzw. nur Name (siehe Zoom-Leisten unten) */
+    --rh-two: 52px; --rh-one: 30px;
+    --zbar: 12px; --zbar-b: 12px; --zbar-r: 12px; /* Dicke der Zoom-Leisten (unten, rechts) */
+    /* Schriftskala der Dichte „calm“ (Krachwerk); Loopwerk nutzt sie nicht */
+    --fs-11: 11px; --fs-13: 13px; --fs-15: 15px; --fs-24: 24px; --fs-38: 38px; --fs-56: 56px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--well); color: var(--ink); font: 400 14px/1.4 var(--font-body); -webkit-font-smoothing: antialiased; }
+  svg { display: block; width: 16px; height: 16px; }
+  .board { padding: 40px 48px 48px; width: max-content; }
+  .board-head { display: grid; grid-template-columns: auto 1fr; column-gap: 22px; align-items: end; margin-bottom: 30px; max-width: 1180px; }
+  .board-no { font: 200 88px/0.8 var(--font-display); letter-spacing: -0.04em; color: var(--ink); text-shadow: var(--glow-ink); }
+  .board-name { font: 300 34px/1 var(--font-display); letter-spacing: -0.02em; margin: 0 0 8px; }
+  .board-idea { margin: 0; color: var(--muted); font-size: 15px; max-width: 760px; }
+  .sec { margin-top: 6px; padding: 18px 24px 10px 0; }
+  .sec-h { font: 500 10px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px 34px; }
+  .row { display: flex; gap: 30px; align-items: flex-start; }
+  .shot { margin: 0; display: grid; grid-template-columns: 34px auto; grid-template-rows: auto auto; }
+  .gut { position: relative; }
+  figcaption { grid-column: 2; padding: 12px 2px 0; display: grid; gap: 4px; font: 500 10px/1.35 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); max-width: 390px; }
+  figcaption b { font-weight: 500; color: var(--ink); letter-spacing: 0.14em; text-transform: uppercase; }
+  figcaption .nt { color: var(--muted); letter-spacing: 0.02em; font-family: var(--font-body); font-size: 12px; }
+  .side + figcaption, .shot:has(.side) figcaption { max-width: 272px; }
+  /* Maßklammer links neben dem Rahmen */
+  .brk { position: absolute; right: 8px; width: 7px; border: 1px solid var(--muted); border-right: 0; }
+  .brk i { position: absolute; right: 12px; top: 50%; transform: translateY(-50%) rotate(-90deg); transform-origin: right center; white-space: nowrap; font: 500 10px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--ink); }
+  .brk.first { border-color: var(--line); border-top: 0; height: 0; width: 18px; right: 0; }
+
+  /* Handy */
+  .phone { position: relative; width: 390px; height: 484px; overflow: hidden; background: var(--bg); border-radius: 0 0 26px 26px; box-shadow: 0 0 0 1px var(--line); }
+  .arr { display: grid; grid-template-columns: 136px 1fr; height: 76px; }
+  .arr-head { display: flex; align-items: center; gap: 10px; padding-left: 12px; font: 600 15px/1 var(--font-body); border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); background: var(--head-bg); }
+  .arr-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cat); box-shadow: var(--glow-cat); }
+  .arr-lane { position: relative; border-bottom: 1px solid var(--line); background-image: linear-gradient(90deg, var(--grid-bar) 1px, transparent 1px); background-size: 96px 100%; }
+  .arr-clip { position: absolute; left: 192px; top: 3px; right: -10px; bottom: 3px; padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--cat) 55%, transparent); border-radius: var(--radius); background: var(--clip-body); color: var(--cat); font: 600 11px/1 var(--font-body); }
+  .sheet { position: absolute; left: 0; right: 0; top: 60px; bottom: 60px; background: var(--sheet-bg); border-radius: 18px 18px 0 0; box-shadow: var(--sheet-shadow); overflow: hidden; }
+  .grip { height: 24px; display: grid; place-items: center; }
+  .grip::before { content: ""; width: 64px; height: 5px; border-radius: 3px; background: var(--muted); }
+  .phone .filters { padding: 4px 12px 8px; box-shadow: 0 1px 0 var(--line); }
+  .make { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px 12px 8px; border-bottom: 1px solid var(--line); }
+  .make span { height: 44px; display: grid; place-items: center; border: 1px dashed color-mix(in srgb, var(--cat-own) 55%, var(--line)); border-radius: var(--radius); font: 500 13px/1 var(--font-body); color: var(--ink); }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px 6px; background: var(--bg); border-top: 1px solid var(--line); }
+  .t { display: grid; justify-items: center; align-content: center; gap: 5px; font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); position: relative; }
+  .t svg { width: 18px; height: 18px; }
+  .t.on { color: var(--ink); }
+  .t.on::before { content: ""; position: absolute; top: 0; width: 18px; height: 2px; border-radius: 1px; background: var(--ink); box-shadow: var(--beam-glow); }
+  .t.off { opacity: 0.35; }
+
+  /* Seitenleiste */
+  .side { position: relative; width: 272px; height: 736px; overflow: hidden; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+  .assets { margin: 0; padding: 16px 16px 6px; font: 300 22px/1.1 var(--font-display); letter-spacing: -0.02em; }
+  .ltabs { display: grid; grid-template-columns: 1fr 1fr; padding: 0 12px; }
+  .ltabs span { height: 44px; display: grid; place-items: center; border-bottom: 2px solid transparent; font: 600 12px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .ltabs .on { color: var(--ink); border-bottom-color: var(--amber); }
+  .side .filters { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); }
+
+  /* Akkordeon-Liste (wie in der App) */
+  .list { padding: 6px 8px 12px; display: grid; gap: 2px; }
+  .grp { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 8px; border-radius: 4px; font: 600 11px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .grp.open { color: var(--ink); }
+  .grp.dis { opacity: 0.45; }
+  .grp .sw { width: 10px; height: 10px; border-radius: 2px; background: var(--cat); flex: none; }
+  .grp[style*="cat-genre"] .sw { background: var(--amber); }
+  .sw-star { color: var(--ink); width: 12px; margin: 0 -1px; flex: none; }
+  .sw-star svg { width: 12px; height: 12px; filter: drop-shadow(0 0 4px rgb(255 255 255 / 0.5)); }
+  .grp-l { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grp-n { margin-left: auto; font: 400 12px/1 var(--font-mono); letter-spacing: 0.06em; }
+  .chev { width: 7px; height: 7px; margin: 0 6px 0 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
+  .grp.open .chev { transform: rotate(45deg); margin-bottom: 3px; }
+  .grp.dis .chev { visibility: hidden; }
+  .items { display: grid; gap: 2px; padding: 0 0 6px; }
+  .item { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto 36px; align-items: center; gap: 8px; min-height: 44px; padding: 0 0 0 8px; border-radius: 4px; font: 400 14px/1.2 var(--font-body); color: var(--ink); }
+  .item.armed { background: rgb(255 255 255 / 0.04); box-shadow: inset 2px 0 0 var(--ink); }
+  .play { width: 0; height: 0; border-left: 8px solid var(--cat); border-top: 5px solid transparent; border-bottom: 5px solid transparent; justify-self: center; filter: drop-shadow(0 0 4px var(--cat)); }
+  .iname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ilen { font: 400 11px/1 var(--font-mono); color: var(--muted); }
+  .istar { color: var(--muted); display: grid; place-items: center; }
+  .istar svg { width: 14px; height: 14px; }
+  .istar.on { color: var(--ink); filter: drop-shadow(0 0 5px rgb(255 255 255 / 0.45)); }
+
+  /* gemeinsame Filter-Bausteine */
+  .field { position: relative; display: flex; align-items: stretch; height: 44px; border-radius: var(--radius-lg); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
+  .field .lead { width: 40px; flex: none; display: grid; place-items: center; color: var(--muted); }
+  .field .lead.reset { color: var(--ink); }
+  .field .ph { flex: 1; min-width: 0; display: flex; align-items: center; font: 400 16px/1 var(--font-body); color: var(--muted); white-space: nowrap; overflow: hidden; }
+  .field .typed { color: var(--ink); }
+  .caret { display: inline-block; width: 1.5px; height: 20px; margin-left: 1px; background: var(--ink); vertical-align: middle; }
+  .lbl { font: 500 9.5px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .mono { font-family: var(--font-mono); }
+  .glow { color: var(--ink); text-shadow: var(--glow-ink); }
+
+  .v3 .r1 { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; }
+  .v3 .fav { height: 44px; border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--key-line); display: grid; place-items: center; color: var(--muted); }
+  .v3 .fav.on { color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); }
+  .v3 .fav.on svg { filter: drop-shadow(0 0 5px rgb(255 255 255 / 0.6)); }
+  .v3 .tiles { margin-top: 8px; display: grid; grid-template-columns: repeat(5, 1fr); border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--key-line); overflow: hidden; }
+  .v3 .tile { position: relative; height: 52px; display: grid; align-content: center; justify-items: center; gap: 5px; border-left: 1px solid var(--key-line); }
+  .v3 .tile:first-child { border-left: 0; }
+  .v3 .tile .a { font: 500 12px/1 var(--font-mono); letter-spacing: 0.04em; color: var(--ink); text-transform: uppercase; }
+  .v3 .tile .b { font: 400 10px/1 var(--font-mono); color: var(--muted); letter-spacing: 0.04em; }
+  /* Pegel: Menge der Sounds dieser Länge als Linie am Boden */
+  .v3 .tile::after { content: ""; position: absolute; left: 7px; bottom: 6px; height: 2px; width: calc((100% - 14px) * var(--p)); border-radius: 1px; background: var(--muted); opacity: 0.7; }
+  .v3 .tile::before { content: ""; position: absolute; left: 7px; right: 7px; bottom: 6px; height: 2px; border-radius: 1px; background: var(--line); }
+  .v3 .tile.on { background: rgb(255 255 255 / 0.06); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.6); border-radius: var(--radius-lg); border-left-color: transparent; }
+  .v3 .tile.on + .tile { border-left-color: transparent; }
+  .v3 .tile.on .a, .v3 .tile.on .b { color: var(--ink); text-shadow: var(--glow-ink); }
+  .v3 .tile.on::after { background: var(--beam); opacity: 1; box-shadow: var(--beam-glow); }
+  .v3 .tile.zero .a, .v3 .tile.zero .b { color: color-mix(in srgb, var(--muted) 50%, transparent); }
+  .v3 .tabs { margin: 8px -4px -10px; display: flex; align-items: stretch; height: 44px; }
+  .phone .v3 .tabs { margin-bottom: -8px; }
+  .v3 .tabs span { display: grid; place-items: center; padding: 0 10px; border-bottom: 2px solid transparent; font: 600 11px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .v3 .tabs span.on { color: var(--ink); border-bottom-color: var(--amber); }
+  .v3 .tabs span.n { display: flex; align-items: center; white-space: nowrap; margin-left: auto; border: 0; font: 400 11px/1 var(--font-mono); letter-spacing: 0.04em; text-transform: none; padding-right: 6px; }
+  .v3 .tabs .n b { color: var(--ink); font-weight: 400; }
+  </style>
+</head>
+<body>
+<main class="board">
+  <header class="board-head"><div class="board-no">3</div><div><h1 class="board-name">Pegel</h1><p class="board-idea">Die Länge ist ein festes Pult aus fünf Kacheln, jede mit Anzahl und einem Pegel, der zeigt, wie viel dahinter liegt – und der den anderen Filtern folgt. Der Stern sitzt neben der Suche, Kategorie/Genre wird zum Reiter, der die Akkordeon-Liste überschreibt.</p></div></header>
+  <section class="sec" id="handy"><h2 class="sec-h">Handy · 390 px · Fach „Sounds“ auf Mitte</h2><div class="row">
+<figure class="shot">
+  <div class="gut"></div>
+  <div class="phone">
+    <div class="arr">
+      <div class="arr-head"><span class="dot" style="--cat:var(--cat-synth)"></span>Melodie</div><div class="arr-lane"></div>
+      <div class="arr-head"><span class="dot" style="--cat:var(--cat-fx)"></span>FX</div><div class="arr-lane"><span class="arr-clip" style="--cat:var(--cat-fx)">Riser</span></div>
+    </div>
+    <div class="sheet" data-frame>
+      <div class="grip"></div>
+      <div class="filters" data-measure><div class="v3"><div class="r1"><div class="field"><span class="lead"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.4 10.4L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="ph">Suchen …</span></div><span class="fav"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="tiles"><span class="tile" style="--p:0.331"><span class="a">1T</span><span class="b">37</span></span><span class="tile" style="--p:0.445"><span class="a">2T</span><span class="b">67</span></span><span class="tile" style="--p:0.428"><span class="a">4T</span><span class="b">62</span></span><span class="tile zero" style="--p:0"><span class="a">8T+</span><span class="b">0</span></span><span class="tile" style="--p:1.000"><span class="a">Shot</span><span class="b">338</span></span></div><div class="tabs"><span class="on">Kategorie</span><span class="">Genre</span><span class="n">504</span></div></div></div>
+      <div class="make"><span>+ Import</span><span>+ Link</span><span>+ Beat</span><span>+ Melodie</span></div>
+      <div class="list"><div class="grp  " style="--cat:var(--cat-drums)" data-first><span class="sw" style="--cat:var(--cat-drums)"></span><span class="grp-l">Drums</span><span class="grp-n">261</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-bass)" ><span class="sw" style="--cat:var(--cat-bass)"></span><span class="grp-l">Bass</span><span class="grp-n">33</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-chords)" ><span class="sw" style="--cat:var(--cat-chords)"></span><span class="grp-l">Akkorde</span><span class="grp-n">123</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-synth)" ><span class="sw" style="--cat:var(--cat-synth)"></span><span class="grp-l">Synth</span><span class="grp-n">59</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-fx)" ><span class="sw" style="--cat:var(--cat-fx)"></span><span class="grp-l">FX</span><span class="grp-n">28</span><span class="chev"></span></div></div>
+    </div>
+    <nav class="tabbar"><span class="t on"><svg viewBox="0 0 16 16"><path d="M6 2.5l8-1.5v9.2a2.3 2.3 0 11-1.5-2.15V4.3L7.5 5.2v6.9A2.3 2.3 0 116 9.95z" fill="currentColor"/></svg>Sounds</span><span class="t"><svg viewBox="0 0 16 16"><path d="M3 1.5v13M8 1.5v13M13 1.5v13" stroke="currentColor" stroke-width="1.5"/><rect x="1" y="9" width="4" height="2.5" fill="currentColor"/><rect x="6" y="4" width="4" height="2.5" fill="currentColor"/><rect x="11" y="7" width="4" height="2.5" fill="currentColor"/></svg>Mixer</span><span class="t off"><svg viewBox="0 0 16 16"><path d="M1 8h3l1.5-4 2.5 9 2-7 1.2 2H15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Editor</span><span class="t"><svg viewBox="0 0 16 16"><path d="M1 3h9v2.5H1zM4 7h11v2.5H4zM1 11h7v2.5H1z" fill="currentColor"/></svg>Song</span></nav>
+  </div>
+  <figcaption><b>Ruhe</b><span class="m"></span><span class="nt">Fünf Längen-Kacheln mit Anzahl und Pegel; Ordnen als Reiter über der Liste.</span></figcaption>
+</figure>
+<figure class="shot">
+  <div class="gut"></div>
+  <div class="phone">
+    <div class="arr">
+      <div class="arr-head"><span class="dot" style="--cat:var(--cat-synth)"></span>Melodie</div><div class="arr-lane"></div>
+      <div class="arr-head"><span class="dot" style="--cat:var(--cat-fx)"></span>FX</div><div class="arr-lane"><span class="arr-clip" style="--cat:var(--cat-fx)">Riser</span></div>
+    </div>
+    <div class="sheet" data-frame>
+      <div class="grip"></div>
+      <div class="filters" data-measure><div class="v3"><div class="r1"><div class="field"><span class="lead reset"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="ph">Suchen …</span></div><span class="fav on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="tiles"><span class="tile" style="--p:0.816"><span class="a">1T</span><span class="b">2</span></span><span class="tile" style="--p:0.577"><span class="a">2T</span><span class="b">1</span></span><span class="tile on" style="--p:1.000"><span class="a">4T</span><span class="b">3</span></span><span class="tile zero" style="--p:0"><span class="a">8T+</span><span class="b">0</span></span><span class="tile" style="--p:0.577"><span class="a">Shot</span><span class="b">1</span></span></div><div class="tabs"><span class="on">Kategorie</span><span class="">Genre</span><span class="n"><b>3</b>/504</span></div></div></div>
+      <div class="make"><span>+ Import</span><span>+ Link</span><span>+ Beat</span><span>+ Melodie</span></div>
+      <div class="list"><div class="grp open " style="--cat:var(--cat-bass)" data-first><span class="sw" style="--cat:var(--cat-bass)"></span><span class="grp-l">Bass</span><span class="grp-n">1</span><span class="chev"></span></div><div class="items"><div class="item armed" style="--cat:var(--cat-bass)"><span class="play"></span><span class="iname">Bass Am–F–C–G</span><span class="ilen">4T</span><span class="istar on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div></div><div class="grp open " style="--cat:var(--cat-chords)" ><span class="sw" style="--cat:var(--cat-chords)"></span><span class="grp-l">Akkorde</span><span class="grp-n">2</span><span class="chev"></span></div><div class="items"><div class="item" style="--cat:var(--cat-chords)"><span class="play"></span><span class="iname">Pad Am–F–C–G</span><span class="ilen">4T</span><span class="istar on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="item" style="--cat:var(--cat-chords)"><span class="play"></span><span class="iname">House-Piano Am–F–C–G</span><span class="ilen">4T</span><span class="istar on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div></div></div>
+    </div>
+    <nav class="tabbar"><span class="t on"><svg viewBox="0 0 16 16"><path d="M6 2.5l8-1.5v9.2a2.3 2.3 0 11-1.5-2.15V4.3L7.5 5.2v6.9A2.3 2.3 0 116 9.95z" fill="currentColor"/></svg>Sounds</span><span class="t"><svg viewBox="0 0 16 16"><path d="M3 1.5v13M8 1.5v13M13 1.5v13" stroke="currentColor" stroke-width="1.5"/><rect x="1" y="9" width="4" height="2.5" fill="currentColor"/><rect x="6" y="4" width="4" height="2.5" fill="currentColor"/><rect x="11" y="7" width="4" height="2.5" fill="currentColor"/></svg>Mixer</span><span class="t off"><svg viewBox="0 0 16 16"><path d="M1 8h3l1.5-4 2.5 9 2-7 1.2 2H15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Editor</span><span class="t"><svg viewBox="0 0 16 16"><path d="M1 3h9v2.5H1zM4 7h11v2.5H4zM1 11h7v2.5H1z" fill="currentColor"/></svg>Song</span></nav>
+  </div>
+  <figcaption><b>Aktiv · 4 Takte + Favoriten</b><span class="m"></span><span class="nt">Zahlen und Pegel folgen den übrigen Filtern: man sieht vorher, was ein Tipp bringt.</span></figcaption>
+</figure>
+<figure class="shot">
+  <div class="gut"></div>
+  <div class="phone">
+    <div class="arr">
+      <div class="arr-head"><span class="dot" style="--cat:var(--cat-synth)"></span>Melodie</div><div class="arr-lane"></div>
+      <div class="arr-head"><span class="dot" style="--cat:var(--cat-fx)"></span>FX</div><div class="arr-lane"><span class="arr-clip" style="--cat:var(--cat-fx)">Riser</span></div>
+    </div>
+    <div class="sheet" data-frame>
+      <div class="grip"></div>
+      <div class="filters" data-measure><div class="v3"><div class="r1"><div class="field"><span class="lead reset"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="ph">Suchen …</span></div><span class="fav"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="tiles"><span class="tile" style="--p:0.331"><span class="a">1T</span><span class="b">37</span></span><span class="tile" style="--p:0.445"><span class="a">2T</span><span class="b">67</span></span><span class="tile on" style="--p:0.428"><span class="a">4T</span><span class="b">62</span></span><span class="tile zero" style="--p:0"><span class="a">8T+</span><span class="b">0</span></span><span class="tile" style="--p:1.000"><span class="a">Shot</span><span class="b">338</span></span></div><div class="tabs"><span class="">Kategorie</span><span class="on">Genre</span><span class="n"><b>62</b>/504</span></div></div></div>
+      <div class="make"><span>+ Import</span><span>+ Link</span><span>+ Beat</span><span>+ Melodie</span></div>
+      <div class="list"><div class="grp  " style="--cat:var(--cat-genre)" data-first><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Techno</span><span class="grp-n">3</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">House</span><span class="grp-n">9</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Hip-Hop</span><span class="grp-n">9</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Breakbeat & DnB</span><span class="grp-n">4</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Pop</span><span class="grp-n">25</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Ambient & Film</span><span class="grp-n">13</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Trap</span><span class="grp-n">4</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Lo-Fi</span><span class="grp-n">6</span><span class="chev"></span></div></div>
+    </div>
+    <nav class="tabbar"><span class="t on"><svg viewBox="0 0 16 16"><path d="M6 2.5l8-1.5v9.2a2.3 2.3 0 11-1.5-2.15V4.3L7.5 5.2v6.9A2.3 2.3 0 116 9.95z" fill="currentColor"/></svg>Sounds</span><span class="t"><svg viewBox="0 0 16 16"><path d="M3 1.5v13M8 1.5v13M13 1.5v13" stroke="currentColor" stroke-width="1.5"/><rect x="1" y="9" width="4" height="2.5" fill="currentColor"/><rect x="6" y="4" width="4" height="2.5" fill="currentColor"/><rect x="11" y="7" width="4" height="2.5" fill="currentColor"/></svg>Mixer</span><span class="t off"><svg viewBox="0 0 16 16"><path d="M1 8h3l1.5-4 2.5 9 2-7 1.2 2H15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Editor</span><span class="t"><svg viewBox="0 0 16 16"><path d="M1 3h9v2.5H1zM4 7h11v2.5H4zM1 11h7v2.5H1z" fill="currentColor"/></svg>Song</span></nav>
+  </div>
+  <figcaption><b>Genre · 4 Takte</b><span class="m"></span><span class="nt">Reiter „Genre“ ordnet die Akkordeons um; ein Tipp.</span></figcaption>
+</figure></div></section>
+  <section class="sec" id="seite"><h2 class="sec-h">Seitenleiste · 272 px · Touch-Maße (Tablet und Desktop)</h2><div class="row">
+<figure class="shot">
+  <div class="gut"></div>
+  <aside class="side" data-frame>
+    <h2 class="assets">Assets</h2>
+    <div class="ltabs"><span class="on">Suchen</span><span>Erstellen</span></div>
+    <div class="filters" data-measure><div class="v3"><div class="r1"><div class="field"><span class="lead"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.4 10.4L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="ph">Suchen …</span></div><span class="fav"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="tiles"><span class="tile" style="--p:0.331"><span class="a">1T</span><span class="b">37</span></span><span class="tile" style="--p:0.445"><span class="a">2T</span><span class="b">67</span></span><span class="tile" style="--p:0.428"><span class="a">4T</span><span class="b">62</span></span><span class="tile zero" style="--p:0"><span class="a">8T+</span><span class="b">0</span></span><span class="tile" style="--p:1.000"><span class="a">Shot</span><span class="b">338</span></span></div><div class="tabs"><span class="on">Kategorie</span><span class="">Genre</span><span class="n">504</span></div></div></div>
+    <div class="list"><div class="grp  " style="--cat:var(--cat-drums)" data-first><span class="sw" style="--cat:var(--cat-drums)"></span><span class="grp-l">Drums</span><span class="grp-n">261</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-bass)" ><span class="sw" style="--cat:var(--cat-bass)"></span><span class="grp-l">Bass</span><span class="grp-n">33</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-chords)" ><span class="sw" style="--cat:var(--cat-chords)"></span><span class="grp-l">Akkorde</span><span class="grp-n">123</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-synth)" ><span class="sw" style="--cat:var(--cat-synth)"></span><span class="grp-l">Synth</span><span class="grp-n">59</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-fx)" ><span class="sw" style="--cat:var(--cat-fx)"></span><span class="grp-l">FX</span><span class="grp-n">28</span><span class="chev"></span></div></div>
+  </aside>
+  <figcaption><b>Ruhe</b><span class="m"></span><span class="nt">Fünf Längen-Kacheln mit Anzahl und Pegel; Ordnen als Reiter über der Liste.</span></figcaption>
+</figure>
+<figure class="shot">
+  <div class="gut"></div>
+  <aside class="side" data-frame>
+    <h2 class="assets">Assets</h2>
+    <div class="ltabs"><span class="on">Suchen</span><span>Erstellen</span></div>
+    <div class="filters" data-measure><div class="v3"><div class="r1"><div class="field"><span class="lead reset"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="ph">Suchen …</span></div><span class="fav on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="tiles"><span class="tile" style="--p:0.816"><span class="a">1T</span><span class="b">2</span></span><span class="tile" style="--p:0.577"><span class="a">2T</span><span class="b">1</span></span><span class="tile on" style="--p:1.000"><span class="a">4T</span><span class="b">3</span></span><span class="tile zero" style="--p:0"><span class="a">8T+</span><span class="b">0</span></span><span class="tile" style="--p:0.577"><span class="a">Shot</span><span class="b">1</span></span></div><div class="tabs"><span class="on">Kategorie</span><span class="">Genre</span><span class="n"><b>3</b>/504</span></div></div></div>
+    <div class="list"><div class="grp open " style="--cat:var(--cat-bass)" data-first><span class="sw" style="--cat:var(--cat-bass)"></span><span class="grp-l">Bass</span><span class="grp-n">1</span><span class="chev"></span></div><div class="items"><div class="item armed" style="--cat:var(--cat-bass)"><span class="play"></span><span class="iname">Bass Am–F–C–G</span><span class="ilen">4T</span><span class="istar on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div></div><div class="grp open " style="--cat:var(--cat-chords)" ><span class="sw" style="--cat:var(--cat-chords)"></span><span class="grp-l">Akkorde</span><span class="grp-n">2</span><span class="chev"></span></div><div class="items"><div class="item" style="--cat:var(--cat-chords)"><span class="play"></span><span class="iname">Pad Am–F–C–G</span><span class="ilen">4T</span><span class="istar on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="item" style="--cat:var(--cat-chords)"><span class="play"></span><span class="iname">House-Piano Am–F–C–G</span><span class="ilen">4T</span><span class="istar on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="currentColor" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div></div></div>
+  </aside>
+  <figcaption><b>Aktiv · 4 Takte + Favoriten</b><span class="m"></span><span class="nt">Zahlen und Pegel folgen den übrigen Filtern: man sieht vorher, was ein Tipp bringt.</span></figcaption>
+</figure>
+<figure class="shot">
+  <div class="gut"></div>
+  <aside class="side" data-frame>
+    <h2 class="assets">Assets</h2>
+    <div class="ltabs"><span class="on">Suchen</span><span>Erstellen</span></div>
+    <div class="filters" data-measure><div class="v3"><div class="r1"><div class="field"><span class="lead reset"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span><span class="ph">Suchen …</span></div><span class="fav"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></div><div class="tiles"><span class="tile" style="--p:0.331"><span class="a">1T</span><span class="b">37</span></span><span class="tile" style="--p:0.445"><span class="a">2T</span><span class="b">67</span></span><span class="tile on" style="--p:0.428"><span class="a">4T</span><span class="b">62</span></span><span class="tile zero" style="--p:0"><span class="a">8T+</span><span class="b">0</span></span><span class="tile" style="--p:1.000"><span class="a">Shot</span><span class="b">338</span></span></div><div class="tabs"><span class="">Kategorie</span><span class="on">Genre</span><span class="n"><b>62</b>/504</span></div></div></div>
+    <div class="list"><div class="grp  " style="--cat:var(--cat-genre)" data-first><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Techno</span><span class="grp-n">3</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">House</span><span class="grp-n">9</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Hip-Hop</span><span class="grp-n">9</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Breakbeat & DnB</span><span class="grp-n">4</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Pop</span><span class="grp-n">25</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Ambient & Film</span><span class="grp-n">13</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Trap</span><span class="grp-n">4</span><span class="chev"></span></div><div class="grp  " style="--cat:var(--cat-genre)" ><span class="sw" style="--cat:var(--cat-genre)"></span><span class="grp-l">Lo-Fi</span><span class="grp-n">6</span><span class="chev"></span></div></div>
+  </aside>
+  <figcaption><b>Genre · 4 Takte</b><span class="m"></span><span class="nt">Reiter „Genre“ ordnet die Akkordeons um; ein Tipp.</span></figcaption>
+</figure></div></section>
+</main>
+
+<script>
+  // Maße: Filterbereich (Oberkante Suche bis Unterkante letzter Filter) und Oberkante erste Gruppe, relativ zum Rahmen
+  function measure() {
+    for (const fig of document.querySelectorAll('.shot')) {
+      const frame = fig.querySelector('[data-frame]');
+      const fz = fig.querySelector('[data-measure]');
+      const first = fig.querySelector('[data-first]');
+      const gut = fig.querySelector('.gut');
+      const fr = frame.getBoundingClientRect(), gr = gut.getBoundingClientRect();
+      const kids = [...fz.children[0].children];
+      const top = Math.min(...kids.map((k) => k.getBoundingClientRect().top));
+      const bot = Math.max(...kids.map((k) => k.getBoundingClientRect().bottom));
+      const h = Math.round(bot - top);
+      const firstY = Math.round(first.getBoundingClientRect().top - fr.top);
+      const b = document.createElement('div'); b.className = 'brk';
+      b.style.top = (top - gr.top) + 'px'; b.style.height = h + 'px'; b.innerHTML = '<i>' + h + '</i>';
+      gut.append(b);
+      const f = document.createElement('div'); f.className = 'brk first'; f.style.top = (first.getBoundingClientRect().top - gr.top) + 'px';
+      gut.append(f);
+      fig.querySelector('.m').textContent = 'Filter ' + h + ' px · Gruppe ab ' + firstY + ' px';
+      fig.dataset.h = h; fig.dataset.first = firstY;
+    }
+  }
+  document.fonts.ready.then(measure);
+</script>
+</body>
+</html>

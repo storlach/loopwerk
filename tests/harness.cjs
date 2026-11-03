@@ -13,14 +13,7 @@ async function openApp({ viewport = { width: 1400, height: 820 }, args = [], has
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  if (!fresh) {
-    await page.addInitScript(() => {
-      try {
-        if (!sessionStorage.getItem('loopwerk.shelfOpen')) sessionStorage.setItem('loopwerk.shelfOpen', '["drums"]');
-        if (!localStorage.getItem('loopwerk.harmonyRows')) localStorage.setItem('loopwerk.harmonyRows', 'on');
-      } catch { /* egal */ }
-    });
-  }
+  if (!fresh) await legacyStart(page);
   if (init) await page.addInitScript(init);
   await page.goto(url);
   await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 15000 });
@@ -31,6 +24,16 @@ async function openApp({ viewport = { width: 1400, height: 820 }, args = [], has
     page, browser, url, errors,
     async close() { await browser.close(); server.close(); },
   };
+}
+
+// Wie früher starten: Regal-Gruppe „Drums“ offen, Tonart- und Akkordzeile sichtbar (für Tests mit eigenem Browser)
+async function legacyStart(page) {
+  await page.addInitScript(() => {
+    try {
+      if (!sessionStorage.getItem('loopwerk.shelfOpen')) sessionStorage.setItem('loopwerk.shelfOpen', '["drums"]');
+      if (!localStorage.getItem('loopwerk.harmonyRows')) localStorage.setItem('loopwerk.harmonyRows', 'on');
+    } catch { /* egal */ }
+  });
 }
 
 // Läuft im Browser: Impuls (1 Takt, Impuls auf Frame 0) und Gleichspannung (1 Takt, Wert 1).
@@ -82,7 +85,10 @@ async function reveal(page, sel) {
     const pop = n.closest('.pop');
     if (pop && pop.hidden) pop.parentElement.querySelector('button').click();
     if (n.closest('.create-panel') && document.querySelector('.shelf').dataset.left !== 'create') document.getElementById('ltab-create').click();
-    if (n.closest('.shelf-head, .shelf-list') && document.querySelector('.shelf').dataset.left === 'create') document.getElementById('ltab-sounds').click();
+    if (n.closest('.shelf-head, .shelf-list, #library') && document.querySelector('.shelf').dataset.left === 'create') document.getElementById('ltab-sounds').click();
+    // Regal-Gruppen starten geschlossen: die Gruppe des Eintrags aufklappen
+    const items = n.closest('.shelf-items');
+    if (items?.hidden) items.closest('.shelf-group')?.querySelector('.shelf-cat')?.click();
   }, sel);
 }
 const clickR = async (page, sel) => { await reveal(page, sel); await page.click(sel); };
@@ -96,4 +102,4 @@ async function toggleFx(page, trackId, fxId) {
   await page.click(`#fx-${fxId}-on`);
 }
 
-module.exports = { openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx };
+module.exports = { legacyStart, openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx };
