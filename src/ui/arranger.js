@@ -763,6 +763,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       const { node, canvas, sample } = makeClip(clip);
       node.style.setProperty('--stack', String(order.indexOf(clip) + 1));
       const heard = (audible.get(clip.id) ?? []).reduce((s, [a, b]) => s + b - a, 0);
+      node.classList.toggle('muted', !!clip.mute);
       node.classList.toggle('covered', heard < clip.lengthBeats - EPS);
       node.classList.toggle('on-top', track.clips.some((o) => o !== clip && isAbove(clip, o, track.clips) && o.startBeat < clip.startBeat + clip.lengthBeats - EPS && o.startBeat + o.lengthBeats > clip.startBeat + EPS));
       r.lane.append(node);

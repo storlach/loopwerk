@@ -39,6 +39,7 @@ import { touch, place } from './ui/place.js';
 import { templateControls, MASTER_TEMPLATES } from './ui/auto-lane.js';
 import { doubleTapRanges } from './ui/touch.js';
 import { EDITION, lsKey } from './edition.js';
+import { mountFreeze } from './ui/freeze-ui.js';
 import { applySurfaces } from './ui/surfaces.js';
 import { clearInstruments } from './sampler.js';
 import { mountPwa } from './pwa.js';
@@ -612,7 +613,9 @@ async function boot() {
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
-  if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools });
+  // Festhalten (Krachwerk 3a): Knopf am Loop-Bereich, Taste F, Füllstand, Sicherung
+  const freezeUi = EDITION.freeze ? mountFreeze({ store, engine, library, ui, own, arranger, appName: EDITION.title }) : null;
+  if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools, onFreeze: freezeUi ? (ids) => freezeUi.run({ clipIds: ids }) : null });
   const sheets = mountSheets({ ui, arranger });
   // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
   if (EDITION.density === 'calm') {
@@ -719,7 +722,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, freezeUi, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

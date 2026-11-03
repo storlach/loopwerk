@@ -1214,6 +1214,203 @@ async function seedPadWall() {
       }
     }
 
+    // ---------- 15: Festhalten und Sicherung (Scheibe 3a, Spec krachwerk-3-festhalten §2, §8, §9 „Teil 3“) ----------
+    // Zwei Spuren: „Bumm“ (Klopfen) auf t1, „Summ“ (Ton) auf t2, je 8 Schläge; Loop 0–4
+    const fzScene = (page, { loop = true } = {}) => page.evaluate(async (withLoop) => {
+      const lw = window.loopwerk;
+      const sr = 44100, n = sr * 2;
+      const mkB = (fill) => { const d = new Float32Array(n); fill(d); const b = new AudioBuffer({ numberOfChannels: 1, length: n, sampleRate: sr }); b.copyToChannel(d, 0); return b; };
+      const bumm = await lw.own.create({ name: 'Bumm', buffer: mkB((d) => { for (let i = 0; i < n; i++) d[i] = 0.7 * Math.sin(i / 14) * Math.exp(-(i % 29400) / 4000); }), source: 'Aufnahme', from: 'mic', cls: 'tief' });
+      const summ = await lw.own.create({ name: 'Summ', buffer: mkB((d) => { for (let i = 0; i < n; i++) d[i] = 0.3 * Math.sin(2 * Math.PI * 440 * i / sr); }), source: 'Aufnahme', from: 'mic', cls: 'ton' });
+      lw.store.addClip('t1', bumm.id, 0, 8);
+      lw.store.addClip('t2', summ.id, 0, 8);
+      if (withLoop) lw.store.setLoop({ on: true, startBeat: 0, endBeat: 4 });
+      return { bumm: bumm.id, summ: summ.id };
+    }, loop);
+    const fzState = (page) => page.evaluate(() => {
+      const lw = window.loopwerk, p = lw.store.project;
+      return {
+        tracks: p.tracks.map((t) => t.name),
+        clips: p.tracks.map((t) => t.clips.map((c) => `${c.startBeat}-${c.startBeat + c.lengthBeats}${c.mute ? 'm' : ''}`)),
+        sel: lw.ui.selectedClipId, undo: lw.store.undoStack.length,
+        wb: document.getElementById('wb-name')?.textContent ?? '', hint: document.getElementById('hint-text').textContent,
+        sounds: lw.library.list().filter((x) => x.category === 'own').map((x) => x.name),
+      };
+    });
+    const fzWait = (page, tracks) => page.waitForFunction((n) => window.loopwerk.store.project.tracks.length === n, tracks, { timeout: 20000 });
+    const sound3 = async (page, shot) => { if (SHOTS) await page.screenshot({ path: path.join(DIR, shot) }); };
+
+    // ----- Desktop: Knopf, Taste F, Auswahl, Rückgängig, Sicherung -----
+    {
+      const ctx = await browser.newContext({ ...DESK, acceptDownloads: true });
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      await fzScene(page, { loop: false });
+      await page.waitForTimeout(300);
+      const hidden0 = await page.evaluate(() => document.getElementById('freeze-btn').hidden);
+      check('Festhalten: ohne Loop-Bereich kein Knopf im Lineal', hidden0);
+      await page.evaluate(() => window.loopwerk.store.setLoop({ on: true, startBeat: 0, endBeat: 4 }));
+      await page.waitForTimeout(300);
+      const geo = await page.evaluate(() => { const b = document.getElementById('freeze-btn'), r = b.getBoundingClientRect(), ru = document.querySelector('.ruler').getBoundingClientRect(); return { vis: !b.hidden && r.width > 0, text: b.textContent, inRuler: r.top >= ru.top - 1 && r.bottom <= ru.bottom + 1, right: r.left >= ru.left + 4 * window.loopwerk.ui.pxPerBeat - 2 }; });
+      check('Festhalten: Knopf steht im Lineal rechts am Loop-Bereich', geo.vis && geo.text === 'Festhalten' && geo.inRuler && geo.right, JSON.stringify(geo));
+      // Zählung wie bei 2b in einem frischen Fenster: ein Clip, Loop an, Festhalten sichtbar
+      {
+        const c1 = await browser.newContext(DESK);
+        const k1 = await openKw(base, c1);
+        await k1.page.evaluate(async () => {
+          const lw = window.loopwerk, sr = 44100, n = sr * 2, d = new Float32Array(n);
+          for (let i = 0; i < n; i++) d[i] = Math.sin(i / 14) * Math.exp(-(i % 29400) / 4000);
+          const bf = new AudioBuffer({ numberOfChannels: 1, length: n, sampleRate: sr });
+          bf.copyToChannel(d, 0);
+          const smp = await lw.own.create({ name: 'Bumm', buffer: bf, source: 'Aufnahme', from: 'mic', cls: 'tief' });
+          lw.store.addClip('t1', smp.id, 0, 8);
+          lw.store.setLoop({ on: true, startBeat: 0, endBeat: 4 });
+          lw.ui.select(lw.store.project.tracks[0].clips[0].id);
+        });
+        await k1.page.waitForTimeout(500);
+        const dens = await countUi(k1.page);
+        check('Zählung Desktop „Clip gewählt, Loop an, Festhalten sichtbar“ ≤ 45 / ≤ 30 / ≤ 5 / ≥ 11', dens.controls <= 45 && dens.frames <= 30 && dens.sizes <= 5 && dens.minFont >= 11, `${dens.controls} / ${dens.frames} / ${dens.sizes} / ${dens.minFont}`);
+        await c1.close();
+      }
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(400);
+      await sound3(page, 'kw-festhalten-desktop-loop.png');
+      const u0 = (await fzState(page)).undo;
+      await page.click('#freeze-btn');
+      await fzWait(page, 3);
+      await page.waitForFunction(() => document.getElementById('wb-name')?.textContent === 'Schleife 1', null, { timeout: 5000 });
+      await page.waitForTimeout(400);
+      const a = await fzState(page);
+      const frozen = await page.evaluate(() => { const lw = window.loopwerk, s = lw.library.list().find((x) => x.name === 'Schleife 1'); return { kind: s?.kind, beats: s?.beats, from: s?.made?.from, track: lw.store.project.tracks[2].clips[0]?.sampleId === s?.id }; });
+      check('Festhalten: neue Spur direkt unter der untersten Quelle, Clip über den Bereich, gewählt, Werkbank „Schleife 1“', a.tracks[2] === 'Schleife 1' && a.clips[2].join() === '0-4' && !!a.sel && a.wb === 'Schleife 1' && frozen.track, JSON.stringify(a));
+      check('Festhalten: Sound „Schleife 1“ in der Kiste, Schleife über 4 Schläge', frozen.kind === 'loop' && frozen.beats === 4 && frozen.from === 'freeze', JSON.stringify(frozen));
+      check('Festhalten: Quellen im Bereich stumm, außerhalb nicht (an den Grenzen geteilt)', a.clips[0].join() === '0-4m,4-8' && a.clips[1].join() === '0-4m,4-8', JSON.stringify(a.clips));
+      check('Festhalten: Einblender „Festgehalten – Quellen im Bereich stumm.“, ein Undo-Schritt', a.hint === 'Festgehalten – Quellen im Bereich stumm.' && a.undo === u0 + 1, `${a.hint} / ${a.undo - u0}`);
+      const mutedLook = await page.evaluate(() => { const c = [...document.querySelectorAll('.lane[data-track-id="t1"] .clip')]; return c.map((n) => ({ m: n.classList.contains('muted'), o: getComputedStyle(n).opacity })); });
+      check('Stumme Clips ruhen im Song auf 50 %', mutedLook[0]?.m && mutedLook[0].o === '0.5' && !mutedLook[1]?.m && mutedLook[1].o === '1', JSON.stringify(mutedLook));
+      await sound3(page, 'kw-festhalten-desktop.png');
+      // Rückgängig: Einblender, Projekt wie vorher, Sound bleibt
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(300);
+      const b = await fzState(page);
+      check('Festhalten: ↶ nimmt alles zurück, Einblender „Rückgängig: Festhalten“, Sound bleibt in der Kiste', b.tracks.length === 2 && b.clips[0].join() === '0-8' && b.hint === 'Rückgängig: Festhalten' && b.sounds.includes('Schleife 1'), JSON.stringify(b));
+      // Taste F (Loop an): zweites Festhalten heißt „Schleife 2“
+      await page.evaluate(() => { document.activeElement?.blur?.(); window.loopwerk.ui.select(null); });
+      await page.keyboard.press('f');
+      await fzWait(page, 3);
+      await page.waitForTimeout(300);
+      const c = await fzState(page);
+      check('Taste F am Desktop hält den Loop-Bereich fest („Schleife 2“)', c.tracks[2] === 'Schleife 2' && c.clips[0].join() === '0-4m,4-8', JSON.stringify(c));
+      // Auswahl: zwei Clips, Festhalten steht an der Stelle von „Kopie“
+      await page.evaluate(() => { const lw = window.loopwerk; lw.store.undo(); lw.store.setLoop({ on: false }); lw.ui.selectMany([lw.store.project.tracks[0].clips[0].id, lw.store.project.tracks[1].clips[0].id]); });
+      await page.waitForTimeout(500);
+      const fl = await page.evaluate(() => { const v = (id) => { const e = document.getElementById(id); return !!e && !e.hidden && e.getBoundingClientRect().width > 0; }; return { fz: v('cf-freeze'), dup: v('cf-dup'), text: document.getElementById('cf-freeze')?.textContent }; });
+      check('Mehrfachauswahl: „Festhalten“ im Werkzeug am Clip statt „Kopie“', fl.fz && !fl.dup && fl.text === 'Festhalten', JSON.stringify(fl));
+      await page.click('#cf-freeze');
+      await fzWait(page, 3);
+      await page.waitForTimeout(300);
+      const d = await fzState(page);
+      check('Auswahl festhalten: Bereich = frühester Anfang bis spätestes Ende, Ergebnis gewählt', d.tracks[2] === 'Schleife 3' && /^0-(8|9|1\d)$/.test(d.clips[2].join()) && d.clips[0].join() === '0-8m' && !!d.sel, JSON.stringify(d));
+      await page.evaluate(() => window.loopwerk.store.undo());
+      // Voreinstellungen in den Feinheiten des Reiters Clip: gemerkt, Quellen stumm aus → Quellen klingen weiter
+      await page.evaluate(() => { const lw = window.loopwerk; lw.store.setLoop({ on: true, startBeat: 0, endBeat: 4 }); lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(300);
+      await page.click('#wb-tab-clip');
+      if (await page.evaluate(() => document.getElementById('wb-fine-btn-clip').getAttribute('aria-expanded') !== 'true')) await page.click('#wb-fine-btn-clip');
+      const prefs0 = await page.evaluate(() => ['wb-clip-mute', 'wb-fz-fx', 'wb-fz-fold', 'wb-fz-mute'].map((id) => document.getElementById(id)?.getAttribute('aria-pressed')));
+      check('Feinheiten Clip: Stumm aus; Festhalten mit Effekten, Falten, Quellen stumm an', prefs0.join() === 'false,true,true,true', prefs0.join());
+      await page.click('#wb-fz-mute');
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.make.freeze') || 'null'));
+      check('Voreinstellung „Quellen stumm“ ist gemerkt (lsKey loopwerk.freeze)', saved?.mute === false, JSON.stringify(saved));
+      await page.click('#freeze-btn');
+      await fzWait(page, 3);
+      await page.waitForTimeout(300);
+      const e = await fzState(page);
+      check('Quellen stumm aus: Quellen bleiben unverändert, Einblender „Festgehalten.“', e.clips[0].join() === '0-8' && e.hint === 'Festgehalten.', JSON.stringify([e.clips, e.hint]));
+      await page.evaluate(() => { window.loopwerk.store.undo(); localStorage.removeItem('loopwerk.make.freeze'); });
+      // Stumm-Schalter am Clip: ein Undo-Schritt
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(300);
+      await page.click('#wb-tab-clip');
+      if (await page.evaluate(() => document.getElementById('wb-fine-btn-clip').getAttribute('aria-expanded') !== 'true')) await page.click('#wb-fine-btn-clip');
+      const m0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+      await page.click('#wb-clip-mute');
+      await page.waitForTimeout(200);
+      const mu = await page.evaluate(() => ({ n: window.loopwerk.store.undoStack.length, mute: window.loopwerk.store.project.tracks[0].clips[0].mute === true }));
+      check('Stumm im Reiter Clip schaltet den Clip stumm, ein Undo-Schritt', mu.mute && mu.n === m0 + 1, JSON.stringify(mu));
+      await page.click('#wb-clip-mute');
+      const mu2 = await page.evaluate(() => window.loopwerk.store.project.tracks[0].clips[0].mute);
+      check('Stumm nochmal: Clip klingt wieder (Feld weg)', mu2 === undefined, String(mu2));
+      // Sicherung: Song-Werkbank, ZIP laden, Zurückholen
+      await page.evaluate(() => { window.loopwerk.ui.select(null); window.loopwerk.ui.selectTrack(null); });
+      if (await page.evaluate(() => !document.getElementById('app').classList.contains('insp-open'))) await page.click('.insp-toggle');
+      await page.waitForTimeout(400);
+      const vis = await page.evaluate(() => { const v = (id) => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; }; return { b: v('backup-btn'), r: v('restore-btn') }; });
+      check('Sicherung: „Alle eigenen Sounds sichern“ und „Sounds zurückholen“ stehen in der Song-Werkbank', vis.b && vis.r, JSON.stringify(vis));
+      await sound3(page, 'kw-sicherung-desktop.png');
+      const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#backup-btn')]);
+      const zipPath = path.join(tmp, dl.suggestedFilename());
+      await dl.saveAs(zipPath);
+      check('Sicherung: Datei „krachwerk-sounds-JJJJ-MM-TT.zip“', /^krachwerk-sounds-\d{4}-\d{2}-\d{2}\.zip$/.test(dl.suggestedFilename()) && fs.statSync(zipPath).size > 1000, dl.suggestedFilename());
+      const n = await page.evaluate(() => window.loopwerk.library.list().filter((x) => x.category === 'own').length);
+      await page.setInputFiles('#restore-input', zipPath);
+      await page.waitForFunction(() => /schon da/.test(document.getElementById('hint-text').textContent), null, { timeout: 8000 });
+      const h1 = await page.evaluate(() => document.getElementById('hint-text').textContent);
+      check('Zurückholen: alles schon da → „0 Sounds zurückgeholt, N waren schon da.“', h1 === `0 Sounds zurückgeholt, ${n} waren schon da.`, h1);
+      // Einen Sound löschen (nicht benutzt: Schleife 1), dann zurückholen
+      await page.evaluate(async () => { const lw = window.loopwerk; const id = lw.library.list().find((x) => x.name === 'Schleife 1').id; await lw.own.remove(id); });
+      await page.setInputFiles('#restore-input', zipPath);
+      await page.waitForFunction(() => /1 Sound zurückgeholt/.test(document.getElementById('hint-text').textContent), null, { timeout: 8000 });
+      const h2 = await page.evaluate(() => document.getElementById('hint-text').textContent);
+      check('Zurückholen: der fehlende Sound kommt wieder („1 Sound zurückgeholt, … waren schon da.“)', h2 === `1 Sound zurückgeholt, ${n - 1} waren schon da.`, h2);
+      const back = await page.evaluate(() => window.loopwerk.library.list().some((x) => x.name === 'Schleife 1'));
+      check('Zurückholen: Sound steht wieder in der Kiste', back);
+      // Füllstand in der Kiste
+      await page.waitForTimeout(600);
+      const fill = await page.evaluate(async () => { const u = await window.loopwerk.own.usage(); return { text: document.getElementById('shelf-store').textContent, mb: Math.max(1, Math.round(u.bytes / 1048576)), quota: u.quota, bytes: u.bytes }; });
+      check('Kiste: letzte Zeile „Eigene: N MB“ = Füllstand', fill.text === `Eigene: ${fill.mb} MB`, JSON.stringify(fill));
+      check('Konsole ohne Fehler (Desktop Festhalten)', k.errors.length === 0, k.errors.join(' | '));
+      await ctx.close();
+    }
+
+    // ----- Handy: ab Loop an in 2 Tipps, Werkbank öffnet, Bilder -----
+    {
+      const ctx = await browser.newContext(PHONE);
+      const k = await openKw(base, ctx);
+      const page = k.page;
+      await fzScene(page, { loop: false });
+      await page.waitForTimeout(300);
+      await page.tap('#loop-btn');
+      await page.waitForFunction(() => window.loopwerk.store.project.loop.on, null, { timeout: 3000 });
+      await page.waitForTimeout(300);
+      const geo = await page.evaluate(() => { const b = document.getElementById('freeze-btn'), r = b.getBoundingClientRect(), ru = document.querySelector('.ruler').getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { vis: !b.hidden && r.width > 0, hit: hit === b, inRuler: r.top >= ru.top - 1 && r.bottom <= ru.bottom + 1, over: document.documentElement.scrollWidth > innerWidth }; });
+      check('Handy: Festhalten im Lineal sichtbar und antippbar, kein waagerechtes Scrollen', geo.vis && geo.hit && geo.inRuler && !geo.over, JSON.stringify(geo));
+      await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks[0].clips[0].id); });
+      await page.waitForTimeout(500);
+      const dens = await countUi(page);
+      check('Zählung Handy „Clip gewählt“ ≤ 18 / ≤ 8 / ≤ 5 / ≥ 11', dens.controls <= 18 && dens.frames <= 8 && dens.sizes <= 5 && dens.minFont >= 11, JSON.stringify(dens));
+      await page.evaluate(() => window.loopwerk.ui.select(null));
+      await page.waitForTimeout(300);
+      await sound3(page, 'kw-festhalten-handy-loop.png');
+      await page.tap('#freeze-btn');
+      await fzWait(page, 3);
+      await page.waitForTimeout(900);
+      const a = await fzState(page);
+      const dock = await page.evaluate(() => window.loopwerk.ui.dock);
+      check('Handy: zwei Tipps (Loop an, Festhalten) → Spur „Schleife 1“, Werkbank offen mit dem Clip', a.tracks[2] === 'Schleife 1' && dock === 'werkbank' && a.wb === 'Schleife 1', JSON.stringify([a.tracks, dock, a.wb]));
+      await sound3(page, 'kw-festhalten-handy.png');
+      await page.evaluate(() => window.loopwerk.ui.setDock(null));
+      await page.waitForTimeout(500);
+      await sound3(page, 'kw-festhalten-handy-ergebnis.png');
+      await page.evaluate(() => window.loopwerk.ui.setDock('song'));
+      await page.waitForTimeout(700);
+      const sv = await page.evaluate(() => { const v = (id) => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; }; return { b: v('backup-btn'), r: v('restore-btn'), over: document.documentElement.scrollWidth > innerWidth }; });
+      check('Handy: Sichern und Zurückholen im Song-Fach, kein waagerechtes Scrollen', sv.b && sv.r && !sv.over, JSON.stringify(sv));
+      await sound3(page, 'kw-sicherung-handy.png');
+      check('Konsole ohne Fehler (Handy Festhalten)', k.errors.length === 0, k.errors.join(' | '));
+      await ctx.close();
+    }
+
     // ---------- 10: Pages-Build ----------
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });
     const site = path.join(__dirname, '..', '_site', 'werkstatt');
@@ -1234,6 +1431,8 @@ async function seedPadWall() {
     const keys = await lw.evaluate(() => Object.keys(localStorage));
     check('Loopwerk: keine abgeschalteten Flächen, Edition „full“, kein Service Worker, Bildmarke mit 5 Balken', lwInfo.off === 0 && lwInfo.bars === 5 && !lwInfo.mark && !lwInfo.splash && lwInfo.ed === 'full' && lwInfo.dens !== 'calm' && /Loopwerk$/.test(lwInfo.title) && !lwInfo.sw, JSON.stringify(lwInfo));
     check('Loopwerk: Schlüssel wie bisher (loopwerk.project.v1, loopwerk.snap)', keys.includes('loopwerk.project.v1') && keys.includes('loopwerk.snap') && !keys.some((k) => k.startsWith('loopwerk.make.')), keys.join(','));
+    const lwFz = await lw.evaluate(() => ({ btn: !!document.getElementById('freeze-btn'), cf: !!document.getElementById('cf-freeze'), store: !!document.getElementById('shelf-store'), bk: !!document.getElementById('backup-btn') }));
+    check('Loopwerk: ohne „Festhalten“, Füllstand und Sicherung', !lwFz.btn && !lwFz.cf && !lwFz.store && !lwFz.bk, JSON.stringify(lwFz));
     await L.close();
     const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'count-baseline.json'), 'utf8'));
     const now = {};

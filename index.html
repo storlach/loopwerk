@@ -161,6 +161,9 @@
 <link rel="modulepreload" href="src/dsp/recipe.js">
 <link rel="modulepreload" href="src/cuts.js">
 <link rel="modulepreload" href="src/dsp/slice.js">
+<link rel="modulepreload" href="src/ui/freeze-ui.js">
+<link rel="modulepreload" href="src/freeze.js">
+<link rel="modulepreload" href="src/sound-backup.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2927,6 +2930,19 @@
   #app[data-density="calm"] .cf-btn:hover:not(:disabled) { background: var(--deck-2); }
   #app[data-density="calm"] .cf-btn:disabled { opacity: 0.4; cursor: default; }
   #app[data-density="calm"] .cf-del { color: var(--danger); margin-left: 6px; }
+  /* Festhalten (Scheibe 3a, src/ui/freeze-ui.js): Linie im Lineal rechts am Loop-Bereich, Fortschritt als Linie, stumme Clips ruhen */
+  .clip.muted { opacity: 0.5; }
+  #app[data-density="calm"] .fz-btn { position: absolute; top: 12px; z-index: 3; height: 16px; padding: 0 2px; border: 0; border-bottom: 1px solid var(--ink); border-radius: 0; background: var(--bg); color: var(--ink); font: 500 var(--fs-11)/14px var(--font-body); cursor: pointer; white-space: nowrap; }
+  #app[data-density="calm"] .fz-btn::before { content: ""; position: absolute; inset: -8px -8px -4px; }
+  #app[data-density="calm"] .fz-btn:hover:not(:disabled) { text-shadow: var(--glow-ink); }
+  #app[data-density="calm"] .fz-btn:disabled { color: var(--muted); border-bottom-color: var(--line); cursor: default; }
+  #app[data-density="calm"] .fz-prog { position: absolute; bottom: 0; height: 2px; width: calc(var(--fz-w, 0px) * var(--fz-f, 0)); background: var(--ink); box-shadow: var(--glow-ink); pointer-events: none; }
+  #app[data-density="calm"] .shelf-store { padding: 6px 14px 10px; font-size: var(--fs-11); color: var(--muted); }
+  #app[data-density="calm"] .shelf-store.full { color: var(--ink); }
+  @media (max-width: 760px) {
+    #app[data-density="calm"] .fz-btn { top: 18px; font-size: var(--fs-13); height: 20px; line-height: 18px; }
+    #app[data-density="calm"] .fz-btn::before { inset: -14px -12px -6px; }
+  }
   /* Werkbank: nichts Gesperrtes zeigen; Wörter in Sans (Zahlen bleiben tabellarisch) */
   #app[data-density="calm"] .insp :is(button, input):disabled { display: none; }
   #app[data-density="calm"] output { font-variant-numeric: tabular-nums; }

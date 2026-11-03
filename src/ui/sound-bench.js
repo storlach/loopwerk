@@ -9,6 +9,7 @@ import { MATERIALS, RECIPE, TUNE_KEYS, materialOf, recipeGesture, recipeSteps, s
 import { layoutCuts } from '../cuts.js';
 import { clamp, el } from '../util.js';
 import { lsKey } from '../edition.js';
+import { freezePrefs, setFreezePrefs } from '../freeze.js';
 import { formatCurve, formatDb } from './arranger.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { mountWaveHandles, cookedSeconds } from './wave-handles.js';
@@ -22,8 +23,8 @@ const FINE_KEY = lsKey('loopwerk.wbFine');
 const SENS_KEY = lsKey('loopwerk.cutSens');
 const TABS = [['form', 'Form'], ['ton', 'Ton'], ['farbe', 'Farbe'], ['zeit', 'Zeit'], ['zerlegen', 'Zerlegen'], ['clip', 'Clip']];
 const CUT_MIN = 1; // s: kürzere Sounds haben nichts zu zerlegen
-const UNDO_NAMES = ['Zerlegen', 'Trennen', 'Als Variante']; // Schritte, deren Rückgängig einen Einblender bekommt
-const SOURCE = { mic: 'Aufnahme', file: 'Datei', loop: 'Schleife' };
+const UNDO_NAMES = ['Zerlegen', 'Trennen', 'Als Variante', 'Festhalten']; // Schritte, deren Rückgängig einen Einblender bekommt
+const SOURCE = { mic: 'Aufnahme', file: 'Datei', loop: 'Schleife', freeze: 'Festgehalten' };
 const NOTE = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'H'];
 
 const load = (key) => { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; } };
@@ -57,6 +58,8 @@ export function treeText(s, r, lib) {
   const steps = recipeSteps(r);
   const dur = (lib.source?.(s) ?? s.orig)?.duration ?? s.duration;
   const parts = [`${mat.label} · ${src}${when}`];
+  const zut = (root?.made?.src || []).map((id) => lib.get(id)?.name).filter(Boolean);
+  if (root?.made?.from === 'freeze' && zut.length) parts[0] += ` aus ${zut.join(', ')}`;
   if (steps.length) parts[0] += ` → ${steps.join(' · ')}`;
   if (dur) parts[0] += ` · ${comma(dur, 2)} s`;
   return (s.parentId ? `Variante von ${root?.name ?? '?'} → ` : '') + parts[0];
@@ -646,6 +649,12 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     const chips = el('div', 'wb-chips');
     mountClipSpeed(speedBox, { store, ui, library, chipsIn: chips });
     fine.append(chips);
+    // Stumm (ein Undo-Schritt) und die Voreinstellungen fürs Festhalten (gemerkt, Spec 3a §2)
+    toggle(fine, 'Stumm', 'wb-clip-mute', () => !!clipNow()?.mute, (on) => { const c = clipNow(); if (c) store.setClip(c.id, { mute: on }); });
+    const pref = (label, id, key) => toggle(fine, label, id, () => !!freezePrefs()[key], (on) => { setFreezePrefs({ [key]: on }); render(); });
+    pref('Festhalten mit Spur-Effekten', 'wb-fz-fx', 'fx').title = 'Festgehaltene Spuren klingen mit ihren Effekten';
+    pref('Ausklang an den Anfang falten', 'wb-fz-fold', 'fold').title = 'Beim Loop-Bereich: der Hall klingt am Anfang der Schleife weiter, sie wiederholt sich nahtlos';
+    pref('Festhalten: Quellen stumm', 'wb-fz-mute', 'mute').title = 'Die Clips im Bereich werden stumm, die neue Schleife übernimmt';
     cslider(fine, 'Kurve Einblenden', 'wb-curve-in', -1, 1, 0.05, (c) => c.fadeInCurve || 0, (c, v, k) => store.setClip(c.id, { fadeInCurve: v }, k), formatCurve, 'insp-fadeInCurve');
     cslider(fine, 'Kurve Ausblenden', 'wb-curve-out', -1, 1, 0.05, (c) => c.fadeOutCurve || 0, (c, v, k) => store.setClip(c.id, { fadeOutCurve: v }, k), formatCurve, 'insp-fadeOutCurve');
   }

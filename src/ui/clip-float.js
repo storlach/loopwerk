@@ -1,4 +1,5 @@
 // Werkzeug am Clip (Dichte „calm“): eine kleine Leiste über dem gewählten Clip – Teilen · Kopie · Löschen, am Handy dazu Werkbank.
+// Bei Mehrfachauswahl steht „Festhalten“ statt „Kopie“ (onFreeze).
 // Passt sie nicht darüber, sitzt sie darunter; immer innerhalb von #arr-wrap, nie auf dem Clip. Folgt Scrollen und Zoom.
 // Schreibt nur über die Werkzeuge (tools.split/duplicate/remove), jedes ist ein Undo-Schritt.
 
@@ -7,7 +8,7 @@ import { narrow } from './place.js';
 
 const GAP = 6;
 
-export function mountClipFloat({ store, ui, tools }) {
+export function mountClipFloat({ store, ui, tools, onFreeze = null }) {
   const wrap = document.getElementById('arr-wrap');
   const scroll = document.getElementById('arr-scroll');
   const bar = el('div', 'clip-float');
@@ -27,7 +28,9 @@ export function mountClipFloat({ store, ui, tools }) {
   };
   const wbBtn = add('cf-werkbank', 'Werkbank', 'Werkbank für diesen Clip öffnen', () => ui.setDock('werkbank'));
   const splitBtn = add('cf-split', 'Teilen', 'Clip an der Abspielmarke teilen (T)', () => tools.split());
-  add('cf-dup', 'Kopie', 'Kopie direkt dahinter legen (Strg+D)', () => tools.duplicate());
+  const dupBtn = add('cf-dup', 'Kopie', 'Kopie direkt dahinter legen (Strg+D)', () => tools.duplicate());
+  // Bei Mehrfachauswahl nimmt „Festhalten“ den Platz von „Kopie“ (Krachwerk, Scheibe 3a)
+  const fzBtn = onFreeze ? add('cf-freeze', 'Festhalten', 'Die gewählten Clips als neue Schleife festhalten (F)', () => onFreeze(ui.multi.slice())) : null;
   add('cf-del', 'Löschen', 'Clip löschen (Entf) – Rückgängig holt ihn zurück', () => tools.remove(), 'cf-del');
   wrap.append(bar);
 
@@ -44,6 +47,7 @@ export function mountClipFloat({ store, ui, tools }) {
     if (!show) return;
     const many = ui.multi.length > 1;
     splitBtn.disabled = many;
+    if (fzBtn) { fzBtn.hidden = !many; dupBtn.hidden = many; }
     wbBtn.hidden = !narrow.matches;
     const w = wrap.getBoundingClientRect();
     const c = node.getBoundingClientRect();
