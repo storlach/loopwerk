@@ -1163,7 +1163,7 @@ async function seedPadWall() {
         const t0 = performance.now();
         const f = () => {
           const r = root.getBoundingClientRect();
-          out.push({ live: root.classList.contains('live'), s: bars.map((b) => +(/scaleY\(([\d.]+)\)/.exec(b.style.transform)?.[1] ?? NaN)),
+          out.push({ t: performance.now(), live: root.classList.contains('live'), s: bars.map((b) => +(/scaleY\(([\d.]+)\)/.exec(b.style.transform)?.[1] ?? NaN)),
             mid: bars.map((b) => { const q = b.getBoundingClientRect(); return Math.round(Math.abs(q.top + q.height / 2 - (r.top + r.height / 2)) * 10) / 10; }),
             hpx: bars.map((b) => b.offsetHeight) });
           if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(out);
@@ -1189,9 +1189,9 @@ async function seedPadWall() {
       const live = run.filter((x) => x.live);
       const spread = Math.max(...run.map((x) => Math.max(...x.s.map((v, i) => Math.abs(v - IDLE[i])))));
       let jump = 0;
-      for (let i = 1; i < run.length; i++) for (let b = 0; b < 7; b++) jump = Math.max(jump, Math.abs(run[i].s[b] - run[i - 1].s[b]) * 22);
+      for (let i = 1; i < run.length; i++) for (let b = 0; b < 7; b++) jump = Math.max(jump, (Math.abs(run[i].s[b] - run[i - 1].s[b]) * 22) / Math.max(1, (run[i].t - run[i - 1].t) / (1000 / 60))); // je Bild bei 60 fps: ein ausgefallenes Bild ist kein Sprung
       check('Pegel bewegt den Klatscher: Ausschlag mit dem Ton, nur transform (keine Layout-Höhe), Mitte bleibt', live.length > 5 && spread > 0.25 && run.every((x) => x.hpx.every((h) => h === run[0].hpx[0]) && x.mid.every((m) => m <= 0.5)), `${live.length} Bilder laut, Ausschlag ${spread.toFixed(2)}`);
-      check('Klatscher ohne Sprung: höchstens 8 px Änderung je Bild', jump <= 8, `${jump.toFixed(1)} px`);
+      check('Klatscher ohne Sprung: höchstens 8 px Änderung je Bild (60 fps)', jump <= 8, `${jump.toFixed(1)} px`);
       await pk.waitForTimeout(1600);
       const back = (await track(60)).at(-1);
       check('Nach dem Ton zurück in die Grundform', back.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005) && !back.live, JSON.stringify(back.s));
