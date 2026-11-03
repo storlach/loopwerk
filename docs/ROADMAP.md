@@ -277,6 +277,11 @@
 - Inspektor und Handy-Clip-Leiste: Zeile „Tonart · erkannt“ mit Auswahl (ändern, „keine“) und Schalter „Folgt Song“ (`src/ui/sound-key.js`, im Projekt `project.soundKeys`, Rückgängig). Folgende Sounds werden in die Song-Tonart umgestimmt (WSOLA + Umtasten, gleiche Länge, `pitchShift` in `src/dsp/stretch.js`), auch je Takt; Dur-Sounds über die parallele Moll-Tonart. Regal: Tonart im Hinweis wie bei Katalog-Sounds
 - Test `tests/key-detect.test.cjs` (24/24 Kadenzen, A-Moll-Folge, C-Dur-Tonleiter, Schlagzeug/Rauschen/Einzelton = keine, Tonhöhe 440 → 523,25/587,33/329,63 Hz)
 
+## ✅ Mehr FX-One-Shots
+- 30 neue FX (`src/loops-fx.js`, eigene Klänge, CC0, Präfix `fxs-`): Riser (Rausch kurz, Gate 4 Takte, Ton, Filter, Endlos/Shepard, Snare-Build), Downlifter kurz, Abwärts-Gleiter, Bass-Einschlag, Donnerschlag, Rückwärts-Crash, Rückwärts-Hall, Vorbeiflug, Jet-Sweep, Zap-Salve, Power-Up, Glitch-Stotterer, Dub-Sirene, Tape-Stopp, Tape-Anlauf, Rückspulen, Scratch, Rausch-Stoß, Funkeln, Wassertropfen, Glas-Ping, Flächen-Anschwellen, Radio-Rauschen, Herzschlag, Gong. Meist sampleweise gerechnet (`kit.pcm`): Zeiten in Schlägen, Ausklänge passen sich der Länge an, Ende ausgeblendet; Suchwörter (`tags`) für das Regal
+- Test `tests/fx-shots.test.cjs`: Länge bei 93/120/150 BPM, kein NaN/Clipping/Gleichanteil, leises Ende, Lautheit (RMS, 400-ms-Fenster, LUFS) wie die vorhandenen FX, Riser steigen und werden heller, Downlifter fallen, Regal-Suche und Export-Weg
+- Weitere CC0-Kandidaten aus Sonic Pi (noch nicht übernommen): `vinyl_backspin`, `vinyl_rewind`, `vinyl_scratch`, `ambi_dark_woosh`, `ambi_lunar_land`, `perc_impact_1/2`, `perc_swoosh`, `perc_swash`, `glitch_robot_1/2`
+
 ## 🧪 Krachwerk – Loopwerk zum Selbermachen (Branch `werkstatt`)
 - Brainstorm mit ux-designer, ui-designer, architekt, creative-director: `docs/ux/krachwerk-brainstorm/` (Zielbild: Song · Werkbank · Kiste, ruhiger bei gleichem Funktionsumfang). Der erste Prototyp (Pad-Wand ohne Arranger) ist zurückgebaut.
 - ✅ Scheibe 1a „Gerüst und erster Laut“ (`docs/specs/krachwerk-1-geruest.md`, ADR 007): volle App unter `/werkstatt/` ohne mitgelieferte Sounds, leerer Song (2 Spuren, 90 BPM), eigener Speicher inkl. der Pad-Wand-Klänge, ● nimmt ohne Vorzähler auf, säubert und legt den Klang als Clip in den Loop; PWA, eigenes Icon; Zählung Desktop „Clip gewählt“ 55 statt 114 Bedienelemente
