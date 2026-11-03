@@ -23,11 +23,13 @@ export const delay = {
 - Immer einen Dry/Wet-Anteil (`mix`) vorsehen, Standard so, dass der Effekt hörbar, aber nicht aufdringlich ist.
 - Tempo-synchrone Zeiten (`syncable`) als Notenwerte anbieten (1/4, 1/8, 1/8 punktiert) – umgerechnet über `spb`.
 
-## 2. Modell
-- Spur bekommt `effects: [{ id, type, params, bypass }]`. Änderungen über Store-Aktionen (`addEffect`, `setEffectParam` mit `coalesce` beim Drehen, `removeEffect`).
+## 2. Modell (ADR 008)
+- Spur und Master haben `fx` als Objekt mit einem Eintrag je Effekttyp (`fx.filter = { on, cutoff, … }`, `withFx` füllt auf). Änderungen über `setTrackFx`/`setMasterFx` (mit `coalesce` beim Drehen).
+- Reihenfolge: optionales `fxOrder` (Liste von Effekt-IDs) an Spur und `project.master`; `fxOrderOf(owner)` bereinigt (Unbekannte/Doppelte weg, Fehlende hinten in `EFFECT_IDS`). Store: `moveFx(target, fxId, toIndex)`, `resetFxOrder(target)`; die Grundreihenfolge speichert kein Feld. Jeder Effekt steht höchstens einmal in der Kette.
+- Ein neuer Effekt kommt in `EFFECTS` (Grundreihenfolge) und damit automatisch in jede Reihenfolge (hinten an, wenn eine Spur schon eine eigene hat).
 
 ## 3. Engine
-- `buildMix` hängt die Kette zwischen Spur-Gain und Panner ein; Änderungen an der Kette während der Wiedergabe ohne Aussetzer (neue Kette aufbauen, überblenden, alte entsorgen).
+- `buildMix` hängt die Kette zwischen Spur-Gain und Panner ein, `buildFxChain(ctx, fx, spb, grid, order)` in der Reihenfolge `order`. Änderungen an der Kette während der Wiedergabe ohne Aussetzer (neue Kette aufbauen, überblenden, alte entsorgen). Wechselt nur die Reihenfolge (`fxKey` mit gleicher Menge), blendet `installChain(…, { keepTail: true })` die Eingänge über und lässt die alte Kette ausklingen (Hall/Echo-Fahne bleibt).
 - Parameteränderungen mit `setTargetAtTime`.
 
 ## 4. UI

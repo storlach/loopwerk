@@ -4,7 +4,7 @@
 import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, tapeRate, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
-import { buildFxChain, fxKey, updateFxParams } from './effects.js';
+import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
 import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey } from './automation.js';
 
@@ -98,38 +98,66 @@ const dbGain = (db) => Math.pow(10, db / 20);
 // Verstärkungen fürs Mastering, solange die Analyse des Songs noch fehlt („Vorhalt“)
 export const defaultMasterGains = (style) => ({ pre: 0, drive: styleOf(style).drive });
 
-// Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet.
-function installChain(ctx, strip, fx, spb, live, grid) {
-  const chain = buildFxChain(ctx, fx, spb, grid);
+// Wie lange eine Kette nachklingt (Hall 0,6 + 3,5·Größe s, Echo bis 4 s, höchstens 4,5 s)
+function chainTail(chain, fx) {
+  let tail = 0.12;
+  if (chain.units.hall) tail = Math.max(tail, 0.6 + 3.5 * withFx(fx).hall.size);
+  if (chain.units.echo) tail = Math.max(tail, 4);
+  return Math.min(4.5, tail);
+}
+
+// Aufräumen nach Ablauf (keine Klangereignisse): Offline braucht es nicht, der Kontext endet ohnehin
+function later(ctx, seconds, fn) {
+  if (typeof OfflineAudioContext !== 'undefined' && ctx instanceof OfflineAudioContext) return;
+  setTimeout(fn, seconds * 1000);
+}
+
+// Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet. keepTail (nur die
+// Reihenfolge wechselt): die Eingänge werden überblendet, der Ausgang der alten Kette bleibt verbunden, bis Hall und Echo
+// ausgeklungen sind – die Fahne reißt nicht ab.
+function installChain(ctx, strip, fx, spb, live, grid, order = EFFECT_IDS, { keepTail = false } = {}) {
+  const chain = buildFxChain(ctx, fx, spb, grid, order);
   const xf = ctx.createGain();
   chain.output.connect(xf).connect(strip.auto);
   strip.input.connect(chain.input);
   const old = strip.chain;
   const oldXf = strip.xf;
   if (old) {
-    if (live) {
+    const drop = () => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); old.dispose(); };
+    if (live && keepTail) {
+      const t = ctx.currentTime;
+      chain.input.gain.setValueAtTime(0, t);
+      chain.input.gain.linearRampToValueAtTime(1, t + 0.03);
+      old.input.gain.setValueAtTime(old.input.gain.value, t);
+      old.input.gain.linearRampToValueAtTime(0, t + 0.03);
+      later(ctx, chainTail(old, strip.fx) + 0.1, drop);
+    } else if (live) {
       const t = ctx.currentTime;
       xf.gain.setValueAtTime(0, t);
       xf.gain.linearRampToValueAtTime(1, t + 0.03);
       oldXf.gain.setValueAtTime(oldXf.gain.value, t);
       oldXf.gain.linearRampToValueAtTime(0, t + 0.03);
-      setTimeout(() => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); old.dispose(); }, 120);
+      setTimeout(drop, 120);
     } else {
-      strip.input.disconnect(old.input);
-      oldXf.disconnect();
-      old.dispose();
+      drop();
     }
   }
   strip.chain = chain;
   strip.xf = xf;
+  strip.fx = fx;
 }
 
-function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid, skip = {}) {
+function syncStrip(ctx, strip, level, panValue, fx, order, spb, live, grid, skip = {}) {
   const t = live ? ctx.currentTime : null;
   if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
   if (strip.pan && !skip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
-  if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live, grid);
-  else updateFxParams(strip.chain, fx, t, spb, grid, skip.fx);
+  const key = fxKey(fx || {}, order);
+  if (!strip.chain || strip.chain.key !== key) {
+    installChain(ctx, strip, fx, spb, live, grid, order, { keepTail: !!strip.chain && sameFxSet(strip.chain.key, key) });
+  } else {
+    strip.fx = fx;
+    updateFxParams(strip.chain, fx, t, spb, grid, skip.fx);
+  }
 }
 
 export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
@@ -261,10 +289,10 @@ export function syncMix(ctx, project, mix, spb, live = true) {
       mix.tracks.set(track.id, strip);
       mix.onStrip?.(track.id, strip);
     }
-    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid, skipOf(track));
+    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, fxOrderOf(track), spb, live && strip.chain != null, mix.grid, skipOf(track));
   }
   const m = masterOf(project);
-  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid, skipOf(m));
+  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, fxOrderOf(m), spb, live && mix.masterStrip.chain != null, mix.grid, skipOf(m));
   syncMastering(ctx, project, mix, live && mix.masterStrip.chain != null && mix.synced === true);
   mix.synced = true;
 }

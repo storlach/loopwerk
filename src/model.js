@@ -3,7 +3,7 @@
 
 import { Emitter } from './util.js';
 import { KEYS, KEY_MAJOR, minorOf, wrapSemis, isSoundKey } from './keys.js';
-import { withFx } from './effects.js';
+import { withFx, fxOrderOf, isDefaultOrder } from './effects.js';
 import { isChord } from './harmony.js';
 import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
@@ -335,9 +335,13 @@ const autoOk = (a) => a == null || (typeof a === 'object' && !Array.isArray(a));
 // Klang-Rezepte (ADR 010) ebenso optional: nur als Objekt
 const recipesOk = autoOk;
 
+// Effekt-Reihenfolge (ADR 008): Liste oder fehlt
+const orderOk = (o) => o == null || Array.isArray(o);
+
 export function isValidProject(p) {
-  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation))
-    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation) && recipesOk(p.recipes);
+  return p && p.version === PROJECT_VERSION && Array.isArray(p.tracks) && p.tracks.every((t) => Array.isArray(t.clips) && autoOk(t.automation) && orderOk(t.fxOrder))
+    && (p.keyChanges == null || Array.isArray(p.keyChanges)) && (p.chords == null || Array.isArray(p.chords)) && autoOk(p.master?.automation) && recipesOk(p.recipes)
+    && orderOk(p.master?.fxOrder);
 }
 
 export class Store extends Emitter {
@@ -889,6 +893,30 @@ export class Store extends Emitter {
       p.master = { volume: 0.85, fx: null, ...(p.master || {}) };
       p.master.mastering = { on: !!next.on, style: next.style };
     });
+  }
+
+  // Effekt-Reihenfolge (target = Spur-ID oder 'master'): fxId an Platz toIndex, ein Schritt. Die Grundreihenfolge
+  // speichert kein Feld, damit alte und neue Dateien gleich bleiben.
+  moveFx(target, fxId, toIndex) {
+    const owner = this._autoOwner(target);
+    const order = fxOrderOf(owner);
+    const from = order.indexOf(fxId);
+    if (from < 0 || (target !== 'master' && !owner)) return;
+    const to = Math.max(0, Math.min(order.length - 1, Math.round(toIndex)));
+    if (to === from) return;
+    const next = order.slice();
+    next.splice(from, 1);
+    next.splice(to, 0, fxId);
+    this.dispatch('fx-order', () => {
+      const o = this._autoOwner(target, true);
+      if (isDefaultOrder(next)) delete o.fxOrder; else o.fxOrder = next;
+    });
+  }
+
+  resetFxOrder(target) {
+    const owner = this._autoOwner(target);
+    if (!owner?.fxOrder) return;
+    this.dispatch('fx-order', () => { delete this._autoOwner(target).fxOrder; });
   }
 
   setMasterFx(fxId, patch, coalesce) {

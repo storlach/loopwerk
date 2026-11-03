@@ -3,7 +3,8 @@
 // (Spur-Lautstärke, Panorama, Verlauf, Effekte). Spur → nur der Spur-Abschnitt.
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
-import { EFFECTS, withFx } from '../effects.js';
+import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf } from '../effects.js';
+import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
@@ -228,6 +229,13 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     sw.type = 'button';
     sw.setAttribute('aria-label', `${e.label} ein/aus`);
     sw.addEventListener('click', () => setFx(e.id, { on: !fxOf()[e.id].on }));
+    // Alt+↑/↓: einen Platz weiter (wie Alt+Pfeil bei Clips)
+    sw.addEventListener('keydown', (ev) => {
+      if (!ev.altKey || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      fxDrag.step(e.id, ev.key === 'ArrowUp' ? -1 : 1);
+    });
     const name = el('span', 'fxl-name', e.label);
     name.addEventListener('click', () => sw.click());
     const sum = el('span', 'fxl-sum');
@@ -266,6 +274,24 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     fxl.append(item);
     items.set(e.id, { item, sw, sum, ctl });
   }
+  // Reihenfolge: oben ist der Eingang; am Namen ziehen ordnet um (ADR 008)
+  const fxOwner = () => (trackId === MASTER ? masterOf(store.project) : store.track(trackId));
+  const fxTarget = () => (trackId === MASTER ? 'master' : trackId);
+  const fxDrag = mountFxDrag(fxl, {
+    ids: EFFECT_IDS,
+    itemOf: (id) => items.get(id).item,
+    handleOf: (id) => items.get(id).item.querySelector('.fxl-name'),
+    getOrder: () => fxOrderOf(fxOwner()),
+    onMove: (id, to) => {
+      if (!trackId) return;
+      store.moveFx(fxTarget(), id, to);
+      const order = fxOrderOf(fxOwner());
+      ui.flash?.(orderText(order, id, order.filter((x) => !items.get(x).item.hidden)));
+    },
+  });
+  const fxReset = resetLink(() => { if (trackId) store.resetFxOrder(fxTarget()); });
+  fxReset.node.id = 'insp-fx-reset';
+
   // Kompakt (Krachwerk): nur eingeschaltete Effekte, die übrigen über „+ Effekt“
   const addFx = el('button', 'wb-fine-btn', '+ Effekt');
   addFx.type = 'button';
@@ -439,7 +465,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
         pan.out.textContent = panText(track.pan || 0);
       }
-      if (fxl.parentElement !== trackSec) trackSec.append(fxl, addFx, fxPick, mixerLink);
+      if (fxl.parentElement !== trackSec) trackSec.append(fxl, fxReset.node, addFx, fxPick, mixerLink);
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
       autoBlock.hidden = fxCompact && !autoOpen;
       fineBtn.setAttribute('aria-expanded', String(autoOpen));
@@ -457,7 +483,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       lenOut.textContent = `${store.project.lengthBars} Takte`;
       // Master-Lautstärke und Master-Effekte unter „Master“
       const m = masterOf(store.project);
-      if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl);
+      if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl, fxReset.node);
       masterTpl.update();
       const open = !!ui.autoLane?.isOpen('master');
       const has = autoKeys('master').some((k) => laneOf(m, k).length);
@@ -469,6 +495,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();
+    const owner = mode === 'sound' ? null : fxOwner();
+    applyOrder(fxl, fxOrderOf(owner), (id) => items.get(id).item);
+    fxReset.update(owner);
     const compact = fxCompact && mode === 'track';
     addFx.hidden = !compact;
     if (!compact) fxPick.hidden = true;

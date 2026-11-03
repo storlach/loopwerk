@@ -1,4 +1,5 @@
-// Effekte: festes Rack pro Kanal (Verzerrer → Filter → EQ → Kompressor → Pumpen → Echo → Hall), wie im Music-Maker-Mixer.
+// Effekte: Rack pro Kanal (Grundreihenfolge Verzerrer → Filter → EQ → Kompressor → Pumpen → Echo → Hall, umstellbar
+// über fxOrder, ADR 008), wie im Music-Maker-Mixer.
 // Jeder Effekt funktioniert mit AudioContext und OfflineAudioContext (gleiche Signalkette für Export und Tests).
 // set(p, t, spb, grid, skip): grid ist die Kontextzeit von Schlag 0 des Songs – daran richten sich LFOs im Takt aus.
 // u.auto = { <param>: { param, map } }: AudioParams, die eine Kurve übernehmen kann (Automation, ADR 006). map rechnet den
@@ -482,28 +483,46 @@ export function withFx(fx) {
   return base;
 }
 
-// Baut die Effektkette für den aktuellen Zustand. Nur eingeschaltete Effekte liegen im Signalweg. Alle Parameter bekommen
-// ihren Reglerwert als Startwert; Kurven plant die Engine gleich danach darüber (Offline ab 0, live ab jetzt).
-export function buildFxChain(ctx, fxState, spb, grid = 0) {
+// Reihenfolge der Kette (ADR 008): owner.fxOrder ohne Unbekannte und Doppelte, fehlende Effekte in der Grundreihenfolge
+// hinten dran. Ohne Feld gilt EFFECT_IDS.
+export function fxOrderOf(owner) {
+  const list = Array.isArray(owner?.fxOrder) ? owner.fxOrder : null;
+  if (!list) return EFFECT_IDS;
+  const out = [];
+  for (const id of list) if (EFFECT_IDS.includes(id) && !out.includes(id)) out.push(id);
+  for (const id of EFFECT_IDS) if (!out.includes(id)) out.push(id);
+  return out;
+}
+export const isDefaultOrder = (order) => order.length === EFFECT_IDS.length && order.every((id, i) => id === EFFECT_IDS[i]);
+const EFFECT_BY_ID = Object.fromEntries(EFFECTS.map((e) => [e.id, e]));
+
+// Baut die Effektkette für den aktuellen Zustand. Nur eingeschaltete Effekte liegen im Signalweg, in der Reihenfolge
+// `order`. Alle Parameter bekommen ihren Reglerwert als Startwert; Kurven plant die Engine gleich danach darüber
+// (Offline ab 0, live ab jetzt).
+export function buildFxChain(ctx, fxState, spb, grid = 0, order = EFFECT_IDS) {
   const fx = withFx(fxState);
   const input = ctx.createGain();
   const output = ctx.createGain();
   const units = {};
   let last = input;
-  for (const e of EFFECTS) {
-    if (!fx[e.id].on) continue;
+  for (const id of order) {
+    const e = EFFECT_BY_ID[id];
+    if (!e || !fx[id].on) continue;
     const u = e.create(ctx);
-    u.set(fx[e.id], null, spb, grid);
+    u.set(fx[id], null, spb, grid);
     last.connect(u.input);
     last = u.output;
-    units[e.id] = u;
+    units[id] = u;
   }
   last.connect(output);
   const dispose = () => { for (const u of Object.values(units)) u.dispose?.(); };
-  return { input, output, units, key: fxKey(fx), dispose };
+  return { input, output, units, key: fxKey(fx, order), dispose };
 }
 
-export const fxKey = (fx) => EFFECT_IDS.filter((id) => fx?.[id]?.on).join('+');
+// Eingeschaltete Effekte in Reihenfolge; in der Grundreihenfolge derselbe Schlüssel wie vor 2.14
+export const fxKey = (fx, order = EFFECT_IDS) => order.filter((id) => fx?.[id]?.on).join('+');
+// Dieselbe Menge eingeschalteter Effekte (nur die Reihenfolge ist anders)?
+export const sameFxSet = (a, b) => a.split('+').sort().join('+') === b.split('+').sort().join('+');
 
 // skip = { <effekt>: { <param>: true } }: Parameter, die gerade einer Kurve gehören
 export function updateFxParams(chain, fxState, t, spb, grid = 0, skip = null) {

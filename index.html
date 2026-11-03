@@ -121,6 +121,7 @@
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
+<link rel="modulepreload" href="src/ui/fx-order.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
 <link rel="modulepreload" href="src/ui/key-select.js">
 <link rel="modulepreload" href="src/ui/sound-tempo.js">
@@ -1219,6 +1220,17 @@
   .fxl-params { display: grid; gap: 8px; padding: 2px 10px 10px 50px; }
   .fxl-item:not(.on) .fxl-params { display: none; }
   .fxl-params .fx-param select { height: 26px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  /* Reihenfolge (2.14): am Namen ziehen; die Zeile hebt sich, die anderen rücken weg, eine Linie zeigt den Platz */
+  .fxl, .fx-cards { position: relative; }
+  .fxl-name { cursor: grab; user-select: none; -webkit-user-select: none; }
+  .fx-card-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .fx-sorting, .fx-sorting * { cursor: grabbing; }
+  .fx-sorting > .fxl-item:not(.fx-lifted), .fx-sorting > .fx-card:not(.fx-lifted) { transition: transform 0.12s ease-out; }
+  .fx-lifted { position: relative; z-index: 2; background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--amber); }
+  .fx-drop-line { position: absolute; left: 0; width: 100%; height: 2px; border-radius: 1px; background: var(--amber); box-shadow: var(--beam-glow); pointer-events: none; z-index: 3; }
+  .fx-drop-line.grid { width: 2px; }
+  .fx-drop-line[hidden] { display: none; }
+  .fx-order-reset[hidden] { display: none; }
 
   /* ---------- Erstellen: Karten zum Anklicken oder auf eine Spur ziehen ---------- */
   .create-panel { display: grid; gap: 8px; padding: 10px 12px 14px; overflow-y: auto; align-content: start; }

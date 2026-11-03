@@ -18,6 +18,7 @@ description: Wissen und Regeln für die Audio-Engine von Loopwerk – Web Audio 
 
 ## Signalkette
 `Stimme (BufferSource → Gain)` → `Spur (Gain → StereoPanner)` → `Master (Gain)` → `Limiter (DynamicsCompressor)` → Ausgang. Effekte pro Spur kommen zwischen Spur-Gain und Panner; Master-Effekte vor den Limiter. `buildMix` baut das für beide Kontexte.
+- Reihenfolge der Effekte aus `fxOrderOf(track)` bzw. `fxOrderOf(master)` (ADR 008); `syncMix` gibt sie an `syncStrip` weiter. Nur Reihenfolge geändert → `keepTail`: Eingänge 30 ms überblenden, alte Kette klingt aus (höchstens 4,5 s), dann entsorgen. Aufräumen ist kein Klangereignis; Offline wird nicht aufgeräumt (`later`).
 - Der Limiter hat Vorlaufverzögerung: Timing-Tests mit `limiter: false` rendern.
 - Pegeländerungen mit `setTargetAtTime(…, 0.012)`, nie hart setzen während der Wiedergabe.
 
