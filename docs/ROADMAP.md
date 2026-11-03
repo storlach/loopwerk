@@ -259,7 +259,7 @@
 - Regler 50–200 % in 5-%-Schritten (Doppelklick/Doppeltipp = 100 %, Pfeiltasten), Schnellwahl ½× · 1× · 2×, Schalter „wie Tonband“: aus = gleiche Tonhöhe (WSOLA im Worker), an = Tonhöhe ändert sich mit (playbackRate in `startVoice`, live und Export gleich, sofort ohne Rechnen). Clip-Länge passt sich an, ein Rückgängig-Schritt je Ziehvorgang
 - Modell: Geschwindigkeit = 1 / `clip.stretch` (alte Projekte unverändert), neues Feld `clip.varispeed`; Länge rastet auf 1/64 Schlag ein, wenn sie fast trifft (48 Schläge bei 150 % = genau 32). Sounds, die der Tonart folgen (tonale Patterns, Loops mit Tonart), laufen nie wie Tonband – sonst wären sie verstimmt. Erzeugte Loops und Patterns werden bei gleicher Tonhöhe im passenden Tempo neu gerendert statt gedehnt (verlustfrei, Anschläge bleiben knackig, ADR 001); WSOLA nur für Aufnahmen und Fremd-Samples. Dehn-Aufträge: der jüngste gebrauchte zuerst, alte Fassungen fallen weg
 - Inspektor (`.insp-clip-speed`) und Handy-Clip-Leiste („Pegel“) über `src/ui/clip-speed.js`; Test `tests/clip-speed.test.cjs`
-- Offen: das Etikett am Clip zeigt noch die Laufzeit (×1,5) statt der Geschwindigkeit
+- Etikett am Clip zeigt die Geschwindigkeit („130 %“, wie Tonband „130 % · Band“)
 
 ## ✅ UI-Paket und Raumlicht als Shader
 - Stumm: Clip-Farbe kommt nach dem Wiederanschalten zurück; Inspektor mit getrennten Abschnitten „Clip“ und „Spur“; Ansicht folgt der Marke nicht mehr, sobald man sie beim Spielen selbst bewegt („Marke folgen“ holt sie zurück, nächster Start folgt wieder); Pfeil im Spurkopf öffnet die Kurven (wie A, auch per Touch); Editor ohne Reiter (`tests/ui-paket.test.cjs`)

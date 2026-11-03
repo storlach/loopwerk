@@ -1,7 +1,7 @@
 // Arranger: Spurköpfe links, Taktraster rechts. Clips verschieben, kürzen, verlängern, kopieren (Alt/Strg),
 // Lautstärke und Fades direkt am Clip über Griffe auf der Hüllkurve.
 
-import { anySoloOf, audibleRanges, chordsOf, keyChangesOf, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
+import { anySoloOf, audibleRanges, canVarispeed, chordsOf, keyChangesOf, clipEnvelope, clipGain, clipSegments, clipSignature, fadeCurveOf, fadeHandlePoint, groupOf, isAbove, sampleFor, totalBeats, trackState, MAX_TRACKS, EPS } from '../model.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { AUTO_PARAMS, laneOf } from '../automation.js';
 import { makeKnob } from './knob.js';
@@ -677,7 +677,13 @@ export function mountArranger({ root, store, engine, library, ui }) {
     node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
     const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
-    if (clip.stretch) label.append(el('span', 'clip-tag', `×${String(clip.stretch).replace('.', ',')}`));
+    // Geschwindigkeit wie im Inspektor (100 % = Original); „wie Tonband“ mit Zusatz
+    if (clip.stretch && Math.abs(clip.stretch - 1) > 1e-6) {
+      const tape = clip.varispeed && canVarispeed(library, clip.sampleId);
+      const tag = el('span', 'clip-tag', `${Math.round(100 / clip.stretch)} %${tape ? ' · Band' : ''}`);
+      tag.title = tape ? 'Geschwindigkeit wie Tonband (Tonhöhe ändert sich mit)' : 'Geschwindigkeit (gleiche Tonhöhe)';
+      label.append(tag);
+    }
     const canvas = el('canvas', 'clip-wave');
     const trim = el('div', 'clip-trim');
     trim.title = 'Ziehen zum Kürzen';
