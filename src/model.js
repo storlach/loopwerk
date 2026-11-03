@@ -143,11 +143,11 @@ export function tapeRate(library, clip) {
   return clip.varispeed && f !== 1 && canVarispeed(library, clip.sampleId) ? 1 / f : 1;
 }
 
-// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange die erste entsteht;
-// danach gilt bis zur neuen die vorige, wenn sie gleich lang ist – z. B. beim Ziehen am Rezept),
-// wie Tonband der Grund-Sound (Tempo über tapeRate)
-export function sampleFor(library, clip) {
-  return clip.stretch && clip.stretch !== 1 && tapeRate(library, clip) === 1 ? library.stretched(clip.sampleId, clip.stretch, { stale: true }) : library.get(clip.sampleId);
+// Der Sound, den ein Clip tatsächlich spielt: bei geänderter Laufzeit die gedehnte Fassung (null, solange die erste entsteht),
+// wie Tonband der Grund-Sound (Tempo über tapeRate). stale: bis die neue Fassung da ist, gilt die vorige, wenn sie gleich
+// lang ist (z. B. beim Ziehen am Rezept) oder im alten Tempo vorliegt (Tempowechsel, die Engine gleicht das Tempo aus).
+export function sampleFor(library, clip, stale = true) {
+  return clip.stretch && clip.stretch !== 1 && tapeRate(library, clip) === 1 ? library.stretched(clip.sampleId, clip.stretch, stale) : library.get(clip.sampleId);
 }
 
 // Spurgruppen: eine Gruppe kann ihre Spuren gemeinsam stumm oder solo schalten (die Spuren behalten ihre eigenen Schalter)

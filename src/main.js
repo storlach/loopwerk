@@ -254,37 +254,70 @@ function mountClipTools({ store, engine, ui, arranger }) {
   return tools;
 }
 
-// Tempo oder Tonart ändern: Sounds neu vorbereiten, Wiedergabe an derselben Stelle fortsetzen.
+// Tempo oder Tonart ändern: Sounds neu vorbereiten.
+// Tempo: die Wiedergabe läuft ohne Pause weiter (die Engine setzt im neuen Tempo an und gleicht Sounds im alten Tempo
+// wie Tonband aus). Zuerst die Sounds des Songs, dann der Rest im Hintergrund; ein neuer Wert verwirft den alten Auftrag.
+// Tonart: anhalten, umstimmen, an derselben Stelle weiter.
 function mountTempo({ store, engine, library, ui, arranger }) {
   let running = null;
+  let tempoJob = null; // läuft, bis alle geladenen Sounds im neuen Tempo vorliegen
+  let usedBusy = false; // bis die Sounds des Songs im neuen Tempo vorliegen
+  let keyBusy = false;
+  let gen = 0;
   const keyOff = () => library.semis !== keySemis(keyOf(store.project));
+  const usedIds = () => [...new Set(store.project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)))];
+  function startTempo() {
+    const bpm = store.project.bpm;
+    const my = ++gen;
+    usedBusy = true;
+    const job = library.setTempo(bpm, { first: usedIds() });
+    tempoJob = (async () => {
+      if (!(await job.first) || my !== gen) return;
+      // Tonart je Takt: umgestimmte Fassungen im neuen Tempo
+      await library.ensureKeyVariants(store.project).catch(() => {});
+      if (my !== gen) return;
+      usedBusy = false;
+      engine.refresh();
+      ui.flash(`Tempo ${bpm} BPM.`);
+      await job;
+    })().catch((err) => console.warn('Tempo:', err?.message || err)).finally(() => {
+      if (my === gen) { tempoJob = null; usedBusy = false; }
+    });
+  }
   async function apply() {
+    if (library.bpm !== store.project.bpm) startTempo();
     if (running) return running;
     running = (async () => {
-      while (library.bpm !== store.project.bpm || keyOff()) {
+      while (library.bpm !== store.project.bpm || keyOff() || tempoJob) {
+        if (library.bpm !== store.project.bpm) startTempo();
+        if (tempoJob) { await tempoJob; continue; }
+        keyBusy = true;
         const wasPlaying = engine.playing;
         const pos = engine.heardBeat();
         if (wasPlaying) engine.stop();
-        if (library.bpm !== store.project.bpm) {
-          ui.flash(`Tempo ${store.project.bpm} BPM – Sounds werden angepasst …`);
-          await library.setTempo(store.project.bpm);
-          ui.flash(`Tempo ${store.project.bpm} BPM.`);
-        } else {
-          const key = keyOf(store.project);
-          ui.flash(`Tonart ${key} – Loops werden umgestimmt …`);
-          await library.setKey(keySemis(key));
-          ui.flash(`Tonart ${key}.`);
-        }
+        const key = keyOf(store.project);
+        ui.flash(`Tonart ${key} – Loops werden umgestimmt …`);
+        await library.setKey(keySemis(key));
+        ui.flash(`Tonart ${key}.`);
         // Tonart je Takt: umgestimmte Fassungen passend zum neuen Stand, bevor es weitergeht
         await library.ensureKeyVariants(store.project).catch(() => {});
         arranger.render();
         if (wasPlaying) engine.play(pos);
+        keyBusy = false;
       }
     })();
-    try { await running; } finally { running = null; }
+    try { await running; } finally { running = null; keyBusy = false; }
   }
-  store.on(() => { if (library.bpm !== store.project.bpm || keyOff()) apply(); });
-  return { apply, get busy() { return !!running; } };
+  store.on(() => {
+    if (library.bpm !== store.project.bpm) startTempo();
+    if (keyOff()) apply();
+  });
+  return {
+    apply,
+    // busy: bis alles im neuen Tempo bzw. in der neuen Tonart vorliegt; usedBusy: bis die Sounds des Songs so weit sind
+    get busy() { return !!running || !!tempoJob; },
+    get usedBusy() { return usedBusy || keyBusy; },
+  };
 }
 
 // Klang eines Sounds aus dem Projekt, in einer Kette: erst Klang-Rezepte (ADR 010: backen, live ohne Stopp neu einplanen),
