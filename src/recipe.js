@@ -103,7 +103,7 @@ export function suggestMaterial(s) {
   if (!s) return 'dinge';
   if (/^pat-/.test(String(s.id)) || s.patternId) return 'strom';
   if (s.made?.cls === 'ton') return 'stimme';
-  if (s.made?.from === 'loop' || s.kind === 'loop') return 'schleife';
+  if (s.made?.from === 'loop' || s.made?.from === 'freeze' || s.kind === 'loop') return 'schleife';
   return 'dinge';
 }
 

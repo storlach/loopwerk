@@ -407,6 +407,8 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const duration = (end - fromBeat) * spb + tailSeconds;
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
   const wantMaster = !analysis && mastering !== false && masteringOf(project).on;
+  // Sounds auf Abruf (eigene Sounds, ADR 011) und gedehnte Fassungen zuerst laden – sonst rendert es Stille
+  await ensureSounds(project, library);
   // Klang-Rezepte übernehmen (gleicher Stand → sofort fertig), damit Export und Tests nach dem aktuellen Rezept klingen
   await library.applyRecipes?.(project);
   // Tonart je Takt und Akkord-Streifen: Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
@@ -468,6 +470,21 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   }
   onProgress?.(1);
   return out;
+}
+
+// Alles, was ein Rendern braucht, bereitstellen: Sounds auf Abruf (library.ensure) und gedehnte Fassungen der Clips.
+// Ohne Wirkung, wenn schon alles da ist (Export ruft vorher ensureProject).
+export async function ensureSounds(project, library) {
+  if (!library.ensure) return;
+  const clips = project.tracks.flatMap((t) => t.clips.filter((c) => !c.mute));
+  const lazy = [...new Set(clips.map((c) => c.sampleId))].filter((id) => library.get(id)?.lazy);
+  if (lazy.length) await library.ensureMany(lazy);
+  const jobs = [];
+  for (const c of clips) {
+    if (!c.stretch || c.stretch === 1 || tapeRate(library, c) !== 1 || !library.ensureStretched || library.stretched?.(c.sampleId, c.stretch)) continue;
+    jobs.push(library.ensureStretched(c.sampleId, c.stretch).catch(() => null));
+  }
+  if (jobs.length) await Promise.all(jobs);
 }
 
 // Projekt-Ansicht fürs Rendern einer Einzelspur bzw. ohne Master-Kette (das Projekt selbst bleibt unverändert)
@@ -608,6 +625,9 @@ export class Engine extends Emitter {
   // countIn: Vorzähler in Schlägen (Metronom-Klicks vor dem eigentlichen Start, z. B. für Aufnahmen)
   async play(fromBeat = this.positionBeat, { countIn = 0 } = {}) {
     await this._ensure();
+    // Eigene Sounds auf Abruf (ADR 011): erst laden, dann starten – sonst bliebe der Anfang still
+    const lazy = this._lazyOwn();
+    if (lazy.length) await this.library.ensureMany(lazy);
     if (this.playing) this._halt(true);
     const pre = this.ctx.currentTime + START_DELAY;
     if (countIn > 0) this._metronome(0, countIn, pre, true);
@@ -630,6 +650,12 @@ export class Engine extends Emitter {
     this._tick();
     this.ticker.start();
     this.emit('state');
+  }
+
+  _lazyOwn() {
+    const out = new Set();
+    for (const t of this.project.tracks) for (const c of t.clips) { const s = !c.mute && this.library.get?.(c.sampleId); if (s?.lazy && s.category === 'own') out.add(c.sampleId); }
+    return [...out];
   }
 
   stop() {

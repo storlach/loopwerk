@@ -57,8 +57,9 @@ const PERSIST_SPY = () => {
 
     // ---------- Browser löscht den Sound (wie iOS nach Wochen ohne Besuch) ----------
     await page.evaluate((id) => new Promise((res, rej) => {
-      const r = indexedDB.open('loopwerk', 1);
-      r.onsuccess = () => { const t = r.result.transaction('sounds', 'readwrite'); t.objectStore('sounds').delete(id); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
+      // Speicher v2 (ADR 011): Metadaten und Audio liegen getrennt
+      const r = indexedDB.open('loopwerk', 2);
+      r.onsuccess = () => { const t = r.result.transaction(['meta', 'audio'], 'readwrite'); t.objectStore('meta').delete(id); t.objectStore('audio').delete(id); t.oncomplete = () => { r.result.close(); res(); }; t.onerror = () => rej(t.error); };
       r.onerror = () => rej(r.error);
     }), made.id);
     await page.reload();

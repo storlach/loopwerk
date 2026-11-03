@@ -7,7 +7,7 @@ export const EDITIONS = {
     id: 'full', title: 'Loopwerk', db: 'loopwerk', keyPrefix: 'loopwerk.',
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
     pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
-    workbench: null, materialColors: false, grainWave: false, brandMark: null,
+    workbench: null, materialColors: false, grainWave: false, brandMark: null, freeze: false,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -44,6 +44,8 @@ export const EDITIONS = {
     workbench: 'sound', materialColors: true, grainWave: true,
     // Zeichen im Deck: Klatscher als Ausschlag um die Mittellinie (assets/icons/krachwerk.svg), src/ui/brand-meter.js
     brandMark: 'klatscher',
+    // Festhalten (Scheibe 3a): Knopf am Loop-Bereich, Taste F, Festhalten im Werkzeug bei Mehrfachauswahl
+    freeze: true,
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
       { id: 'koerper', label: 'Körper', cat: 'drums' },

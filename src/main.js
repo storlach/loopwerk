@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf } from './model.js';
+import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, usedSampleIds } from './model.js';
 import { accompanimentPlan, applyPlan } from './starter.js';
 import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
@@ -466,6 +466,10 @@ async function boot() {
   });
   const engine = new Engine(store, library);
   const ui = createUi();
+  // Speicher v2: hält ein anderer Tab mit altem Stand die Datenbank, sagt es ein Einblender (ADR 011)
+  const blocked = () => ui.flash(`${EDITION.title} ist noch in einem anderen Tab offen – dort schließen.`);
+  own.onBlocked = blocked;
+  if (own.blocked) blocked();
 
   // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
   const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm' });
@@ -481,7 +485,8 @@ async function boot() {
         else ui.flash('Variante gelöscht (Strg+Z holt sie zurück).');
         return;
       }
-      if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
+      // Auch stumme Clips und Varianten, deren Original dieser Sound ist, brauchen ihn
+      if (usedSampleIds(store.project).has(id)) {
         ui.flash('Dieser Sound wird im Projekt benutzt. Entferne erst die Clips.');
         return;
       }

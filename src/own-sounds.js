@@ -3,30 +3,71 @@
 
 import { decodeAudio } from './samples.js';
 import { encodeWav } from './wav.js';
+import { isDoubleMono } from './dsp/clean.js';
+import { usedSampleIds } from './model.js';
 
-const STORE = 'sounds';
+// Speicher v2 (ADR 011): „meta“ (alles außer Audio, dazu duration/channels/sampleRate/bytes) und „audio“ ({ id, wav }).
+// Der Start liest nur „meta“, Audio kommt auf Abruf. v1 hatte einen Store „sounds“ mit allem in einem Datensatz.
+const META = 'meta';
+const AUDIO = 'audio';
+const V1 = 'sounds';
+const DB_VERSION = 2;
 const MAX_SECONDS = 480;
 
 // Eine Datenbank je Edition (Loopwerk „loopwerk“, Krachwerk „loopwerk-make“), gleiches Schema
 const dbs = new Map();
+const blockedFns = new Map(); // name → Rückruf, wenn ein anderer Tab das Upgrade aufhält
 function db(name) {
   if (!dbs.has(name)) {
     dbs.set(name, new Promise((resolve, reject) => {
-      const req = indexedDB.open(name, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' });
-      req.onsuccess = () => resolve(req.result);
+      const req = indexedDB.open(name, DB_VERSION);
+      req.onupgradeneeded = (e) => upgrade(req.result, req.transaction, e.oldVersion);
+      req.onblocked = () => blockedFns.get(name)?.();
+      req.onsuccess = () => {
+        const d = req.result;
+        // Neuere Fassung in einem anderen Tab will upgraden: Verbindung freigeben
+        d.onversionchange = () => { d.close(); dbs.delete(name); };
+        resolve(d);
+      };
       req.onerror = () => reject(req.error);
     }).catch((err) => { dbs.delete(name); throw err; }));
   }
   return dbs.get(name);
 }
 
-function txOn(name, mode, fn) {
+// In der Versionswechsel-Transaktion: bricht etwas ab, rollt IndexedDB alles zurück (v1 bleibt unverändert)
+function upgrade(d, t, oldVersion) {
+  if (!d.objectStoreNames.contains(META)) d.createObjectStore(META, { keyPath: 'id' });
+  if (!d.objectStoreNames.contains(AUDIO)) d.createObjectStore(AUDIO, { keyPath: 'id' });
+  if (oldVersion < 1 || !d.objectStoreNames.contains(V1)) return;
+  const meta = t.objectStore(META);
+  const audio = t.objectStore(AUDIO);
+  const cur = t.objectStore(V1).openCursor();
+  cur.onsuccess = () => {
+    const c = cur.result;
+    if (!c) { d.deleteObjectStore(V1); return; }
+    const { wav, ...rec } = c.value;
+    meta.put(metaOf(rec, wav));
+    if (wav) audio.put({ id: rec.id, wav });
+    c.continue();
+  };
+}
+
+function metaOf(rec, wav) {
+  const info = wav ? wavInfo(wav) : null;
+  return { ...rec, duration: info?.duration ?? rec.duration ?? null, channels: info?.channels ?? rec.channels ?? null, sampleRate: info?.sampleRate ?? rec.sampleRate ?? null, bytes: wav?.byteLength ?? wav?.size ?? 0 };
+}
+
+// stores: Name oder Liste; fn bekommt die Stores (bei Liste als Objekt nach Namen)
+function txOn(name, stores, mode, fn) {
   return db(name).then((d) => new Promise((resolve, reject) => {
-    const t = d.transaction(STORE, mode);
-    const result = fn(t.objectStore(STORE));
-    t.oncomplete = () => resolve(result?.result ?? result);
+    const list = Array.isArray(stores) ? stores : [stores];
+    const t = d.transaction(list, mode);
+    const arg = Array.isArray(stores) ? Object.fromEntries(list.map((s) => [s, t.objectStore(s)])) : t.objectStore(stores);
+    const result = fn(arg);
+    t.oncomplete = () => resolve(result instanceof IDBRequest ? result.result : result);
     t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('abgebrochen'));
   }));
 }
 
@@ -44,27 +85,31 @@ export function bufferToChannels(buffer) {
   return Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c).slice());
 }
 
-// Länge einer WAV-Datei aus dem Kopf lesen, ohne sie zu dekodieren (eigene Sounds sind PCM-WAV aus encodeWav)
-export function wavDuration(buf) {
+// Länge, Kanäle und Rate einer WAV-Datei aus dem Kopf lesen, ohne sie zu dekodieren (eigene Sounds sind WAV aus encodeWav)
+export function wavInfo(buf) {
   try {
     const v = new DataView(buf);
     if (v.getUint32(0, false) !== 0x52494646) return null; // „RIFF“
-    let pos = 12, rate = 0, block = 0;
+    let pos = 12, rate = 0, block = 0, channels = 0;
     while (pos + 8 <= v.byteLength) {
       const id = v.getUint32(pos, false), size = v.getUint32(pos + 4, true);
-      if (id === 0x666d7420) { rate = v.getUint32(pos + 12, true); block = v.getUint16(pos + 20, true); } // „fmt “
-      if (id === 0x64617461) return rate && block ? Math.min(size, v.byteLength - pos - 8) / block / rate : null; // „data“
+      if (id === 0x666d7420) { channels = v.getUint16(pos + 10, true); rate = v.getUint32(pos + 12, true); block = v.getUint16(pos + 20, true); } // „fmt “
+      if (id === 0x64617461) return rate && block ? { duration: Math.min(size, v.byteLength - pos - 8) / block / rate, channels, sampleRate: rate } : null; // „data“
       pos += 8 + size + (size & 1);
     }
   } catch { /* kein WAV */ }
   return null;
 }
+export const wavDuration = (buf) => wavInfo(buf)?.duration ?? null;
 
 // Library-Eintrag aus Datensatz (orig fehlt bei Einträgen auf Abruf; dann zählt die Länge aus dem WAV-Kopf)
 // Herkunft für die Kiste (Krachwerk): Mikrofon, Datei oder Schleife; Felder aus der Pad-Wand (cls, tags, bars) verstanden
+// Festgehaltenes (from 'freeze') nennt seine Zutaten in src (Sound-IDs, höchstens 16)
 function makeMeta(rec) {
   const from = rec.from || (rec.cls === 'loop' ? 'loop' : /^Import/.test(rec.source || '') ? 'file' : 'mic');
-  return { cls: rec.cls ?? null, tags: rec.tags ?? [], from };
+  const made = { cls: rec.cls ?? null, tags: rec.tags ?? [], from };
+  if (Array.isArray(rec.src) && rec.src.length) made.src = rec.src.slice(0, 16).map(String);
+  return made;
 }
 
 function toSample(rec, orig, duration = orig?.duration) {
@@ -101,31 +146,43 @@ export class OwnSounds {
     this.library = library;
     this.dbName = db;
     this.available = typeof indexedDB !== 'undefined';
+    this.blocked = false; // ein anderer Tab mit altem Stand hält die Datenbank (Einblender über onBlocked)
+    this.onBlocked = null;
+    blockedFns.set(db, () => { this.blocked = true; this.onBlocked?.(); });
   }
 
-  tx(mode, fn) { return txOn(this.dbName, mode, fn); }
+  tx(stores, mode, fn) { return txOn(this.dbName, stores, mode, fn); }
+
+  // Library-Eintrag auf Abruf aus einem meta-Datensatz; Audio liest erst der Lader
+  stubRecord(rec) {
+    const had = this.library.get(rec.id);
+    if (had && !had.missing) return false;
+    const sample = toSample(rec, null, rec.duration ?? undefined);
+    this.library.stub(sample, async (x) => {
+      const wav = await this.readWav(x.id);
+      if (!wav) throw new Error('nicht mehr im Browser gespeichert');
+      x.orig = await decodeAudio(wav.slice(0));
+      x.duration = x.orig.duration;
+      if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
+    });
+    if (sample.duration && !sample.beats) sample.lengthBeats = Math.max(1, Math.ceil(sample.duration / (60 / this.library.bpm) - 1e-6));
+    return true;
+  }
 
   async loadAll() {
     if (!this.available) return 0;
     try {
-      // Nur Name und Länge sofort (Start bleibt schnell, egal wie viele Aufnahmen); dekodiert wird beim ersten Gebrauch
-      const recs = await this.tx('readonly', (s) => s.getAll());
-      for (const rec of recs || []) {
-        const had = this.library.get(rec.id);
-        if (had && !had.missing) continue;
-        const sample = toSample(rec, null, wavDuration(rec.wav) ?? undefined);
-        this.library.stub(sample, async (x) => {
-          const r = await this.tx('readonly', (st) => st.get(x.id));
-          if (!r?.wav) throw new Error('nicht mehr im Browser gespeichert');
-          x.orig = await decodeAudio(r.wav.slice(0));
-          x.duration = x.orig.duration;
-          if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
-        });
-        if (sample.duration && !sample.beats) sample.lengthBeats = Math.max(1, Math.ceil(sample.duration / (60 / this.library.bpm) - 1e-6));
-      }
-      if (recs?.length) askPersist();
-      if (recs?.length) this.library.emit();
-      return recs?.length ?? 0;
+      // Nur meta beim Start (schnell, egal wie viele Aufnahmen); Audio wird beim ersten Gebrauch gelesen und dekodiert.
+      // Hält ein anderer Tab das Upgrade auf, startet die App ohne eigene Sounds und holt sie nach, sobald es geht.
+      const open = db(this.dbName);
+      const first = await Promise.race([open, new Promise((r) => { const was = blockedFns.get(this.dbName); blockedFns.set(this.dbName, () => { was?.(); r(null); }); })]);
+      if (!first) { open.then(() => this.loadAll()).catch(() => {}); return 0; }
+      this.blocked = false;
+      const recs = await this.listMeta();
+      for (const rec of recs) this.stubRecord(rec);
+      if (recs.length) askPersist();
+      if (recs.length) this.library.emit();
+      return recs.length;
     } catch (err) {
       this.available = false;
       console.warn('Eigene Sounds konnten nicht geladen werden:', err?.message || err);
@@ -133,19 +190,60 @@ export class OwnSounds {
     }
   }
 
+  // Alle meta-Datensätze (ohne Audio)
+  async listMeta() {
+    if (!this.available) return [];
+    return (await this.tx(META, 'readonly', (s) => s.getAll())) || [];
+  }
+
+  // Gespeicherte WAV-Bytes eines Sounds (ArrayBuffer) oder null
+  async readWav(id) {
+    if (!this.available) return null;
+    const r = await this.tx(AUDIO, 'readonly', (s) => s.get(id));
+    const wav = r?.wav ?? null;
+    return wav instanceof Blob ? wav.arrayBuffer() : wav;
+  }
+
+  async hasRecord(id) {
+    if (!this.available) return false;
+    return !!(await this.tx(META, 'readonly', (s) => s.getKey(id)));
+  }
+
+  // meta + Audio in einer Transaktion schreiben (meta-Felder bleiben, wie sie sind; Länge/Kanäle/Bytes aus dem WAV)
+  async putRecord(rec, wav) {
+    const m = metaOf(rec, wav);
+    delete m.wav;
+    await this.tx([META, AUDIO], 'readwrite', (st) => { st[META].put(m); st[AUDIO].put({ id: m.id, wav }); });
+    return m;
+  }
+
+  // Speicherbedarf der eigenen Sounds (Summe der WAV-Bytes) und Quote des Browsers (Füllstand in der Kiste)
+  async usage() {
+    const bytes = (await this.listMeta().catch(() => [])).reduce((a, m) => a + (m.bytes || 0), 0);
+    let quota = null;
+    try { quota = (await navigator.storage?.estimate?.())?.quota ?? null; } catch { /* unbekannt */ }
+    return { bytes, quota };
+  }
+
   // Neuen eigenen Sound anlegen (aus Puffer) und dauerhaft speichern
-  // cls/tags/from: optionale Herkunft und Einordnung (Krachwerk); landen auch in der Projektdatei
-  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from }) {
+  // cls/tags/from/src: optionale Herkunft und Einordnung (Krachwerk); landen auch in der Projektdatei.
+  // Doppel-Mono wird als 1 Kanal gespeichert (halber Platz). bits: 16 (Standard) oder 32 (Gleitkomma, übersteuert nicht)
+  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from, src, bits = 16 }) {
     if (buffer.duration > MAX_SECONDS) throw new Error(`„${name}“ ist länger als ${MAX_SECONDS / 60} Minuten – bitte vorher kürzen.`);
-    const wav = await encodeWav(buffer).arrayBuffer();
-    const rec = { id, name, kind, beats, source, wav, created: Date.now() };
+    const chs = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+    const store = buffer.numberOfChannels > 1 && isDoubleMono(chs)
+      ? { numberOfChannels: 1, length: buffer.length, sampleRate: buffer.sampleRate, getChannelData: () => chs[0] }
+      : buffer;
+    const wav = await encodeWav(store, { bits }).arrayBuffer();
+    const rec = { id, name, kind, beats, source, created: Date.now() };
     if (cls != null) rec.cls = cls;
     if (tags) rec.tags = tags;
     if (from) rec.from = from;
+    if (Array.isArray(src) && src.length) rec.src = src.slice(0, 16);
     const sample = await this.library.add(toSample(rec, buffer));
     if (this.available) {
       askPersist();
-      try { await this.tx('readwrite', (s) => s.put(rec)); } catch (err) {
+      try { await this.putRecord(rec, wav); } catch (err) {
         this.available = false;
         console.warn('Eigener Sound nur für diese Sitzung gespeichert:', err?.message || err);
       }
@@ -174,7 +272,7 @@ export class OwnSounds {
     s.material = material;
     if (!this.available) return;
     try {
-      await this.tx('readwrite', (st) => new Promise((res) => {
+      await this.tx(META, 'readwrite', (st) => new Promise((res) => {
         const g = st.get(id);
         g.onsuccess = () => { if (g.result) st.put({ ...g.result, material }); res(); };
         g.onerror = () => res();
@@ -184,26 +282,31 @@ export class OwnSounds {
 
   async remove(id) {
     this.library.remove(id);
-    if (this.available) { try { await this.tx('readwrite', (s) => s.delete(id)); } catch { /* egal */ } }
+    if (this.available) { try { await this.tx([META, AUDIO], 'readwrite', (st) => { st[META].delete(id); st[AUDIO].delete(id); }); } catch { /* egal */ } }
   }
 
   // Für die Projektdatei: alle im Projekt benutzten eigenen Sounds als Base64-WAV, dazu die Eltern-Sounds benutzter
-  // Varianten (Klang-Rezept, ADR 010) – die haben kein eigenes Audio
+  // Varianten (Klang-Rezept, ADR 010) – die haben kein eigenes Audio. Gespeicherte WAV-Bytes direkt, sonst aus dem Puffer.
   async embed(project) {
-    const ids = project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId));
-    const parents = ids.map((id) => project.recipes?.[id]?.parent).filter(Boolean);
-    const used = new Set([...ids, ...parents].filter(isOwnId));
+    const used = [...usedSampleIds(project)].filter(isOwnId);
     const out = [];
     for (const id of used) {
-      const s = await this.library.ensure(id).catch(() => null);
-      if (!s?.orig) continue;
-      const wav = new Uint8Array(await encodeWav(s.orig).arrayBuffer());
+      const s = this.library.get(id);
+      if (!s || s.missing) continue;
+      let wav = await this.readWav(id).catch(() => null);
+      if (!wav) {
+        const full = await this.library.ensure(id).catch(() => null);
+        if (!full?.orig) continue;
+        wav = await encodeWav(full.orig).arrayBuffer();
+      }
+      const bytes = new Uint8Array(wav);
       let bin = '';
-      for (let i = 0; i < wav.length; i += 0x8000) bin += String.fromCharCode.apply(null, wav.subarray(i, i + 0x8000));
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
       const e = { id, name: s._baseName ?? s.name, kind: s.kind, beats: s.beats, source: s.source, wav: btoa(bin) };
       if (s.made?.cls != null) e.cls = s.made.cls;
       if (s.made?.tags?.length) e.tags = s.made.tags;
       if (s.made?.from) e.from = s.made.from;
+      if (s.made?.src?.length) e.src = s.made.src;
       out.push(e);
     }
     return out;
@@ -220,7 +323,7 @@ export class OwnSounds {
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const buffer = await decodeAudio(bytes.buffer);
-      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from });
+      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from, src: e.src });
       n++;
     }
     return n;

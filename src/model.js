@@ -69,7 +69,7 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}|${clip.varispeed ? 1 : 0}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}|${clip.varispeed ? 1 : 0}${clip.mute ? '|m' : ''}`;
 }
 
 // Stapel: Liegen Clips einer Spur übereinander, klingt der obere. Der untere bleibt unverändert erhalten
@@ -106,10 +106,22 @@ export function audibleRanges(track) {
   return map;
 }
 
+// Stumme Clips (clip.mute) klingen nirgends, verdecken aber weiter, was unter ihnen liegt – eine Stelle für Realtime und Offline
 export function audibleMap(project) {
   const map = new Map();
-  for (const t of project.tracks) for (const [id, r] of audibleRanges(t)) map.set(id, r);
+  for (const t of project.tracks) {
+    const muted = new Set(t.clips.filter((c) => c.mute).map((c) => c.id));
+    for (const [id, r] of audibleRanges(t)) map.set(id, muted.has(id) ? [] : r);
+  }
   return map;
+}
+
+// Alle Sounds, die das Projekt braucht: Clips (auch stumme) und die Eltern benutzter Varianten (ADR 010, kein eigenes Audio)
+export function usedSampleIds(project) {
+  const ids = new Set();
+  for (const t of project.tracks || []) for (const c of t.clips || []) ids.add(c.sampleId);
+  for (const id of [...ids]) { const parent = project.recipes?.[id]?.parent; if (parent) ids.add(parent); }
+  return ids;
 }
 
 // Wiederholungen eines Clips, beschnitten auf seine hörbaren Bereiche: [{ seg, from, to }]
@@ -185,6 +197,7 @@ export function normalizeClip(clip) {
   clip.fadeInBeats = fi;
   clip.fadeOutBeats = fo;
   for (const k of ['fadeInCurve', 'fadeOutCurve']) if (clip[k] != null) clip[k] = fadeCurveOf(clip[k]);
+  if (clip.mute) clip.mute = true; else delete clip.mute;
   return clip;
 }
 
@@ -678,13 +691,65 @@ export class Store extends Emitter {
     return 't' + (1 + Math.max(0, ...this.project.tracks.map((t) => parseInt(t.id.slice(1), 10) || 0)));
   }
 
-  addTrack() {
+  // after: neue Spur direkt unter dieser Spur (sonst am Ende); name/volume: Vorgaben für die neue Spur
+  addTrack({ after = null, name = null, volume = 0.8 } = {}) {
     if (this.project.tracks.length >= MAX_TRACKS) return null;
     const id = this._newTrackId();
     this.dispatch('add-track', (p) => {
-      p.tracks.push({ id, name: 'Spur ' + (p.tracks.length + 1), volume: 0.8, pan: 0, mute: false, solo: false, clips: [] });
+      const track = { id, name: name ?? 'Spur ' + (p.tracks.length + 1), volume, pan: 0, mute: false, solo: false, clips: [] };
+      const at = after == null ? -1 : p.tracks.findIndex((t) => t.id === after);
+      if (at < 0) p.tracks.push(track); else p.tracks.splice(at + 1, 0, track);
     });
     return id;
+  }
+
+  // Clips, die im Bereich [fromBeat, toBeat) klingen (hörbare Spur, nicht stumm, nicht verdeckt)
+  audibleClipsIn(fromBeat, toBeat) {
+    const p = this.project;
+    const aud = audibleMap(p);
+    const solo = anySoloOf(p);
+    const out = [];
+    for (const t of p.tracks) {
+      const st = trackState(p, t);
+      if (st.mute || (solo && !st.solo)) continue;
+      for (const c of t.clips) if ((aud.get(c.id) || []).some(([s, e]) => s < toBeat - EPS && e > fromBeat + EPS)) out.push(c.id);
+    }
+    return out;
+  }
+
+  // Festhalten (Krachwerk 3a): neuer Sound sampleId liegt als Clip [fromBeat, fromBeat + lengthBeats) auf einer neuen Spur
+  // direkt unter der untersten Quellspur (0 dB, Mitte, ohne Effekte). loop: sampleTempo = Bereich. mute: die Quell-Clips
+  // (clipIds bzw. alle hörbaren im Bereich) werden an den Bereichsgrenzen geteilt, die inneren Stücke stumm.
+  // Ein Rückgängig-Schritt. Rückgabe { trackId, clipId } | null (keine Spur mehr frei)
+  freeze({ fromBeat, toBeat, sampleId, clipIds = null, mute = true, lengthBeats = null, loop = true, name = null }) {
+    if (!(toBeat > fromBeat + EPS) || this.project.tracks.length >= MAX_TRACKS) return null;
+    const p = this.project;
+    const sources = (clipIds ?? this.audibleClipsIn(fromBeat, toBeat)).filter((id) => this.findClip(id));
+    const idx = sources.map((id) => p.tracks.indexOf(this.findClip(id).track));
+    const after = idx.length ? p.tracks[Math.max(...idx)].id : null;
+    const solo = anySoloOf(p);
+    let out = null;
+    this.batch('Festhalten', () => {
+      const trackId = this.addTrack({ after, name: String(name ?? this.sampleName?.(sampleId) ?? 'Schleife').slice(0, 32), volume: 1 });
+      const track = this.track(trackId);
+      if (solo) track.solo = true; // sonst schwiege die neue Spur neben einer Solo-Quelle
+      const total = totalBeats(this.project);
+      const len = Math.min(lengthBeats ?? toBeat - fromBeat, total - fromBeat);
+      const clip = { id: this.newId(), sampleId, startBeat: fromBeat, lengthBeats: len, offsetBeats: 0 };
+      track.clips.push(normalizeClip(clip));
+      if (loop) this.project.sampleTempo = { ...(this.project.sampleTempo || {}), [sampleId]: toBeat - fromBeat };
+      if (mute && sources.length) {
+        const all = new Set(sources);
+        for (const id of this.splitAt(fromBeat, [...all])) all.add(id);
+        for (const id of this.splitAt(toBeat, [...all])) all.add(id);
+        for (const id of all) {
+          const c = this.findClip(id)?.clip;
+          if (c && c.startBeat >= fromBeat - EPS && c.startBeat + c.lengthBeats <= toBeat + EPS) c.mute = true;
+        }
+      }
+      out = { trackId, clipId: clip.id };
+    });
+    return out;
   }
 
   removeTrack(trackId) {
