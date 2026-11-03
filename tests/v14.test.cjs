@@ -241,6 +241,7 @@ const { check, finish } = createChecker();
       const m = await import('./src/model.js');
       window.loopwerk.store.replace(m.createEmptyProject());
     });
+    await page.click('#shelf-filter-btn');
     await page.click('.shelf-sort [data-sort="genre"]');
     const genreView = await page.evaluate(() => ({
       heads: [...document.querySelectorAll('.shelf-cat')].map((h) => h.textContent.replace(/\d+$/, '')),
@@ -268,6 +269,7 @@ const { check, finish } = createChecker();
     await page.evaluate(() => window.loopwerk.library.catalogReady);
     check('Ordnung nach Genre wird gemerkt', await page.evaluate(() => document.querySelector('.shelf-sort [data-sort="genre"]').getAttribute('aria-pressed') === 'true'));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-genre.png') });
+    await page.click('#shelf-filter-btn');
     await page.click('.shelf-sort [data-sort="cat"]');
     check('Zurück nach Kategorie', await page.evaluate(() => !!document.getElementById('shelf-cat-drums')));
 

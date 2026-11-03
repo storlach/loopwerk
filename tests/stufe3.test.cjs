@@ -137,25 +137,25 @@ const { check, finish } = createChecker();
       check('„Harmonie“ antippen blendet Tonart- und Akkordzeile ein', harmOpen);
     }
     await page.click('#shelf-cat-drums'); // Test-Voreinstellung hat Drums offen: zu, damit gleich nur „Bass“ offen ist
-    check('Filter: nur noch der Favoriten-Schalter', await page.evaluate(() => [...document.querySelectorAll('#shelf-chips .chip')].map((c) => c.dataset.filter).join(',')) === 'fav');
+    check('Filter: Favoriten-Stern im Suchfeld, keine Chips mehr', await page.evaluate(() => !!document.querySelector('#shelf-find #shelf-fav') && !document.querySelector('#shelf-chips')));
     await page.click('#shelf-cat-bass');
     const bassRows = await page.locator('#shelf-items-bass .loop-item').count();
     const basses = await page.evaluate(() => window.loopwerk.library.list().filter((s) => s.category === 'bass').length);
     check('Akkordeon „Bass“ zeigt alle Bass-Sounds', bassRows === basses, `${bassRows} Einträge`);
     await page.locator('#shelf-items-bass .loop-row').first().locator('.loop-fav').click();
-    await page.click('#shelf-chips .chip[data-filter="fav"]');
+    await page.click('#shelf-fav');
     const favRows = await page.locator('#library .loop-item').count();
     check('Stern markiert einen Favoriten', favRows === 1, `${favRows} Favorit(en)`);
     await page.reload();
     await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
     await page.evaluate(() => window.loopwerk.library.catalogReady);
-    await page.click('#shelf-chips .chip[data-filter="fav"]');
+    await page.click('#shelf-fav');
     const favAfter = await page.locator('#library .loop-item').count();
     const bpmAfter = await page.evaluate(() => [window.loopwerk.store.project.bpm, window.loopwerk.library.bpm]);
     check('Favoriten und Tempo bleiben nach Neuladen erhalten', favAfter === 1 && bpmAfter[0] === 100 && bpmAfter[1] === 100, `Favoriten ${favAfter}, Tempo ${bpmAfter.join('/')}`);
 
     if (SHOTS) {
-      await page.click('#shelf-chips .chip[data-filter="fav"]');
+      await page.click('#shelf-fav');
       await page.fill('#shelf-search', '');
       await page.screenshot({ path: path.join(SHOT_DIR, 'stufe3-light.png') });
     }
