@@ -1,0 +1,350 @@
+{
+  "_doc": "Inventar der Loopwerk-Funktionen aus docs/ux/krachwerk-brainstorm/ux.md §5 (und der Song-Spec §2): jede Zeile hat einen Pfad in Krachwerk als Selektor-Folge ab einem benannten Zustand. Zustände: nichts (nichts gewählt, Werkbank zu), song (Song-Werkbank offen: 1 Tipp ab nichts, Songname bzw. Lesezeile), clip (ein Clip gewählt), spur (eine Spur gewählt), loop (Loop-Bereich gesetzt). steps: höchstens 2 Tipps; phone/desk: Schritte nur für diesen Bildschirm; expect: Selektor, der danach sichtbar sein muss (oder status:export = Fortschritt oder Ergebnis des Exports steht im Kopf). twins: wie viele gleichwertige Zusatzwege es gibt (höchstens 1).",
+  "paths": [
+    {
+      "id": "tempo",
+      "loopwerk": "Tempo (Deck, Inspektor −/+, Kachel, Tempo-Fach)",
+      "state": "song",
+      "steps": [],
+      "expect": "#sb-tempo",
+      "twins": 1
+    },
+    {
+      "id": "tonart",
+      "loopwerk": "Tonart (Deck, Streifen, Inspektor, Tempo-Fach)",
+      "state": "song",
+      "steps": [],
+      "expect": "#sb-key",
+      "twins": 0
+    },
+    {
+      "id": "laenge",
+      "loopwerk": "Länge in Takten (Inspektor Song, Song-Fach)",
+      "state": "song",
+      "steps": [],
+      "expect": "#sb-length",
+      "twins": 0
+    },
+    {
+      "id": "klick",
+      "loopwerk": "Metronom (Deck, Song-Fach)",
+      "state": "song",
+      "steps": [],
+      "expect": "#metro-btn",
+      "twins": 0
+    },
+    {
+      "id": "tonart-streifen",
+      "loopwerk": "Tonart-/Akkord-Streifen",
+      "state": "song",
+      "steps": [
+        "#sb-fine-btn-song",
+        "#harm-btn"
+      ],
+      "expect": ".key-row",
+      "twins": 1
+    },
+    {
+      "id": "mixer",
+      "loopwerk": "Mixer (Fader je Spur)",
+      "state": "song",
+      "steps": [
+        "#sb-tab-mischen"
+      ],
+      "expect": "#sb-faders",
+      "twins": 0
+    },
+    {
+      "id": "mixer-detail",
+      "loopwerk": "Mixer-Detail (Spur)",
+      "state": "song",
+      "steps": [
+        "#sb-tab-mischen",
+        "#sb-faders .sb-fname"
+      ],
+      "expect": "#insp-vol",
+      "twins": 1
+    },
+    {
+      "id": "fx-pad",
+      "loopwerk": "FX-Pad",
+      "state": "song",
+      "steps": [
+        "#sb-tab-mischen",
+        "#fxpad-btn"
+      ],
+      "expect": "#fxpad",
+      "twins": 0
+    },
+    {
+      "id": "summen-effekte",
+      "loopwerk": "Master-Effekte (Inspektor Song)",
+      "state": "song",
+      "steps": [
+        "#sb-tab-mischen",
+        "#sb-fx-toggle"
+      ],
+      "expect": "#sb-fx",
+      "twins": 0
+    },
+    {
+      "id": "mastering",
+      "loopwerk": "Mastering (Inspektor Song, Song-Fach, Export)",
+      "state": "song",
+      "steps": [
+        "#sb-tab-fertig"
+      ],
+      "expect": "#sb-mst-on",
+      "twins": 0
+    },
+    {
+      "id": "export",
+      "loopwerk": "Export-Klappfeld (Format, Bereich, Ausklang)",
+      "state": "song",
+      "steps": [
+        "#export-btn"
+      ],
+      "expect": "status:export",
+      "twins": 0
+    },
+    {
+      "id": "export-feinheiten",
+      "loopwerk": "MP3, Einzelspuren, Ausklang",
+      "state": "song",
+      "steps": [
+        "#sb-tab-fertig",
+        "#sb-fine-btn-fertig"
+      ],
+      "expect": "#sb-mp3",
+      "twins": 0
+    },
+    {
+      "id": "speichern",
+      "loopwerk": "Projekt-Menü: Speichern",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt"
+      ],
+      "expect": "#save-btn",
+      "twins": 0
+    },
+    {
+      "id": "oeffnen",
+      "loopwerk": "Projekt-Menü: Öffnen",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt"
+      ],
+      "expect": "#open-btn",
+      "twins": 0
+    },
+    {
+      "id": "neu",
+      "loopwerk": "Projekt-Menü: Leeren",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt"
+      ],
+      "expect": "#new-btn",
+      "twins": 0
+    },
+    {
+      "id": "sichern",
+      "loopwerk": "(neu in Krachwerk) Alle Sounds sichern",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt"
+      ],
+      "expect": "#backup-btn",
+      "twins": 0
+    },
+    {
+      "id": "zurueckholen",
+      "loopwerk": "(neu in Krachwerk) Sounds zurückholen",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt"
+      ],
+      "expect": "#restore-btn",
+      "twins": 0
+    },
+    {
+      "id": "tipps",
+      "loopwerk": "Projekt-Menü: Tipps wieder zeigen",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt",
+        "#sb-fine-btn-projekt"
+      ],
+      "expect": "#tips-reset",
+      "twins": 0
+    },
+    {
+      "id": "tastenkuerzel",
+      "loopwerk": "Tastenkürzel / Gesten",
+      "state": "song",
+      "steps": [
+        "#sb-tab-projekt",
+        "#sb-fine-btn-projekt"
+      ],
+      "expect": "#keys-btn",
+      "twins": 0
+    },
+    {
+      "id": "aufnahme-einstellungen",
+      "loopwerk": "Aufnahme (Stille, Säubern)",
+      "state": "song",
+      "steps": [
+        "#sb-tab-aufnahme"
+      ],
+      "expect": "#sb-autostop",
+      "twins": 0
+    },
+    {
+      "id": "inspektor-clip",
+      "loopwerk": "Inspektor Clip",
+      "state": "clip",
+      "steps": [],
+      "expect": "#wb-name",
+      "twins": 0,
+      "phone": [
+        "#cf-werkbank"
+      ]
+    },
+    {
+      "id": "sample-editor",
+      "loopwerk": "Sample-Editor (Rückwärts u. a.)",
+      "state": "clip",
+      "steps": [
+        "#wb-tab-form"
+      ],
+      "expect": "#wb-reverse",
+      "twins": 0,
+      "phone": [
+        "#cf-werkbank"
+      ]
+    },
+    {
+      "id": "clip-leiste",
+      "loopwerk": "Clip-Leiste / Deck-Gruppe Clip (Teilen, Kopie, Löschen)",
+      "state": "clip",
+      "steps": [],
+      "expect": "#cf-del",
+      "twins": 0
+    },
+    {
+      "id": "spur-werkbank",
+      "loopwerk": "Inspektor Spur, Spurkopf (Lautstärke, M, S)",
+      "state": "spur",
+      "steps": [],
+      "expect": "#insp-mute",
+      "twins": 1
+    },
+    {
+      "id": "spur-effekte",
+      "loopwerk": "Effekte der Spur",
+      "state": "spur",
+      "steps": [
+        "#insp-add-fx"
+      ],
+      "expect": ".wb-fx-pick",
+      "twins": 0
+    },
+    {
+      "id": "automation",
+      "loopwerk": "Automation (Kurven)",
+      "state": "spur",
+      "steps": [
+        "#insp-fine"
+      ],
+      "expect": "#insp-auto-toggle",
+      "twins": 1
+    },
+    {
+      "id": "loop",
+      "loopwerk": "Loop-Bereich",
+      "state": "nichts",
+      "steps": [
+        "#loop-btn"
+      ],
+      "expect": "state:loop",
+      "twins": 1
+    },
+    {
+      "id": "festhalten",
+      "loopwerk": "(neu in Krachwerk) Festhalten",
+      "state": "loop",
+      "steps": [],
+      "expect": "#freeze-btn",
+      "twins": 1
+    },
+    {
+      "id": "kiste-suche",
+      "loopwerk": "Regal: Suche",
+      "state": "nichts",
+      "phone": [
+        "#tab-sounds"
+      ],
+      "steps": [],
+      "expect": "#shelf-find",
+      "twins": 0
+    },
+    {
+      "id": "kiste-neu",
+      "loopwerk": "Erstellen-Karten (Kit aus Klatschen, Beat, Melodie, Import)",
+      "state": "nichts",
+      "phone": [
+        "#tab-sounds"
+      ],
+      "steps": [
+        "#shelf-new"
+      ],
+      "expect": ".ccard[data-create=\"kit\"]",
+      "twins": 1,
+      "expectPhone": "#new-kit-btn"
+    },
+    {
+      "id": "zoom",
+      "loopwerk": "Zoom ±, Spurhöhe ±",
+      "state": "nichts",
+      "steps": [],
+      "gesture": "zoom",
+      "expect": "gesture:zoom",
+      "twins": 1
+    },
+    {
+      "id": "pattern-editor",
+      "loopwerk": "Pattern-Editor (Beat, Melodie)",
+      "state": "extern",
+      "steps": [],
+      "covered": "tests/werkstatt.test.cjs Teil 4 (Kit-Werkbank, Instrument-Werkbank, Pad-Wand)",
+      "twins": 0
+    }
+  ],
+  "dropped": [
+    {
+      "loopwerk": "Katalog: Regal nach Genre, Länge, Kategorie; Sonic-Pi-Sounds",
+      "reason": "Krachwerk nur mit Selbstgemachtem (ADR 007): keine mitgelieferten Sounds"
+    },
+    {
+      "loopwerk": "Song-Starter, Begleitautomatik",
+      "reason": "ohne Loops keine Begleitung (EDITION.surfaces starter/accomp)"
+    },
+    {
+      "loopwerk": "KI: Melodie weiterführen, Klang aus Beschreibung",
+      "reason": "alles von dir (EDITION.surfaces ai)"
+    },
+    {
+      "loopwerk": "Sounds per Link, Ton aus einem Tab",
+      "reason": "kein Fremdmaterial (EDITION.surfaces link)"
+    },
+    {
+      "loopwerk": "Beispiel-Arrangement (Demo)",
+      "reason": "leerer Song als Anfang (EDITION.demo = false)"
+    },
+    {
+      "loopwerk": "Sample-Editor als eigenes Fach (zerstörend, Übernehmen)",
+      "reason": "ersetzt durch die nichtzerstörende Sound-Werkbank; jede Funktion hat einen Zwilling (EDITION.twins ed-…)"
+    }
+  ]
+}

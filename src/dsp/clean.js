@@ -95,9 +95,10 @@ function fadeEdges(d, sampleRate) {
 }
 
 // Rohaufnahme säubern. Rückgabe: { chs, sampleRate, start, end } (Frames bezogen auf die Eingabe) oder null bei Stille.
-export function cleanTake(chs, sampleRate, { maxSeconds = 4 } = {}) {
+// clean: false = roh lassen (nur Stille an den Rändern weg und Kanten ausblenden; kein Hochpass, kein Anheben auf Zielpegel)
+export function cleanTake(chs, sampleRate, { maxSeconds = 4, clean = true } = {}) {
   const src = isDoubleMono(chs) ? [chs[0]] : chs;
-  const filtered = src.map((d) => highpass(d, sampleRate));
+  const filtered = clean ? src.map((d) => highpass(d, sampleRate)) : src.map((d) => d.slice());
   const bounds = soundBounds(mixMono(filtered), sampleRate);
   if (!bounds) return null;
   const end = Math.min(bounds.end, bounds.start + Math.round(maxSeconds * sampleRate));
@@ -105,7 +106,7 @@ export function cleanTake(chs, sampleRate, { maxSeconds = 4 } = {}) {
   const out = filtered.map((d) => d.slice(bounds.start, end));
   let peak = 0;
   for (const d of out) for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; }
-  const g = peak > 0 ? PEAK_TARGET / peak : 1;
+  const g = clean && peak > 0 ? PEAK_TARGET / peak : 1;
   for (const d of out) { for (let i = 0; i < d.length; i++) d[i] *= g; fadeEdges(d, sampleRate); }
   return { chs: out, sampleRate, start: bounds.start, end };
 }

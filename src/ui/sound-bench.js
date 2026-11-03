@@ -5,7 +5,7 @@
 // geschrieben wird nur über store.setRecipe / addVariant / setSampleTempo / setClip (Ziehen = ein Rückgängig-Schritt).
 
 import { clipGain, keyOf, tonicOf } from '../model.js';
-import { MATERIALS, RECIPE, TUNE_KEYS, materialOf, recipeGesture, recipeSteps, suggestMaterial } from '../recipe.js';
+import { MATERIALS, RECIPE, TUNE_KEYS, materialOf, recipeGesture, recipeSteps, suggestMaterial, treeText } from '../recipe.js';
 import { layoutCuts } from '../cuts.js';
 import { clamp, el } from '../util.js';
 import { lsKey } from '../edition.js';
@@ -25,7 +25,6 @@ const SENS_KEY = lsKey('loopwerk.cutSens');
 const TABS = [['form', 'Form'], ['ton', 'Ton'], ['farbe', 'Farbe'], ['zeit', 'Zeit'], ['zerlegen', 'Zerlegen'], ['clip', 'Clip']];
 const CUT_MIN = 1; // s: kürzere Sounds haben nichts zu zerlegen
 const UNDO_NAMES = ['Zerlegen', 'Trennen', 'Als Variante', 'Festhalten']; // Schritte, deren Rückgängig einen Einblender bekommt
-const SOURCE = { mic: 'Aufnahme', file: 'Datei', loop: 'Schleife', freeze: 'Festgehalten' };
 const NOTE = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'H'];
 
 const load = (key) => { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; } };
@@ -43,28 +42,9 @@ function setOut(out, text) {
   if (!m) { out.textContent = text; return; }
   out.append(el('span', 'wb-num', m[1]), m[2]);
 }
-const pad2 = (n) => String(n).padStart(2, '0');
 export const noteName = (midi) => `${NOTE[((Math.round(midi) % 12) + 12) % 12]}${Math.floor(Math.round(midi) / 12) - 1}`;
 
-// Stammbaum-Zeile (§5): Material · Quelle Datum → Schritte · Dauer
-export function treeText(s, r, lib) {
-  if (!s) return '';
-  if (s.missing) return 'Dieser Klang ist nicht mehr im Browser. Die Projektdatei bringt ihn zurück.';
-  const root = s.parentId ? lib.get(s.parentId) : s;
-  const mat = materialOf(r?.material ?? root?.material ?? s.material) ?? materialOf(suggestMaterial(root ?? s));
-  const strom = /^pat-/.test(s.id) || s.patternId;
-  const src = strom ? 'Strom' : SOURCE[root?.made?.from ?? 'mic'] ?? 'Aufnahme';
-  let when = '';
-  if (root?.created && root.created > 1e11) { const d = new Date(root.created); when = ` ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}. ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
-  const steps = recipeSteps(r);
-  const dur = (lib.source?.(s) ?? s.orig)?.duration ?? s.duration;
-  const parts = [`${mat.label} · ${src}${when}`];
-  const zut = (root?.made?.src || []).map((id) => lib.get(id)?.name).filter(Boolean);
-  if (root?.made?.from === 'freeze' && zut.length) parts[0] += ` aus ${zut.join(', ')}`;
-  if (steps.length) parts[0] += ` → ${steps.join(' · ')}`;
-  if (dur) parts[0] += ` · ${comma(dur, 2)} s`;
-  return (s.parentId ? `Variante von ${root?.name ?? '?'} → ` : '') + parts[0];
-}
+export { treeText };
 
 export function mountSoundBench(box, { store, ui, library, engine, tools, own = null, back = null }) {
   const root = el('div', 'wb');

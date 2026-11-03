@@ -7,7 +7,8 @@ import { fileExt } from '../wav.js';
 import { masteringOf } from '../engine.js';
 import { mountMasteringControls } from './mastering.js';
 
-export function mountExport({ root, store, library, ui, engine, tempo, mastering }) {
+// direct: Song-Werkbank (Krachwerk) – der Knopf „Exportieren“ rendert gleich über direct.run(), das Dock wird nicht geöffnet
+export function mountExport({ root, store, library, ui, engine, tempo, mastering, direct = null }) {
   const $ = (id) => root.querySelector('#' + id);
   const btn = document.getElementById('export-btn');
   const go = $('ex-go');
@@ -125,7 +126,11 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     }
   });
 
-  btn.addEventListener('click', () => ui.setDock(ui.dock === 'export' ? null : 'export'));
+  if (direct) {
+    btn.addEventListener('click', () => direct.run());
+    const label = () => { btn.disabled = direct.state.busy; btn.textContent = direct.state.busy ? `${Math.round(direct.state.p * 100)} %` : 'Exportieren'; };
+    direct.on(label);
+  } else btn.addEventListener('click', () => ui.setDock(ui.dock === 'export' ? null : 'export'));
   ui.on(() => {
     const show = ui.dock === 'export';
     btn.setAttribute('aria-pressed', String(show));

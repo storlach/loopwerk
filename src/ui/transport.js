@@ -4,7 +4,8 @@ import { clamp } from '../util.js';
 import { createDemoProject, createEmptyProject } from '../model.js';
 import { lsKey } from '../edition.js';
 
-export function mountTransport({ store, engine, ui, arranger, emptyProject = createEmptyProject }) {
+// newLabel: Beschriftung von „Leeren“ (Krachwerk: „Neuer Song“)
+export function mountTransport({ store, engine, ui, arranger, emptyProject = createEmptyProject, newLabel = null }) {
   const $ = (id) => document.getElementById(id);
   const play = $('play-btn');
   const loopBtn = $('loop-btn');
@@ -76,7 +77,8 @@ export function mountTransport({ store, engine, ui, arranger, emptyProject = cre
     });
   }
   const reset = (project) => { engine.stop(); engine.setPosition(0); ui.select(null); store.replace(project); };
-  confirmButton($('new-btn'), 'Leeren', () => reset(emptyProject()));
+  if (newLabel) $('new-btn').textContent = newLabel;
+  confirmButton($('new-btn'), newLabel ?? 'Leeren', () => reset(emptyProject()));
   confirmButton($('demo-btn'), 'Beispiel', () => reset(createDemoProject()));
 
   function sync() {

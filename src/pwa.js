@@ -1,16 +1,17 @@
-// Krachwerk als App am Handy (nur unter /werkstatt/): Service Worker für den Start ohne Netz und einmal der Tipp
+// Krachwerk als App am Handy (nur unter /werkstatt/, die Adresse steht in EDITION.path): Service Worker für den Start ohne Netz und einmal der Tipp
 // „Zum Home-Bildschirm“ in iPhone-Safari – iOS räumt Seiten-Speicher sonst nach Tagen ohne Besuch, Apps nicht.
 // Dauerhaften Speicher erbittet own-sounds.js (askPersist) beim ersten eigenen Sound.
 
-import { lsKey } from './edition.js';
+import { EDITION, lsKey } from './edition.js';
 
 const TIP_KEY = lsKey('loopwerk.tips.home');
 const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIos = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export function mountPwa({ ui, recorder, own }) {
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && /\/werkstatt\//.test(location.pathname)) {
-    navigator.serviceWorker.register('werkstatt/sw.js', { scope: 'werkstatt/' })
+  const dir = EDITION.path; // Adresse nur aus EDITION.path
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && location.pathname.includes(`/${dir}/`)) {
+    navigator.serviceWorker.register(`${dir}/sw.js`, { scope: `${dir}/` })
       .catch((err) => console.warn('Offline-Start nicht verfügbar:', err?.message || err));
   }
   const tip = () => {

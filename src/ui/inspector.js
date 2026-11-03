@@ -42,7 +42,8 @@ function fxSummary(e, f) {
 
 // Optionen (Krachwerk, Spec Scheibe 2a §6): clipPanel(container, deps) ersetzt den Clip-Abschnitt (Sound-Werkbank);
 // trackOnClip: false = die Spur zeigt sich nur bei eigener Spurwahl; fxCompact = nur eingeschaltete Effekte und „+ Effekt“
-export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false }) {
+// songPanel(box, deps) ersetzt den Song-Abschnitt (Song-Werkbank, Scheibe 5): { render, slots: { fx, auto } }
+export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, songPanel = null }) {
   const app = document.getElementById('app');
   root.innerHTML = '';
 
@@ -362,11 +363,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   autoGrp.append(masterAuto);
   const mstSlot = grp('insp-mst');
   songSec.append(songGrp, masterGrp, autoGrp, mstSlot);
-  if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
+  if (mastering && !songPanel) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
 
-  root.append(clipSec, trackSec, songSec, hintSec);
+  // Song-Werkbank (Krachwerk): Master-Effekte und Verlauf der Summe wohnen im Reiter „Mischen“, Mastering im Reiter „Fertig“
+  const songBox = el('section', 'insp-sec insp-song');
+  const sb = songPanel ? songPanel(songBox, { store, ui, library, engine, mastering }) : null;
+  if (sb) sb.slots.auto.append(masterAuto);
+
+  root.append(clipSec, trackSec, songSec, songBox, hintSec);
 
   // ---------- Anzeige ----------
   function render() {
@@ -379,8 +385,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const mode = found ? 'clip' : track ? 'track' : benchId ? 'sound' : 'song';
     clipSec.hidden = mode !== 'clip' && mode !== 'sound';
     trackSec.hidden = mode === 'song' || mode === 'sound' || (mode === 'clip' && !trackOnClip);
-    songSec.hidden = mode !== 'song';
-    hintSec.hidden = mode !== 'song';
+    songSec.hidden = mode !== 'song' || !!sb;
+    songBox.hidden = mode !== 'song' || !sb;
+    hintSec.hidden = mode !== 'song' || !!sb;
     root.dataset.mode = mode;
     if (calm) {
       if (mode !== 'song') pinned = false;
@@ -389,6 +396,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     }
 
     if (panel) panel.render();
+    if (sb && mode === 'song') sb.render();
     if (found && !panel) {
       const { clip } = found;
       const s = library.get(clip.sampleId);
@@ -459,7 +467,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       lenOut.textContent = `${store.project.lengthBars} Takte`;
       // Master-Lautstärke und Master-Effekte unter „Master“
       const m = masterOf(store.project);
-      if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl);
+      if (sb) { if (fxl.parentElement !== sb.slots.fx) sb.slots.fx.append(fxl, addFx, fxPick); } else if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl);
       masterTpl.update();
       const open = !!ui.autoLane?.isOpen('master');
       const has = autoKeys('master').some((k) => laneOf(m, k).length);
@@ -471,7 +479,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();
-    const compact = fxCompact && mode === 'track';
+    const compact = fxCompact && (mode === 'track' || (mode === 'song' && !!sb));
     addFx.hidden = !compact;
     if (!compact) fxPick.hidden = true;
     for (const b of fxPick.children) b.hidden = !!fx[b.dataset.fx]?.on;
@@ -499,7 +507,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const anyLocked = () => {
     if (!lockTrack()) return false;
     const fx = fxCtl().some(([c]) => !c.lock.btn.hidden);
-    return songMode() ? !songSec.hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx);
+    return songMode() ? !(sb ? songBox : songSec).hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx);
   };
   function showFx(c, p) {
     const track = lockTrack();
@@ -549,5 +557,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   // Erkannte Tonart kommt im Hintergrund: nur die Zeile nachziehen
   library.on(() => { if (ui.selectedClipId) skey.update(selSample()); });
   render();
-  return { render };
+  // Song-Werkbank öffnen, auch wenn nichts gewählt ist (Songname im Deck)
+  const showSong = () => { pinned = true; render(); };
+  return { render, showSong, songBench: sb };
 }

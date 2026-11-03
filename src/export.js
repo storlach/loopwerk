@@ -2,7 +2,8 @@
 // MP3 mit LAME (lamejs, LGPL-3.0, lame.sourceforge.net) – wird erst beim ersten MP3-Export geladen.
 
 import { renderProject, masteringOf, trackLevel } from './engine.js';
-import { encodeWav, wavBits, fileExt } from './wav.js';
+import { encodeWav, wavBits, fileExt, INFO_MAX } from './wav.js';
+import { ingredients } from './recipe.js';
 import { analyzeMastering } from './mastering.js';
 import { audibleMap, trackState, EPS } from './model.js';
 import { makeZip, crc32 } from './zip.js';
@@ -68,8 +69,23 @@ export function peakOf(buffer) {
   return p;
 }
 
+// Zutatenliste für den WAV-Kommentar (ICMT, höchstens 2000 Zeichen): Kopf und Summe zuerst, dann so viele Zeilen wie passen
+export function infoOf(project, library, { app = 'Krachwerk' } = {}) {
+  const z = ingredients(project, library, { app });
+  const out = [z.head, z.summary];
+  let len = out.join('\n').length;
+  let i = 0;
+  for (; i < z.lines.length; i++) {
+    if (len + 1 + z.lines[i].length > INFO_MAX - 24) break;
+    out.push(z.lines[i]);
+    len += 1 + z.lines[i].length;
+  }
+  if (i < z.lines.length) out.push(`… und ${z.lines.length - i} weitere`);
+  return { title: project.name || '', software: app, comment: out.join('\n'), list: z };
+}
+
 // format: 'wav' (16 Bit) | 'wav24' | 'wav32' (Gleitkomma) | 'mp3'; range: 'song' | 'loop'; mastering: mit Mastering (Standard: wie im Projekt eingeschaltet)
-export async function exportSong(project, library, { format = 'wav', range = 'song', tail = true, mastering = masteringOf(project).on, onProgress } = {}) {
+export async function exportSong(project, library, { format = 'wav', range = 'song', tail = true, mastering = masteringOf(project).on, info = null, onProgress } = {}) {
   const [fromBeat, toBeat] = exportRange(project, range);
   if (toBeat <= fromBeat) throw new Error('Im Song liegen noch keine Clips – es gibt nichts zu exportieren.');
   const renderShare = format === 'mp3' ? 0.5 : 0.95;
@@ -90,7 +106,7 @@ export async function exportSong(project, library, { format = 'wav', range = 'so
   });
   const blob = format === 'mp3'
     ? await encodeMp3(audio, { onProgress: (p) => onProgress?.(renderShare + p * (1 - renderShare)) })
-    : encodeWav(audio, { bits: wavBits(format) });
+    : encodeWav(audio, { bits: wavBits(format), info });
   onProgress?.(1);
   return { blob, duration: audio.duration, peak: peakOf(audio), fromBeat, toBeat, analysis, audio };
 }

@@ -2,13 +2,15 @@
 // Die einzige Stelle, an der sich Editionen unterscheiden. src/main.js liest sie und gibt Werte als Optionen weiter.
 // Quelle: globalThis.LOOPWERK_EDITION (setzt die erzeugte Seite /werkstatt/) oder ?edition=… in der Adresse.
 
+import { CALM_TWINS } from './calm.js';
+
 export const EDITIONS = {
   full: {
     id: 'full', title: 'Loopwerk', db: 'loopwerk', keyPrefix: 'loopwerk.',
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
     pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
     workbench: null, materialColors: false, grainWave: false, brandMark: null, freeze: false,
-    kitBench: false, startCard: false, tips: null,
+    kitBench: false, startCard: false, tips: null, songBench: false,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -20,15 +22,11 @@ export const EDITIONS = {
     surfaces: { starter: false, accomp: false, ai: false, link: false, catalog: false, demo: false, tips: false, editor: false },
     // Stufe 3 (data-tier="3") ist in „calm“ nicht sichtbar; hier steht, wo man es stattdessen findet (Schlüssel: ID oder .Klasse)
     twins: {
-      'home-btn': 'Pos1, Lineal antippen', 'metro-btn': 'Song-Fach (Klick)',
-      '.lcd-more': 'Song-Fach, Werkbank Song', '.meter-wrap': 'Song-Fach, Werkbank Song',
-      'zoom-in': 'Strg+Rad, zwei Finger', 'zoom-out': 'Strg+Rad, zwei Finger', 'zoomy-in': 'Alt+Rad, zwei Finger', 'zoomy-out': 'Alt+Rad, zwei Finger',
-      'select-btn': 'lange drücken', 'select-all-btn': 'Strg+A', '.ltab': '+ Neu in der Kiste',
-      '.tbtn-mute': 'Werkbank Spur (M)', '.tbtn-solo': 'Werkbank Spur (S)', '.track-vol-wrap': 'Werkbank Spur (Lautstärke)',
-      '.key-row': 'Song-Fach (Tonart und Akkorde)', '.chord-row': 'Song-Fach (Tonart und Akkorde)',
-      'clipbar': 'Werkzeug am Clip', 'split-btn': 'Werkzeug am Clip', 'dup-btn': 'Werkzeug am Clip', 'del-btn': 'Werkzeug am Clip',
-      'mixer-btn': 'Song-Fach (Mischen)', 'fxpad-btn': 'Song-Fach (FX-Pad)', 'editor-tab': 'Werkbank (Form · Ton · Zerlegen)', 'tab-song': 'Tipp auf das Deck',
-      '.tabbar-end': 'Song-Werkbank (Hilfe)', '.tbtn-chev': 'Werkbank Spur (Feinheiten, Kurve)',
+      ...CALM_TWINS,
+      'metro-btn': 'Song-Werkbank, Reiter Song (Klick)', '.lcd-more': 'Song-Werkbank, Reiter Song', '.meter-wrap': 'Song-Werkbank, Reiter Song',
+      '.key-row': 'Song-Werkbank, Reiter Song (Tonart und Akkorde)', '.chord-row': 'Song-Werkbank, Reiter Song (Tonart und Akkorde)',
+      'mixer-btn': 'Song-Werkbank, Reiter Mischen', 'fxpad-btn': 'Song-Werkbank, Reiter Mischen (FX-Pad)', 'editor-tab': 'Werkbank (Form · Ton · Zerlegen)', 'tab-song': 'Tipp auf das Deck',
+      '.tabbar-end': 'Song-Werkbank, Reiter Projekt (Hilfe)',
       // Sample-Editor (2b, Spec krachwerk-2b-zerlegen §6): Funktion → Zwilling in der Werkbank
       'edit-btn': 'Werkbank (Form · Ton · Zerlegen)',
       'ed-crop': 'Form: Anfang/Ende', 'ed-cut': 'Zerlegen, Schnitt löschen; Teilen und Löschen am Clip', 'ed-silence': 'Zerlegen, Schnitt löschen; Teilen und Löschen am Clip',
@@ -49,6 +47,10 @@ export const EDITIONS = {
     freeze: true,
     // Kit und Instrument (Scheibe 4): Kit-/Instrument-Werkbank, Pad-Wand, Startkarte, eigene Tipps (src/tips-make.js)
     kitBench: true, startCard: true, tips: 'make',
+    // Song-Werkbank (Scheibe 5): Song, Mischen, Fertig, Projekt, Aufnahme an einem Ort; Zutatenliste beim Export
+    songBench: true,
+    // Adresse der Edition (nur hier): umgestellt wird erst nach Martins Entscheidung, siehe KW_PATH in tools/werkstatt-page.cjs
+    path: globalThis.LOOPWERK_PATH || 'werkstatt', // die erzeugte Seite (KW_PATH) setzt LOOPWERK_PATH
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
       { id: 'koerper', label: 'Körper', cat: 'drums' },
@@ -71,6 +73,20 @@ export function editionId() {
 }
 
 export const EDITION = EDITIONS[editionId()];
+
+// Dichte der Oberfläche: Krachwerk ist immer „calm“. In Loopwerk gilt „calm“ nur auf Wunsch (?density=calm in der Adresse oder
+// lsKey('loopwerk.density') = 'calm'; ?density=full schaltet es wieder aus) – es gibt keinen sichtbaren Schalter. Standard: aus.
+export function densityFrom(edition = EDITION, search = globalThis.location?.search || '', storage = globalThis.localStorage) {
+  if (edition.density === 'calm') return 'calm';
+  try {
+    const q = new URLSearchParams(search).get('density');
+    if (q === 'calm') return 'calm';
+    if (q === 'full') return 'full';
+    if (storage?.getItem(edition.keyPrefix + 'density') === 'calm') return 'calm';
+  } catch { /* Standard */ }
+  return edition.density;
+}
+export const DENSITY = densityFrom();
 
 // Speicher-Schlüssel je Edition: in Loopwerk unverändert, in Krachwerk „loopwerk.make.…“
 export const lsKey = (k) => k.replace(/^loopwerk\./, EDITION.keyPrefix);

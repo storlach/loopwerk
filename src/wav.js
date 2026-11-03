@@ -1,6 +1,24 @@
 // WAV-Kodierung: 16 oder 24 Bit PCM, 32 Bit Gleitkomma (übersteuert nicht: Werte über 0 dBFS bleiben erhalten).
 
-export function encodeWav(buffer, { bits = 16 } = {}) {
+// INFO-Block (LIST/INFO) am Ende der Datei: ISFT (Programm), INAM (Titel), ICMT (Kommentar, höchstens 2000 Zeichen).
+// Die Audiodaten bleiben unverändert; Programme, die den Block nicht kennen, überspringen ihn.
+export const INFO_MAX = 2000;
+function infoChunk(info) {
+  if (!info) return null;
+  const enc = new TextEncoder();
+  const subs = [];
+  for (const [id, key, max] of [['INAM', 'title', 200], ['ISFT', 'software', 200], ['ICMT', 'comment', INFO_MAX]]) {
+    const v = String(info[key] ?? '').slice(0, max);
+    if (!v) continue;
+    const bytes = enc.encode(v);
+    const size = bytes.length + 1; // mit Null am Ende
+    subs.push({ id, bytes, size, padded: size + (size & 1) });
+  }
+  if (!subs.length) return null;
+  return { subs, size: 4 + subs.reduce((n, x) => n + 8 + x.padded, 0) };
+}
+
+export function encodeWav(buffer, { bits = 16, info = null } = {}) {
   const ch = buffer.numberOfChannels;
   const frames = buffer.length;
   const float = bits === 32;
@@ -8,10 +26,13 @@ export function encodeWav(buffer, { bits = 16 } = {}) {
   const fmtSize = float ? 18 : 16;
   const head = 12 + 8 + fmtSize + (float ? 12 : 0) + 8;
   const dataBytes = frames * ch * bytesPer;
-  const view = new DataView(new ArrayBuffer(head + dataBytes));
+  const list = infoChunk(info);
+  const pad = list && (dataBytes & 1) ? 1 : 0; // Blöcke beginnen auf geraden Adressen
+  const tailBytes = list ? pad + 8 + list.size : 0;
+  const view = new DataView(new ArrayBuffer(head + dataBytes + tailBytes));
   const str = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
   let o = 0;
-  str(o, 'RIFF'); view.setUint32(o + 4, head + dataBytes - 8, true); str(o + 8, 'WAVE'); o += 12;
+  str(o, 'RIFF'); view.setUint32(o + 4, head + dataBytes + tailBytes - 8, true); str(o + 8, 'WAVE'); o += 12;
   str(o, 'fmt '); view.setUint32(o + 4, fmtSize, true); o += 8;
   view.setUint16(o, float ? 3 : 1, true);
   view.setUint16(o + 2, ch, true);
@@ -38,6 +59,15 @@ export function encodeWav(buffer, { bits = 16 } = {}) {
         view.setInt16(o, v < 0 ? v * 0x8000 : v * 0x7fff, true);
         o += 2;
       }
+    }
+  }
+  if (list) {
+    o += pad;
+    str(o, 'LIST'); view.setUint32(o + 4, list.size, true); str(o + 8, 'INFO'); o += 12;
+    for (const x of list.subs) {
+      str(o, x.id); view.setUint32(o + 4, x.size, true);
+      new Uint8Array(view.buffer, o + 8, x.bytes.length).set(x.bytes);
+      o += 8 + x.padded;
     }
   }
   return new Blob([view], { type: 'audio/wav' });

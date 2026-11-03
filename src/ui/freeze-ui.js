@@ -7,6 +7,7 @@ import { freezeRange, freezePrefs } from '../freeze.js';
 import { backupSounds, restoreSounds, backupName } from '../sound-backup.js';
 import { saveFile } from './save-file.js';
 import { narrow, place } from './place.js';
+import { slot } from './song-slots.js';
 
 const MB = 1048576;
 const ERRORS = {
@@ -140,8 +141,8 @@ export function mountFreeze({ store, engine, library, ui, own, arranger, appName
   const input = document.createElement('input');
   Object.assign(input, { type: 'file', id: 'restore-input', accept: '.zip,application/zip', multiple: true, hidden: true });
   document.body.append(input);
-  const slotN = document.getElementById('song-links');
-  const slotW = document.getElementById('insp-song-tools');
+  const slotN = slot('proj', document.getElementById('song-links'));
+  const slotW = slot('proj', document.getElementById('insp-song-tools'));
   place(backupBtn, { calm: { narrow: slotN, wide: slotW } });
   place(restoreBtn, { calm: { narrow: slotN, wide: slotW } });
 

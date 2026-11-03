@@ -169,6 +169,11 @@
 <link rel="modulepreload" href="src/ui/freeze-ui.js">
 <link rel="modulepreload" href="src/freeze.js">
 <link rel="modulepreload" href="src/sound-backup.js">
+<link rel="modulepreload" href="src/calm.js">
+<link rel="modulepreload" href="src/rec-prefs.js">
+<link rel="modulepreload" href="src/ui/song-slots.js">
+<link rel="modulepreload" href="src/ui/song-export.js">
+<link rel="modulepreload" href="src/ui/song-bench.js">
 <link rel="modulepreload" href="src/ui/kit-bench.js">
 <link rel="modulepreload" href="src/ui/start-card.js">
 <link rel="modulepreload" href="src/tips-make.js">
@@ -3071,6 +3076,34 @@
   }
   /* Clip: Griffe für Ein-/Ausblenden unter der Namenszeile (CD #7) */
   #app[data-density="calm"] .arr-grid:not(.ch-low) { --wave-top: 24px; }
+  /* Song-Werkbank (Scheibe 5, src/ui/song-bench.js): Bausteine der Werkbank (wb-*), dazu Kopf mit Exportieren, Knopfgruppen, Fader je Spur */
+  #app[data-songbench] #song { display: none !important; }
+  #app[data-density="calm"] .sb-head-slot { flex: none; display: inline-flex; margin-left: 4px; }
+  #app[data-density="calm"] .sb-head-slot .key { min-height: 44px; padding: 0 14px; }
+  #app[data-density="calm"] .sb-status { white-space: normal; margin: 0; }
+  #app[data-density="calm"] .sb-status:empty, #app[data-density="calm"] .sb-tools:empty { display: none; }
+  #app[data-density="calm"] .sb-tools { display: grid; gap: 6px; }
+  #app[data-density="calm"] .sb-tools :is(.key, .tab, .tab-keys), #app[data-density="calm"] .sb .sb-more { display: flex; align-items: center; justify-content: flex-start; width: 100%; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--radius); background: var(--deck-2); box-shadow: none; color: var(--ink); text-align: left; cursor: pointer; }
+  #app[data-density="calm"] .sb-tools :is(.key, .tab, .tab-keys):hover, #app[data-density="calm"] .sb .sb-more:hover { background: color-mix(in srgb, var(--ink) 12%, var(--deck-2)); }
+  #app[data-density="calm"] .sb-tools :is(.key, .tab)[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 22%, var(--deck-2)); font-weight: 600; }
+  #app[data-density="calm"] .sb-tools .tab svg { display: none; }
+  #app[data-density="calm"] .sb-tools :is(.tab, .tab-label) { font-size: var(--fs-13); max-width: none; flex: none; }
+  #app[data-density="calm"] .sb-tools .tab { width: 100%; }
+  #app[data-density="calm"] .sb-mix-tools .tab::after, #app[data-density="calm"] .sb .sb-more::after { content: " ▸"; margin-left: 6px; color: var(--muted); }
+  #app[data-density="calm"] .sb .sb-more[aria-expanded="true"]::after { content: " ▾"; }
+  #app[data-density="calm"] .sb-proj-tools #save-btn { order: -1; }
+  #app[data-density="calm"] .sb-proj-tools #new-btn.confirm { background: var(--danger); color: var(--accent-ink); }
+  #app[data-density="calm"] .sb-fader { grid-template-columns: minmax(0, 1fr) auto; align-items: center; align-content: center; }
+  #app[data-density="calm"] .sb-fname { min-height: 36px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #app[data-density="calm"] button.sb-fname { cursor: pointer; }
+  #app[data-density="calm"] .sb-fader.muted .sb-fname { color: var(--muted); }
+  #app[data-density="calm"] .sb-master .sb-fname { color: var(--muted); }
+  #app[data-density="calm"] .sb-fx { display: grid; gap: 10px; }
+  #app[data-density="calm"] .sb-mst .mst-head { min-height: 44px; }
+  #app[data-density="calm"] .sb .insp-keychg-row { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+  #app[data-density="calm"] .sb-rec-setup:empty { display: none; }
+  #app[data-songbench] .tabbar-end[data-placed] { display: block !important; margin: 0; }
+  #app[data-density="calm"] .sb .keys-pop { position: static; width: auto; margin-top: 6px; box-shadow: none; }
 
   /* Breit: Kiste 240 px (einklappbar), Werkbank rechts 36 % (60 % mit ⤢), ohne Auswahl 24 px */
   @media (min-width: 761px) {

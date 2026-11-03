@@ -1151,7 +1151,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
 
   function laneClick(e, lane) {
     if (scissors) { scissors = null; grid.classList.remove('scissors'); ui.status(null); }
-    if (!ui.armedSampleId) { select(null); ui.selectTrack?.(null); return; }
+    if (!ui.armedSampleId) { const was = ui.selectedClipId || ui.selectedTrackId; select(null); ui.selectTrack?.(null); if (!was) ui.emptyClick?.(); return; }
     const sample = library.get(ui.armedSampleId);
     const rect = lane.getBoundingClientRect();
     const beat = clamp(snapDown((e.clientX - rect.left) / ppb(), e), 0, totalBeats(store.project) - step(e));
@@ -1319,7 +1319,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const box = root.getBoundingClientRect();
     const st = root.scrollTop;
     const head = rowsEl.getBoundingClientRect().top - box.top + st; // klebende Kopfzeilen: Lineal, Tonart, Akkorde
-    const end = head + rowsEl.offsetHeight + addRow.offsetHeight;
+    const end = head + rowsEl.offsetHeight + Math.min(addRow.offsetHeight, 56); // die Zeile wächst bei wenigen Spuren bis zum Rand, ihre Knöpfe sitzen oben
     const a = { boxTop: box.top, head, st };
     const recent = revealed && performance.now() - revealed.at < 1000 && revealed.node.isConnected ? revealed.node : null;
     const row = (trackId && rowsEl.querySelector(`.lane[data-track-id="${trackId}"]`)?.closest('.track-row')) || recent;

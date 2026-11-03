@@ -4,8 +4,10 @@
 
 import { place, narrow } from './place.js';
 import { lsKey } from '../edition.js';
+import { slot, hasSongBench } from './song-slots.js';
 
-export function mountLayout({ store, ui, library, editName = () => '' }) {
+// kiste: Krachwerk-Namen (Kiste statt Sounds); mit Song-Werkbank (song-slots.js) wandern die Song-Knöpfe in deren Reiter
+export function mountLayout({ store, ui, library, editName = () => '', kiste = false }) {
   const $ = (id) => document.getElementById(id);
   const app = $('app');
 
@@ -14,19 +16,24 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Raster, Klick und Loop wandern über die Spuren (so bleibt im Deck Platz für Aufnahme, Wiederholen und die Anzeige); Zoomen geht am Handy mit zwei Fingern (die Knöpfe bleiben unsichtbar im Deck)
   for (const id of ['zoom-out', 'zoom-in', 'zoomy-out', 'zoomy-in']) place($(id), { wide: $('arr-bar-view') });
   place($('snap-sel'), { wide: $('arr-bar-view'), narrow: $('arr-pills') });
-  place($('metro-btn'), { narrow: $('arr-pills'), calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
+  // Dichte „calm“: ohne Song-Werkbank Fach „Song“ und Inspektor, mit ihr deren Reiter (Spec krachwerk-5-song §2)
+  const bench = hasSongBench();
+  const calmAt = (name, narrowEl, wideEl) => ({ narrow: bench ? slot(name) : narrowEl, wide: bench ? slot(name) : wideEl });
+  const calmSong = (name) => calmAt(name, $('song-links'), $('insp-song-tools'));
+  place($('metro-btn'), { narrow: $('arr-pills'), calm: calmSong('song') });
   place($('loop-btn'), { narrow: $('arr-pills') }); // der Loop-Bereich liegt im Lineal darunter
   // Rückgängig und Wiederholen: am Handy beide im Deck
   place($('undo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
   place($('redo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
   // Song: Name oben, Speichern und Exportieren als Hauptknöpfe, der Rest als ruhige Textzeile
   place($('project-name'), { wide: $('project-menu-body'), narrow: $('song-name') });
-  place($('open-btn'), { wide: $('project-menu-body'), narrow: $('song-links') });
-  place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main') });
-  place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main') });
+  place($('open-btn'), { wide: $('project-menu-body'), narrow: $('song-links'), calm: bench ? calmSong('proj') : null });
+  place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main'), calm: bench ? calmSong('proj') : null });
+  place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main'), calm: bench ? calmSong('head') : null });
   place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
-  place($('tips-reset'), { narrow: $('song-links') });
-  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
+  place($('tips-reset'), { narrow: $('song-links'), calm: bench ? calmSong('projFine') : null });
+  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), calm: bench ? calmSong('proj') : null });
+  if (bench) $('tips-reset')?.removeAttribute('data-off'); // Tipps zurücksetzen gibt es in Krachwerk im Reiter „Projekt“
   place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
   place($('shelf-find'), { narrow: $('shelf-sticky') });
@@ -34,9 +41,9 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Dichte „calm“: Daumenleiste am Handy (Kiste · ▶ · ● · Werkbank), Mischen und FX-Pad im Fach „Song“, „+ Neu“ neben der Suche
   place($('play-btn'), { calm: { narrow: $('tabbar') } });
   place($('rec-btn'), { calm: { narrow: $('tabbar') } });
-  place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
-  place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
-  place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') } }); // Tastenkürzel: Song-Werkbank
+  if (!bench) place($('mixer-btn'), { calm: calmSong() }); // mit Song-Werkbank: Reiter „Mischen“ statt Mixer-Fach
+  place($('fxpad-btn'), { calm: calmSong('mix') });
+  place(document.querySelector('.tabbar-end'), { calm: bench ? { wide: slot('projFine'), narrow: slot('projFine') } : { wide: $('insp-song-tools') } }); // Tastenkürzel
   place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
@@ -71,7 +78,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   const closePops = () => pops.forEach((p) => p.set(false));
 
   // Projekt-Menü: Name sichtbar im Knopf
-  const setProject = popup($('project-menu-btn'), $('project-menu'), { onOpen: () => requestAnimationFrame(() => $('project-name').select?.()) });
+  const setProject = bench ? () => {} : popup($('project-menu-btn'), $('project-menu'), { onOpen: () => requestAnimationFrame(() => $('project-name').select?.()) });
   const showName = () => { $('project-menu-name').textContent = store.project.name || 'Projekt'; $('deck-name').textContent = store.project.name || 'Song'; };
   store.on(showName);
   // Leere Spuren: leise Zeile in Spur 1 (CSS, nur calm)
@@ -85,6 +92,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   $('project-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') setProject(false); });
 
   popup($('keys-btn'), $('keys-pop'));
+  if (bench) $('project-menu-btn').addEventListener('click', () => ui.openSong?.()); // der Songname öffnet die Song-Werkbank statt des Menüs
   const setPatMore = popup($('pat-more-btn'), $('pat-more'));
   // Ein Knopf im Menü (Schritt-Eingabe, Weiterführen, Einsingen, Leeren) erledigt seine Sache und schließt es
   $('pat-more').addEventListener('click', (e) => { if (e.target.closest('button')) setPatMore(false); });
@@ -130,7 +138,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
     fold(zu);
     try { localStorage.setItem(foldKey, zu ? '1' : '0'); } catch { /* egal */ }
   });
-  if (calm) {
+  if (calm && kiste) {
     document.querySelector('.left-title').textContent = 'Kiste';
     $('tab-sounds').querySelector('.tab-label').textContent = 'Kiste';
     const labels = () => { $('mixer-btn').querySelector('.tab-label').textContent = narrow.matches ? 'Mischen' : 'Mixer'; };

@@ -29,6 +29,9 @@ import { mountKeySelects } from './ui/key-select.js';
 import { mountMixer } from './ui/mixer.js';
 import { mountEditor } from './ui/editor.js';
 import { mountExport } from './ui/export-dock.js';
+import { mountSongExport } from './ui/song-export.js';
+import { mountSongBench } from './ui/song-bench.js';
+import { slot } from './ui/song-slots.js';
 import { mountMasteringAnalysis } from './mastering.js';
 import { mountMasteringControls } from './ui/mastering.js';
 import { mountFxPad } from './ui/fxpad.js';
@@ -42,7 +45,7 @@ import { mountLinkImport } from './ui/link-import.js';
 import { touch, place } from './ui/place.js';
 import { templateControls, MASTER_TEMPLATES } from './ui/auto-lane.js';
 import { doubleTapRanges } from './ui/touch.js';
-import { EDITION, lsKey } from './edition.js';
+import { EDITION, DENSITY, lsKey } from './edition.js';
 import { mountFreeze } from './ui/freeze-ui.js';
 import { applySurfaces } from './ui/surfaces.js';
 import { clearInstruments } from './sampler.js';
@@ -61,7 +64,7 @@ const STORAGE_KEY = lsKey('loopwerk.project.v1');
 // Edition (ADR 007): Kennzeichen am Wurzelelement, abgeschaltete Flächen ausblenden – vor allem anderen
 {
   const app = document.getElementById('app');
-  if (app) { app.dataset.edition = EDITION.id; app.dataset.density = EDITION.density; }
+  if (app) { app.dataset.edition = EDITION.id; app.dataset.density = DENSITY; if (EDITION.songBench) app.dataset.songbench = '1'; }
   applySurfaces(EDITION.surfaces);
   if (!EDITION.catalogs) clearInstruments();
 }
@@ -559,7 +562,7 @@ async function boot() {
   if (own.blocked) blocked();
 
   // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm' });
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: DENSITY !== 'calm' });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
@@ -604,7 +607,7 @@ async function boot() {
       ui.flash('Eigener Sound gelöscht.');
     },
   });
-  mountTransport({ store, engine, ui, arranger, emptyProject: () => createEmptyProject(EDITION) });
+  mountTransport({ store, engine, ui, arranger, emptyProject: () => createEmptyProject(EDITION), newLabel: EDITION.songBench ? 'Neuer Song' : null });
   mountProjectIO({ store, engine, ui, library, own, patterns, keepUnknown: EDITION.keepUnknownClips, appName: EDITION.title });
   const tools = mountClipTools({ store, engine, ui, arranger });
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
@@ -675,7 +678,9 @@ async function boot() {
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountSoundState({ store, engine, library, ui, arranger });
   const mastering = mountMasteringAnalysis({ store, engine, library });
-  mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering });
+  // Song-Werkbank (Krachwerk): „Exportieren“ im Kopf rendert gleich, ohne Dock (src/ui/song-export.js)
+  const songExport = EDITION.songBench ? mountSongExport({ store, library, engine, ui, tempo, appName: EDITION.title }) : null;
+  mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering, direct: songExport });
   const fxpad = mountFxPad({ root: document.getElementById('fxpad'), store, engine, ui });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
   if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }
@@ -686,6 +691,7 @@ async function boot() {
   document.getElementById('song-auto-slot').append(songAuto.node);
   const inspector = mountInspector({
     root: document.getElementById('insp'), store, ui, library, tools, engine, mastering,
+    ...(songExport ? { songPanel: (box, deps) => mountSongBench(box, { ...deps, exporter: songExport, own, appName: EDITION.title }) } : {}),
     // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
     ...(EDITION.workbench === 'sound' ? {
       clipPanel: (box, deps) => {
@@ -698,14 +704,35 @@ async function boot() {
     } : {}),
   });
   const layout = mountLayout({
-    store, ui, library,
+    store, ui, library, kiste: !!EDITION.shelfGroups,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
   });
+  // Song-Werkbank: Songname (Desktop), Lesezeile (Handy) und Klick ins Leere zeigen den Song
+  if (EDITION.songBench) {
+    const clearPick = () => { ui.select(null); ui.selectTrack(null); ui.openSound(null); };
+    ui.openSong = () => { clearPick(); inspector.showSong(); if (narrow.matches) ui.setDock('werkbank'); };
+    ui.toggleSong = () => {
+      const song = ui.dock === 'werkbank' && !ui.selectedClipId && !ui.selectedTrackId && !ui.benchSoundId;
+      if (song) ui.setDock(null); else ui.openSong();
+    };
+    ui.emptyClick = () => { if (!narrow.matches && !ui.dock) ui.openSong(); };
+  }
   layout.onEditorTab(() => {
     if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
     else tools.edit();
   });
   if (EDITION.kitBench) document.querySelector('#create-panel .ccard[data-create="record"]')?.after(kitCard());
+  // Handy: die Karten der Spalte „Erstellen“ gibt es dort nicht; „+ Kit“ steht neben „+ Beat“ (Klatschen → Kit, 2 Tipps ab der Kiste)
+  if (EDITION.kitBench) {
+    const kitBtn = document.createElement('button');
+    kitBtn.className = 'shelf-import';
+    kitBtn.id = 'new-kit-btn';
+    kitBtn.type = 'button';
+    kitBtn.title = 'Klatschen und klopfen – daraus wird ein Kit mit Groove';
+    kitBtn.textContent = '+ Kit';
+    kitBtn.addEventListener('click', () => recording.clap());
+    document.getElementById('new-beat-btn')?.before(kitBtn);
+  }
   mountCreate({
     root: document.getElementById('create-panel'), arranger,
     actions: {
@@ -732,10 +759,10 @@ async function boot() {
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
   // Festhalten (Krachwerk 3a): Knopf am Loop-Bereich, Taste F, Füllstand, Sicherung
   const freezeUi = EDITION.freeze ? mountFreeze({ store, engine, library, ui, own, arranger, appName: EDITION.title }) : null;
-  if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools, onFreeze: freezeUi ? (ids) => freezeUi.run({ clipIds: ids }) : null });
+  if (DENSITY === 'calm') mountClipFloat({ store, ui, tools, onFreeze: freezeUi ? (ids) => freezeUi.run({ clipIds: ids }) : null });
   const sheets = mountSheets({ ui, arranger });
   // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
-  if (EDITION.density === 'calm') {
+  if (DENSITY === 'calm') {
     const app0 = document.getElementById('app');
     const fit = () => {
       if (!app0.classList.contains('wb-wide') || !app0.classList.contains('insp-open') || narrow.matches) return;
@@ -751,10 +778,10 @@ async function boot() {
     }).observe(app0, { attributes: true, attributeFilter: ['class'] });
   }
   // Ruhige Dichte: Tonart- und Akkordzeile am Handy erst bei Wechseln – oder auf Wunsch über das Song-Fach (gemerkt)
-  if (EDITION.density === 'calm') {
+  if (DENSITY === 'calm') {
     const btn = document.getElementById('harm-tpl').content.firstElementChild.cloneNode(true);
-    document.getElementById('song-links').prepend(btn);
-    place(btn, { calm: { narrow: document.getElementById('song-links'), wide: document.getElementById('insp-song-tools') } }); // Desktop: Song-Werkbank
+    const at = slot('songFine', null);
+    place(btn, { calm: { narrow: at ?? document.getElementById('song-links'), wide: at ?? document.getElementById('insp-song-tools') } }); // Song-Werkbank, Reiter Song (Feinheiten)
     const app = document.getElementById('app');
     const set = (on) => {
       app.classList.toggle('harmony-on', on);

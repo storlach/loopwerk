@@ -36,7 +36,9 @@ export function mountMobile({ store, ui, tools, library }) {
   // Dichte „calm“: das Deck ist die Lesezeile (Name · Takt · Tempo), ein Tipp darauf öffnet das Song-Fach
   $('app').querySelector('.deck').addEventListener('click', (e) => {
     if (app.dataset.density !== 'calm' || !narrow.matches || e.target.closest('button, input, select, label')) return;
-    ui.setDock(ui.dock === 'song' ? null : 'song');
+    // Mit Song-Werkbank (Krachwerk) zeigt die Werkbank-Schublade den Song, sonst das Fach „Song“
+    if (ui.toggleSong) ui.toggleSong();
+    else ui.setDock(ui.dock === 'song' ? null : 'song');
   });
 
   function syncTabs() {

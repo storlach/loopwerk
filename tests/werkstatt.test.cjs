@@ -195,7 +195,7 @@ async function seedPadWall() {
     check('Kein Code der alten Pad-Wand geladen', proto.length === 0, proto.join(', '));
     console.log(`   Startzeit bis „ready“ (Handy, lokal): ${A.startMs} ms`);
     const surf = await page.evaluate(() => {
-      const sel = ['#starter', '.ccard[data-create="accomp"]', '#pat-continue', '.sing-desc-field', '#sing-sound', '[data-link-open]', '.ccard[data-create="link"]', '#link-pop', '#tab-capture', '#shelf-filters', '.shelf-credit', '#pop-about', '#demo-btn', '#tips-reset', '#shelf-filter-btn', '#shelf-fav'];
+      const sel = ['#starter', '.ccard[data-create="accomp"]', '#pat-continue', '.sing-desc-field', '#sing-sound', '[data-link-open]', '.ccard[data-create="link"]', '#link-pop', '#tab-capture', '#shelf-filters', '.shelf-credit', '#pop-about', '#demo-btn', '#shelf-filter-btn', '#shelf-fav'];
       const off = sel.filter((q) => { const n = document.querySelector(q); return n && n.hasAttribute('data-off') && getComputedStyle(n).display === 'none'; });
       const keep = ['#import-btn', '.ccard[data-create="beat"]', '.ccard[data-create="melody"]', '.ccard[data-create="sing"]', '#rec-btn'].filter((q) => document.querySelector(q) && !document.querySelector(q).closest('[data-off]'));
       return { off: off.length, all: sel.length, missing: sel.filter((q) => !off.includes(q)), keep: keep.length };
@@ -455,11 +455,13 @@ async function seedPadWall() {
             rowsGone: ['.key-row', '.chord-row'].map((q) => document.querySelector(q).getClientRects().length === 0),
           };
         });
-        // Deck antippen öffnet das Song-Fach, dort stehen „Mischen“ und „FX-Pad“
+        // Deck antippen öffnet die Song-Werkbank (Scheibe 5): Reiter Mischen mit „FX-Pad“, Reiter Song mit „Klick“
         await page.tap('.deck-name');
         await page.waitForTimeout(900);
-        bench.songLinks = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, links: [...document.querySelectorAll('#song-links .tab')].map((b) => b.textContent.trim()), metro: !!document.querySelector('#song-links #metro-btn') }));
-        // Zwilling der Tonart-/Akkordzeile: Schalter im Song-Fach blendet beide wieder ein (Wechsel lassen sich anlegen)
+        bench.songLinks = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, links: [...document.querySelectorAll('#sb-mix-tools .tab')].map((b) => b.textContent.trim()).concat(document.getElementById('sb-fx-toggle') ? ['Mischen'] : []), metro: !!document.querySelector('#sb-song-tools #metro-btn') }));
+        // Zwilling der Tonart-/Akkordzeile: Schalter in den Feinheiten des Reiters Song blendet beide wieder ein (Wechsel lassen sich anlegen)
+        await page.tap('#sb-tab-song');
+        if (await page.evaluate(() => document.getElementById('sb-fine-btn-song').getAttribute('aria-expanded') !== 'true')) await page.tap('#sb-fine-btn-song');
         await page.tap('#harm-btn');
         await page.waitForTimeout(200);
         bench.harmony = await page.evaluate(() => ({ pressed: document.getElementById('harm-btn').getAttribute('aria-pressed'), rows: ['.key-row', '.chord-row'].map((q) => document.querySelector(q).getClientRects().length > 0) }));
@@ -579,7 +581,7 @@ async function seedPadWall() {
     check('Werkbank Handy: öffnet auf Mitte, 2 Spuren und die Marke bleiben sichtbar', Math.abs(ws.frac - 0.5) < 0.06 && ws.rowsAbove && ws.markVisible, JSON.stringify(ws));
     const ph = bench.phone;
     check('Daumenleiste: 4 Ziele ≥ 44 px, unterer Rand ≤ 844', ph.bar.every((r) => r && r.w >= 44 && r.h >= 44 && r.bottom <= 844), JSON.stringify(ph.bar.map((r) => r && [Math.round(r.w), Math.round(r.h), Math.round(r.bottom)])));
-    check('Song-Fach: Tipp aufs Deck öffnet es, „Mischen“ und „FX-Pad“ stehen darin', bench.songLinks.dock === 'song' && ['Mischen', 'FX-Pad'].every((t) => bench.songLinks.links.includes(t)) && bench.songLinks.metro, JSON.stringify(bench.songLinks));
+    check('Song-Werkbank: Tipp aufs Deck öffnet sie (Werkbank-Schublade), „Mischen“ und „FX-Pad“ stehen im Reiter Mischen, „Klick“ im Reiter Song', bench.songLinks.dock === 'werkbank' && ['Mischen', 'FX-Pad'].every((t) => bench.songLinks.links.includes(t)) && bench.songLinks.metro, JSON.stringify(bench.songLinks));
     check('Werkzeug am Clip (Handy): in #arr-wrap, 4 Tasten ≥ 44 px', ph.floatIn && !ph.floatHidden && ph.floatBtns.length === 4 && ph.floatBtns.every((h) => h >= 44), JSON.stringify(ph.floatBtns));
     const f = bench.float;
     check('Werkzeug am Clip (Desktop): innerhalb von #arr-wrap, deckt den Clip nicht ab, Tasten ≥ 44 px', f.inside && !f.covers && f.h.length === 3 && f.h.every((h) => h >= 44), JSON.stringify(f));
@@ -607,7 +609,7 @@ async function seedPadWall() {
       for (const t of ['form', 'ton', 'farbe', 'zeit', 'clip']) {
         document.getElementById(`wb-tab-${t}`).click();
         await new Promise((r) => setTimeout(r, 60));
-        const g = document.querySelector('[role=tabpanel]:not([hidden]) .wb-grund');
+        const g = document.querySelector('.wb:not(.sb) [role=tabpanel]:not([hidden]) .wb-grund');
         out[t] = [...g.querySelectorAll('button, input:not([type=hidden]), select, [role=slider]')].filter(vis).length;
       }
       document.getElementById('wb-tab-form').click();
@@ -625,9 +627,9 @@ async function seedPadWall() {
       await page.waitForTimeout(500);
       const head = await page.evaluate(() => ({
         name: document.getElementById('wb-name')?.textContent, count: document.getElementById('wb-count')?.textContent,
-        tabs: [...document.querySelectorAll('.wb-tabs [role=tab]:not([hidden])')].map((t) => t.textContent).join(','),
-        sel: [...document.querySelectorAll('.wb-tabs [role=tab][aria-selected=true]')].map((t) => t.textContent).join(','),
-        group: [...document.querySelectorAll('.wb-tabs')].length, tablist: document.querySelector('.wb-tabs')?.getAttribute('role'),
+        tabs: [...document.querySelectorAll('.wb-tabs[aria-label="Werkbank"] [role=tab]:not([hidden])')].map((t) => t.textContent).join(','),
+        sel: [...document.querySelectorAll('.wb-tabs[aria-label="Werkbank"] [role=tab][aria-selected=true]')].map((t) => t.textContent).join(','),
+        group: [...document.querySelectorAll('.wb-tabs[aria-label="Werkbank"]')].length, tablist: document.querySelector('.wb-tabs[aria-label="Werkbank"]')?.getAttribute('role'),
         sliders: [...document.querySelectorAll('.wb-wave [role=slider]')].filter((e) => !e.closest('[hidden]')).length,
       }));
       check('Werkbank: Kopf mit Name und „in 2 Clips“, Reiter Form · Ton · Farbe · Zeit · Clip (role=tab), Form gewählt', head.name === 'Bumm 1' && head.count === 'in 2 Clips' && head.tabs === 'Form,Ton,Farbe,Zeit,Clip' && head.sel === 'Form' && head.tablist === 'tablist', JSON.stringify(head));
@@ -761,12 +763,21 @@ async function seedPadWall() {
         return {
           bar: ['tabbar', 'editor-tab', 'tab-song'].map((i) => vis(document.getElementById(i))),
           tw: ['mixer-btn', 'fxpad-btn', 'editor-tab', '.tabbar-end', '.tbtn-chev', '.tbtn-mute'].map((i) => !!tw[i]),
-          song: vis(document.getElementById('mixer-btn')) && vis(document.getElementById('fxpad-btn')) && vis(document.getElementById('keys-btn')) && vis(document.getElementById('harm-btn')),
+          song: false,
           pan: !!document.querySelector('.track-head [id*="pan"], .track-head .tbtn-pan'),
         };
       });
+      // Song-Werkbank: FX-Pad im Reiter Mischen, Tastenkürzel im Reiter Projekt (Feinheiten), Tonart und Akkorde im Reiter Song (Feinheiten)
+      const where = {};
+      for (const [tab, ids] of [['mischen', ['fxpad-btn']], ['projekt', ['keys-btn']], ['song', ['harm-btn']]]) {
+        await page.click(`#sb-tab-${tab}`);
+        if (tab !== 'mischen' && await page.evaluate((t) => document.getElementById(`sb-fine-btn-${t}`).getAttribute('aria-expanded') !== 'true', tab)) await page.click(`#sb-fine-btn-${tab}`);
+        where[tab] = await page.evaluate((list) => list.every((i) => { const e = document.getElementById(i); return !!e && e.getClientRects().length > 0; }), ids);
+      }
+      dk.song = Object.values(where).every(Boolean) && await page.evaluate(() => !document.getElementById('mixer-btn').getClientRects().length);
+      dk.where = where;
       check('Desktop: Fachleiste nicht sichtbar, Zwillinge in EDITION.twins, Spurkopf ohne Panorama-Knopf', dk.bar.every((v) => !v) && dk.tw.every(Boolean) && !dk.pan, JSON.stringify(dk));
-      check('Desktop: Song-Werkbank (nichts gewählt) zeigt Mischen, FX-Pad und die Tastenkürzel', dk.song, JSON.stringify(dk));
+      check('Desktop: Song-Werkbank (nichts gewählt): FX-Pad im Reiter Mischen, Tastenkürzel im Reiter Projekt, Tonart und Akkorde im Reiter Song; kein Mixer-Knopf', dk.song, JSON.stringify(dk));
       if (SHOTS) {
         await page.evaluate((c) => window.loopwerk.ui.select(c), clip0);
         await page.waitForTimeout(500);
@@ -800,7 +811,7 @@ async function seedPadWall() {
         for (const t of ['form', 'ton', 'farbe', 'zeit', 'clip']) {
           document.getElementById(`wb-tab-${t}`).click();
           await new Promise((r) => setTimeout(r, 80));
-          const g = document.querySelector('[role=tabpanel]:not([hidden]) .wb-grund');
+          const g = document.querySelector('.wb:not(.sb) [role=tabpanel]:not([hidden]) .wb-grund');
           const items = [...g.querySelectorAll('button, input:not([type=hidden]), select')].filter((e) => e.getClientRects().length && !e.closest('[hidden]'));
           out[t] = items.filter((e) => { const r = e.getBoundingClientRect(); return r.top < wb.top - 1 || r.bottom > bar.top + 1; }).length;
         }
@@ -890,7 +901,7 @@ async function seedPadWall() {
       check('Zerlegen: Marken erscheinen sofort, 8 Marken bei Empfindlichkeit 0,5, ein Regler „Marke 1 von 8“ (role=slider)', m0.marks === 8 && m0.label === 'Marke 1 von 8' && m0.role === 'slider', JSON.stringify(m0));
       const hidden4 = await page.evaluate(() => ['.wb-h-start', '.wb-h-end', '.wb-h-atk', '.wb-h-rel'].every((q) => getComputedStyle(document.querySelector(q)).display === 'none'));
       check('Marken-Modus: die 4 Griffe aus 2a sind ausgeblendet', hidden4);
-      const gr = await page.evaluate(() => document.querySelectorAll('[role=tabpanel]:not([hidden]) .wb-grund :is(button, input, select, [role=slider])').length);
+      const gr = await page.evaluate(() => document.querySelectorAll('.wb:not(.sb) [role=tabpanel]:not([hidden]) .wb-grund :is(button, input, select, [role=slider])').length);
       check('Zerlegen: Grund hat 5 Griffe (An Anschlägen · In 8 gleiche · Empfindlichkeit · Als Kit · Auf die Spur)', gr === 5, String(gr));
       const near = await page.evaluate(() => {
         const t = [0.5, 1.6, 2.4, 3.9, 5.0, 6.3, 7.5, 8.8];
@@ -1055,7 +1066,7 @@ async function seedPadWall() {
       const inView = await page.evaluate(() => {
         const wb = document.getElementById('werkbank').getBoundingClientRect();
         const bar = document.getElementById('tabbar').getBoundingClientRect();
-        const items = [...document.querySelectorAll('[role=tabpanel]:not([hidden]) .wb-grund :is(button, input)')].filter((e) => e.getClientRects().length);
+        const items = [...document.querySelectorAll('.wb:not(.sb) [role=tabpanel]:not([hidden]) .wb-grund :is(button, input)')].filter((e) => e.getClientRects().length);
         return items.filter((e) => { const r = e.getBoundingClientRect(); return r.top < wb.top - 1 || r.bottom > bar.top + 1; }).length;
       });
       check('Handy Zerlegen auf „Mitte“: alle 5 Grund-Griffe liegen vollständig im Bild', inView === 0, String(inView));
@@ -1375,6 +1386,7 @@ async function seedPadWall() {
       await page.evaluate(() => { window.loopwerk.ui.select(null); window.loopwerk.ui.selectTrack(null); });
       if (await page.evaluate(() => !document.getElementById('app').classList.contains('insp-open'))) await page.click('.insp-toggle');
       await page.waitForTimeout(400);
+      await page.click('#sb-tab-projekt');
       const vis = await page.evaluate(() => { const v = (id) => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; }; return { b: v('backup-btn'), r: v('restore-btn') }; });
       check('Sicherung: „Alle eigenen Sounds sichern“ und „Sounds zurückholen“ stehen in der Song-Werkbank', vis.b && vis.r, JSON.stringify(vis));
       await sound3(page, 'kw-sicherung-desktop.png');
@@ -1432,10 +1444,11 @@ async function seedPadWall() {
       await page.evaluate(() => window.loopwerk.ui.setDock(null));
       await page.waitForTimeout(500);
       await sound3(page, 'kw-festhalten-handy-ergebnis.png');
-      await page.evaluate(() => window.loopwerk.ui.setDock('song'));
+      await page.evaluate(() => window.loopwerk.ui.openSong());
       await page.waitForTimeout(700);
+      await page.tap('#sb-tab-projekt');
       const sv = await page.evaluate(() => { const v = (id) => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; }; return { b: v('backup-btn'), r: v('restore-btn'), over: document.documentElement.scrollWidth > innerWidth }; });
-      check('Handy: Sichern und Zurückholen im Song-Fach, kein waagerechtes Scrollen', sv.b && sv.r && !sv.over, JSON.stringify(sv));
+      check('Handy: Sichern und Zurückholen im Reiter Projekt, kein waagerechtes Scrollen', sv.b && sv.r && !sv.over, JSON.stringify(sv));
       await sound3(page, 'kw-sicherung-handy.png');
       check('Konsole ohne Fehler (Handy Festhalten)', k.errors.length === 0, k.errors.join(' | '));
       await ctx.close();

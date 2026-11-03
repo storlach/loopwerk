@@ -7,7 +7,8 @@ import { el } from '../util.js';
 
 const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',').replace('-', '−') : '–');
 
-export function mountMasteringControls(root, { store, engine, analysis, prefix }) {
+// split: der Vergleich (Vorher/Nachher) kommt nicht in den Körper, sondern als cmpRow zurück (Krachwerk: Feinheiten im Reiter „Fertig“)
+export function mountMasteringControls(root, { store, engine, analysis, prefix, split = false }) {
   const box = el('div', 'mst');
   box.id = `${prefix}`;
   // Kopf: Name links, Schalter rechts; darunter der Messwert
@@ -53,7 +54,9 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
     cmp.append(b);
     return b;
   });
-  body.append(meter, row('Stil', styles), row('Vergleich', cmp));
+  const cmpRow = row('Vergleich', cmp);
+  body.append(meter, row('Stil', styles));
+  if (!split) body.append(cmpRow);
   box.append(head, body);
   root.append(box);
 
@@ -76,5 +79,5 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
   analysis.on(render);
   engine.on((what) => { if (what === 'monitor') render(); });
   render();
-  return { render, box };
+  return { render, box, cmpRow };
 }

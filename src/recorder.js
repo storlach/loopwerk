@@ -3,6 +3,7 @@
 
 import { Emitter } from './util.js';
 import { channelsToBuffer } from './own-sounds.js';
+import { loadRecPrefs } from './rec-prefs.js';
 import { cleanTake, features, classify, describe, mixMono } from './dsp/clean.js';
 
 // Modus „sound“ (Krachwerk): ohne Vorzähler und ohne Song-Mitlauf; endet von selbst nach 1,2 s Stille nach dem Klang
@@ -33,8 +34,12 @@ export class Recorder extends Emitter {
     if (this.state !== 'idle') return;
     this.mode = mode;
     this.tag = tag;
-    this.silenceSec = silence ?? SOUND_SILENCE;
-    this.maxSec = maxSeconds ?? SOUND_MAX;
+    // Vorlieben (Reiter „Aufnahme“): ohne Stopp nach Stille endet die Aufnahme erst mit ● (oder nach 30 s); Kit-Aufnahmen haben ihre eigenen Werte
+    const prefs = loadRecPrefs();
+    this.manual = silence == null && !prefs.autoStop;
+    this.silenceSec = silence ?? (prefs.autoStop ? prefs.silence : Infinity);
+    this.maxSec = maxSeconds ?? (this.manual ? 30 : SOUND_MAX);
+    this.cleanOn = this.tag ? true : prefs.clean;
     if (!this.supported) throw new RecorderError('unavailable', 'Aufnahmen gehen in dieser Ansicht nicht.');
     this.state = 'arming';
     this.emit('state');
@@ -77,7 +82,7 @@ export class Recorder extends Emitter {
       if (p > 0.03) auto.heard = true;
       auto.quiet = auto.heard && p < Math.max(0.012, auto.loudest * 0.06) ? auto.quiet + dt : 0;
       this.emit('level', p);
-      if ((auto.heard && auto.quiet >= this.silenceSec) || auto.total >= this.maxSec || (!auto.heard && auto.total >= SOUND_WAIT)) this.finish();
+      if ((auto.heard && auto.quiet >= this.silenceSec) || auto.total >= this.maxSec || (!auto.heard && !this.manual && auto.total >= SOUND_WAIT)) this.finish();
     };
     // Latenz: Ausgabe (bis der Klick zu hören ist) plus Eingabe (bis das Mikrofon-Signal ankommt)
     const inputLatency = this.stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
@@ -137,7 +142,7 @@ export class Recorder extends Emitter {
   // Krachwerk: säubern (Stille weg, Start auf dem Anschlag, Pegel), einordnen, benennen. Platzieren macht die UI.
   async _finishSound(chs, sr) {
     const t0 = performance.now();
-    const c = cleanTake(chs, sr, { maxSeconds: this.maxSec ?? SOUND_MAX });
+    const c = cleanTake(chs, sr, { maxSeconds: this.maxSec ?? SOUND_MAX, clean: this.cleanOn !== false });
     if (!c) throw new RecorderError('silent', 'Nichts gehört – nochmal?');
     const f = features(mixMono(c.chs), sr);
     const cls = classify(f);

@@ -1,3 +1,5 @@
+import { KEYS } from './keys.js';
+
 // Klang-Rezept eines Sounds (ADR 010, Spec krachwerk-2-werkbank §2): project.recipes[sampleId]. Ohne Audio – Store,
 // Library und Werkbank teilen sich Tabelle, Normalisierung und Wörter. Gebacken wird in src/dsp/recipe.js.
 
@@ -140,4 +142,60 @@ export function recipeGesture(gap = 600) {
   };
   key.end = () => { cur.ended = performance.now(); };
   return key;
+}
+
+// ---------- Stammbaum und Zutatenliste (Scheibe 5) ----------
+const SOURCE = { mic: 'Aufnahme', file: 'Datei', loop: 'Schleife', freeze: 'Festgehalten' };
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// Stammbaum-Zeile (§5): Material · Quelle Datum → Schritte · Dauer
+export function treeText(s, r, lib) {
+  if (!s) return '';
+  if (s.missing) return 'Dieser Klang ist nicht mehr im Browser. Die Projektdatei bringt ihn zurück.';
+  const root = s.parentId ? lib.get(s.parentId) : s;
+  const mat = materialOf(r?.material ?? root?.material ?? s.material) ?? materialOf(suggestMaterial(root ?? s));
+  const strom = /^pat-/.test(s.id) || s.patternId;
+  const src = strom ? 'Strom' : SOURCE[root?.made?.from ?? 'mic'] ?? 'Aufnahme';
+  let when = '';
+  if (root?.created && root.created > 1e11) { const d = new Date(root.created); when = ` ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}. ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+  const steps = recipeSteps(r);
+  const dur = (lib.source?.(s) ?? s.orig)?.duration ?? s.duration;
+  const parts = [`${mat.label} · ${src}${when}`];
+  const zut = (root?.made?.src || []).map((id) => lib.get(id)?.name).filter(Boolean);
+  if (root?.made?.from === 'freeze' && zut.length) parts[0] += ` aus ${zut.join(', ')}`;
+  if (steps.length) parts[0] += ` → ${steps.join(' · ')}`;
+  if (dur) parts[0] += ` · ${num(dur, 2)} s`;
+  return (s.parentId ? `Variante von ${root?.name ?? '?'} → ` : '') + parts[0];
+}
+
+// Zutatenliste des Songs (rein): welche Sounds klingen, wie sind sie entstanden, was ist nicht selbst gemacht.
+// Eigen = „own-…“/„mk-…“ (Aufnahmen), Strom („pat-…“, vom Programm aus deinem Muster gebaut) und Varianten davon;
+// Fremd = alles andere aus der Bibliothek (mitgelieferte Loops und Sounds). Fehlt ein Sound in der Bibliothek, zählt er als eigen.
+// Rückgabe: { head, summary, lines, text, own, foreign }; text ist die Nachricht beim Teilen und der WAV-Kommentar.
+export function ingredients(project, library, { app = 'Krachwerk' } = {}) {
+  const ids = new Set();
+  for (const t of project.tracks || []) for (const c of t.clips || []) ids.add(c.sampleId);
+  for (const k of Object.values(project.kits || {})) for (const id of Object.values(k?.map || {})) if (typeof id === 'string') ids.add(id);
+  for (const i of Object.values(project.instruments || {})) if (typeof i?.sampleId === 'string') ids.add(i.sampleId);
+  const rootOf = (id) => { const s = library.get(id); return project.recipes?.[id]?.parent ?? s?.parentId ?? id; };
+  const roots = [...new Set([...ids].map(rootOf))];
+  const isOwn = (id) => { const s = library.get(id); return /^(own|mk|pat)-/.test(String(id)) || !s || s.category === 'own'; };
+  const own = [];
+  const foreign = [];
+  for (const id of roots) {
+    const s = library.get(id);
+    const name = s?.name ?? project.recipes?.[id]?.name ?? 'Ohne Namen';
+    if (!isOwn(id)) { foreign.push({ id, name }); continue; }
+    // Rezept des Sounds selbst, sonst das seiner Variante (die im Song klingt)
+    const used = [...ids].filter((x) => rootOf(x) === id);
+    const hit = used.find((x) => x !== id) ?? id;
+    const line = s ? treeText(library.get(hit) ?? s, project.recipes?.[hit], library) : '';
+    own.push({ id, name, line });
+  }
+  const n = own.length;
+  const m = foreign.length;
+  const summary = `${n} ${n === 1 ? 'Geräusch' : 'Geräusche'} · ${m} ${m === 1 ? 'fremdes Sample' : 'fremde Samples'}`;
+  const head = [app, project.name || 'unbenannt', `${Math.round(project.bpm)} BPM`, (KEYS.includes(project.key) ? project.key : 'Am')].join(' · ');
+  const lines = [...own.map((x) => `${x.name}: ${x.line}`), ...foreign.map((x) => `${x.name}: fremdes Sample`)];
+  return { head, summary, lines, own, foreign, text: [head, summary, ...lines].join('\n') };
 }
