@@ -1,6 +1,6 @@
 # Krachwerk Scheibe 2b: Zerlegen
 
-**Stand:** 03.11.2026 · **Grundlage:** `krachwerk-2-werkbank.md` §1 (Teilung), ADR 008, `ux.md` (Reiter Zerlegen), `cd-review.md` (2a) · **Branch:** `werkstatt`
+**Stand:** 03.11.2026 · **Grundlage:** `krachwerk-2-werkbank.md` §1 (Teilung), ADR 010, `ux.md` (Reiter Zerlegen), `cd-review.md` (2a) · **Branch:** `werkstatt`
 **Rahmen:** Loopwerk unverändert (`count-baseline.json` exakt), Krachwerk nur über Edition-Optionen, ≤ 5 Grund-Griffe je Reiter, ein Undo-Schritt je Zerlegen, Schnitte nicht-destruktiv, `PROJECT_VERSION` bleibt 1.
 
 ## 0. Ziel aus Nutzersicht
@@ -110,7 +110,7 @@ Lage-Rechnung ohne Audio in **neu `src/cuts.js`** (auch in Node testbar): `planC
 | 4 | Editor aus, Zwillinge | `src/edition.js`, `index.html` (`data-surface`) | Haupt-Session | nach 2 |
 | 5 | Krachwerk-Zeichen im Deck | `index.html`, `src/ui/glow.js`, `assets/icons/` | motion-designer | ab 0 |
 | 6 | Tests 6–9, UI-Teil 2b, Budgets | `tests/cuts.test.cjs`, `tests/werkstatt.test.cjs` | qa | ab 4 |
-| 7 | Abschluss: `npm test`, Bilder, ui-designer, CD, ROADMAP, CLAUDE.md (Zerlegen-Satz, Editor nur Loopwerk), Nachtrag ADR 008 (Autotune im Rezept, Trennen als Audio) | `docs/…`, `CLAUDE.md` | Haupt-Session, ui-designer, creative-director | – |
+| 7 | Abschluss: `npm test`, Bilder, ui-designer, CD, ROADMAP, CLAUDE.md (Zerlegen-Satz, Editor nur Loopwerk), Nachtrag ADR 010 (Autotune im Rezept, Trennen als Audio) | `docs/…`, `CLAUDE.md` | Haupt-Session, ui-designer, creative-director | – |
 
 ## 10. Selbst entschieden
 - **Marken verschiebbar, aber nur vor dem Übernehmen.** Danach sind Schnitte gewöhnliche Varianten (kein zweites Modell).

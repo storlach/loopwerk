@@ -1,5 +1,7 @@
-# ADR 008: Klang-Rezept am Sound, gebacken in die Library-Fassung
+# ADR 010: Klang-Rezept am Sound, gebacken in die Library-Fassung
 
+
+> Ursprünglich als ADR 008 angelegt; beim Zusammenführen mit `main` (dort ADR 008 = Effekt-Reihenfolge und Send-Busse) in 010 umbenannt.
 **Status:** vorgeschlagen (Architekt, 02.11.2026) · **Spec:** `docs/specs/krachwerk-2-werkbank.md`
 
 ## Kontext

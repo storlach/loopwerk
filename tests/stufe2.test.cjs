@@ -26,6 +26,13 @@ const { check, finish } = createChecker();
       // 1. Clip-Gain halbiert den Impuls
       const g = await render(proj([{ id: 'a', sampleId: 'test-click', startBeat: 0, lengthBeats: 4, gain: 0.5 }]), 4);
       out.gainPeak = g[0];
+      // 1b. Über 0 dB: Gain 2 (+6 dB) verdoppelt den Impuls; der Store begrenzt auf +12 dB
+      const g2 = await render(proj([{ id: 'a', sampleId: 'test-click', startBeat: 0, lengthBeats: 4, gain: 2 }]), 4);
+      out.gainPeak2 = g2[0];
+      const gs = new m.Store(proj([{ id: 'a', sampleId: 'test-click', startBeat: 0, lengthBeats: 4 }]), { sampleBeats: () => 4 });
+      gs.setClip('a', { gain: 10 });
+      out.gainMax = gs.track('t1').clips[0].gain;
+      out.slider = [m.gainToSlider(1), m.gainToSlider(m.MAX_CLIP_GAIN), m.sliderToGain(1.125), m.sliderToGain(0.5)];
 
       // 2. Fade-In / Fade-Out auf Gleichspannung
       const f = await render(proj([{ id: 'a', sampleId: 'test-dc', startBeat: 0, lengthBeats: 4, fadeInBeats: 2, fadeOutBeats: 1 }]), 4);
@@ -65,6 +72,8 @@ const { check, finish } = createChecker();
       return out;
     });
 
+    check('Clip-Lautstärke über 0 dB: +6 dB verdoppelt den Pegel', Math.abs(audio.gainPeak2 - 1.7) < 0.004, `Spitze ${audio.gainPeak2.toFixed(4)} (erwartet 1,7)`);
+    check('Clip-Lautstärke höchstens +12 dB, Regler bis 0 dB linear, darüber in dB', Math.abs(audio.gainMax - 10 ** (12 / 20)) < 1e-6 && audio.slider[0] === 1 && Math.abs(audio.slider[1] - 1.25) < 1e-9 && Math.abs(audio.slider[2] - 10 ** (6 / 20)) < 1e-9 && audio.slider[3] === 0.5, JSON.stringify({ max: audio.gainMax, slider: audio.slider }));
     check('Clip-Lautstärke 0,5 halbiert den Pegel', Math.abs(audio.gainPeak - 0.425) < 0.002, `Spitze ${audio.gainPeak.toFixed(4)} (erwartet 0,425)`);
     const exp = [0, 0.425, 0.85, 0.85, 0.425, 0].map((v) => v);
     const fadeOk = audio.fade.every((v, i) => Math.abs(v - exp[i]) < 0.01);

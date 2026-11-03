@@ -188,7 +188,7 @@ export class OwnSounds {
   }
 
   // Für die Projektdatei: alle im Projekt benutzten eigenen Sounds als Base64-WAV, dazu die Eltern-Sounds benutzter
-  // Varianten (Klang-Rezept, ADR 008) – die haben kein eigenes Audio
+  // Varianten (Klang-Rezept, ADR 010) – die haben kein eigenes Audio
   async embed(project) {
     const ids = project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId));
     const parents = ids.map((id) => project.recipes?.[id]?.parent).filter(Boolean);

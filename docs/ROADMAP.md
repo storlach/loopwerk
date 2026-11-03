@@ -18,7 +18,7 @@
 
 ### Offen aus Stufe 2
 - ~~Mehrfachauswahl~~ (erledigt in 2.1)
-- Clip-Lautstärke über 0 dB
+- ~~Clip-Lautstärke über 0 dB~~ (erledigt: bis +12 dB; Regler und Griff bis 0 dB linear, darüber ein Fünftel Regelweg in dB, Griff über den oberen Clip-Rand hinaus ziehen, Etikett „+6,0 dB“ am Clip)
 
 ## ✅ Stufe 3 – Bibliothek und Tempo (0.3)
 - 33 CC0-Sounds aus Sonic Pi (Loops, Drums, Bass, Flächen, Glocken, FX) mit Quelle und Lizenz je Sound
@@ -56,7 +56,7 @@
 - Einzelspuren (Stems): Haken im Export-Fach → ZIP mit „01 Drums.wav“ usw. je hörbarer Spur (gemutet/leer übersprungen, Solo ignoriert), Spur mit Effekten, Fader, Panorama, Kurven, Fades; ohne Master-Kette addieren sie sich exakt zum Mix, „Mit Summe“ schickt jede durch Master und Mastering; Fortschritt je Spur, abbrechbar (`renderProject` mit `onlyTrack`, `master: false`; `tests/stems.test.cjs`)
 
 ### Offen aus Stufe 6
-- ~~Einzelspuren (Stems)~~ (erledigt) – Normalisieren beim Export: durch Mastering (2.10) abgedeckt; offen: Stems als 24/32-Bit-WAV (trockene Stems können ohne Master-Fader über 0 dBFS gehen)
+- ~~Einzelspuren (Stems)~~ (erledigt) – Normalisieren beim Export: durch Mastering (2.10) abgedeckt; WAV mit 24 Bit oder 32 Bit Gleitkomma (übersteuert nicht) wählbar, Stems ohne Summe stellen 32 Bit voreingestellt ein (`tests/wav-bits.test.cjs`)
 
 ## ✅ Stufe 7 – Instrumente (1.0)
 - Beat-Editor (Stepsequencer, 8 Instrumente, zwei Kits) und Melodie-Editor (Piano-Roll, vier Klänge)
@@ -227,7 +227,7 @@
 - Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
 - Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
 
-## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven, Scheibe 4: Summe, Scheibe 6: Effekt-Pad aufnehmen)
+## ✅ 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven samt Verzerrer-Anteil (Scheibe 5 ging darin auf), Scheibe 4: Summe, Scheibe 6: Effekt-Pad aufnehmen)
 - Lautstärke-Kurve je Spur, linear: Modell und Engine (`src/automation.js`, `tests/automation.test.cjs`), Kurven wandern mit Clips
 - Kurvenzeile unter der Spur (`src/ui/auto-lane.js`): Spur-Menü „Kurve“ oder Taste A; Maus: Klick setzt, Ziehen verschiebt (Raster, Umschalt frei), Doppelklick/Entf löscht, Fähnchen mit Wert und Position; Finger: Antippen setzt, Punkt ziehen, Halten löscht, Wischen scrollt; geschlossen als dünne Linie über den Clips
 - Vorlagen Einblenden/Ausblenden (1 · 2 · 4 · 8 Takte): Inspektor „Spur“, am Handy Spur-Menü → „Verlauf“; Tests: `tests/automation-ui.test.cjs`
@@ -259,18 +259,19 @@
 - Regler 50–200 % in 5-%-Schritten (Doppelklick/Doppeltipp = 100 %, Pfeiltasten), Schnellwahl ½× · 1× · 2×, Schalter „wie Tonband“: aus = gleiche Tonhöhe (WSOLA im Worker), an = Tonhöhe ändert sich mit (playbackRate in `startVoice`, live und Export gleich, sofort ohne Rechnen). Clip-Länge passt sich an, ein Rückgängig-Schritt je Ziehvorgang
 - Modell: Geschwindigkeit = 1 / `clip.stretch` (alte Projekte unverändert), neues Feld `clip.varispeed`; Länge rastet auf 1/64 Schlag ein, wenn sie fast trifft (48 Schläge bei 150 % = genau 32). Sounds, die der Tonart folgen (tonale Patterns, Loops mit Tonart), laufen nie wie Tonband – sonst wären sie verstimmt. Erzeugte Loops und Patterns werden bei gleicher Tonhöhe im passenden Tempo neu gerendert statt gedehnt (verlustfrei, Anschläge bleiben knackig, ADR 001); WSOLA nur für Aufnahmen und Fremd-Samples. Dehn-Aufträge: der jüngste gebrauchte zuerst, alte Fassungen fallen weg
 - Inspektor (`.insp-clip-speed`) und Handy-Clip-Leiste („Pegel“) über `src/ui/clip-speed.js`; Test `tests/clip-speed.test.cjs`
-- Offen: das Etikett am Clip zeigt noch die Laufzeit (×1,5) statt der Geschwindigkeit
+- Etikett am Clip zeigt die Geschwindigkeit („130 %“, wie Tonband „130 % · Band“)
 
 ## ✅ UI-Paket und Raumlicht als Shader
 - Stumm: Clip-Farbe kommt nach dem Wiederanschalten zurück; Inspektor mit getrennten Abschnitten „Clip“ und „Spur“; Ansicht folgt der Marke nicht mehr, sobald man sie beim Spielen selbst bewegt („Marke folgen“ holt sie zurück, nächster Start folgt wieder); Pfeil im Spurkopf öffnet die Kurven (wie A, auch per Touch); Editor ohne Reiter (`tests/ui-paket.test.cjs`)
 - Raumlicht nach Frequenz (Bass unten, Höhen oben), Säule an der Marke, Nachglühen, Vignette; gezeichnet als WebGL-2-Shader (`src/ui/room-shader.js`): Sternenstaub (Martins Wahl aus neun Entwürfen: Höhenlinien, Polarlicht, Kammlinien, LED-Raster, Plasma-Adern, Fasern, Sternenstaub, Kristall, Equalizer-Säulen): Lichtpunkte sammeln sich, wo Nebel und Licht sind, blenden weich ein und aus und funkeln mit der Musik; je Takt nur eine leise Welle. Seitenleisten mit Weichzeichner.
-- Raumlicht ist jetzt eine Spektrum-Wand (Martins Wahl nach Vergleich im Programm; verworfen: Spur-Pulse, beides, Sternenstaub ruhig/reaktiv, Wasserfall, Höhenlinien und weitere Entwürfe): Punktraster über die Breite des Arrangers, 32 Bänder von links tief nach rechts hoch, bezogen auf das lauteste Band (gut 30 dB, Höhen um 15 dB angehoben), Spitzenpunkte fallen langsam. Jede Spalte in der Farbe der Spuren, die dort klingen (Spektrum je Spur aus `engine.trackBands`), satt im Körper, Weißglut an der Spitze. Werte in `src/ui/room-react.js`
+- Inspektor: Clip-Einstellungen ganz in der Clip-Farbe umrandet (Desktop und Handy-Clip-Leiste), Spur-Einstellungen neutral ohne Farbe – die Zuordnung ist auf einen Blick klar
+- Raumlicht: Rand-Glühen (Martins Wahl aus einer dritten Runde mit acht ruhigeren Entwürfen: Rand-Glühen, Bühnenlicht, Farbfelder, Plakat, Bokeh, Lamellen, Horizont, Wasserlicht). Man soll ablesen können, was klingt, ohne dass es von den Clips ablenkt: die Mitte bleibt ruhig (umgekehrte Vignette), an der Unterkante das ganze Spektrum von links tief nach rechts hoch mit feinem LED-Streifen, links trägt der Bass, rechts die Höhen die Seite, oben ein Hauch. Jede Stelle in der Farbe der Spur, die dort klingt (Spektrum je Spur, `engine.trackBands`); wie weit das Licht hereinreicht, zeigt den Pegel; Anstieg gut 50 ms, Ausklang gut 0,8 s, Farben gleiten in gut 0,4 s. Die Spektrum-Wand (Punktraster) ist gemerkt: Commit 293fdc2
 
 ## 🧪 Krachwerk – Loopwerk zum Selbermachen (Branch `werkstatt`)
 - Brainstorm mit ux-designer, ui-designer, architekt, creative-director: `docs/ux/krachwerk-brainstorm/` (Zielbild: Song · Werkbank · Kiste, ruhiger bei gleichem Funktionsumfang). Der erste Prototyp (Pad-Wand ohne Arranger) ist zurückgebaut.
 - ✅ Scheibe 1a „Gerüst und erster Laut“ (`docs/specs/krachwerk-1-geruest.md`, ADR 007): volle App unter `/werkstatt/` ohne mitgelieferte Sounds, leerer Song (2 Spuren, 90 BPM), eigener Speicher inkl. der Pad-Wand-Klänge, ● nimmt ohne Vorzähler auf, säubert und legt den Klang als Clip in den Loop; PWA, eigenes Icon; Zählung Desktop „Clip gewählt“ 55 statt 114 Bedienelemente
 - ✅ Scheibe 1b „Flächen und Ruhe“: Dichte `calm` (Schriftskala, Stufen mit Zwillingen), Werkbank rechts (⤢ 60 %) bzw. als Schublade am Handy, Daumenleiste Kiste · ▶ · ● · Werkbank, Werkzeug am Clip (`src/ui/clip-float.js`), Kiste nach Herkunft; Zählung „Clip gewählt“ Desktop 54 Bedienelemente / 30 Rahmen / 4 Schriftgrößen (Loopwerk 114 / 71 / 12), Handy 18 / 8 / 4 (Loopwerk 43 / 27 / 7)
-- ✅ Scheibe 2a „Sound-Werkbank“ (`docs/specs/krachwerk-2-werkbank.md`, ADR 008): Klang-Rezept am Sound (nicht-destruktiv, gebacken, eine Signalkette; Varianten), Werkbank mit Welle (Anfang/Ende/Anschlag/Ausklang) und Reitern Form · Ton · Farbe · Zeit · Clip, Herkunft (Material Körper/Dinge/Stimme/Strom/Schleife) mit gleicher Farbe in Kiste und Song, Stammbaum-Zeile; Zählung Desktop „Clip gewählt“ 45 / 11 / 4
+- ✅ Scheibe 2a „Sound-Werkbank“ (`docs/specs/krachwerk-2-werkbank.md`, ADR 010): Klang-Rezept am Sound (nicht-destruktiv, gebacken, eine Signalkette; Varianten), Werkbank mit Welle (Anfang/Ende/Anschlag/Ausklang) und Reitern Form · Ton · Farbe · Zeit · Clip, Herkunft (Material Körper/Dinge/Stimme/Strom/Schleife) mit gleicher Farbe in Kiste und Song, Stammbaum-Zeile; Zählung Desktop „Clip gewählt“ 45 / 11 / 4
 - ✅ Scheibe 2b „Zerlegen“ (`docs/specs/krachwerk-2b-zerlegen.md`): Reiter Zerlegen (An Anschlägen | In N gleiche, Empfindlichkeit, In die Kiste, Auf die Spur), verschiebbare Marken auf der Welle, Schnitte als Varianten (ein Undo), Autotune als Rezeptschritt, Trennen in der Werkbank, Werkbank direkt aus der Kiste, 56-px-Kopfzeile der Handy-Schublade, Sample-Editor in Krachwerk ersetzt (Zwillinge), eigenes Zeichen im Deck
 - Als Nächstes Scheibe 3: Takes (Aufnahme im Loop über den laufenden Song), Festhalten (Resampling), Speicher v2 und ZIP-Sicherung
 
@@ -284,4 +285,4 @@
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
 
 ## Später
-- Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins
+- Tonart-Erkennung, Desktop-App (Tauri), Plugins

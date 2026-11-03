@@ -513,11 +513,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     }
     const g = room.ghosts.reduce((m, x) => (x.i > (m?.i ?? 0) ? x : m), null);
     react.step(dt, engine.playing && !calm);
-    // Spektrum über die Breite des Arrangers (links tief, rechts hoch), nicht hinter den Seitenleisten
-    const ar = grid.getBoundingClientRect();
-    const vw = window.innerWidth || 1;
-    const x0 = Math.max(0, (ar.left + headW()) / vw), x1 = Math.min(1, Math.min(ar.right, root.getBoundingClientRect().right) / vw);
-    const reactU = lastReact = { spec: react.spec, peak: react.peak, col: react.col, x0, x1 };
+    const reactU = lastReact = { spec: react.spec, col: react.col };
     shader.draw({
       react: reactU,
       t: flow, K: mix ? K : 0, A, band: mix ? [b0, b1, b2] : [0, 0, 0], glow: mix ? room.glow : [0, 0, 0],

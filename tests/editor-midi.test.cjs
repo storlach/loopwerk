@@ -263,15 +263,20 @@ function geometry(pitch) {
       const poll = () => (engine.ctx.currentTime >= target ? res(engine.ctx.currentTime) : setTimeout(poll, 2));
       poll();
     }), beat);
+    // Wartet im Browser auf den Schlag und schickt die MIDI-Nachrichten dort sofort – ohne Rundlauf zum Testprogramm,
+    // der unter Last (langsame Maschine) leicht 100 ms und mehr kostet und dann die Messung verfälscht
+    const atBeat = (beat, ...msgs) => page.evaluate(([b, list]) => new Promise((res) => {
+      const { engine, patternEditor } = window.loopwerk;
+      const lp = patternEditor.looper;
+      const target = lp.t0 + b * lp.spb + (engine.ctx.outputLatency || 0) + (engine.ctx.baseLatency || 0);
+      const poll = () => { if (engine.ctx.currentTime < target) { setTimeout(poll, 2); return; } for (const m of list) window.__midiIn.onmidimessage(m); res(); };
+      poll();
+    }), [beat, msgs]);
     await page.click('#pat-live');
-    await waitBeat(1.02);
-    await midi(NOTE_ON(64, 40));
-    await waitBeat(1.9);
-    await midi(NOTE_OFF(64));
-    await waitBeat(2.02);
-    await midi(NOTE_ON(66, 127));
-    await waitBeat(2.5);
-    await midi(NOTE_OFF(66));
+    await atBeat(1.02, NOTE_ON(64, 40));
+    await atBeat(1.9, NOTE_OFF(64));
+    await atBeat(2.02, NOTE_ON(66, 127));
+    await atBeat(2.5, NOTE_OFF(66));
     await page.waitForTimeout(150);
     ns = await getNotes();
     check('Live: MIDI-Noten landen im Raster mit ihrem Anschlag (Velocity 40 → 0,38 …, 127 → 1)',
@@ -279,10 +284,8 @@ function geometry(pitch) {
     await setNotes([]);
     await page.selectOption('#pat-chord', 'major');
     const d2 = await undoDepth();
-    await waitBeat(3.02);
-    await midi(NOTE_ON(60, 80));
-    await waitBeat(3.6);
-    await midi(NOTE_OFF(60));
+    await atBeat(3.02, NOTE_ON(60, 80));
+    await atBeat(3.6, NOTE_OFF(60));
     await page.waitForTimeout(150);
     ns = await getNotes();
     const v80 = await page.evaluate(async () => (await import('./src/instruments.js')).midiVelocity(80));
@@ -377,13 +380,9 @@ function geometry(pitch) {
     await page.click('#pat-view .seg[data-view="grid"]');
     await setRows({});
     await page.click('#pat-live');
-    await waitBeat(1.02);
-    await midi(NOTE_ON(38, 30)); // Snare leise auf Schlag 2 → Schritt 4
-    await waitBeat(2.35);
-    await midi(NOTE_ON(36, 127)); // Kick, 0,35 Schläge nach Schlag 3 → Schritt 9 (9,4 gerundet)
-    await waitBeat(3.02);
-    await midi(NOTE_ON(60, 100)); // unbekannt: kein Eintrag
-    await midi(NOTE_ON(42, 64));
+    await atBeat(1.02, NOTE_ON(38, 30)); // Snare leise auf Schlag 2 → Schritt 4
+    await atBeat(2.27, NOTE_ON(36, 127)); // Kick, 0,27 Schläge nach Schlag 3 → Schritt 9 (9,1 gerundet, Spielraum für langsame Maschinen)
+    await atBeat(3.02, NOTE_ON(60, 100), NOTE_ON(42, 64)); // 60 unbekannt: kein Eintrag; 42 Hi-Hat
     await page.waitForTimeout(150);
     let rw = await rows();
     const v30 = await page.evaluate(async () => (await import('./src/instruments.js')).midiVelocity(30));

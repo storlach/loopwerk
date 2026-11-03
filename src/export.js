@@ -2,7 +2,7 @@
 // MP3 mit LAME (lamejs, LGPL-3.0, lame.sourceforge.net) – wird erst beim ersten MP3-Export geladen.
 
 import { renderProject, masteringOf, trackLevel } from './engine.js';
-import { encodeWav } from './wav.js';
+import { encodeWav, wavBits, fileExt } from './wav.js';
 import { analyzeMastering } from './mastering.js';
 import { audibleMap, trackState, EPS } from './model.js';
 import { makeZip, crc32 } from './zip.js';
@@ -68,7 +68,7 @@ export function peakOf(buffer) {
   return p;
 }
 
-// format: 'wav' | 'mp3'; range: 'song' | 'loop'; mastering: mit Mastering (Standard: wie im Projekt eingeschaltet)
+// format: 'wav' (16 Bit) | 'wav24' | 'wav32' (Gleitkomma) | 'mp3'; range: 'song' | 'loop'; mastering: mit Mastering (Standard: wie im Projekt eingeschaltet)
 export async function exportSong(project, library, { format = 'wav', range = 'song', tail = true, mastering = masteringOf(project).on, onProgress } = {}) {
   const [fromBeat, toBeat] = exportRange(project, range);
   if (toBeat <= fromBeat) throw new Error('Im Song liegen noch keine Clips – es gibt nichts zu exportieren.');
@@ -90,7 +90,7 @@ export async function exportSong(project, library, { format = 'wav', range = 'so
   });
   const blob = format === 'mp3'
     ? await encodeMp3(audio, { onProgress: (p) => onProgress?.(renderShare + p * (1 - renderShare)) })
-    : encodeWav(audio);
+    : encodeWav(audio, { bits: wavBits(format) });
   onProgress?.(1);
   return { blob, duration: audio.duration, peak: peakOf(audio), fromBeat, toBeat, analysis, audio };
 }
@@ -138,7 +138,7 @@ export async function exportStems(project, library, { format = 'wav', range = 's
   for (let i = 0; i < tracks.length; i++) {
     if (signal?.aborted) throw aborted();
     const track = tracks[i];
-    const name = `${stemName(project, track)}.${format}`;
+    const name = `${stemName(project, track)}.${fileExt(format)}`;
     const step = (p, phase) => onProgress?.(share + (1 - share) * (i + p) / tracks.length, { index: i, count: tracks.length, name, phase });
     const audio = await renderProject(project, library, {
       fromBeat, toBeat, tailSeconds, onlyTrack: track.id, master: withMaster,
@@ -148,7 +148,7 @@ export async function exportStems(project, library, { format = 'wav', range = 's
     if (signal?.aborted) throw aborted();
     const blob = format === 'mp3'
       ? await encodeMp3(audio, { onProgress: (p) => step(renderShare + p * (1 - renderShare), 'encode') })
-      : encodeWav(audio);
+      : encodeWav(audio, { bits: wavBits(format) });
     files.push({ name, data: blob, crc: crc32(new Uint8Array(await blob.arrayBuffer())), size: blob.size });
     stems.push({ name, trackId: track.id, peak: peakOf(audio) });
     duration = audio.duration;

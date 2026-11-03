@@ -293,6 +293,10 @@ const { check, finish } = createChecker();
     await page.tap('#lvl-speed-tape');
     const pt = await page.evaluate(() => ({ v: window.loopwerk.store.findClip(window.loopwerk.ui.selectedClipId).clip.varispeed, pressed: document.getElementById('lvl-speed-tape').getAttribute('aria-pressed') }));
     check('Handy: Tonband-Schalter antippen schaltet um', pt.v === true && pt.pressed === 'true', JSON.stringify(pt));
+    await page.waitForTimeout(150);
+    const tag = await page.evaluate(() => [...document.querySelectorAll(`.clip[data-clip-id="${window.loopwerk.ui.selectedClipId}"] .clip-tag`)].map((n) => n.textContent));
+    const tapeOk = await page.evaluate(async () => { const { canVarispeed } = await import('./src/model.js'); const { store, ui, library } = window.loopwerk; return canVarispeed(library, store.findClip(ui.selectedClipId).clip.sampleId); });
+    check('Etikett am Clip zeigt die Geschwindigkeit (160 %, bei Tonband mit Zusatz)', tag.includes(tapeOk ? '160 % · Band' : '160 %'), JSON.stringify({ tag, tapeOk }));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'clip-speed-handy.png') });
     // Doppeltipp auf den Regler = 100 %
     const rr = await page.locator('#lvl-speed').boundingBox();

@@ -40,7 +40,7 @@ export const EDITIONS = {
       'ed-loop': 'Zeit', 'ed-beats': 'Zeit', 'ed-bpm': 'Zeit', 'ed-play': 'Tipp auf die Welle',
       'ed-undo': 'Rückgängig (↶)', 'ed-name': 'Name im Kopf der Werkbank', 'ed-apply': 'Als Variante',
     },
-    // Klang-Rezept (Scheibe 2a, ADR 008): Sound-Werkbank im Clip-Abschnitt, Herkunftsfarben in Kiste und Song, Roh = Korn
+    // Klang-Rezept (Scheibe 2a, ADR 010): Sound-Werkbank im Clip-Abschnitt, Herkunftsfarben in Kiste und Song, Roh = Korn
     workbench: 'sound', materialColors: true, grainWave: true,
     // Zeichen im Deck: Klatscher als Ausschlag um die Mittellinie (assets/icons/krachwerk.svg), src/ui/brand-meter.js
     brandMark: 'klatscher',

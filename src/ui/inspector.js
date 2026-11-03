@@ -4,7 +4,7 @@
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
 import { EFFECTS, withFx } from '../effects.js';
-import { clipGain, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
+import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
 import { formatCurve, formatDb } from './arranger.js';
@@ -137,7 +137,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   if (!panel) clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
-  gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: Number(gain.input.value) }, 'insp-gain-' + c.id); });
+  gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: sliderToGain(Number(gain.input.value)) }, 'insp-gain-' + c.id); });
   fin.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { fadeInBeats: clamp(Number(fin.input.value), 0, c.lengthBeats - (c.fadeOutBeats || 0)) }, 'insp-in-' + c.id); });
   fout.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { fadeOutBeats: clamp(Number(fout.input.value), 0, c.lengthBeats - (c.fadeInBeats || 0)) }, 'insp-out-' + c.id); });
   for (const [r, key] of [[cin, 'fadeInCurve'], [cout, 'fadeOutCurve']]) {
@@ -155,9 +155,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   trackSec.setAttribute('aria-label', 'Spur-Einstellungen');
   const trackHead = el('header', 'insp-head');
   const trackTitle = el('h2', 'insp-title');
-  const trackSw = el('span', 'swatch');
   const trackName = el('span');
-  trackTitle.append(el('span', 'insp-kind', 'Spur'), el('span', 'insp-sep', '·'), trackSw, trackName);
+  // Spur-Einstellungen neutral, ohne Farbe – die Clip-Farbe gehört nur dem Clip-Abschnitt
+  trackTitle.append(el('span', 'insp-kind', 'Spur'), el('span', 'insp-sep', '·'), trackName);
   const trackSub = el('p', 'insp-meta');
   trackHead.append(trackTitle, trackSub);
   const vol = slider('Spur-Lautstärke', 'insp-vol', 0, 1, 0.01);
@@ -390,7 +390,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const bars = clip.lengthBeats / bpb;
       clipMeta.textContent = `Takt ${from}${to > from ? `–${to}` : ''} · ${Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : fmtBeats(clip.lengthBeats)}`;
       const setR = (r, v, max, text) => { r.input.max = String(max); if (document.activeElement !== r.input) r.input.value = String(v); r.out.textContent = text; };
-      setR(gain, clipGain(clip), 1, formatDb(clipGain(clip)));
+      setR(gain, gainToSlider(clipGain(clip)), GAIN_SLIDER_MAX, formatDb(clipGain(clip)));
       setR(fin, clip.fadeInBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeInBeats || 0));
       setR(fout, clip.fadeOutBeats || 0, clip.lengthBeats, fmtBeats(clip.fadeOutBeats || 0));
       setR(cin, clip.fadeInCurve || 0, 1, formatCurve(clip.fadeInCurve || 0));
@@ -416,10 +416,6 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       trackName.textContent = track.name;
       const n = track.clips.length;
       trackSub.textContent = `Gilt für alle Clips der Spur · ${n} ${n === 1 ? 'Clip' : 'Clips'}`;
-      // Akzent wie der Farbpunkt im Spurkopf: Kategorie des ersten Clips
-      const first = track.clips.reduce((a, c) => (!a || c.startBeat < a.startBeat ? c : a), null);
-      const fs = first && library.get(first.sampleId);
-      trackSec.className = `insp-sec insp-track${fs ? ` cat-${fs.colorCat ?? fs.category}` : ''}`;
       volLabel.textContent = 'Spur-Lautstärke';
       if (document.activeElement !== vol.input) vol.input.value = String(track.volume);
       vol.out.textContent = formatDb(track.volume);

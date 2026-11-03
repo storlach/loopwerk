@@ -1,6 +1,6 @@
 # Krachwerk Scheibe 2: Sound-Werkbank
 
-**Stand:** 02.11.2026 · **Grundlage:** `docs/ux/krachwerk-brainstorm/synthese.md` (maßgeblich), `ux.md` §c, `ui.md`, `architektur.md` §3, `docs/ux/cd-review.md` (Krachwerk Scheibe 1), ADR 007, **ADR 008 (Klang-Rezept)** · **Branch:** `werkstatt`
+**Stand:** 02.11.2026 · **Grundlage:** `docs/ux/krachwerk-brainstorm/synthese.md` (maßgeblich), `ux.md` §c, `ui.md`, `architektur.md` §3, `docs/ux/cd-review.md` (Krachwerk Scheibe 1), ADR 007, **ADR 010 (Klang-Rezept)** · **Branch:** `werkstatt`
 **Fester Rahmen:** Eine Änderung gilt für alle Clips dieses Sounds, daneben gibt es „Als Variante“. Sie wirkt sofort, ohne „Übernehmen“, und geht über ↶ zurück. Raum und Echo gehören zur Spur. Höchstens 5 Griffe je Reiter. Loopwerk bleibt optisch unverändert (`count-baseline.json` exakt). `PROJECT_VERSION` bleibt 1.
 
 ## 0. Ziel aus Nutzersicht
@@ -54,7 +54,7 @@ Neues optionales Feld `project.recipes`. Schlüssel ist die Sound-ID. Fehlende F
 
 Material und Name laufen über `setRecipe(id, { material })` bzw. `{ name }`. `OwnSounds` speichert das zuletzt gesetzte Material zusätzlich als Vorschlag am Datensatz (`rec.material`, außerhalb des Undo, nur Vorbelegung für neue Projekte).
 
-## 4. Engine (ADR 008: gebacken, eine Kette)
+## 4. Engine (ADR 010: gebacken, eine Kette)
 **Kein neuer Knoten.** `startVoice`, `buildMix`, `clipPieces` und der Scheduler bleiben unverändert. Das Rezept ändert den Puffer, die Engine merkt das an `rev` in `_sig` und plant live neu (`_resync`: alte Stimme blendet aus, neue setzt mit ±96 Samples Überblendung an derselben Stelle ein).
 
 **Library (`src/samples.js`):**
@@ -205,12 +205,12 @@ Regler sind Linien mit Wert in Mono (Zahlen) und Wort in Sans. Gesperrte Griffe 
 | 6 | Kiste nach Material, Varianten eingerückt · Arranger Korn/Linie, Blendengriffe unter dem Namen · Fachleiste und Panorama in Stufe 3 | `src/ui/library.js`, `src/ui/arranger.js`, `src/ui/layout.js`, `index.html` | ui-engineer | mit 5 |
 | 7 | Krachwerk-Zeichen im Deck | `index.html`, `src/ui/glow.js`, `assets/icons/` | motion-designer | mit 5 |
 | 8 | Prüfungen 11–17, UI-Teil 2a, Budgets | `tests/recipe.test.cjs`, `tests/werkstatt.test.cjs` | qa | ab 3 |
-| 9 | **Abschluss 2a:** `npm test`, Bilder, ui-designer-Review, CD-Durchsicht, ROADMAP, CLAUDE.md (Rezept-Satz unter Technik, ADR 008) | `docs/ROADMAP.md`, `CLAUDE.md`, `docs/ux/cd-review.md` | Haupt-Session, ui-designer, creative-director | – |
+| 9 | **Abschluss 2a:** `npm test`, Bilder, ui-designer-Review, CD-Durchsicht, ROADMAP, CLAUDE.md (Rezept-Satz unter Technik, ADR 010) | `docs/ROADMAP.md`, `CLAUDE.md`, `docs/ux/cd-review.md` | Haupt-Session, ui-designer, creative-director | – |
 
 Vor Schritt 2 lädt der audio-engineer den Skill `audio-engine-regeln`.
 
 ## 10. Selbst entschieden
-- **Alles gebacken, keine Knoten je Stimme** (ADR 008): eine Kette, Offline gleich Realtime ohne eigenen Nachweis je Knoten.
+- **Alles gebacken, keine Knoten je Stimme** (ADR 010): eine Kette, Offline gleich Realtime ohne eigenen Nachweis je Knoten.
 - **Rezept im Projekt, Material zusätzlich als Vorschlag am Datensatz:** Undo bleibt im Store, und neue Projekte erben trotzdem die letzte Wahl.
 - **Varianten ohne eigenes Audio** und mit `parent` auf die Wurzel. Damit sind die Schnitte aus 2b fertig modelliert.
 - **Kiste nach Material statt nach Quelle:** Mit setzbarem Material ist die Gruppe gleich der Farbe. Die Quelle steht im Stammbaum.

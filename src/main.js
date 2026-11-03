@@ -287,7 +287,7 @@ function mountTempo({ store, engine, library, ui, arranger }) {
   return { apply, get busy() { return !!running; } };
 }
 
-// Klang eines Sounds aus dem Projekt, in einer Kette: erst Klang-Rezepte (ADR 008: backen, live ohne Stopp neu einplanen),
+// Klang eines Sounds aus dem Projekt, in einer Kette: erst Klang-Rezepte (ADR 010: backen, live ohne Stopp neu einplanen),
 // dann Sound-Tempo (Aufnahme neu einpassen, Wiedergabe an derselben Stelle fortsetzen)
 function mountSoundState({ store, engine, library, ui, arranger }) {
   let last = '';

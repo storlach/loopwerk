@@ -45,7 +45,7 @@ Neueste Prüfung oben.
 
 ## Krachwerk Scheibe 2a (03.11.2026)
 
-**Geprüft:** alle neun Bilder in `docs/ux/krachwerk-brainstorm/shots-2a/` (Handy je Reiter Form/Ton/Farbe/Zeit/Clip, Handy Clip gewählt, Desktop Clip gewählt, ⤢ breit, Kiste), daneben `shots-1b/` (gleiche Lage) und die Aufnahmefolge in `tests/werkstatt.test.cjs`. Grundlage: `docs/specs/krachwerk-2-werkbank.md`, ADR 008, `synthese.md`, meine Durchsicht von Scheibe 1. **Zählwerte (Clip gewählt):** Desktop 57/33/4/11 → **45/11/4/11** (Endziel 45/35/6/11: Bedienelemente erreicht, Rahmen weit darunter), Handy 17/8/4/11, Handy *Werkbank Mitte* 26/8/4/11 (Budget 26 genau ausgeschöpft). Nicht umgesetzt laut ui-engineer: Krachwerk-Zeichen im Deck, 56-px-Zustand der Schublade, Werkbank für einen Sound aus der Kiste.
+**Geprüft:** alle neun Bilder in `docs/ux/krachwerk-brainstorm/shots-2a/` (Handy je Reiter Form/Ton/Farbe/Zeit/Clip, Handy Clip gewählt, Desktop Clip gewählt, ⤢ breit, Kiste), daneben `shots-1b/` (gleiche Lage) und die Aufnahmefolge in `tests/werkstatt.test.cjs`. Grundlage: `docs/specs/krachwerk-2-werkbank.md`, ADR 010, `synthese.md`, meine Durchsicht von Scheibe 1. **Zählwerte (Clip gewählt):** Desktop 57/33/4/11 → **45/11/4/11** (Endziel 45/35/6/11: Bedienelemente erreicht, Rahmen weit darunter), Handy 17/8/4/11, Handy *Werkbank Mitte* 26/8/4/11 (Budget 26 genau ausgeschöpft). Nicht umgesetzt laut ui-engineer: Krachwerk-Zeichen im Deck, 56-px-Zustand der Schublade, Werkbank für einen Sound aus der Kiste.
 
 ### 1. Urteil
 

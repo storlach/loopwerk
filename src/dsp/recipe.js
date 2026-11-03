@@ -1,4 +1,4 @@
-// Klang-Rezept backen (ADR 008): aus dem Original und dem Rezept einen neuen Puffer rechnen. Reines JS auf
+// Klang-Rezept backen (ADR 010): aus dem Original und dem Rezept einen neuen Puffer rechnen. Reines JS auf
 // Float32Array-Kanälen, Eingabe bleibt unverändert – läuft im Hauptthread (kurze Klänge) und im Rechen-Worker.
 // Feste Reihenfolge: Ausschnitt · rückwärts · Dehnen · Tonhöhe · Autotune · Hochpass/Tiefpass · Wärme · Körnung · Gain ·
 // Hüllkurve.

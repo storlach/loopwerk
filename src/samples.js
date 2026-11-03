@@ -1864,7 +1864,7 @@ export class Library extends Emitter {
     return changed;
   }
 
-  // ---------- Klang-Rezepte (ADR 008) ----------
+  // ---------- Klang-Rezepte (ADR 010) ----------
   // Rezepte des Projekts übernehmen: Varianten anlegen bzw. entfernen, geänderte Sounds neu backen und ihre Fassung
   // neu vorbereiten (neues rev → die Engine plant live neu). Gleicher Stand → sofort fertig (wartet nur auf laufendes
   // Backen). Rückgabe: true, wenn sich ein Klang geändert hat.

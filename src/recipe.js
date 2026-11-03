@@ -1,4 +1,4 @@
-// Klang-Rezept eines Sounds (ADR 008, Spec krachwerk-2-werkbank §2): project.recipes[sampleId]. Ohne Audio – Store,
+// Klang-Rezept eines Sounds (ADR 010, Spec krachwerk-2-werkbank §2): project.recipes[sampleId]. Ohne Audio – Store,
 // Library und Werkbank teilen sich Tabelle, Normalisierung und Wörter. Gebacken wird in src/dsp/recipe.js.
 
 // Klangfelder: Bereich, Standard (= nicht gespeichert), Raster beim Speichern, Raster der Bedienung (ui)

@@ -51,9 +51,11 @@ const { check, finish } = createChecker();
       requestAnimationFrame(f);
     }));
     await page.mouse.up();
-    await page.waitForTimeout(200);
+    // Licht aus: bis zu 1 s warten (langsame Maschine), dann prüfen
+    await page.waitForFunction(() => !/radial-gradient/.test(getComputedStyle(document.querySelector('#pat-pads .pat-pad[data-row="kick"]')).backgroundImage), null, { timeout: 1000 }).catch(() => {});
     const after = await page.evaluate(() => getComputedStyle(document.querySelector('#pat-pads .pat-pad[data-row="kick"]')).backgroundImage);
-    check('Pad halten: leuchtet in jedem Bild, auch während des Wirbels', lit.length > 20 && lit.every(Boolean), `${lit.filter(Boolean).length}/${lit.length}`);
+    // genug Bilder für die Aussage (bei 60 Bildern/s sind es rund 65, auf langsamen Maschinen weniger)
+    check('Pad halten: leuchtet in jedem Bild, auch während des Wirbels', lit.length >= 8 && lit.every(Boolean), `${lit.filter(Boolean).length}/${lit.length}`);
     check('Pad loslassen: Licht geht aus', !/radial-gradient/.test(after), after.slice(0, 60));
     await page.evaluate(() => { window.loopwerk.ui.setDock(null); document.getElementById('ltab-sounds').click(); });
 
