@@ -22,7 +22,7 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
   const name = el('span', 'mst-name', 'Mastering');
   const meter = el('output', 'mst-meter');
   meter.id = `${prefix}-meter`;
-  head.append(sw, name, meter);
+  head.append(sw, name);
   // Einstellungen, nur bei eingeschaltetem Mastering
   const body = el('div', 'mst-body');
   const row = (label, node) => { const r = el('div', 'mst-row'); r.append(el('span', 'mst-label', label), node); return r; };
@@ -53,7 +53,7 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
     cmp.append(b);
     return b;
   });
-  body.append(row('Stil', styles), row('Vergleich', cmp));
+  body.append(meter, row('Stil', styles), row('Vergleich', cmp));
   box.append(head, body);
   root.append(box);
 

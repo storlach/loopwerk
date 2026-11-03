@@ -3,7 +3,7 @@
 // node tests/more-loops.test.cjs [--verbose]
 const { chromium } = require('playwright');
 const { start } = require('./serve.cjs');
-const { createChecker } = require('./harness.cjs');
+const { legacyStart, createChecker } = require('./harness.cjs');
 
 const VERBOSE = process.argv.includes('--verbose');
 const { check, finish } = createChecker();
@@ -13,6 +13,7 @@ const { check, finish } = createChecker();
   const url = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage();
+  await legacyStart(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

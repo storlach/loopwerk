@@ -1,7 +1,7 @@
 // Version 1.7: flüssige Tasteneingabe (keine verlorenen Schläge, kein Ruckeln) und Splash-Screen beim Laden.
 // node tests/v17.test.cjs
 const { chromium } = require('playwright');
-const { openApp, createChecker, clickR, selectR, createCard } = require('./harness.cjs');
+const { legacyStart, openApp, createChecker, clickR, selectR, createCard } = require('./harness.cjs');
 const { start } = require('./serve.cjs');
 
 const { check, finish } = createChecker();
@@ -11,6 +11,7 @@ const { check, finish } = createChecker();
   const server = await start();
   const browser = await chromium.launch();
   const sp = await browser.newPage();
+  await legacyStart(sp);
   const errors = [];
   sp.on('pageerror', (e) => errors.push(e.message));
   let n = 0;

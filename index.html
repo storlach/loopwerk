@@ -2614,16 +2614,18 @@
   /* ---------- Mastering der Summe (Inspektor „Song“, Export) ---------- */
   /* Kopf: Schalter + Name + Messwert; darunter (nur wenn an) die Einstellungen, eingerückt unter dem Namen */
   .mst { display: grid; gap: 6px; }
-  .mst-head { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 10px; cursor: pointer; }
+  .mst-head { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; cursor: pointer; }
   .mst-name { font-weight: 600; font-size: 13px; color: var(--ink); }
   .mst:not(.on) .mst-name { color: var(--muted); }
-  .mst-meter { justify-self: end; font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--ink); text-align: right; }
+  .mst-meter { font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--ink); }
   .mst-body { display: grid; gap: 8px; padding-left: 42px; }
   .mst-body[hidden] { display: none; }
   .mst-row { display: grid; gap: 4px; }
   .mst-label { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .mst-seg { display: flex; border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--key-line); }
   .mst-seg .seg { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  /* vier Stile als 2 × 2, damit „Ausgewogen“ ganz lesbar bleibt */
+  .mst-styles { display: grid; grid-template-columns: 1fr 1fr; }
   .insp-mst { margin: 2px 0 10px; }
   .song-mst { padding: 4px 0 2px; }
   .ex-master { min-width: 0; }
@@ -2692,8 +2694,9 @@
   @media (max-width: 760px), (hover: none) and (pointer: coarse) {
     .mst-seg .seg, .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 44px; height: 44px; }
     .mst-head { min-height: 44px; }
-    .mst .fxl-switch { width: 44px; height: 26px; }
-    .mst .fxl-switch::after { width: 20px; height: 20px; top: 3px; left: 3px; }
+    /* 44 px hoch zum Tippen, sichtbar ist nur die 26 px hohe Bahn (Hintergrund im Inhaltsbereich) */
+    .mst .fxl-switch { width: 44px; height: 44px; padding: 9px 0; background-clip: content-box; border-radius: 13px / 13px; }
+    .mst .fxl-switch::after { width: 20px; height: 20px; top: 12px; left: 3px; }
     .mst .fxl-switch[aria-pressed="true"]::after { transform: translateX(18px); }
     .mst-body { padding-left: 0; }
     .fxpad-target { height: 44px; }
@@ -3158,8 +3161,10 @@
   /* Obere Leiste: Einstellbares hat einen Rahmen und einen Pfeil (Tempo, Tonart), reine Anzeige (Takt, Schlag, Zeit) bleibt ohne */
   .lcd .lcd-edit { position: relative; }
   .lcd .lcd-edit .lcd-input, .lcd .lcd-edit .key-sel {
-    box-shadow: inset 0 0 0 1px var(--key-line); border-radius: var(--radius); padding: 0 6px; box-sizing: content-box;
+    box-shadow: inset 0 0 0 1px var(--key-line); border-radius: var(--radius); padding: 0 6px; box-sizing: border-box;
   }
+  .lcd .lcd-edit .lcd-input { width: calc(4.2ch + 12px); }
+  @media (max-width: 760px) { .lcd .lcd-edit .lcd-input { width: 100%; padding: 0 1px; text-align: center; } }
   .lcd .lcd-edit .key-sel { padding-right: 18px; }
   .lcd .lcd-edit:hover .lcd-input, .lcd .lcd-edit:hover .key-sel, .lcd .lcd-edit :focus-visible { box-shadow: inset 0 0 0 1px var(--ink); }
   .lcd .lcd-key.lcd-edit::after {

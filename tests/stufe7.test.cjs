@@ -2,7 +2,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { openApp, createChecker, clickR, selectR, createCard } = require('./harness.cjs');
+const { reveal, openApp, createChecker, clickR, selectR, createCard } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -153,8 +153,9 @@ const { check, finish } = createChecker();
     // Pattern im Regal löschen (nicht benutzt) und Rückgängig
     const cnt = await page.evaluate(() => window.loopwerk.store.addPattern({ type: 'synth', name: 'Übrig', bars: 1, preset: 'lead', notes: [] }));
     await page.waitForFunction(() => window.loopwerk.library.list().some((s) => s.name === 'Übrig'));
-    await page.evaluate(() => { const h = document.getElementById('shelf-cat-own'); if (h && h.getAttribute('aria-expanded') === 'false') h.click(); });
     const row = page.locator('#library .loop-row', { hasText: 'Übrig' });
+    await reveal(page, '#library .loop-row .loop-del');
+    await page.evaluate(() => { const h = document.getElementById('shelf-cat-own'); if (h && h.getAttribute('aria-expanded') === 'false') h.click(); });
     await row.locator('.loop-del').click();
     await row.locator('.loop-del').click();
     await page.waitForFunction(() => !window.loopwerk.library.list().some((s) => s.name === 'Übrig'), null, { timeout: 3000 });

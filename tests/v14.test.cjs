@@ -1,7 +1,7 @@
 // Version 1.4: feineres Raster, Zoom, Spur-Funktionen, Techno-Sounds, Genres, neue Effekte, Drumpad, Klaviatur.
 // node tests/v14.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker, clickR, selectR, createCard, toggleFx } = require('./harness.cjs');
+const { reveal, openApp, createChecker, clickR, selectR, createCard, toggleFx } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -258,6 +258,7 @@ const { check, finish } = createChecker();
     await page.fill('#shelf-search', '');
     // Ein Sound in mehreren Genres: Auswahl leuchtet überall
     await page.locator('#shelf-cat-g-house').click().catch(() => {});
+    await reveal(page, '#library .loop-item[data-sample-id="techno-hats"]');
     await page.locator('#library .loop-item[data-sample-id="techno-hats"]').first().click();
     const armedRows = await page.evaluate(() => [...document.querySelectorAll('#library .loop-item[data-sample-id="techno-hats"]')].map((n) => n.classList.contains('armed')));
     check('Ausgewählter Sound ist in jeder Genre-Gruppe markiert', armedRows.length >= 1 && armedRows.every(Boolean), JSON.stringify(armedRows));

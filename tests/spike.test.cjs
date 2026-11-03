@@ -1,6 +1,7 @@
 // End-to-End-Tests für den Spike: node tests/spike.test.cjs [--shots]
 // Prüft Timing samplegenau per Offline-Rendering, Überschreib-Logik, Drag & Drop und Wiedergabe.
 const { chromium } = require('playwright');
+const { legacyStart } = require('./harness.cjs');
 const path = require('path');
 const { start } = require('./serve.cjs');
 
@@ -16,6 +17,7 @@ function check(name, ok, detail = '') {
   const url = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
   const page = await browser.newPage({ viewport: { width: 1400, height: 820 } });
+  await legacyStart(page);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
