@@ -19,9 +19,11 @@
     },
     {
       "id": "laenge",
-      "loopwerk": "Länge in Takten (Inspektor Song, Song-Fach)",
+      "loopwerk": "Länge in Takten (Inspektor Song, Song-Fach) – in Krachwerk „Arbeitsfläche“",
       "state": "song",
-      "steps": [],
+      "steps": [
+        "#sb-fine-btn-song"
+      ],
       "expect": "#sb-length",
       "twins": 0
     },
@@ -89,7 +91,7 @@
     },
     {
       "id": "mastering",
-      "loopwerk": "Mastering (Inspektor Song, Song-Fach, Export)",
+      "loopwerk": "Mastering (Inspektor Song, Song-Fach, Export) – in Krachwerk von Anfang an an",
       "state": "song",
       "steps": [
         "#sb-tab-fertig"
@@ -301,7 +303,10 @@
       ],
       "expect": ".ccard[data-create=\"kit\"]",
       "twins": 1,
-      "expectPhone": "#new-kit-btn"
+      "expectPhone": "#new-kit-btn",
+      "phoneSteps": [
+        "#tab-sounds"
+      ]
     },
     {
       "id": "zoom",

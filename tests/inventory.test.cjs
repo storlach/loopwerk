@@ -36,7 +36,7 @@ async function tap(page, phone, sel) {
 async function runPath(page, phone, p) {
   if (p.state === 'extern') return { ok: true, taps: 0, why: 'abgedeckt: ' + p.covered };
   await setState(page, phone, p.state);
-  const steps = [...(phone && p.phone ? p.phone : []), ...p.steps];
+  const steps = phone && p.phoneSteps ? p.phoneSteps : [...(phone && p.phone ? p.phone : []), ...p.steps];
   try {
     for (const s of steps) await tap(page, phone, s);
     if (p.gesture === 'zoom') {
@@ -108,20 +108,24 @@ async function runPath(page, phone, p) {
       await page.waitForTimeout(600);
       let ok = 0;
       const fails = [];
+      const pending = []; // abgelaufene Pfade laufen weiter: erst abwarten, dann Kontext schließen (sonst „Failed to find context“)
       for (const p of inv.paths) {
         if (p.state === 'extern') continue;
         // ohne Song-Werkbank: nur Pfade, die nicht an sb-… hängen, sind sinnvoll – der Rest wird gezählt und als nicht vorhanden ausgegeben
-        const r = await Promise.race([runPath(page, phone, p).catch((e) => ({ ok: false, why: e.message })), new Promise((res) => setTimeout(() => res({ ok: false, why: 'Zeit' }), 12000))]);
+        const rp = runPath(page, phone, p).catch((e) => ({ ok: false, why: e.message }));
+        pending.push(rp);
+        const r = await Promise.race([rp, new Promise((res) => setTimeout(() => res({ ok: false, why: 'Zeit' }), 12000))]);
         if (r.ok) ok++; else fails.push(p.id);
       }
       console.log(`   Loopwerk ?density=calm (${dev}): ${ok} von ${inv.paths.length - 1} Inventar-Pfaden laufen (ohne Budget; Rest ist Krachwerk-Eigenes: ${fails.join(', ')})`);
+      await Promise.allSettled(pending);
       check(`Loopwerk ?density=calm (${dev}): Pfade ausgeführt, Konsole ohne Fehler`, errors.length === 0, errors.join(' | '));
-      await ctx.close();
+      await ctx.close().catch(() => {});
     }
   } catch (err) {
     check('Ablauf ohne Ausnahme', false, err.stack || err.message);
   } finally {
-    await browser.close();
+    await browser.close().catch(() => {});
     server.close();
     finish();
   }

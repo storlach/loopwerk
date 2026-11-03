@@ -32,6 +32,7 @@ import { mountExport } from './ui/export-dock.js';
 import { mountSongExport } from './ui/song-export.js';
 import { mountSongBench } from './ui/song-bench.js';
 import { slot } from './ui/song-slots.js';
+import { mountHintLift } from './ui/hint-lift.js';
 import { mountMasteringAnalysis } from './mastering.js';
 import { mountMasteringControls } from './ui/mastering.js';
 import { mountFxPad } from './ui/fxpad.js';
@@ -703,6 +704,7 @@ async function boot() {
       trackOnClip: false, fxCompact: true,
     } : {}),
   });
+  if (DENSITY === 'calm') mountHintLift({ hint: document.getElementById('hint'), arranger: document.querySelector('.arranger') });
   const layout = mountLayout({
     store, ui, library, kiste: !!EDITION.shelfGroups,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
@@ -731,7 +733,7 @@ async function boot() {
     kitBtn.title = 'Klatschen und klopfen – daraus wird ein Kit mit Groove';
     kitBtn.textContent = '+ Kit';
     kitBtn.addEventListener('click', () => recording.clap());
-    document.getElementById('new-beat-btn')?.before(kitBtn);
+    place(kitBtn, { calm: { narrow: document.getElementById('shelf-sticky') } }); // Handy: neben „+ Neu“ in der Suchzeile, Kiste → + Kit = 2 Tipps
   }
   mountCreate({
     root: document.getElementById('create-panel'), arranger,

@@ -78,7 +78,7 @@ const shareStub = () => {
       await page.waitForTimeout(500);
       const o = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, songHidden: getComputedStyle(document.getElementById('song')).display === 'none' || document.getElementById('song').hidden, name: document.getElementById('sb-name').textContent, meta: document.getElementById('sb-meta').textContent, exp: document.getElementById('export-btn').closest('#sb-head-slot') != null, tabs: [...document.querySelectorAll('.sb [role=tab]')].map((t) => t.textContent).join(','), roles: document.querySelector('.sb .wb-tabs').getAttribute('role') }));
       check('Handy: Tipp auf die Lesezeile öffnet die Song-Werkbank (Schublade), Fach „Song“ unsichtbar', o.dock === 'werkbank' && o.songHidden, JSON.stringify(o));
-      check('Kopf: Name, „32 Takte · 1:25“ (bei 90 BPM), „Exportieren“ im Kopf; Reiter Song · Mischen · Fertig · Projekt · Aufnahme (role=tab)', o.name === 'unbenannt' && o.meta === '32 Takte · 1:25' && o.exp && o.tabs === 'Song,Mischen,Fertig,Projekt,Aufnahme' && o.roles === 'tablist', JSON.stringify(o));
+      check('Kopf: Name, „2 Takte · 0:08“ (Export-Länge: 8 Schläge bei 90 BPM + Ausklang), „Exportieren“ im Kopf; Reiter Song · Mischen · Fertig · Projekt · Aufnahme (role=tab)', o.name === 'unbenannt' && o.meta === '2 Takte · 0:08' && o.exp && o.tabs === 'Song,Mischen,Fertig,Projekt,Aufnahme' && o.roles === 'tablist', JSON.stringify(o));
       const heads = await page.evaluate(() => ['export-btn'].map((i) => { const r = document.getElementById(i).getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; }));
       check('Exportieren: Tippziel ≥ 44 px', heads[0][1] >= 36 && heads[0][0] >= 44, JSON.stringify(heads));
       // Reiter: Grund ≤ 5, kein seitliches Scrollen
@@ -124,7 +124,7 @@ const shareStub = () => {
       await page.evaluate(() => { const s = document.getElementById('sb-key'); s.value = 'Dm'; s.dispatchEvent(new Event('change', { bubbles: true })); });
       await page.evaluate(() => { const i = document.getElementById('sb-length'); i.value = '16'; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); });
       const sg = await page.evaluate(() => { const p = window.loopwerk.store.project; return { bpm: p.bpm, key: p.key, len: p.lengthBars, meta: document.getElementById('sb-meta').textContent }; });
-      check('Song: Tempo, Tonart und Länge schreiben über setBpm / setKey / setLength; Kopf rechnet mit („16 Takte · 0:38“)', sg.bpm === 100 && sg.key === 'Dm' && sg.len === 16 && sg.meta === '16 Takte · 0:38', JSON.stringify(sg));
+      check('Song: Tempo, Tonart und Arbeitsfläche (Länge, in den Feinheiten) schreiben über setBpm / setKey / setLength; der Kopf zeigt weiter die Export-Länge', sg.bpm === 100 && sg.key === 'Dm' && sg.len === 16 && sg.meta === '2 Takte · 0:07', JSON.stringify(sg));
       await page.evaluate(() => { const lw = window.loopwerk; lw.store.setBpm(90); lw.store.setKey('Am'); lw.store.setLength(32); });
       // Umbenennen im Kopf
       await page.tap('#sb-name');
@@ -133,13 +133,37 @@ const shareStub = () => {
       check('Kopf: Antippen benennt um (setProjectName), Fach-Titel und Deck folgen', await page.evaluate(() => window.loopwerk.store.project.name === 'Mein Song' && document.getElementById('sb-name').textContent === 'Mein Song' && document.getElementById('deck-name').textContent === 'Mein Song'));
       // Fertig: Mastering, Stil nur bei an, Loop-Bereich, Teilen, Zutaten
       await page.tap('#sb-tab-fertig');
+      const metaSecs = await page.evaluate(() => Number(document.getElementById('sb-meta').dataset.seconds));
+      const f00 = await page.evaluate(() => ({ on: !!window.loopwerk.store.project.master?.mastering?.on, style: window.loopwerk.store.project.master?.mastering?.style, styles: [...document.querySelectorAll('#sb-mst .mst-style')].filter((e) => e.getClientRects().length).length, pressed: document.getElementById('sb-mst-on').getAttribute('aria-pressed') }));
+      check('Fertig: Mastering „Ausgewogen“ ist in Krachwerk von Anfang an an (Stil als Wortzeile)', f00.on && f00.style === 'balanced' && f00.styles >= 3 && f00.pressed === 'true', JSON.stringify(f00));
+      await page.tap('#sb-mst-on');
       const f0 = await page.evaluate(() => ({ styles: [...document.querySelectorAll('#sb-mst .mst-style')].filter((e) => e.getClientRects().length).length, share: !document.getElementById('sb-share').hidden, zut: document.getElementById('sb-zut').textContent, loopBtn: document.getElementById('sb-loop').hidden }));
-      check('Fertig: Stil nur bei Mastering an, „Teilen“ am Handy sichtbar (Attrappe), Zutaten „2 Geräusche · 0 fremde Samples“', f0.styles === 0 && f0.share && f0.zut === '2 Geräusche · 0 fremde Samples', JSON.stringify(f0));
+      check('Fertig: Mastering aus → keine Stil-Wörter, „Teilen“ am Handy sichtbar (Attrappe), Zutaten „2 Geräusche · 0 fremde Samples“', f0.styles === 0 && f0.share && f0.zut === '2 Geräusche · 0 fremde Samples', JSON.stringify(f0));
       await page.tap('#sb-mst-on');
       const f1 = await page.evaluate(() => ({ on: !!window.loopwerk.store.project.master?.mastering?.on, styles: [...document.querySelectorAll('#sb-mst .mst-style')].filter((e) => e.getClientRects().length).length }));
       check('Fertig: Mastering an (setMastering), Stil-Tasten erscheinen', f1.on && f1.styles >= 3, JSON.stringify(f1));
       await shot(page, 'kw-fertig-handy.png');
-      await page.tap('#sb-mst-on');
+      // Einblender decken keine Bedienelemente der Werkbank ab (alle Reiter, Feinheiten offen)
+      const overlaps = [];
+      for (const t of TABS) {
+        await page.tap(`#sb-tab-${t}`);
+        await page.evaluate(() => window.loopwerk.ui.flash('Geteilt: Mein Song.wav – das ist ein längerer Einblender, der zwei Zeilen braucht'));
+        await page.waitForTimeout(450);
+        overlaps.push(await page.evaluate(() => {
+          const h = document.getElementById('hint');
+          const hr = h.getBoundingClientRect();
+          const hit = [...document.querySelectorAll('#werkbank button, #werkbank input, #werkbank select, #werkbank [role=tab]')].filter((e) => e.getClientRects().length && !e.closest('[hidden]') && !h.contains(e)).filter((e) => {
+            const r = e.getBoundingClientRect();
+            if (r.right <= hr.left || r.left >= hr.right || r.bottom <= hr.top || r.top >= hr.bottom) return false;
+            const at = document.elementFromPoint(Math.min(Math.max(r.left + r.width / 2, hr.left + 1), hr.right - 1), Math.min(Math.max(r.top + r.height / 2, hr.top + 1), hr.bottom - 1));
+            return at === e || e.contains(at) || h.contains(at);
+          }).map((e) => e.id || e.className);
+          return { shown: h.classList.contains('show'), hit };
+        }));
+        await shot(page, `kw-hint-${t}-handy.png`);
+      }
+      check('Einblender (Handy, alle 5 Reiter): decken keinen sichtbaren Bedienknopf der Werkbank ab', overlaps.every((o) => o.shown && o.hit.length === 0), JSON.stringify(overlaps));
+      await page.tap('#sb-tab-fertig');
       // Export in 2 Tipps aus jedem Reiter (Handy: Teilen-Menü mit Datei und Text)
       const exp = [];
       for (const t of TABS) {
@@ -160,6 +184,7 @@ const shareStub = () => {
       const spb = 60 / 90;
       const want = 8 * spb + 2.5; // 8 Schläge (zwei Takte) + Ausklang
       check('WAV-Länge = Song + Ausklang ± 1 Frame', Math.abs(e0.frames - Math.round(want * e0.rate)) <= 1, `${e0.frames} Frames, erwartet ${Math.round(want * e0.rate)}`);
+      check('Kopf zeigt die echte Export-Länge: angezeigte Dauer = WAV-Länge ± 1 Frame', Math.abs(metaSecs * e0.rate - e0.frames) <= 1, `${metaSecs} s gegen ${e0.frames / e0.rate} s`);
       // Teilen-Knopf
       await page.evaluate(() => { window.__shared.length = 0; });
       await page.tap('#sb-tab-fertig');

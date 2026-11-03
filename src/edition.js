@@ -49,6 +49,8 @@ export const EDITIONS = {
     kitBench: true, startCard: true, tips: 'make',
     // Song-Werkbank (Scheibe 5): Song, Mischen, Fertig, Projekt, Aufnahme an einem Ort; Zutatenliste beim Export
     songBench: true,
+    // Mastering „Ausgewogen“ von Anfang an an (eigene Aufnahmen sind leise, Export bleibt 2 Tipps)
+    mastering: 'balanced',
     // Adresse der Edition (nur hier): umgestellt wird erst nach Martins Entscheidung, siehe KW_PATH in tools/werkstatt-page.cjs
     path: globalThis.LOOPWERK_PATH || 'werkstatt', // die erzeugte Seite (KW_PATH) setzt LOOPWERK_PATH
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)

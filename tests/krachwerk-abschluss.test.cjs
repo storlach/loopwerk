@@ -86,10 +86,18 @@ function serveDir(dir) {
       await page.evaluate(() => { window.loopwerk.ui.select(null); window.loopwerk.ui.setDock(null); });
       await page.waitForTimeout(400);
       const clipsBefore = await nClips();
-      await page.tap('#tab-sounds'); await page.tap('#shelf-new'); await page.tap('#new-kit-btn'); taps.d = 3;
+      await page.tap('#tab-sounds'); await page.tap('#new-kit-btn'); taps.d = 2;
       await page.waitForFunction((n) => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length > n && Object.keys(window.loopwerk.store.project.kits || {}).length > 0, clipsBefore, { timeout: 40000 });
       await page.waitForTimeout(800);
-      check('d) Klatsch-Kit: Kit mit Pads und ein Muster-Clip im Song', await page.evaluate(() => Object.values(window.loopwerk.store.project.kits)[0] && Object.keys(Object.values(window.loopwerk.store.project.kits)[0].map).length >= 5), `Tipps: ${taps.d}`);
+      check('d) Klatsch-Kit in 2 Tipps (Kiste, + Kit): Kit mit Pads und ein Muster-Clip im Song', taps.d === 2 && await page.evaluate(() => Object.values(window.loopwerk.store.project.kits)[0] && Object.keys(Object.values(window.loopwerk.store.project.kits)[0].map).length >= 5), `Tipps: ${taps.d}`);
+      const pn = await page.evaluate(async () => {
+        const p = window.loopwerk.store.project;
+        const kit = Object.values(p.kits)[0];
+        const { PAD_IDS } = await import('./src/grooves.js');
+        const ids = PAD_IDS.map((r) => kit.map[r]).filter(Boolean);
+        return { kit: kit.name, names: ids.map((id) => p.recipes[id]?.name) };
+      });
+      check('d) Schnitte heißen nach dem Kit und sind nach Pad-Reihenfolge nummeriert („Klatschen 1 · 1“ = Kick)', pn.names.length >= 5 && pn.names.every((n, i) => n === `${pn.kit} · ${i + 1}`), JSON.stringify(pn));
       // b) Takes über den Loop – 3b ist noch nicht gebaut
       const takes = await page.evaluate(() => !!(window.loopwerk.recorder.takes || window.loopwerk.store.takesOf));
       console.log(takes ? '   b) Takes vorhanden' : '   Hinweis b): Takes über den Loop (Scheibe 3b / v2.13) sind noch nicht gebaut – Schritt übersprungen');
@@ -106,10 +114,8 @@ function serveDir(dir) {
       // f) Mastering + Export (Songname, Fertig, Mastering, Exportieren)
       await page.evaluate(() => { window.loopwerk.ui.select(null); window.loopwerk.ui.setDock(null); window.__shared.length = 0; });
       await page.waitForTimeout(500);
-      await page.tap('#deck-name'); await page.waitForSelector('#sb-tab-fertig', { state: 'visible' });
-      await page.tap('#sb-tab-fertig');
-      await page.tap('#sb-mst-on');
-      await page.tap('#export-btn'); taps.f = 4;
+      await page.tap('#deck-name'); await page.waitForSelector('#export-btn', { state: 'visible' });
+      await page.tap('#export-btn'); taps.f = 2; // Mastering „Ausgewogen“ ist von Anfang an an
       await page.waitForFunction(() => window.__shared.length > 0, null, { timeout: 90000 });
       const ex = await page.evaluate(async () => {
         const lw = window.loopwerk, p = lw.store.project;
@@ -119,11 +125,11 @@ function serveDir(dir) {
         return { shared: window.__shared[0], want: songEndBeat(p) * 60 / p.bpm + 2.5, names: [...names], mastering: !!p.master?.mastering?.on, tracks: p.tracks.length };
       });
       const e = ex.shared;
-      check('f) Mastering + Export: Teilen-Menü bekommt die WAV, Mastering war an', e.name === 'unbenannt.wav' && ex.mastering, `${e.name}`);
+      check('f) Export in 2 Tipps (Songname, Exportieren): Teilen-Menü bekommt die WAV, Mastering war von Anfang an an', e.name === 'unbenannt.wav' && ex.mastering, `${e.name}`);
       check('WAV-Länge = Song + Ausklang ± 1 Frame', Math.abs(e.frames - Math.round(ex.want * e.rate)) <= 1, `${e.frames} gegen ${Math.round(ex.want * e.rate)}`);
       check('ICMT enthält alle eigenen Sound-Namen des Songs', ex.names.length >= 3 && ex.names.every((n) => e.icmt.includes(n + ': ')), `${ex.names.join(', ')} | ${e.icmt?.length} Zeichen`);
       check('Nachricht beim Teilen = Zutatenliste (Kopf und „… fremde Samples“)', /^Krachwerk · unbenannt · 90 BPM · Am\n\d+ Geräusche · 0 fremde Samples/.test(e.text), e.text?.split('\n').slice(0, 2).join(' / '));
-      console.log(`   Tipps gezählt: a) Geräusch ${taps.a} · c) Rückwärts ${taps.c} · d) Klatsch-Kit ${taps.d} (Kiste, + Neu, + Kit; Spec: 2) · e) Festhalten ${taps.e} · f) Mastering + Export ${taps.f} (Spec: 3; ohne Mastering: Songname + Exportieren = 2, bei gemerktem Reiter „Fertig“ 3)`);
+      console.log(`   Tipps gezählt: a) Geräusch ${taps.a} · c) Rückwärts ${taps.c} · d) Klatsch-Kit ${taps.d} (Kiste, + Kit) · e) Festhalten ${taps.e} · f) Export mit Mastering ${taps.f} (Songname, Exportieren)`);
       check('Konsole ohne Fehler (Ablauf a–f)', k.errors.length === 0, k.errors.join(' | '));
       await ctx.close();
     }
@@ -159,7 +165,7 @@ function serveDir(dir) {
       check('Offline: Zerlegen setzt Marken', await page.evaluate(() => document.querySelectorAll('.wb-mk').length > 0));
       await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(null); lw.ui.setDock(null); });
       // Kit
-      await page.tap('#tab-sounds'); await page.tap('#shelf-new'); await page.tap('#new-kit-btn');
+      await page.tap('#tab-sounds'); await page.tap('#new-kit-btn');
       await page.waitForFunction(() => Object.keys(window.loopwerk.store.project.kits || {}).length > 0, null, { timeout: 40000 });
       check('Offline: Klatsch-Kit entsteht', true);
       // Festhalten

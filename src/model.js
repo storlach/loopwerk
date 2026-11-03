@@ -13,8 +13,10 @@ export const EPS = 1e-6;
 export const DEFAULT_TRACK_NAME = /^Spur \d+$/;
 export const PROJECT_VERSION = 1;
 
-export function createEmptyProject({ tracks = 8, bpm = 120 } = {}) {
+// mastering: Stil-ID (Krachwerk: „balanced“) schaltet das Mastering von Anfang an ein
+export function createEmptyProject({ tracks = 8, bpm = 120, mastering = null } = {}) {
   return {
+    ...(mastering ? { master: { volume: 0.85, fx: null, mastering: { on: true, style: mastering } } } : {}),
     version: PROJECT_VERSION,
     name: 'unbenannt',
     bpm,
@@ -1076,6 +1078,9 @@ export class Store extends Emitter {
       let kitName = name || `${base} ${n}`;
       while (taken.has(kitName)) kitName = `${base} ${++n}`;
       const kitId = this.addKit({ name: kitName, map: pads });
+      // Schnitte heißen nach dem Kit und sind nach Pad-Reihenfolge nummeriert (Kick = 1), nicht benutzte danach
+      const order = [...PAD_IDS.map((r) => pads[r]).filter(Boolean), ...res.ids.filter((id) => !Object.values(pads).includes(id))];
+      this.dispatch(label, (p) => { order.forEach((id, i) => { if (p.recipes?.[id]) p.recipes[id] = { ...p.recipes[id], name: `${kitName} · ${i + 1}`.slice(0, 40) }; }); });
       const placed = place ? this.placeKit(kitId, { trackId, atBeat, groove }) : null;
       return { kitId, ids: res.ids, patternId: placed?.patternId ?? null, clipId: placed?.clipId ?? null };
     });

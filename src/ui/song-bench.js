@@ -6,6 +6,7 @@
 import { MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf, masteringOf } from '../engine.js';
 import { ingredients } from '../recipe.js';
+import { exportRange, EXPORT_TAIL } from '../export.js';
 import { el } from '../util.js';
 import { lsKey } from '../edition.js';
 import { loadRecPrefs, saveRecPrefs } from '../rec-prefs.js';
@@ -177,9 +178,9 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
     k.append(el('span', null, 'Tonart'), keySel);
     grund.append(k);
     bindKeySelect(keySel, store);
-    const l = row(grund, 'Länge');
+    const l = row(fine, 'Arbeitsfläche');
     const lIn = range(l.r, 'sb-length', 4, 128, 4);
-    lIn.setAttribute('aria-label', 'Länge des Songs in Takten');
+    lIn.setAttribute('aria-label', 'Arbeitsfläche: Länge des Songs in Takten (der Export endet am letzten Clip)');
     lIn.addEventListener('input', () => { l.out.textContent = `${lIn.value} Takte`; });
     lIn.addEventListener('change', () => store.setLength(Number(lIn.value)));
     slots.song = group(grund, 'sb-song-tools'); // Klick (metro-btn)
@@ -369,8 +370,14 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
   function render() {
     const p = store.project;
     if (nameBtn.textContent !== (p.name || 'Song')) nameBtn.textContent = p.name || 'Song';
-    const bars = p.lengthBars;
-    meta.textContent = `${bars} ${bars === 1 ? 'Takt' : 'Takte'} · ${clock(bars * p.beatsPerBar * 60 / p.bpm)}`;
+    // der Kopf zeigt, was der Export liefert: Bereich bis zum letzten Clip (oder Loop) plus Ausklang
+    const hasLoop = p.loop.endBeat > p.loop.startBeat;
+    const [from, to] = exportRange(p, exporter.loopOnly && hasLoop ? 'loop' : 'song');
+    const beats = to - from;
+    const secs = beats > 0 ? beats * 60 / p.bpm + (exporter.prefs.tail ? EXPORT_TAIL : 0) : 0;
+    const bars = beats / p.beatsPerBar;
+    meta.dataset.seconds = String(secs);
+    meta.textContent = beats > 0 ? `${String(Math.round(bars * 100) / 100).replace('.', ',')} ${bars === 1 ? 'Takt' : 'Takte'} · ${clock(secs)}` : 'noch leer';
     for (const u of updaters) u();
     if (!exporter.state.text) status.textContent = '';
   }

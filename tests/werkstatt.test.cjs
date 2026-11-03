@@ -211,7 +211,7 @@ async function seedPadWall() {
       const loop = got[2];
       lw.store.addClip(lw.store.project.tracks[0].id, 'mk-test1', 0, 4);
       await lw.library.ensureProject(lw.store.project);
-      const buf = await lw.renderProject(lw.store.project, lw.library, { fromBeat: 0, toBeat: 4, limiter: false });
+      const buf = await lw.renderProject(lw.store.project, lw.library, { fromBeat: 0, toBeat: 4, limiter: false, mastering: false });
       const d = buf.getChannelData(0);
       let peak = 0, at = 0;
       for (let i = 0; i < Math.round(buf.sampleRate * 0.05); i++) if (Math.abs(d[i]) > peak) { peak = Math.abs(d[i]); at = i; }
@@ -253,7 +253,7 @@ async function seedPadWall() {
     const onsets = await page.evaluate(async () => {
       const lw = window.loopwerk;
       const { detectOnsets } = await import('./src/dsp/slice.js');
-      const buf = await lw.renderProject(lw.store.project, lw.library, { fromBeat: 0, toBeat: 4, limiter: false });
+      const buf = await lw.renderProject(lw.store.project, lw.library, { fromBeat: 0, toBeat: 4, limiter: false, mastering: false });
       return detectOnsets(buf.getChannelData(0), buf.sampleRate).map((f) => f / buf.sampleRate);
     });
     const spb = 60 / 90;
