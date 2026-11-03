@@ -1,11 +1,10 @@
-// Schnelle Musikwerte für das Raumlicht: Spektrum in 32 Bändern mit fallenden Spitzen und je Band die Farbe der
+// Schnelle Musikwerte für das Raumlicht: Spektrum in 32 Bändern und je Band die Farbe der
 // Spuren, die dort gerade klingen (gewichtet nach ihrem Anteil am Band).
 
 export const SPEC_N = 32;
 
 export function createReact({ engine, colorOf }) {
   const spec = new Float32Array(SPEC_N);
-  const peak = new Float32Array(SPEC_N);
   const col = new Float32Array(SPEC_N * 3); // 0…255 je Band
   const target = new Float32Array(SPEC_N * 3);
   const heard = new Map(); // trackId → Kategorie (in diesem Raumlicht-Bild hörbar)
@@ -30,9 +29,8 @@ export function createReact({ engine, colorOf }) {
       const b = bands ? bands[i] : 0;
       const rel = Math.min(1, Math.max(0, (b - top + 0.55) / 0.55));
       const v = smooth(rel) * smooth(Math.min(1, Math.max(0, (b - 0.04) / 0.3)));
-      // hoch in gut 30 ms (knackig, aber ohne harten Sprung), zurück in gut 100 ms
-      spec[i] = v > spec[i] ? spec[i] + (v - spec[i]) * (1 - Math.exp(-dt / 0.035)) : Math.max(v, spec[i] * Math.exp(-dt / (0.12 * fade)));
-      peak[i] = Math.max(spec[i], peak[i] - (dt * 0.45) / fade);
+      // hoch in gut 50 ms, zurück in gut 0,3 s: die Ränder atmen mit der Musik, statt bei jedem Schlag zu zucken
+      spec[i] = v > spec[i] ? spec[i] + (v - spec[i]) * (1 - Math.exp(-dt / 0.05)) : Math.max(v, spec[i] * Math.exp(-dt / (0.3 * fade)));
     }
     // Farbe je Band: Spuren nach ihrem Anteil gemischt (hoch potenziert, damit die stärkste die Farbe trägt)
     if (live && heard.size) {
@@ -58,5 +56,5 @@ export function createReact({ engine, colorOf }) {
     heard.clear();
   }
 
-  return { feed, step, spec, peak, col };
+  return { feed, step, spec, col };
 }

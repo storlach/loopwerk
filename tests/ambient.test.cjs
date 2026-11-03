@@ -128,15 +128,9 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     check('Bass leuchtet links stärker als rechts', dBl.left > 1.3 * Math.max(1, dBl.right), JSON.stringify(dBl));
 
     // ---------- Lichtwelle an der Marke ----------
-    let near = 0;
-    const marks = [];
-    for (let i = 0; i < 5; i++) {
-      const s = await page.evaluate(sample);
-      marks.push([+s.atMark.toFixed(1), +s.far.toFixed(1)]);
-      if (s.atMark > s.far * 1.12) near++;
-      await wait(220);
-    }
-    check('Lichtwelle: an der Marke heller als weiter weg', near >= 4, JSON.stringify(marks));
+    // Rand-Glühen: die Mitte (Clips) bleibt ruhig, das Licht sitzt an den Rändern
+    const calmMid = await page.evaluate(sample);
+    check('Mitte bleibt ruhig: Ränder deutlich heller als die Mitte', calmMid.edge > 1.6 * calmMid.mid, JSON.stringify({ mid: +calmMid.mid.toFixed(1), edge: +calmMid.edge.toFixed(1) }));
     const ph = await page.evaluate(() => {
       const r = document.querySelector('.playhead').getBoundingClientRect();
       return { want: ((r.left + r.width / 2) / window.innerWidth) * window.loopwerk.glow.state.room.w, got: window.loopwerk.glow.state.room.x };
@@ -201,7 +195,7 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     const rc = await page.evaluate(() => window.loopwerk.glow.state.roomCost);
     check('Raumlicht kostet wenig Rechenzeit (< 1,5 ms je Bild)', rc < 1.5, rc.toFixed(2) + ' ms');
     const lum = await page.evaluate(sample);
-    check('Mit Musik: Ränder dunkler als die Mitte (Vignette)', lum.mid > 1.6 * lum.edge, JSON.stringify({ mid: +lum.mid.toFixed(1), edge: +lum.edge.toFixed(1) }));
+    check('Mit Musik: Ränder heller als die Mitte (umgekehrte Vignette)', lum.edge > 1.6 * lum.mid, JSON.stringify({ mid: +lum.mid.toFixed(1), edge: +lum.edge.toFixed(1) }));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'ambient-desktop.png') });
 
     // ---------- Stopp: sanft aus ----------
