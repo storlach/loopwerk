@@ -5,6 +5,8 @@
 // eine laufende Bewegung lässt sich jederzeit greifen. Ein Schubs springt zum nächsten Haltepunkt in Wischrichtung.
 // Jede Schublade merkt sich ihren Haltepunkt; am Handy öffnen Mixer, Sample- und Melodie-Editor oben, Beat-Editor in der Mitte.
 // Der Arranger bekommt unten so viel Platz, dass die letzten Spuren über das Fach gescrollt werden können.
+// Krachwerk, Handy: die Werkbank mit gewähltem Klang wird beim Herunterwischen nicht weggeräumt, sondern ruht als Kopfzeile
+// (56 px: Griff + Name + „Als Variante“); ein Tipp auf den Griff oder Hochwischen holt sie zurück, nochmal Herunterwischen schließt.
 
 import { clamp, el, trackPointer } from '../util.js';
 import { narrow, touch } from './place.js';
@@ -16,6 +18,7 @@ const TOP = 1;
 const FLICK = 0.35; // px/ms: ab hier zählt die Bewegung als Schubs
 const HIDE = -84; // zu: Oberkante samt Schatten unter dem Rand
 const GONE = -64; // ab hier ist nichts mehr zu sehen (auch kein Schatten)
+const HEAD_PX = 56; // Werkbank als Kopfzeile (Handy)
 const RUBBER = 72; // Gummiband über oben: höchstens so viele px
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
 // Federkonstante (rad/s): 18 ≈ iOS-Sheet (Antwortzeit 0,35 s), reduzierte Bewegung kürzer, aber sichtbar
@@ -62,7 +65,16 @@ export function mountSheets({ ui, arranger }) {
   // Beat- und Melodie-Editor merken sich ihre Höhe getrennt: Pads brauchen weniger Platz als die Klaviatur
   const keyOf = (s) => (s.id === 'pattern' && s.dataset.type ? `pattern-${s.dataset.type}` : s.id || 'sounds');
   const stored = () => { const m = snaps[mode()]; return m && typeof m === 'object' ? m : (snaps[mode()] = {}); };
+  // Kopfzeile statt zu: nur die Werkbank (Dichte „calm“, Handy) und nur mit gewähltem Clip oder Kisten-Sound
+  const headable = (s) => !!s && s.id === 'werkbank' && narrow.matches && app.dataset.density === 'calm' && !!(ui.selectedClipId || ui.benchSoundId);
+  const isHead = (s) => headable(s) && stored()[keyOf(s)] === 'head';
+  const syncHead = (s) => {
+    const on = isHead(s);
+    s.classList.toggle('is-head', on);
+    if (on) { const b = s.querySelector('.werkbank-body'); if (b) b.scrollTop = 0; }
+  };
   const openFrac = (s) => {
+    if (isHead(s)) return Math.max(0.02, (HEAD_PX - (S(s)?.bd ?? 0)) / Math.max(1, full()));
     const v = s && stored()[keyOf(s)];
     if (v === TOP || v === MID) return v;
     if (narrow.matches && s && ['pattern-synth', 'editor', 'mixer', 'fxpad'].includes(keyOf(s))) return TOP;
@@ -145,6 +157,7 @@ export function mountSheets({ ui, arranger }) {
     }
     s.style.transform = '';
     s.style.clipPath = '';
+    syncHead(s);
     lastAb = arr.getBoundingClientRect().bottom;
     follow(lastAb);
     syncPad();
@@ -240,6 +253,7 @@ export function mountSheets({ ui, arranger }) {
     for (const o of sheets) if (o !== s) o.style.zIndex = '';
     s.style.zIndex = '21'; // die neue Schublade fährt über die alte
     const h = full();
+    syncHead(s);
     m.open = true;
     m.cover = null;
     m.drag = null;
@@ -379,11 +393,19 @@ export function mountSheets({ ui, arranger }) {
           else { m.target = m.H; spring(sheet, m); }
           return;
         }
-        const target = snapTarget(clamp(m.p, 0, h) / h, v);
+        let target = snapTarget(clamp(m.p, 0, h) / h, v);
+        const wasHead = isHead(sheet);
+        // Werkbank mit Klang: Kopfzeile statt zu; vom Kopf aus holt ein Tipp oder Hochwischen sie zurück, Herunterwischen schließt
+        if (target === 0 && headable(sheet)) {
+          const down = dy > 12 || v > FLICK;
+          if (wasHead && down) { shut(); return; }
+          target = wasHead ? (dy < -20 || Math.abs(dy) < 6 ? MID : 'head') : 'head';
+        }
         if (target === 0) { shut(); return; }
         stored()[keyOf(sheet)] = target;
         try { localStorage.setItem(KEY, JSON.stringify(snaps)); } catch { /* egal */ }
-        m.target = target * h + m.bd;
+        syncHead(sheet);
+        m.target = target === 'head' ? HEAD_PX : target * h + m.bd;
         setPad(Math.max(pad, m.target));
         spring(sheet, m);
       }, () => {

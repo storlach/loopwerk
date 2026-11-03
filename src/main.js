@@ -89,25 +89,40 @@ function createUi() {
     snapBeats: 1,
     selectedClipId: null,
     selectedTrackId: null,
+    benchSoundId: null, // Krachwerk: Werkbank für einen Sound aus der Kiste (ohne Clip)
     armedSampleId: null,
     statusText: null,
     flashText: null,
     dock: null,
-    setDock(name) { if (ui.dock !== name) { ui.dock = name; ui.emit(); } },
+    setDock(name) {
+      if (ui.dock === name) return;
+      ui.dock = name;
+      if (name !== 'werkbank' && ui.benchSoundId && narrow.matches) ui.benchSoundId = null; // Handy: Schublade zu = Sound-Werkbank zu
+      ui.emit();
+    },
     // Mehrfachauswahl: multi enthält alle ausgewählten Clips (ab zwei); selectedClipId ist der zuletzt gewählte
     multi: [],
     select(id) {
-      if (ui.selectedClipId === id && !ui.multi.length && (!id || !ui.selectedTrackId)) return;
+      if (ui.selectedClipId === id && !ui.multi.length && (!id || !ui.selectedTrackId) && !ui.benchSoundId) return;
       ui.multi = [];
       ui.selectedClipId = id;
+      ui.benchSoundId = null;
       if (id) ui.selectedTrackId = null;
+      ui.emit();
+    },
+    // Werkbank für einen Sound aus der Kiste (Doppelklick/lange drücken); null schließt sie
+    openSound(id) {
+      if (ui.benchSoundId === (id || null) && !ui.selectedClipId && !ui.selectedTrackId) return;
+      ui.benchSoundId = id || null;
+      if (id) { ui.selectedClipId = null; ui.selectedTrackId = null; ui.multi = []; }
       ui.emit();
     },
     // Spur im Inspektor zeigen (hebt die Clip-Auswahl auf)
     selectTrack(id) {
-      if (ui.selectedTrackId === id && !ui.selectedClipId) return;
+      if (ui.selectedTrackId === id && !ui.selectedClipId && !ui.benchSoundId) return;
       ui.selectedTrackId = id;
       ui.selectedClipId = null;
+      ui.benchSoundId = null;
       ui.multi = [];
       ui.emit();
     },
@@ -115,7 +130,7 @@ function createUi() {
       const list = [...new Set(ids)];
       ui.multi = list.length > 1 ? list : [];
       ui.selectedClipId = list.length ? list[list.length - 1] : null;
-      if (list.length) ui.selectedTrackId = null;
+      if (list.length) { ui.selectedTrackId = null; ui.benchSoundId = null; }
       ui.emit();
     },
     selectedIds() { return ui.multi.length ? ui.multi.slice() : ui.selectedClipId ? [ui.selectedClipId] : []; },
@@ -456,6 +471,7 @@ async function boot() {
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
+    onBench: EDITION.workbench === 'sound' ? (id) => { ui.openSound(id); if (narrow.matches) ui.setDock('werkbank'); } : null,
     onDeleteOwn: async (id) => {
       if (store.project.recipes?.[id]?.parent) {
         // Variante: nur ohne Clips entfernen
@@ -485,7 +501,9 @@ async function boot() {
   const openClip = (clipId) => {
     const c = store.findClip(clipId)?.clip;
     const pid = c && library.get(c.sampleId)?.patternId;
-    if (pid) patternEditor.open(pid); else editor.open(clipId);
+    if (pid) patternEditor.open(pid);
+    else if (EDITION.surfaces.editor !== false) editor.open(clipId);
+    else if (narrow.matches) ui.setDock('werkbank'); // Krachwerk: die Werkbank ersetzt den Sample-Editor
   };
   tools.onEdit = openClip;
   document.getElementById('arr-scroll').addEventListener('dblclick', (e) => {

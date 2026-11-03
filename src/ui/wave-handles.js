@@ -2,6 +2,9 @@
 // Punkte auf der Hüllkurven-Linie. Innerhalb von Anfang/Ende zeichnet die gebackene Welle als Lichtstrich, außerhalb
 // steht das Original als Korn. Die Darstellung folgt der Abspielrichtung; gespeichert wird in Originalzeit.
 // Schreibt nur über store.setRecipe (ein Rückgängig-Schritt je Ziehen), alle Griffe sind role="slider".
+// Marken-Modus (Zerlegen, 2b): setMarks({ times, sel, min, max, cb }) blendet die vier Griffe aus und zeigt senkrechte Marken
+// (Originalzeit in s). Die Marken sind reiner Zustand der Werkbank; hier nur Zeichnen, Ziehen, Tastatur (ein role="slider"
+// mit wanderndem Fokus) und Rückmeldung über cb.onSelect / onMove / onDelete / onHear.
 
 import { el, trackPointer } from '../util.js';
 import { MIN_SPAN, recipeGesture } from '../recipe.js';
@@ -55,7 +58,16 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
   const hEnd = mk('wb-h-end', 'Ende');
   const hAtk = mk('wb-h-atk', 'Anschlag');
   const hRel = mk('wb-h-rel', 'Ausklang');
-  box.append(canvas, mark, hStart, hEnd, hAtk, hRel);
+  // Marken-Modus: Linien (nur zum Greifen, ohne eigene Tastenfläche) und ein einziger Regler, der mit der Auswahl wandert
+  const marksBox = el('div', 'wb-marks');
+  marksBox.hidden = true;
+  const msl = el('div', 'wb-mk-slider');
+  msl.setAttribute('role', 'slider');
+  msl.tabIndex = 0;
+  msl.setAttribute('aria-orientation', 'horizontal');
+  msl.title = 'Marke: ziehen, Pfeil links/rechts verschiebt (Umschalt: grob), Pfeil hoch/runter wechselt die Marke, Entf löscht';
+  marksBox.append(msl);
+  box.append(canvas, mark, hStart, hEnd, hAtk, hRel, marksBox);
   container.append(box);
 
   const gesture = recipeGesture();
@@ -160,9 +172,113 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
     const y0 = e.clientY;
     const id = soundId;
     trackPointer(e, () => {}, (ev) => {
-      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) engine.previewSample?.(id);
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) >= 8) return;
+      if (M && view) M.cb.onHear?.(origTime(ev.clientX)); // Marken-Modus: den Schnitt zwischen zwei Marken vorhören
+      else engine.previewSample?.(id);
     });
   });
+
+  // ---------- Marken ----------
+  let M = null;
+  const nodes = [];
+  let lastTap = { i: -1, t: 0 };
+  const revOf = () => !!recipeOf(soundId).reverse;
+  // Anzeigezeit ↔ Originalzeit (bei „rückwärts“ gespiegelt)
+  const origTime = (clientX) => { const d = toTime(clientX); return revOf() ? view.dur - d : d; };
+  const markX = (t) => ((revOf() ? view.dur - t : t) / view.dur) * view.W;
+  const clampMark = (i, t) => {
+    const lo = i > 0 ? M.times[i - 1] + MIN_SPAN : M.min;
+    const hi = i < M.times.length - 1 ? M.times[i + 1] - MIN_SPAN : M.max - MIN_SPAN;
+    return Math.round(Math.min(Math.max(t, lo), Math.max(lo, hi)) * 1e5) / 1e5;
+  };
+
+  function grab(e, getIdx) {
+    if (e.button !== 0 || !view || !M) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const i0 = getIdx();
+    M.cb.onSelect?.(i0);
+    msl.focus({ preventScroll: true });
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const grabDx = e.clientX - (box.getBoundingClientRect().left + markX(M.times[i0]));
+    let moved = false;
+    const end = () => nodes.forEach((n) => n.classList.remove('drag'));
+    nodes[i0]?.classList.add('drag');
+    trackPointer(e, (ev) => {
+      if (!M || !view) return;
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+      moved = true;
+      lastTap = { i: -1, t: 0 };
+      M.cb.onMove?.(i0, clampMark(i0, origTime(ev.clientX - grabDx)));
+    }, () => {
+      end();
+      if (moved) return;
+      // Doppeltipp (Maus, Stift, Finger gleich) löscht die Marke
+      const now = performance.now();
+      if (lastTap.i === i0 && now - lastTap.t < 380) { lastTap = { i: -1, t: 0 }; M?.cb.onDelete?.(i0); } else lastTap = { i: i0, t: now };
+    }, end);
+  }
+
+  function makeNode() {
+    const n = el('div', 'wb-mk');
+    n.setAttribute('aria-hidden', 'true');
+    n.append(el('span', 'wb-mk-n'));
+    n.addEventListener('pointerdown', (e) => grab(e, () => nodes.indexOf(n)));
+    marksBox.insertBefore(n, msl);
+    return n;
+  }
+  msl.addEventListener('pointerdown', (e) => grab(e, () => M.sel));
+  msl.addEventListener('keydown', (e) => {
+    if (!M || !view) return;
+    const k = e.key;
+    // Entf, Pfeile gehören der Marke, nicht dem Song (Entf löscht sonst den gewählten Clip)
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Delete', 'Backspace'].includes(k)) e.stopPropagation();
+    if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      e.preventDefault();
+      const dir = (k === 'ArrowRight' ? 1 : -1) * (revOf() ? -1 : 1); // nach rechts = später auf dem Bildschirm
+      M.cb.onMove?.(M.sel, clampMark(M.sel, M.times[M.sel] + dir * (e.shiftKey ? 0.05 : 0.005)));
+    } else if (k === 'ArrowUp' || k === 'ArrowDown') {
+      e.preventDefault();
+      M.cb.onSelect?.(Math.min(M.times.length - 1, Math.max(0, M.sel + (k === 'ArrowDown' ? 1 : -1))));
+    } else if (k === 'Delete' || k === 'Backspace') {
+      e.preventDefault();
+      M.cb.onDelete?.(M.sel);
+    }
+  });
+
+  function layoutMarks() {
+    const on = !!(M && view && M.times.length);
+    marksBox.hidden = !on;
+    box.classList.toggle('marking', on);
+    if (!on) return;
+    while (nodes.length < M.times.length) nodes.push(makeNode());
+    while (nodes.length > M.times.length) nodes.pop().remove();
+    let lastX = -99;
+    M.times.forEach((t, i) => {
+      const x = markX(t);
+      const n = nodes[i];
+      n.style.left = `${x}px`;
+      n.classList.toggle('sel', i === M.sel);
+      n.classList.toggle('crowd', i !== M.sel && x - lastX < 16);
+      if (x - lastX >= 16) lastX = x;
+      n.firstChild.textContent = String(i + 1);
+    });
+    const x = markX(M.times[M.sel]);
+    msl.style.left = `${x}px`;
+    msl.setAttribute('aria-label', `Marke ${M.sel + 1} von ${M.times.length}`);
+    msl.setAttribute('aria-valuemin', String(M.min));
+    msl.setAttribute('aria-valuemax', String(M.max));
+    msl.setAttribute('aria-valuenow', String(Math.round(M.times[M.sel] * 1000) / 1000));
+    msl.setAttribute('aria-valuetext', fmtS(M.times[M.sel]));
+  }
+  function setMarks(cfg) {
+    const was = !!M;
+    M = cfg && cfg.times?.length ? cfg : null;
+    if (M) M.sel = Math.min(Math.max(0, M.sel ?? 0), M.times.length - 1);
+    if (was !== !!M && soundId) render(soundId); // Hüllkurve nur ohne Marken
+    else layoutMarks();
+  }
 
   // ---------- Zeichnen ----------
   function draw(s, r, W, H, color) {
@@ -230,6 +346,7 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
     c.globalAlpha = 0.95;
     c.strokeStyle = color;
     c.lineWidth = 1.5;
+    if (M) { c.globalAlpha = 1; return { dur, ds, de, x0, x1, aPx, rPx, cooked: cookedT, top, W, H }; } // Marken-Modus: ohne Hüllkurve
     c.beginPath();
     c.moveTo(x0, bot);
     c.lineTo(x0 + OFF + aPx, top);
@@ -244,11 +361,11 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
   function render(id, cat) {
     soundId = id;
     const s = id && library.get(id);
-    if (!s || !s.orig) { view = null; box.classList.add('empty'); if (id && s?.lazy) library.ensure?.(id).then(() => library.emit?.()); return; }
+    if (!s || !s.orig) { view = null; box.classList.add('empty'); layoutMarks(); if (id && s?.lazy) library.ensure?.(id).then(() => library.emit?.()); return; }
     box.classList.remove('empty');
     const W = Math.round(box.clientWidth);
     const H = Math.round(box.clientHeight);
-    if (W < 20 || H < 20) { view = null; return; }
+    if (W < 20 || H < 20) { view = null; layoutMarks(); return; }
     const r = recipeOf(id);
     const color = getComputedStyle(box).color;
     view = draw(s, r, W, H, color);
@@ -268,6 +385,7 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
     set(hEnd, view.de, view.ds + MIN_SPAN, view.dur, fmtS(view.de));
     set(hAtk, r.attack ?? 0, 0, 2000, fmtMs(r.attack ?? 0));
     set(hRel, r.release ?? 0, 0, 5000, fmtMs(r.release ?? 0));
+    layoutMarks();
     updateMark();
   }
 
@@ -289,5 +407,5 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
 
   const ro = new ResizeObserver(() => { if (soundId) render(soundId); });
   ro.observe(box);
-  return { render, el: box, redraw: () => render(soundId) };
+  return { render, el: box, redraw: () => render(soundId), setMarks };
 }

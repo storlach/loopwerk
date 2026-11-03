@@ -1,14 +1,15 @@
 // Sound-Werkbank (Krachwerk 2a, Spec docs/specs/krachwerk-2-werkbank.md §6): ersetzt im Inspektor den Clip-Abschnitt.
 // Kopf (Herkunft, Name, „in N Clips“, Als Variante) · Stammbaum · Welle mit Griffen · Reiter Form, Ton, Farbe, Zeit, Clip.
+// Zerlegen (2b): Marken auf der Welle, „In die Kiste“ / „Auf die Spur“, Trennen in den Feinheiten (docs/specs/krachwerk-2b-zerlegen.md).
 // Je Reiter höchstens 5 Griffe im Grund, der Rest steht unter „Feinheiten“. Eine Änderung gilt für alle Clips des Sounds;
 // geschrieben wird nur über store.setRecipe / addVariant / setSampleTempo / setClip (Ziehen = ein Rückgängig-Schritt).
 
 import { clipGain, keyOf, tonicOf } from '../model.js';
-import { MATERIALS, RECIPE, materialOf, recipeGesture, recipeSteps, suggestMaterial } from '../recipe.js';
+import { MATERIALS, RECIPE, TUNE_KEYS, materialOf, recipeGesture, recipeSteps, suggestMaterial } from '../recipe.js';
+import { layoutCuts } from '../cuts.js';
 import { clamp, el } from '../util.js';
 import { lsKey } from '../edition.js';
 import { formatCurve, formatDb } from './arranger.js';
-import { place } from './place.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { mountWaveHandles, cookedSeconds } from './wave-handles.js';
 import { fmtBpm, hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
@@ -18,7 +19,10 @@ import { midiOf, snapToScale, voicing } from '../dsp/pitch.js';
 
 const TAB_KEY = lsKey('loopwerk.wbTab');
 const FINE_KEY = lsKey('loopwerk.wbFine');
-const TABS = [['form', 'Form'], ['ton', 'Ton'], ['farbe', 'Farbe'], ['zeit', 'Zeit'], ['clip', 'Clip']];
+const SENS_KEY = lsKey('loopwerk.cutSens');
+const TABS = [['form', 'Form'], ['ton', 'Ton'], ['farbe', 'Farbe'], ['zeit', 'Zeit'], ['zerlegen', 'Zerlegen'], ['clip', 'Clip']];
+const CUT_MIN = 1; // s: kürzere Sounds haben nichts zu zerlegen
+const UNDO_NAMES = ['Zerlegen', 'Trennen', 'Als Variante']; // Schritte, deren Rückgängig einen Einblender bekommt
 const SOURCE = { mic: 'Aufnahme', file: 'Datei', loop: 'Schleife' };
 const NOTE = ['C', 'C♯', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'B♭', 'H'];
 
@@ -138,18 +142,40 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     rename(false);
     if (save_ && cur.id && v && v !== sound()?.name) patch({ name: v });
   });
-  let variantFlash = null;
-  // Rückgängig von „Als Variante“: der Einblender verschwindet mit der Variante
-  store.on(() => {
-    if (variantFlash && !store.project.recipes?.[variantFlash]) { variantFlash = null; ui.flashText = null; ui.emit(); }
-  });
+  // Rückgängig/Wiederholen von Zerlegen, Trennen, Als Variante: der Einblender nennt den Schritt (ersetzt den alten)
+  {
+    const names = [];
+    const redoNames = [];
+    let n = store.undoStack.length;
+    let top = store.undoStack[n - 1];
+    store.on((_, reason) => {
+      const len = store.undoStack.length;
+      if (reason === 'undo') {
+        const name = names.pop();
+        redoNames.push(name);
+        if (UNDO_NAMES.includes(name)) ui.flash(`Rückgängig: ${name}`);
+      } else if (reason === 'redo') {
+        const name = redoNames.pop();
+        names.push(name);
+        if (UNDO_NAMES.includes(name)) ui.flash(`Wiederholt: ${name}`);
+      } else if (reason === 'replace' || reason === 'init') {
+        names.length = 0;
+        redoNames.length = 0;
+      } else if (len > n || (len && store.undoStack[len - 1] !== top)) {
+        names.push(reason);
+        redoNames.length = 0;
+        while (names.length > len) names.shift();
+      }
+      n = len;
+      top = store.undoStack[len - 1];
+    });
+  }
   varBtn.addEventListener('click', () => {
     if (!cur.id) return;
     const vr = store.addVariant(cur.id, { clipId: cur.clipId });
     library.syncVariants?.(store.project);
     library.emit?.();
     ui.flash(`„${library.get(vr)?.name ?? 'Variante'}“ – eigener Klang nur für diesen Clip.`);
-    variantFlash = vr;
   });
 
   // ---------- Welle ----------
@@ -354,9 +380,28 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     auto.title = 'Rundet den erkannten Grundton auf die Tonart des Songs';
     const found = el('p', 'wb-note');
     found.id = 'wb-grundton';
+    // Autotune (2b): Rezeptschritt hinter der Tonhöhe, Stärke 0 = aus
+    toggle(fine, 'Autotune', 'wb-tune', () => (recipe().tune ?? 0) > 0, (on) => patch(on ? { tune: 1, tuneKey: keyOf(store.project), robot: null } : { tune: null, robot: null, tuneKey: null }));
+    rslider(fine, 'tune', 'Stärke', { min: 0, max: 1, step: 0.01, def: 0, fmt: fmtPct, show: (ctx) => (ctx.r.tune ?? 0) > 0 });
+    const keyRow = el('label', 'insp-row wb-row');
+    const keyOut = el('output');
+    const keySel = document.createElement('select');
+    keySel.id = 'wb-tune-key';
+    keySel.setAttribute('aria-label', 'Tonart für Autotune');
+    for (const k of TUNE_KEYS) keySel.append(new Option(k, k));
+    keyRow.append(el('span', null, 'Tonart'), keyOut, keySel);
+    fine.append(keyRow);
+    keySel.addEventListener('change', () => patch({ tuneKey: keySel.value }));
+    const robot = toggle(fine, 'Roboter', 'wb-tune-robot', () => !!recipe().robot, (on) => patch({ robot: on ? true : null }));
     const acts = el('div', 'wb-acts');
     fine.append(found, acts);
-    btn(acts, 'Zurücksetzen', 'wb-ton-reset', () => patch({ semis: null, cents: null }));
+    btn(acts, 'Zurücksetzen', 'wb-ton-reset', () => patch({ semis: null, cents: null, tune: null, robot: null, tuneKey: null }));
+    updaters.push((ctx) => {
+      const on = (ctx.r.tune ?? 0) > 0;
+      keyRow.hidden = !on;
+      robot.hidden = !on;
+      if (on) { setVal(keySel, ctx.r.tuneKey ?? 'Am'); setOut(keyOut, ''); }
+    });
     updaters.push((ctx) => {
       if (ctx.tab !== 'ton') return;
       const d = detect();
@@ -364,9 +409,6 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
       auto.hidden = !pc || Math.abs(snapToScale(pc.midi, tonicOf(keyOf(store.project)), 'minor') - pc.midi) < 0.005;
       found.textContent = !d ? '' : d.done === undefined ? 'Grundton wird erkannt …' : pc ? `Grundton ${noteName(pc.midi)} · ${comma(pc.hz, 1)} Hz` : 'Kein Grundton erkannt';
     });
-    // „Im Editor“ (Autotune, Trennen): der Editor-Knopf zieht hierher
-    const ed = document.getElementById('edit-btn');
-    if (ed) place(ed, { calm: { narrow: fine, wide: fine } });
   }
 
   // ---------- Farbe ----------
@@ -438,6 +480,144 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     });
   }
 
+  // ---------- Zerlegen ----------
+  // Marken sind Zustand der Werkbank (cut.cuts, Sekunden des Originals); erst „In die Kiste“/„Auf die Spur“ schreibt in den Store.
+  const cut = { mode: 'onsets', count: 8, sens: clamp(Number(load(SENS_KEY).v ?? 0.5), 0, 1), grid: false, info: null, cuts: [], sel: 0, token: 0, srcKey: '', pendKey: '', forId: null, busy: false };
+  const prog = el('div', 'wb-prog');
+  prog.hidden = true;
+  prog.append(el('i'));
+  wave.el.after(prog); // Fortschritt als Linie unter der Welle
+  prog.setAttribute('role', 'progressbar');
+  prog.setAttribute('aria-label', 'Trennen läuft');
+  const setProg = (p) => { prog.firstChild.style.width = `${Math.round(clamp(p, 0, 1) * 100)}%`; };
+  const srcKey = () => `${cur.id}|${recipe().start ?? 0}|${recipe().end ?? ''}`;
+  const fmtCuts = (n) => `${n} ${n === 1 ? 'Schnitt' : 'Schnitte'}`;
+  let lastTrack = null;
+  const marksCb = {
+    onSelect(i) { cut.sel = i; paintMarks(); },
+    onMove(i, t) { cut.cuts[i].start = t; if (i > 0) cut.cuts[i - 1].end = t; paintMarks(); },
+    onDelete(i) {
+      if (cut.cuts.length <= 1) { ui.flash('Ein Schnitt bleibt.'); return; }
+      if (i === 0) cut.cuts[1].start = cut.cuts[0].start; else cut.cuts[i - 1].end = cut.cuts[i].end;
+      cut.cuts.splice(i, 1);
+      cut.sel = Math.min(i, cut.cuts.length - 1);
+      paintMarks();
+    },
+    onHear(t) {
+      const c = cut.cuts.find((x) => t >= x.start && t < x.end) ?? cut.cuts[cut.cuts.length - 1];
+      const o = sound()?.orig;
+      if (c && o) engine.previewBuffer?.(o, c.start, c.end - c.start);
+    },
+  };
+  function paintMarks() {
+    const on = tab === 'zerlegen' && cur.kind === 'sound' && cut.forId === cur.id && cut.cuts.length && cut.info;
+    wave.setMarks(on ? { times: cut.cuts.map((c) => c.start), sel: cut.sel, min: cut.info.start, max: cut.info.end, cb: marksCb } : null);
+  }
+  async function findMarks() {
+    const id = cur.id;
+    if (!id || cur.kind !== 'sound') return;
+    const my = ++cut.token;
+    cut.pendKey = srcKey();
+    try {
+      const { findCuts } = await import('../cut-sound.js');
+      const res = await findCuts(library, id, recipe(), { mode: cut.mode, sensitivity: cut.sens, count: cut.count });
+      if (my !== cut.token || !res) return;
+      cut.info = res;
+      cut.cuts = res.cuts.map((c) => ({ ...c }));
+      cut.forId = id;
+      cut.sel = Math.min(cut.sel, cut.cuts.length - 1);
+      cut.srcKey = cut.pendKey;
+      render();
+    } catch { if (my === cut.token) ui.flash('Die Marken konnten nicht gesetzt werden.'); }
+  }
+  const ensureMarks = () => { if (tab === 'zerlegen' && cur.kind === 'sound' && cut.srcKey !== srcKey() && cut.pendKey !== srcKey()) findMarks(); };
+  const setCutMode = (mode) => { cut.mode = mode; render(); findMarks(); };
+
+  function commit(toTrack) {
+    if (!cur.id || cur.kind !== 'sound' || !cut.cuts.length || cut.forId !== cur.id) return;
+    const s = sound();
+    const clip = toTrack ? clipNow() : null;
+    const opt = { recipe: recipe(), duration: cut.info.duration, sampleRate: cut.info.sampleRate, beatsPerSecond: store.project.bpm / 60, grid: cut.grid ? ui.snapBeats || 0 : 0, loopBeats: s?.kind === 'loop' ? s.lengthBeats : null };
+    let res;
+    if (!toTrack) res = store.cutSound(cur.id, cut.cuts);
+    else if (clip) res = store.cutSound(cur.id, layoutCuts(cut.cuts, { ...opt, clip }), { clipId: clip.id, place: 'clip' });
+    else res = store.cutSound(cur.id, layoutCuts(cut.cuts, opt), { trackId: store.track(lastTrack) ? lastTrack : null, atBeat: Math.max(0, Math.round(engine.heardBeat() * 4) / 4), place: 'track' });
+    if (!res) { ui.flash('Hier gibt es nichts zu zerlegen.'); return; }
+    library.syncVariants?.(store.project);
+    library.emit?.();
+    ui.flash(`${fmtCuts(res.ids.length)} ${toTrack ? 'auf der Spur' : 'in der Kiste'}`);
+    if (toTrack && res.clipIds?.length) ui.select(res.clipIds[0]);
+  }
+
+  async function separate(mode) {
+    if (cut.busy || !cur.id || cur.kind !== 'sound') return;
+    cut.busy = true;
+    setProg(0);
+    prog.hidden = false;
+    render();
+    try {
+      const { separateSound } = await import('../cut-sound.js');
+      const res = await separateSound({ store, library, own, sampleId: cur.id, clipId: cur.clipId, mode, onProgress: setProg });
+      const where = cur.clipId ? '' : ' in der Kiste';
+      ui.flash(!res ? 'Das geht hier nicht: kein Original oder zu wenige freie Spuren.' : mode === 'stems' ? `4 Ebenen${cur.clipId ? ' auf neuen Spuren' : where}.` : mode === 'vocal' ? `Nur die Stimme${where || ' spielt jetzt'}.` : `Die Stimme ist weg${where}.`);
+      library.emit?.();
+    } catch { ui.flash('Trennen hat nicht geklappt.'); }
+    cut.busy = false;
+    prog.hidden = true;
+    render();
+  }
+
+  {
+    const { grund, fine } = panels.zerlegen;
+    const seg = el('div', 'wb-seg');
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Wo die Marken sitzen');
+    grund.append(seg);
+    const bOn = btn(seg, 'An Anschlägen', 'wb-cut-onsets', () => setCutMode('onsets'), 'wb-toggle');
+    const bEven = btn(seg, 'In 8 gleiche', 'wb-cut-even', () => setCutMode('even'), 'wb-toggle');
+    const sens = row(grund, 'Empfindlichkeit');
+    const sIn = range(sens.r, 'wb-cut-sens', 0, 1, 0.01);
+    sIn.setAttribute('aria-label', 'Empfindlichkeit');
+    sIn.addEventListener('input', () => { cut.sens = Number(sIn.value); save(SENS_KEY, { v: cut.sens }); setOut(sens.out, fmtPct(cut.sens)); findMarks(); });
+    const acts = el('div', 'wb-acts wb-acts-2');
+    grund.append(acts);
+    const box_ = btn(acts, 'In die Kiste', 'wb-cut-box', () => commit(false));
+    const trk = btn(acts, 'Auf die Spur', 'wb-cut-track', () => commit(true));
+    box_.title = 'Legt die Schnitte als eigene Sounds in die Kiste';
+    trk.title = 'Ersetzt den Clip durch die Schnitte an denselben Stellen';
+    // Feinheiten: Anzahl gleiche, Ins Raster, Trennen
+    const nRow = el('div', 'insp-row wb-row wb-count-row');
+    nRow.append(el('span', null, 'Anzahl gleiche'));
+    const nSeg = el('div', 'wb-seg');
+    nSeg.setAttribute('role', 'group');
+    nSeg.setAttribute('aria-label', 'Anzahl gleiche Schnitte');
+    nRow.append(nSeg);
+    fine.append(nRow);
+    const nBtns = [2, 4, 8, 16].map((n) => btn(nSeg, String(n), `wb-cut-n-${n}`, () => { cut.count = n; cut.mode = 'even'; render(); findMarks(); }, 'wb-toggle'));
+    const grid = toggle(fine, 'Ins Raster', 'wb-cut-grid', () => cut.grid, (on) => { cut.grid = on; render(); });
+    grid.title = 'Die Anfänge der Schnitt-Clips rasten auf das Raster ein';
+    fine.append(el('p', 'wb-note', 'Trennen'));
+    const sep = el('div', 'wb-acts');
+    fine.append(sep);
+    const sepBtns = [
+      btn(sep, 'Stimme weg', 'wb-sep-novocal', () => separate('novocal')),
+      btn(sep, 'Nur Stimme', 'wb-sep-vocal', () => separate('vocal')),
+      btn(sep, 'In 4 Ebenen', 'wb-sep-stems', () => separate('stems')),
+    ];
+    updaters.push(() => {
+      bOn.setAttribute('aria-pressed', String(cut.mode === 'onsets'));
+      bEven.setAttribute('aria-pressed', String(cut.mode === 'even'));
+      bEven.textContent = `In ${cut.count} gleiche`;
+      sens.r.hidden = cut.mode !== 'onsets';
+      setVal(sIn, cut.sens);
+      setOut(sens.out, fmtPct(cut.sens));
+      nBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(cut.mode === 'even' && cut.count === [2, 4, 8, 16][i])));
+      for (const b of sepBtns) b.disabled = cut.busy;
+      const ready = cut.forId === cur.id && cut.cuts.length > 0;
+      box_.disabled = trk.disabled = !ready;
+    });
+  }
+
   // ---------- Clip ----------
   {
     const { grund, fine } = panels.clip;
@@ -473,35 +653,42 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   // ---------- Anzeige ----------
   function render() {
     const found = ui.selectedClipId ? store.findClip(ui.selectedClipId) : null;
-    if (!found) return;
-    const { clip } = found;
-    const s = library.get(clip.sampleId);
+    // Ohne Clip: Werkbank für einen Sound aus der Kiste
+    const benchId = !found && !ui.selectedTrackId ? ui.benchSoundId : null;
+    if (!found && !benchId) return;
+    const clip = found?.clip ?? null;
+    const sId = clip ? clip.sampleId : benchId;
+    if (found) lastTrack = found.track.id;
+    const s = library.get(sId);
     const isPat = !!s && (/^pat-/.test(s.id) || !!s.patternId);
     const kind = !s || s.missing ? 'missing' : isPat ? 'pattern' : 'sound';
-    if (cur.id !== clip.sampleId || cur.kind !== kind) { matRow.hidden = true; dot.setAttribute('aria-expanded', 'false'); if (!nameIn.hidden) rename(false); }
-    cur = { id: clip.sampleId, clipId: clip.id, kind };
+    if (cur.id !== sId || cur.kind !== kind) { matRow.hidden = true; dot.setAttribute('aria-expanded', 'false'); if (!nameIn.hidden) rename(false); }
+    cur = { id: sId, clipId: clip?.id ?? null, kind };
     const r = store.project.recipes?.[cur.id] ?? {};
     const cat = s?.colorCat ?? s?.category ?? 'fx';
     root.className = `wb cat-${cat} wb-${kind}`;
     box.dataset.kind = kind;
+    box.dataset.source = clip ? 'clip' : 'kiste';
     // Kopf
     if (nameIn.hidden) nameBtn.textContent = s?.name ?? 'Clip';
     const n = store.clipsOf(cur.id);
     count.textContent = kind === 'missing' ? '' : `in ${n} ${n === 1 ? 'Clip' : 'Clips'}`;
-    varBtn.hidden = kind !== 'sound';
+    varBtn.hidden = kind !== 'sound' || !clip;
     dot.hidden = kind === 'missing';
     tree.textContent = treeText(s, r, library);
     tree.title = tree.textContent;
     const mat = (materialOf(r.material ?? library.get(s?.parentId)?.material ?? s?.material) ?? materialOf(suggestMaterial(s))).id;
     for (const [id, b] of matBtns) b.setAttribute('aria-pressed', String(id === mat));
-    // Reiter je Objektart
-    const avail = kind === 'sound' ? ['form', 'ton', 'farbe', ...(hasOwnTempo(s) ? ['zeit'] : []), 'clip'] : kind === 'pattern' ? ['clip'] : [];
+    // Reiter je Objektart; Zerlegen nur bei Sounds ab 1 s (Länge des Ausschnitts), Clip nur mit Clip
+    const dur0 = kind === 'sound' ? durOf() : 0;
+    const cutOk = kind === 'sound' && dur0 > 0 && Math.min(dur0, r.end ?? dur0) - (r.start ?? 0) >= CUT_MIN;
+    const avail = kind === 'sound' ? ['form', 'ton', 'farbe', ...(hasOwnTempo(s) ? ['zeit'] : []), ...(cutOk ? ['zerlegen'] : []), ...(clip ? ['clip'] : [])] : kind === 'pattern' && clip ? ['clip'] : [];
     for (const [id] of TABS) tabBtns[id].hidden = !avail.includes(id);
     tabs.hidden = !avail.length;
     const want = tabMem[kind === 'pattern' ? 'pattern' : 'sound'] ?? (kind === 'pattern' ? 'clip' : 'form');
     tab = avail.includes(want) ? want : avail[0] ?? 'form';
     show();
-    patLink.hidden = kind !== 'pattern';
+    patLink.hidden = kind !== 'pattern' || !clip;
     wave.el.hidden = kind !== 'sound';
     if (kind === 'sound') {
       wave.render(cur.id);
@@ -512,6 +699,8 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
       const ctx = { s, r, clip, dur: 0, tab };
       for (const fn of updaters) { try { fn(ctx); } catch { /* Reiter fehlt */ } }
     }
+    ensureMarks();
+    paintMarks();
   }
   library.on?.(() => { if (!root.closest('[hidden]')) render(); });
   return { render, root, choose };

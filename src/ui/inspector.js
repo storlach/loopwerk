@@ -58,7 +58,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     if (!calm) { app.classList.toggle('insp-open'); return; }
     // Offen: schließen (Auswahl aufheben); zu: den Song zeigen
     pinned = !app.classList.contains('insp-open');
-    if (!pinned) { ui.select(null); ui.selectTrack(null); }
+    if (!pinned) { ui.select(null); ui.selectTrack(null); ui.openSound?.(null); }
     render();
   });
   root.append(toggle);
@@ -363,9 +363,11 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   function render() {
     const found = ui.selectedClipId ? store.findClip(ui.selectedClipId) : null;
     const track = found?.track ?? (ui.selectedTrackId ? store.track(ui.selectedTrackId) : null);
-    const mode = found ? 'clip' : track ? 'track' : 'song';
-    clipSec.hidden = mode !== 'clip';
-    trackSec.hidden = mode === 'song' || (mode === 'clip' && !trackOnClip);
+    // „sound“: Werkbank für einen Sound aus der Kiste, ohne Clip (nur mit clipPanel)
+    const benchId = !found && !track && panel && ui.benchSoundId && library.get(ui.benchSoundId) ? ui.benchSoundId : null;
+    const mode = found ? 'clip' : track ? 'track' : benchId ? 'sound' : 'song';
+    clipSec.hidden = mode !== 'clip' && mode !== 'sound';
+    trackSec.hidden = mode === 'song' || mode === 'sound' || (mode === 'clip' && !trackOnClip);
     songSec.hidden = mode !== 'song';
     hintSec.hidden = mode !== 'song';
     root.dataset.mode = mode;
@@ -409,7 +411,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       stReset.hidden = !fixed;
     }
 
-    if (mode !== 'song') {
+    if (mode === 'clip' || mode === 'track') {
       trackId = track.id;
       trackName.textContent = track.name;
       const n = track.clips.length;
@@ -435,6 +437,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
       autoBlock.hidden = fxCompact && !autoOpen;
       fineBtn.setAttribute('aria-expanded', String(autoOpen));
+    } else if (mode === 'sound') {
+      trackId = null;
+      autoBlock.hidden = true;
     } else {
       trackId = MASTER;
       autoBlock.hidden = true;
@@ -455,7 +460,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
     }
-    if (mode !== 'song' && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
+    if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();
     const compact = fxCompact && mode === 'track';
