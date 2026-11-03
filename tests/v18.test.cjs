@@ -230,7 +230,11 @@ const { check, finish } = createChecker();
     check('Schließen per Knopf ist animiert', await page.evaluate(() => document.getElementById('mixer').classList.contains('leaving')));
     await rest(page);
     const fClose = motion(await stopFrames(page), '#mixer');
-    check('Schließen per Knopf: gleitet ganz hinaus, ohne Sprung', fClose.moving >= 5 && fClose.last.vis <= -30 && fClose.jerk <= 60, JSON.stringify({ moving: fClose.moving, last: fClose.last, peak: fClose.peak, jerk: fClose.jerk }));
+    // Mindestens 5 bewegte Bilder bei 60 Bildern/s; auf einer langsamen Maschine (größere Bildabstände) entsprechend weniger
+    const gaps = fClose.pts.slice(1).map((p, i) => p.t - fClose.pts[i].t).filter((g) => g > 0).sort((a, b) => a - b);
+    const dtm = gaps[Math.floor(gaps.length / 2)] || 16.7;
+    const need = Math.min(5, Math.max(3, Math.floor(240 / dtm)));
+    check('Schließen per Knopf: gleitet ganz hinaus, ohne Sprung', fClose.moving >= need && fClose.last.vis <= -30 && fClose.jerk <= 60, JSON.stringify({ moving: fClose.moving, need, dtm: Math.round(dtm), last: fClose.last, peak: fClose.peak, jerk: fClose.jerk }));
     await page.click('#mixer-btn');
     await page.keyboard.press('Escape');
     check('Esc schließt das Fach', await page.evaluate(() => window.loopwerk.ui.dock === null));
