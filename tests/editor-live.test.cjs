@@ -56,6 +56,12 @@ const { check, finish } = createChecker();
     check('Rückgängig: Originalklang, Schalter aus', Math.abs(back - before) <= 4 && u.hist === 0 && u.pressed === 'false' && u.val === '0', JSON.stringify({ back, before, ...u }));
     await page.click('#ed-play');
     check('Stopp hält das Vorhören an', await page.evaluate(() => !window.loopwerk.engine.preview));
+    // Schublade zuwischen: das Fach blendet sich erst selbst aus, dann wechselt das Fach – der Loop muss enden
+    await page.click('#ed-play');
+    await page.waitForFunction(() => !!window.loopwerk.engine.preview?.loop);
+    await page.evaluate(() => { document.getElementById('editor').hidden = true; window.loopwerk.ui.setDock(null); });
+    await page.waitForTimeout(200);
+    check('Schublade zu stoppt den laufenden Clip', await page.evaluate(() => !window.loopwerk.engine.preview));
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Ablauf ohne Ausnahme', false, e.stack);

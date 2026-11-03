@@ -52,7 +52,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   const grid = el('div', 'arr-grid');
   const rulerRow = el('div', 'ruler-row');
   const corner = el('div', 'corner');
-  corner.append(el('span', null, 'Takt'));
+  corner.append(el('span', 'corner-label', 'Takt'));
   // Tonart- und Akkordzeile ein-/ausblenden: zu Beginn zu, ein Klick öffnet bzw. schließt (je Gerät gemerkt).
   // Verborgene Tonart- oder Akkordwechsel zeigt ein Leuchtpunkt am Schalter.
   const HARM_KEY = lsKey('loopwerk.harmonyRows');
@@ -857,7 +857,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     if (gripDrag != null) beat = gripDrag;
     const x = headW() + beat * ppb();
     playhead.style.transform = `translateX(${x}px)`;
-    phGrip.style.transform = `translateX(${beat * ppb()}px)`;
+    // Am Songanfang ganz sichtbar statt halb unter der Ecke: der Griff rückt bis zu seiner halben Breite nach rechts
+    phGrip.style.transform = `translateX(${Math.max(beat * ppb(), (phGrip.offsetWidth || 14) / 2)}px)`;
     if (engine.playing && !wasPlaying) freeView = false;
     wasPlaying = engine.playing;
     if (engine.playing) {

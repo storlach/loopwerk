@@ -529,7 +529,7 @@
   .ruler-row { display: flex; position: sticky; top: 0; z-index: 4; height: 30px; }
   .corner {
     position: sticky; left: 0; z-index: 5;
-    flex: 0 0 var(--head-w);
+    flex: 0 0 var(--head-w); min-width: 0; overflow: hidden;
     display: flex; align-items: center; padding: 0 12px; box-sizing: border-box;
     background: var(--panel);
     border-bottom: 1px solid var(--line);
@@ -3154,6 +3154,11 @@
   .harm-toggle:hover, .harm-toggle:focus-visible { color: var(--ink); }
   /* ausgeblendet, aber es gibt Wechsel: Leuchtpunkt */
   .harm-toggle.has::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 6px var(--ink); }
+  /* schmale Spurköpfe: „Takt“ steht schon im Lineal, die Ecke gehört dem Schalter */
+  @media (max-width: 760px) {
+    .corner:has(.harm-toggle) > .corner-label { display: none; }
+    .corner:has(.harm-toggle) .harm-toggle { margin-left: 0; padding: 0; }
+  }
   .arr-grid.harm-off { --key-row-h: 0px; --chord-row-h: 0px; }
   .arr-grid.harm-off > .key-row, .arr-grid.harm-off > .chord-row { display: none; }
   @media (prefers-reduced-motion: reduce) { .harm-toggle svg { transition: none; } }
