@@ -31,6 +31,7 @@ const TIPS = [
   { id: 'sing', sel: '#pattern:not([hidden]) #sing-rec', text: 'Sing, summ oder pfeif eine Melodie – Loopwerk macht Noten daraus. Unter „Wie soll es klingen?“ beschreibst du den Klang.' },
   { id: 'vkeys', sel: '#pattern:not([hidden]) .pat-vkeys', only: 'narrow', text: 'Die Tasten links sind spielbar: halten = langer Ton, mit dem Finger darübergleiten spielt weiter.' },
   { id: 'editor', sel: '#editor:not([hidden]) #ed-wave', text: 'Über die Wellenform ziehen wählt einen Bereich. Darunter findest du Schneiden, Klang, Tonhöhe und Autotune und das Trennen von Stimme und Instrumenten.' },
+  { id: 'rec-latency', sel: '#app.rec-unmeasured #rec-more', only: 'wide', text: 'Sitzt die Aufnahme nicht im Takt? ▾ neben ● → Einmessen.' },
   { id: 'export', sel: '#export:not([hidden]) .export-body', text: 'WAV ist verlustfrei, MP3 deutlich kleiner. „Nur Loop-Bereich“ exportiert nur den markierten Teil.' },
 ];
 

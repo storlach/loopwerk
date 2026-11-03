@@ -166,6 +166,9 @@
 <link rel="modulepreload" href="src/dsp/recipe.js">
 <link rel="modulepreload" href="src/cuts.js">
 <link rel="modulepreload" href="src/dsp/slice.js">
+<link rel="modulepreload" href="src/dsp/loopback.js">
+<link rel="modulepreload" href="src/rec-settings.js">
+<link rel="modulepreload" href="src/ui/rec-setup.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3304,6 +3307,35 @@
   #app[data-density="calm"] .shelf-sticky #shelf-new { grid-column: 2; grid-row: 1; }
   @media (prefers-reduced-motion: reduce) { .len-bar { transition: none; } }
   @media (max-width: 760px), (pointer: coarse) { .shelf-find .shelf-search { font-size: 16px; } }
+
+  /* ---------- Aufnahme (2.13): ▾ am ●, Feld „Aufnahme“ (Eingang, Latenz, Einmessen) ---------- */
+  .rec-wrap { display: inline-flex; margin-left: -3px; }
+  .deck .key.rec-more { min-width: 20px; width: 20px; padding: 0; }
+  .deck .key.rec-more svg { width: 11px; height: 11px; }
+  .rec-pop { left: 0; right: auto; width: 320px; }
+  .rec-setup { display: grid; gap: 6px; color: var(--ink); font: 500 12px/1.2 var(--font-body); }
+  .rs-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; }
+  .rs-label { font: 600 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .rs-input { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rs-lat { display: flex; align-items: center; gap: 6px; }
+  #app .rec-setup .key { height: 36px; }
+  #app .rec-setup .key.rs-step { width: 36px; min-width: 36px; padding: 0; font-size: 16px; }
+  .rs-out { min-width: 56px; text-align: center; font: 500 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .rs-mark { font: 500 10px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); }
+  .rs-mark[data-measured="true"] { color: var(--ink); }
+  #app .rec-setup .key.rs-cal { width: 100%; }
+  .rs-cal[aria-busy="true"] { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+  .song-rec:empty { display: none; }
+  #app[data-density="calm"] .rec-wrap { display: none; }
+  /* Finger (Tablet): volle 44 px Tippfläche */
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) { .deck .key.rec-more { width: 44px; min-width: 44px; } .rec-wrap { margin-left: 0; } }
+  @media (max-width: 760px) {
+    .rec-wrap { display: none; }
+    .song-rec { padding: 4px 0; border-top: 1px solid var(--line); }
+    .rs-row { min-height: 44px; }
+    #app .rec-setup .key { height: 44px; }
+    #app .rec-setup .key.rs-step { width: 44px; min-width: 44px; }
+  }
 </style>
 
 
@@ -3332,6 +3364,12 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
         <span class="rec-label">Aufnahme</span>
       </button>
+      <span class="menu-wrap rec-wrap" id="rec-more-wrap">
+        <button class="key rec-more" id="rec-more" data-tier="3" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="rec-pop" aria-label="Aufnahme einstellen" title="Aufnahme: Latenz einmessen">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5z"/></svg>
+        </button>
+        <div class="pop rec-pop" id="rec-pop" role="dialog" aria-label="Aufnahme" hidden></div>
+      </span>
       <button class="key" id="metro-btn" data-tier="3" type="button" title="Metronom">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l3 14H3zm1.6 2L5.4 13h5.2L8.4 3zM8 6l4-3 .6.8-4 3z"/></svg>
         Klick
@@ -3752,6 +3790,7 @@
       <div class="song-mst" id="song-mst-slot"></div>
       <div class="song-auto" id="song-auto-slot" role="group" aria-label="Verlauf der Summe"><span class="song-auto-label">Summe</span></div>
       <div class="song-main" id="song-main"></div>
+      <div class="song-rec" id="song-rec"></div>
       <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
       <template id="harm-tpl"><button class="key" id="harm-btn" type="button" aria-pressed="false">Tonart und Akkorde</button></template>
       <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>

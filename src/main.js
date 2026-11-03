@@ -43,6 +43,7 @@ import { applySurfaces } from './ui/surfaces.js';
 import { clearInstruments } from './sampler.js';
 import { mountPwa } from './pwa.js';
 import { mountClipFloat } from './ui/clip-float.js';
+import { mountRecSetup } from './ui/rec-setup.js';
 
 // iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
 // Zoomen mit zwei Fingern bleibt erlaubt (Safari ignoriert die Grenze dafür). Für Gerüste, die wir nicht selbst schreiben.
@@ -420,7 +421,13 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }
     btn.setAttribute('aria-pressed', String(rec));
     label.textContent = recorder.state === 'recording' ? 'Stopp' : recorder.state === 'saving' ? 'Speichert …' : 'Aufnahme';
     if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
-    else if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
+    else if (what === 'recorded') {
+      arranger.select(payload.clipId);
+      ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`);
+      // Tipp „Einmessen“ (tips.js), solange auf diesem Gerät nicht gemessen wurde
+      document.getElementById('app').classList.toggle('rec-unmeasured', !recorder.latencyInfo?.measured);
+    }
+    if (what === 'latency') document.getElementById('app').classList.remove('rec-unmeasured');
     if (what === 'error') ui.flash(payload.message);
   });
   return { start };
@@ -630,6 +637,7 @@ async function boot() {
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
   });
+  const recSetup = mountRecSetup({ ui, engine, recorder });
   layout.onEditorTab(() => {
     if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
     else tools.edit();
@@ -764,7 +772,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

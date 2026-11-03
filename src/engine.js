@@ -653,6 +653,7 @@ export class Engine extends Emitter {
       for (const type of ['pointerup', 'touchend', 'keydown']) document.addEventListener(type, wake, { capture: true, passive: true });
       const worklets = await loadFxWorklet(ctx);
       const loopExtra = await measureLoopExtra(ctx.sampleRate);
+      this.limiterFrames = await limiterLatency(ctx.sampleRate);
       this.ctx = ctx;
       this.worklets = worklets;
       // Gemeinsamer Ausgang für alles Hörbare (Song, Vorhören, Pads, Klick) – dort misst die Bildmarke den Pegel
@@ -699,6 +700,15 @@ export class Engine extends Emitter {
       this.mix.output.connect(this.analyser);
       this.meterData = new Float32Array(this.analyser.fftSize);
     }
+  }
+
+  // Verzögerung des Songs durch die Summe in Sekunden (Mastering-Kette oder Schutz-Limiter mit Vorausschau).
+  // Klick, Vorzähler und Vorhören laufen an der Summe vorbei über this.out. Für den Latenzausgleich der Aufnahme.
+  playbackDelay() {
+    if (!this.ctx || !this.mix) return 0;
+    const sr = this.ctx.sampleRate;
+    const frames = this.mix.mst && this.mix.monitor?.ab !== 'A' ? masterLatency(sr) : (this.limiterFrames ?? 0);
+    return frames / sr;
   }
 
   // ---------- Transport ----------
