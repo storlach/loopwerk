@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, usedSampleIds } from './model.js';
+import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, usedSampleIds, kitOf, instrumentOf } from './model.js';
 import { accompanimentPlan, applyPlan } from './starter.js';
 import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
@@ -16,7 +16,11 @@ import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountSoundBench } from './ui/sound-bench.js';
-import { mountCreate } from './ui/create.js';
+import { mountBenches } from './ui/kit-bench.js';
+import { mountStartCard } from './ui/start-card.js';
+import { makeTips } from './tips-make.js';
+import { padWallTemplate, importPadWall } from './pad-wall.js';
+import { mountCreate, kitCard } from './ui/create.js';
 import { mountSheets } from './ui/sheets.js';
 import { mountTips } from './ui/tips.js';
 import { mountBrandMeter } from './ui/brand-meter.js';
@@ -354,7 +358,7 @@ function mountSoundState({ store, engine, library, ui, arranger }) {
 
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
 // mode 'sound' (Krachwerk): ohne Vorzähler; der gesäuberte Klang kommt als Clip ab dem Takt der Marke in den Loop
-function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }) {
+function mountRecording({ store, engine, ui, arranger, recorder, library, mode = 'song', bench = () => null }) {
   const btn = document.getElementById('rec-btn');
   const label = btn.querySelector('.rec-label');
   const freeTrack = (from, to) => store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < to && c.startBeat + c.lengthBeats > from));
@@ -379,8 +383,11 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }
     if (!engine.playing) engine.play(startBeat);
     return clipId;
   }
-  async function start(target) {
+  // Ist die Kit- oder Instrument-Werkbank mit Clip offen, nimmt ● Pads bzw. Tasten ins Raster auf (kein Mikrofon)
+  async function start(target, opts = {}) {
     if (recorder.state === 'recording') { recorder.stop(); return; }
+    const kb = !target && !opts.tag ? bench() : null;
+    if (recorder.state === 'idle' && (kb?.recording || kb?.recContext())) { kb.toggleRec(); return; }
     if (recorder.state !== 'idle') return;
     const bpb = store.project.beatsPerBar;
     const startBeat = target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
@@ -391,24 +398,53 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }
     if (!trackId && mode === 'song') { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
     pending = { trackId, startBeat };
     try {
-      await recorder.start({ trackId, startBeat, mode });
-      ui.flash(mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.' : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.');
+      await recorder.start({ trackId, startBeat, mode, silence: opts.silence, maxSeconds: opts.maxSeconds, tag: opts.tag });
+      ui.flash(opts.say ?? (mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.' : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.'));
     } catch (err) {
       ui.flash(err.code === 'denied'
         ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
         : 'Aufnahmen sind in dieser Ansicht nicht möglich (z. B. in claude.ai). Nimm mit einer anderen App auf und importiere die Datei („Datei importieren“).');
     }
   }
-  recorder.on((what, payload) => {
-    const rec = recorder.state === 'recording' || recorder.state === 'arming';
-    btn.classList.toggle('recording', recorder.state === 'recording');
+  // Klatsch dein Kit: ● bis zu 10 s (Stopp nach 2 s Stille) → Zerlegen → Kit → Groove, spielt im Loop
+  async function clapDone(sample) {
+    const bpb = store.project.beatsPerBar;
+    const l = store.project.loop;
+    const at = l.on ? l.startBeat : Math.floor(engine.heardBeat() / bpb) * bpb;
+    try {
+      const { kitFromSound } = await import('./cut-sound.js');
+      const res = await kitFromSound({ store, library, sampleId: sample.id, atBeat: at });
+      if (!res.kitId) { ui.flash('Nur ein Schlag gehört – nochmal?'); return; }
+      library.syncVariants?.(store.project);
+      library.emit?.();
+      const n = Object.keys(store.project.kits[res.kitId].map).length;
+      if (res.clipId) arranger.select(res.clipId);
+      engine.play(at);
+      ui.flash(`${n} ${n === 1 ? 'Schlag' : 'Schläge'} – dein Kit spielt.`);
+    } catch { ui.flash('Aus der Aufnahme ließ sich kein Kit machen.'); }
+  }
+  // Rot nur für die Aufnahme; ohne Aufnahme nennt die Beschriftung die Quelle (Pads, Tasten)
+  const syncBtn = () => {
+    const kb = bench();
+    const pads = !!kb?.recording;
+    const rec = recorder.state === 'recording' || recorder.state === 'arming' || pads;
+    btn.classList.toggle('recording', recorder.state === 'recording' || pads);
     btn.setAttribute('aria-pressed', String(rec));
-    label.textContent = recorder.state === 'recording' ? 'Stopp' : recorder.state === 'saving' ? 'Speichert …' : 'Aufnahme';
-    if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
+    label.textContent = recorder.state === 'recording' || pads ? 'Stopp' : recorder.state === 'saving' ? 'Speichert …' : kb?.label ?? 'Aufnahme';
+  };
+  ui.on(syncBtn);
+  recorder.on((what, payload) => {
+    syncBtn();
+    if (what === 'recorded' && payload.mode === 'sound' && payload.tag?.kind === 'pad') {
+      store.setKitPad(payload.tag.kitId, payload.tag.row, payload.sample.id);
+      library.emit?.();
+      ui.flash(`„${payload.sample.name}“ liegt auf dem Pad.`);
+    } else if (what === 'recorded' && payload.mode === 'sound' && payload.tag?.kind === 'clap') clapDone(payload.sample);
+    else if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
     else if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
     if (what === 'error') ui.flash(payload.message);
   });
-  return { start };
+  return { start, sync: syncBtn, clap: () => start(null, { tag: { kind: 'clap' }, silence: 2, maxSeconds: 10, say: 'Klatsch und klopf – ich höre zu.' }) };
 }
 
 function mountImport({ store, ui, arranger, own, shelf }) {
@@ -510,6 +546,26 @@ async function boot() {
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
+    objects: EDITION.kitBench ? {
+      list: () => [
+        ...Object.keys(store.project.kits || {}).map((id) => ({ id, kit: kitOf(store.project, id) })).filter((x) => x.kit).map(({ id, kit }) => ({ id, kind: 'kit', name: kit.name, sub: `${Object.keys(kit.map).length} Pads` })),
+        ...Object.keys(store.project.instruments || {}).map((id) => ({ id, inst: instrumentOf(store.project, id) })).filter((x) => x.inst).map(({ id, inst }) => ({ id, kind: 'instrument', name: inst.name, sub: 'Instrument' })),
+      ],
+      template: () => { const t = padWallTemplate({ project: store.project, library }); return t ? { name: t.name, sub: `${t.ids.length} Pads` } : null; },
+      open: (id) => { ui.openSound(id); if (narrow.matches) ui.setDock('werkbank'); },
+      place: (o, target) => {
+        const at = { trackId: target.trackId, atBeat: target.startBeat };
+        const res = o.kind === 'kit' ? store.placeKit(o.id, at) : store.placeInstrument(o.id, at);
+        if (res) arranger.select(res.clipId); else ui.flash('Hier ist kein Platz.');
+      },
+      importTemplate: () => {
+        const id = importPadWall({ store, library });
+        if (!id) return;
+        ui.flash(`Pad-Wand übernommen – ${Object.keys(store.project.kits[id].map).length} Pads im Kit.`);
+        ui.openSound(id);
+        if (narrow.matches) ui.setDock('werkbank');
+      },
+    } : null,
     onBench: EDITION.workbench === 'sound' ? (id) => { ui.openSound(id); if (narrow.matches) ui.setDock('werkbank'); } : null,
     onDeleteOwn: async (id) => {
       if (store.project.recipes?.[id]?.parent) {
@@ -591,7 +647,8 @@ async function boot() {
   ensureStretch(); // einmal beim Start: eigene Sounds im Projekt (auf Abruf) gleich bereitstellen
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
-  const recording = mountRecording({ store, engine, ui, arranger, recorder, mode: EDITION.record });
+  const benchRef = { kb: null };
+  const recording = mountRecording({ store, engine, ui, arranger, recorder, library, mode: EDITION.record, bench: () => benchRef.kb });
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
@@ -613,7 +670,15 @@ async function boot() {
   const inspector = mountInspector({
     root: document.getElementById('insp'), store, ui, library, tools, engine, mastering,
     // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
-    ...(EDITION.workbench === 'sound' ? { clipPanel: (box, deps) => mountSoundBench(box, { ...deps, own }), trackOnClip: false, fxCompact: true } : {}),
+    ...(EDITION.workbench === 'sound' ? {
+      clipPanel: (box, deps) => {
+        if (!EDITION.kitBench) return mountSoundBench(box, { ...deps, own });
+        const benches = mountBenches(box, { ...deps, own, recorder, rec: { sync: () => recording.sync(), recordPad: (kitId, row) => recording.start(null, { tag: { kind: 'pad', kitId, row }, say: 'Mach ein Geräusch – es landet auf dem Pad.' }) } });
+        benchRef.kb = benches.kb;
+        return benches;
+      },
+      trackOnClip: false, fxCompact: true,
+    } : {}),
   });
   const layout = mountLayout({
     store, ui, library,
@@ -623,9 +688,11 @@ async function boot() {
     if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
     else tools.edit();
   });
+  if (EDITION.kitBench) document.querySelector('#create-panel .ccard[data-create="record"]')?.after(kitCard());
   mountCreate({
     root: document.getElementById('create-panel'), arranger,
     actions: {
+      kit: () => recording.clap(),
       beat: (t) => createPattern(newDrumPattern, t),
       melody: (t) => createPattern(newSynthPattern, t),
       sing: async (t) => { await createPattern(newSynthPattern, t); patternEditor.openSing(); },
@@ -683,7 +750,29 @@ async function boot() {
     try { on = localStorage.getItem(lsKey('loopwerk.harmony')) === '1'; } catch { /* Standard */ }
     if (on) set(true);
   }
-  const tips = EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
+  const tips = EDITION.tips ? mountTips({ ui, store, list: makeTips({ store, ui, library, engine }), poll: 1000 })
+    : EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
+  // Startkarte im leeren Song (Krachwerk): ● Geräusch, Klatsch dein Kit, Strom ohne Mikrofon
+  async function stromBeat() {
+    let clipId = null;
+    store.batch('Strom', () => {
+      const pid = store.addPattern({ ...newDrumPattern(1), name: 'Strom 1' });
+      store.setGroove(pid, 'gerade');
+      const t = store.project.tracks.find((x) => !x.clips.length) ?? store.project.tracks[0];
+      clipId = store.addClip(t.id, patternSampleId(pid), 0, 4);
+      store.setLoop({ on: true, startBeat: 0, endBeat: 4 });
+    });
+    await patterns.sync(store.project);
+    if (clipId) arranger.select(clipId);
+    engine.play(0);
+    ui.flash('Strom läuft – tippe auf den Clip, um Pads und Schritte zu ändern.');
+  }
+  const startCard = EDITION.startCard ? mountStartCard({ store, ui, recorder, actions: { record: () => recording.start(null), file: () => importer.pick(null), clap: () => recording.clap(), strom: stromBeat } }) : null;
+  // Pad-Wand aus dem Prototyp: einmal Bescheid sagen, wo sie jetzt liegt
+  if (EDITION.kitBench && padWallTemplate({ project: store.project, library })) {
+    const flag = lsKey('loopwerk.padNote');
+    try { if (!localStorage.getItem(flag)) { localStorage.setItem(flag, '1'); ui.flash('Deine Pad-Wand liegt als Vorlage „Pad-Wand“ in der Kiste.'); } } catch { /* egal */ }
+  }
 
   let saveTimer = null;
   const saveNow = () => {
@@ -755,7 +844,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, freezeUi, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, freezeUi, startCard, benchRef, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

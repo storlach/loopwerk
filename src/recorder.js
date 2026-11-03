@@ -28,9 +28,13 @@ export class Recorder extends Emitter {
   }
 
   // mode: 'song' (Loopwerk: Vorzähler, Song läuft mit, Clip an der Marke) oder 'sound' (Krachwerk, s. o.)
-  async start({ trackId, startBeat, mode = 'song' }) {
+  // silence / maxSeconds: Stille nach dem Klang bzw. längste Aufnahme (Klatsch dein Kit: 2 s / 10 s); tag: Kennung für die Ablage
+  async start({ trackId, startBeat, mode = 'song', silence = null, maxSeconds = null, tag = null }) {
     if (this.state !== 'idle') return;
     this.mode = mode;
+    this.tag = tag;
+    this.silenceSec = silence ?? SOUND_SILENCE;
+    this.maxSec = maxSeconds ?? SOUND_MAX;
     if (!this.supported) throw new RecorderError('unavailable', 'Aufnahmen gehen in dieser Ansicht nicht.');
     this.state = 'arming';
     this.emit('state');
@@ -73,7 +77,7 @@ export class Recorder extends Emitter {
       if (p > 0.03) auto.heard = true;
       auto.quiet = auto.heard && p < Math.max(0.012, auto.loudest * 0.06) ? auto.quiet + dt : 0;
       this.emit('level', p);
-      if ((auto.heard && auto.quiet >= SOUND_SILENCE) || auto.total >= SOUND_MAX || (!auto.heard && auto.total >= SOUND_WAIT)) this.finish();
+      if ((auto.heard && auto.quiet >= this.silenceSec) || auto.total >= this.maxSec || (!auto.heard && auto.total >= SOUND_WAIT)) this.finish();
     };
     // Latenz: Ausgabe (bis der Klick zu hören ist) plus Eingabe (bis das Mikrofon-Signal ankommt)
     const inputLatency = this.stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
@@ -132,7 +136,7 @@ export class Recorder extends Emitter {
   // Krachwerk: säubern (Stille weg, Start auf dem Anschlag, Pegel), einordnen, benennen. Platzieren macht die UI.
   async _finishSound(chs, sr) {
     const t0 = performance.now();
-    const c = cleanTake(chs, sr, { maxSeconds: SOUND_MAX });
+    const c = cleanTake(chs, sr, { maxSeconds: this.maxSec ?? SOUND_MAX });
     if (!c) throw new RecorderError('silent', 'Nichts gehört – nochmal?');
     const f = features(mixMono(c.chs), sr);
     const cls = classify(f);
@@ -142,7 +146,7 @@ export class Recorder extends Emitter {
     const sample = await this.own.create({ name, buffer: channelsToBuffer(c.chs, sr), source: 'Aufnahme', cls, tags, from: 'mic' });
     this.state = 'idle';
     this.emit('state');
-    this.emit('recorded', { sample, clipId: null, mode: 'sound' });
+    this.emit('recorded', { sample, clipId: null, mode: 'sound', tag: this.tag ?? null });
     return { sample, clipId: null };
   }
 }

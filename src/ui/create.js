@@ -3,8 +3,20 @@
 
 import { el, trackPointer } from '../util.js';
 
-const LABELS = { beat: 'Beat', melody: 'Melodie', sing: 'Einsingen', record: 'Aufnahme', import: 'Import', link: 'Link', accomp: 'Begleitung' };
-const CATS = { beat: 'drums', melody: 'synth', sing: 'own', record: 'fx', import: 'bass', link: 'chords', accomp: 'chords' };
+const LABELS = { kit: 'Kit aus Klatschen', beat: 'Beat', melody: 'Melodie', sing: 'Einsingen', record: 'Aufnahme', import: 'Import', link: 'Link', accomp: 'Begleitung' };
+const CATS = { kit: 'drums', beat: 'drums', melody: 'synth', sing: 'own', record: 'fx', import: 'bass', link: 'chords', accomp: 'chords' };
+
+// Karte „Kit aus Klatschen“ (Krachwerk, Scheibe 4): kommt vor mountCreate in die Karten, damit sie wie die anderen bedient wird
+export function kitCard() {
+  const card = el('button', 'ccard cat-drums');
+  card.type = 'button';
+  card.dataset.create = 'kit';
+  const ico = el('span', 'ccard-ico');
+  ico.setAttribute('aria-hidden', 'true');
+  ico.innerHTML = '<svg viewBox="0 0 16 16"><path d="M1 2h4v4H1zm5 0h4v4H6zm5 0h4v4h-4zM1 7h4v4H1zm5 0h4v4H6zm5 0h4v4h-4z"/></svg>';
+  card.append(ico, el('span', 'ccard-title', 'Kit aus Klatschen'), el('span', 'ccard-sub', 'Klatschen und klopfen – daraus wird ein Kit mit Groove'));
+  return card;
+}
 
 // actions: { beat(target), melody(target), sing(target), record(target), import(target) } – target = { trackId, startBeat } oder null
 export function mountCreate({ root, arranger, actions }) {

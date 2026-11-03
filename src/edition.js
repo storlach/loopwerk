@@ -8,6 +8,7 @@ export const EDITIONS = {
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
     pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
     workbench: null, materialColors: false, grainWave: false, brandMark: null, freeze: false,
+    kitBench: false, startCard: false, tips: null,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -46,6 +47,8 @@ export const EDITIONS = {
     brandMark: 'klatscher',
     // Festhalten (Scheibe 3a): Knopf am Loop-Bereich, Taste F, Festhalten im Werkzeug bei Mehrfachauswahl
     freeze: true,
+    // Kit und Instrument (Scheibe 4): Kit-/Instrument-Werkbank, Pad-Wand, Startkarte, eigene Tipps (src/tips-make.js)
+    kitBench: true, startCard: true, tips: 'make',
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
       { id: 'koerper', label: 'Körper', cat: 'drums' },

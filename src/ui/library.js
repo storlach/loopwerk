@@ -58,7 +58,9 @@ const materialIn = (s, store, library) => store.project.recipes?.[s.id]?.materia
 
 // onBench(id): Werkbank für einen Sound (Doppelklick, lange drücken); Schnitte eines Zerlegens (s.group) stehen als eine
 // eingerückte Zeile „Name · 8 Schnitte“ unter dem Eltern-Sound und klappen auf
-export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null, onBench = null }) {
+// objects (Krachwerk, Scheibe 4): Kits und Instrumente des Songs als erste Gruppe, dazu die Vorlage „Pad-Wand“:
+// { list(): [{ id, kind, name, sub }], template(): { name, sub } | null, open(id), place(obj, target), importTemplate() }
+export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null, onBench = null, objects = null }) {
   const search = document.getElementById('shelf-search');
   const favBtn = document.getElementById('shelf-fav');
   const resetBtn = document.getElementById('shelf-reset');
@@ -209,7 +211,13 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
 
   function render() {
     const q = search.value.trim().toLowerCase();
-    const all = library.list().filter((s) => !s.missing);
+    // Muster eines Kits oder Instruments im Song gehören zum Clip, nicht in die Kiste (dort stehen Kit und Instrument selbst);
+    // ohne Clip bleiben sie sichtbar, damit man sie löschen kann
+    const asObject = (s) => {
+      const pat = objects && s.patternId ? store.project.patterns?.[s.patternId] : null;
+      return !!pat && (store.project.kits?.[pat.kit] || store.project.instruments?.[pat.preset]) && store.clipsOf(s.id) > 0;
+    };
+    const all = library.list().filter((s) => !s.missing && !asObject(s));
     const words = (s) => [s.name, CATEGORIES.find((c) => c.id === s.category)?.label, ...(s.genres || []).map((g) => GENRES.find((x) => x.id === g)?.label),
       ...(s.tags || []), s.kind === 'loop' ? 'loop' : 'one-shot oneshot', s.origin]
       .filter(Boolean).join(' ').toLowerCase();
@@ -252,7 +260,12 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     search.placeholder = !all.length ? 'Suchen …' : shown.length === all.length ? `Suchen … (${all.length})` : `Suchen … (${shown.length} Treffer)`;
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
-    if (!shown.length) {
+    const objQ = (o) => !q || o.name.toLowerCase().includes(q);
+    const showObjs = !!objects && filter === 'all' && len === 'all';
+    const objList = showObjs ? objects.list().filter(objQ) : [];
+    const tpl = showObjs && !q ? objects.template() : null;
+    if (objList.length || tpl) renderObjects(objList, tpl);
+    if (!shown.length && !objList.length && !tpl) {
       root.append(el('p', 'shelf-empty', groupBy && !q && filter === 'all' ? 'Noch nichts aufgenommen' : filter === 'fav' && !q
         ? 'Noch keine Favoriten. Markiere Sounds mit dem Stern.'
         : `Keine Sounds gefunden${q ? ` für „${search.value.trim()}“` : ''}.`));
@@ -345,6 +358,75 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     sync();
   }
 
+  function renderObjects(list, tpl) {
+    const expanded = !open.has('kits-zu') || !!search.value.trim();
+    const group = el('section', 'shelf-group cat-drums shelf-kits');
+    const h = el('h3', 'shelf-cat-wrap');
+    const head = el('button', 'shelf-cat');
+    head.type = 'button';
+    head.id = 'shelf-cat-kits';
+    head.setAttribute('aria-expanded', String(expanded));
+    head.setAttribute('aria-controls', 'shelf-items-kits');
+    head.append(el('span', 'swatch'), el('span', null, 'Kits und Instrumente'), el('span', 'shelf-count', String(list.length + (tpl ? 1 : 0))), el('span', 'shelf-chevron'));
+    head.addEventListener('click', () => { if (open.has('kits-zu')) open.delete('kits-zu'); else open.add('kits-zu'); saveOpen(open, groupBy); render(); });
+    h.append(head);
+    const box = el('div', 'shelf-items');
+    box.id = 'shelf-items-kits';
+    box.hidden = !expanded;
+    const rowOf = (o, cat) => {
+      const r = el('div', `loop-row cat-${cat} loop-object`);
+      const item = el('button', 'loop-item');
+      item.type = 'button';
+      item.dataset.objectId = o.id;
+      item.append(el('span', 'loop-play'), el('span', 'loop-name', o.name), el('span', 'loop-len', o.sub));
+      r.append(item);
+      return { r, item };
+    };
+    for (const o of list) {
+      const { r, item } = rowOf(o, o.kind === 'kit' ? 'drums' : 'synth');
+      item.title = `${o.kind === 'kit' ? 'Kit' : 'Instrument'} · ${o.sub}`;
+      bindObject(item, o);
+      box.append(r);
+    }
+    if (tpl) {
+      const { r, item } = rowOf({ id: 'pad-wand', name: tpl.name, sub: tpl.sub }, 'drums');
+      r.classList.add('loop-template');
+      item.dataset.template = 'pads';
+      item.title = 'Vorlage aus deiner alten Pad-Wand: antippen legt ein Kit daraus an';
+      item.addEventListener('click', () => objects.importTemplate());
+      box.append(r);
+    }
+    group.append(h, box);
+    root.append(group);
+  }
+
+  // Tipp öffnet die Werkbank, Ziehen auf eine Spur legt das Kit oder Instrument als Clip ab
+  function bindObject(item, o) {
+    item.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      const sx = e.clientX, sy = e.clientY;
+      let ghost = null, target = null;
+      const probe = { category: o.kind === 'kit' ? 'drums' : 'synth', lengthBeats: 4 };
+      const clean = () => { ghost?.remove(); document.body.classList.remove('is-dragging'); arranger.clearDropPreview(); };
+      trackPointer(e, (ev) => {
+        if (!ghost) {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+          ghost = el('div', `drag-ghost cat-${probe.category}`, o.name);
+          document.body.append(ghost);
+          document.body.classList.add('is-dragging');
+        }
+        ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 12}px)`;
+        target = arranger.dropTargetAt(ev.clientX, ev.clientY, probe);
+      }, () => {
+        if (!ghost) { objects.open(o.id); return; }
+        clean();
+        if (target) objects.place(o, target);
+      }, clean);
+    });
+    item.addEventListener('click', (e) => { if (e.detail === 0) objects.open(o.id); });
+    item.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
   function toggle(catId) {
     if (open.has(catId)) open.delete(catId);
     else {
@@ -365,6 +447,13 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   };
   let lastTap = { id: null, t: 0 };
 
+  // Ziehen auf ein Pad der Kit-Werkbank (Element mit data-pad-drop): Ziel hervorheben, beim Loslassen Ereignis „pad-drop“
+  function overPad(ev, prev) {
+    const hit = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('[data-pad-drop]') ?? null;
+    if (hit !== prev) { prev?.classList.remove('pad-over'); hit?.classList.add('pad-over'); }
+    return hit;
+  }
+
   function bindItem(item, sample) {
     item.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
@@ -373,6 +462,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       let ghost = null;
       let target = null;
       let long = false;
+      let padOver = null;
       const timer = benchable(sample) ? setTimeout(() => { if (!ghost) { long = true; lastTap = { id: null, t: 0 }; openBench(sample); } }, 520) : 0;
       trackPointer(e, (ev) => {
         if (!ghost) {
@@ -384,6 +474,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         }
         ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 12}px)`;
         target = arranger.dropTargetAt(ev.clientX, ev.clientY, sample);
+        padOver = overPad(ev, padOver);
       }, () => {
         clearTimeout(timer);
         if (long) return;
@@ -397,9 +488,11 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         ghost.remove();
         document.body.classList.remove('is-dragging');
         arranger.clearDropPreview();
+        if (padOver) { padOver.classList.remove('pad-over'); padOver.dispatchEvent(new CustomEvent('pad-drop', { detail: { sampleId: sample.id } })); return; }
         if (target) arranger.select(store.addClip(target.trackId, sample.id, target.startBeat, sample.lengthBeats));
       }, () => {
         clearTimeout(timer);
+        padOver?.classList.remove('pad-over');
         ghost?.remove();
         document.body.classList.remove('is-dragging');
         arranger.clearDropPreview();
@@ -422,6 +515,13 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   }
   ui.on(sync);
   engine.on(sync);
+  // Kits, Instrumente und die Vorlage ändern sich im Store, nicht in der Bibliothek: nur bei geänderter Liste neu aufbauen
+  if (objects) {
+    const patClips = () => store.project.tracks.reduce((n, t) => n + t.clips.filter((c) => /^pat-/.test(c.sampleId)).length, 0);
+    const sig = () => JSON.stringify([objects.list(), objects.template(), patClips()]);
+    let last = sig();
+    store.on(() => { const s = sig(); if (s !== last) { last = s; render(); } });
+  }
   // Tempowechsel ändert nichts, was das Regal zeigt (Loops in Takten, One-Shots ohne Länge): kein Neuaufbau
   library.on?.((why) => { if (why !== 'tempo') render(); });
   narrow.addEventListener('change', () => {

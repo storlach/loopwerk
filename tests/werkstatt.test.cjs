@@ -73,6 +73,34 @@ function micWav(file) {
   fs.writeFileSync(file, buf);
 }
 
+
+// Fixture „Klatsch dein Kit“: 0,8 s Stille, dann alle 0,7 s ein Schlag (Kick, Snare, Hi-Hat, Kick, Snare, Hi-Hat), dann Stille
+function clapWav(file) {
+  const sr = 48000, n = sr * 10;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(sr, 24);
+  buf.writeUInt32LE(sr * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const d = new Float32Array(n);
+  const hit = (kind, at) => {
+    const o = Math.round(sr * at);
+    let ph = 0, prev = 0, y1 = 0, y2 = 0;
+    const r = 0.97, w = 2 * Math.PI * 1500 / sr, a1 = 2 * r * Math.cos(w), a2 = -r * r;
+    for (let i = 0; i < sr * 0.3 && o + i < n; i++) {
+      let v = 0;
+      if (kind === 0) { const f = 46 + 119 * Math.exp(-i / (sr * 0.03)); ph += 2 * Math.PI * f / sr; v = 0.5 * Math.sin(ph) * Math.exp(-i / (sr * 0.09)); }
+      else if (kind === 1) { const y = rnd() * 0.12 + a1 * y1 + a2 * y2; y2 = y1; y1 = y; v = 0.8 * y * Math.exp(-i / (sr * 0.06)); }
+      else { const x = rnd(); v = (x - prev) * 0.45 * Math.exp(-i / (sr * 0.018)); prev = x; }
+      d[o + i] += v;
+    }
+  };
+  for (let k = 0; k < 6; k++) hit(k % 3, 0.8 + 0.7 * k);
+  for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.max(-1, Math.min(1, d[i] + 0.001 * rnd())) * 32767), 44 + i * 2);
+  fs.writeFileSync(file, buf);
+}
+
 async function openKw(base, context, { init } = {}) {
   const page = await context.newPage();
   const errors = [];
@@ -82,7 +110,7 @@ async function openKw(base, context, { init } = {}) {
   page.on('request', (r) => requests.push(new URL(r.url()).pathname));
   if (init) {
     await page.goto(`${base}/werkstatt/manifest.webmanifest`); // gleicher Ursprung, App läuft noch nicht
-    await page.evaluate(init);
+    for (const f of [].concat(init)) await page.evaluate(f);
   }
   const t0 = Date.now();
   await page.goto(`${base}/werkstatt/`);
@@ -393,6 +421,7 @@ async function seedPadWall() {
         counts[`${dev}-${sc}`] = await countUi(page);
         if (sc === 'start') bench[`empty-${dev}`] = await page.evaluate(() => ({
           hint: getComputedStyle(document.querySelector('.track-row .lane'), '::after').content,
+          card: document.getElementById('start-card')?.textContent ?? '',
           kiste: document.querySelector('#library .shelf-empty')?.textContent,
         }));
         if (SHOTS) await page.screenshot({ path: path.join(DIR, `kw-${sc}-${dev}.png`) });
@@ -542,7 +571,7 @@ async function seedPadWall() {
     check('Werkbank Desktop: bei Clipwahl 36 % (± 1), ⤢ macht 60 % des Raums rechts der Kiste (± 1), bleibt nach dem Neuladen', Math.abs(w.open - 36) <= 1 && Math.abs(w.wide - 60) <= 1 && Math.abs(w.again - 60) <= 1, `${w.open.toFixed(1)} / ${w.wide.toFixed(1)} / ${w.again.toFixed(1)} %`);
     check('⤢: Kiste klappt auf 24 px zu, Song zeigt mindestens 4 ganze Takte (Takt 5 im Bild), Werkzeug deckt keinen Spurkopf ab', bench.wb.shelfWide <= 26 && bench.wideState.bars && !bench.wideState.headsHit, `${bench.wb.shelfWide} px, Takte ${bench.wideState.barsSeen}, Spurkopf verdeckt: ${bench.wideState.headsHit}`);
     check('Werkbank: Sound-Tempo-Block bei Einzelklang und gesperrte Knöpfe nicht sichtbar', !bench.stempo.block && bench.stempo.off === 0, JSON.stringify(bench.stempo));
-    check('Leerer Start: Hinweis in Spur 1 („● tippen …“), Kiste „Noch nichts aufgenommen“ (Handy und Desktop)', ['desktop', 'handy'].every((d) => /tippen/.test(bench[`empty-${d}`].hint) && bench[`empty-${d}`].kiste === 'Noch nichts aufgenommen'), JSON.stringify([bench['empty-desktop'], bench['empty-handy']]));
+    check('Leerer Start: Startkarte „● Mach ein Geräusch“ statt Hinweistext in Spur 1, Kiste „Noch nichts aufgenommen“ (Handy und Desktop)', ['desktop', 'handy'].every((d) => /Mach ein Geräusch/.test(bench[`empty-${d}`].card) && bench[`empty-${d}`].hint === 'none' && bench[`empty-${d}`].kiste === 'Noch nichts aufgenommen'), JSON.stringify([bench['empty-desktop'], bench['empty-handy']]));
     check('Handy: „Tonart und Akkorde“ im Song-Fach blendet beide Zeilen wieder ein', bench.harmony?.pressed === 'true' && bench.harmony.rows.every(Boolean), JSON.stringify(bench.harmony));
     check('Handy: Werkzeug am Clip deckt keinen Spurkopf ab, Reihenfolge Werkbank · Teilen · Kopie · Löschen; Tonart- und Akkordzeile ohne Wechsel weg', !bench.phone.headsHit && bench.phone.floatRight <= 390 && bench.phone.order.join() === 'Werkbank,Teilen,Kopie,Löschen' && bench.phone.rowsGone.every(Boolean), JSON.stringify([bench.phone.headsHit, bench.phone.order, bench.phone.rowsGone]));
     check('Werkbank Desktop: ohne Auswahl eingeklappt (≤ 26 px)', w.shut <= 26, `${w.shut.toFixed(1)} px`);
@@ -862,7 +891,7 @@ async function seedPadWall() {
       const hidden4 = await page.evaluate(() => ['.wb-h-start', '.wb-h-end', '.wb-h-atk', '.wb-h-rel'].every((q) => getComputedStyle(document.querySelector(q)).display === 'none'));
       check('Marken-Modus: die 4 Griffe aus 2a sind ausgeblendet', hidden4);
       const gr = await page.evaluate(() => document.querySelectorAll('[role=tabpanel]:not([hidden]) .wb-grund :is(button, input, select, [role=slider])').length);
-      check('Zerlegen: Grund hat 5 Griffe (An Anschlägen · In 8 gleiche · Empfindlichkeit · In die Kiste · Auf die Spur)', gr === 5, String(gr));
+      check('Zerlegen: Grund hat 5 Griffe (An Anschlägen · In 8 gleiche · Empfindlichkeit · Als Kit · Auf die Spur)', gr === 5, String(gr));
       const near = await page.evaluate(() => {
         const t = [0.5, 1.6, 2.4, 3.9, 5.0, 6.3, 7.5, 8.8];
         const W = document.querySelector('.wb-wave').getBoundingClientRect().width;
@@ -959,7 +988,8 @@ async function seedPadWall() {
       await page.click('#wb-tab-zerlegen');
       await page.waitForFunction(() => document.querySelectorAll('.wb-mk').length > 0, null, { timeout: 5000 });
       const g0 = await page.evaluate(() => new Set(Object.values(window.loopwerk.store.project.recipes).map((r) => r.group)).size);
-      await page.click('#wb-cut-box');
+      if (await page.evaluate(() => document.getElementById('wb-fine-btn-zerlegen').getAttribute('aria-expanded') !== 'true')) await page.click('#wb-fine-btn-zerlegen');
+      await page.click('#wb-cut-box'); // „In die Kiste“ steht seit Scheibe 4 in den Feinheiten
       await page.waitForTimeout(500);
       const g1 = await page.evaluate(() => ({ groups: new Set(Object.values(window.loopwerk.store.project.recipes).map((r) => r.group)).size, clips: window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length, hint: document.getElementById('hint-text').textContent }));
       check('Aus der Kiste: „In die Kiste“ legt eine zweite Gruppe an, Einblender „8 Schnitte in der Kiste“, Clips unverändert', g1.groups === g0 + 1 && g1.clips === 8 && /8 Schnitte in der Kiste/.test(g1.hint), JSON.stringify(g1));
@@ -1409,6 +1439,345 @@ async function seedPadWall() {
       await sound3(page, 'kw-sicherung-handy.png');
       check('Konsole ohne Fehler (Handy Festhalten)', k.errors.length === 0, k.errors.join(' | '));
       await ctx.close();
+    }
+
+
+    // ---------- Teil 4: Kit und Instrument (Scheibe 4, Spec docs/specs/krachwerk-4-kit.md §9) ----------
+    {
+      const clapFile = path.join(tmp, 'klatsch.wav');
+      clapWav(clapFile);
+      const bClap = await chromium.launch({
+        args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${clapFile}%noloop`],
+      });
+      const visible = (page, sel) => page.evaluate((q) => { const e = document.querySelector(q); return !!e && e.getClientRects().length > 0 && !e.closest('[hidden]'); }, sel);
+      // Zeiger wie ein Finger: runter, halten, hoch (Zeigerereignisse, wie die App sie bedient)
+      const press = (page, sel, ms = 0) => page.evaluate(async ({ sel, ms }) => {
+        const el = document.querySelector(sel);
+        const r = el.getBoundingClientRect();
+        const o = { pointerId: 7, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1, bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+        el.dispatchEvent(new PointerEvent('pointerdown', o));
+        if (ms) await new Promise((res) => setTimeout(res, ms));
+        window.dispatchEvent(new PointerEvent('pointerup', { ...o, buttons: 0 }));
+      }, { sel, ms });
+      const grundOf = (page, panel) => page.evaluate((id) => [...document.querySelectorAll(`#${id} .wb-grund :is(button, input:not([type=hidden]), select, [role=slider])`)].filter((e) => e.getClientRects().length > 0 && !e.closest('[hidden]')).length, panel);
+      // drei eigene Sounds (Stöße bei 200, 1000, 5000 Hz) und ein Ton A4 im Browser anlegen
+      const seedSounds = (page) => page.evaluate(async () => {
+        const lw = window.loopwerk;
+        const ac = new AudioContext();
+        const mk = async (name, f, secs = 0.5) => {
+          const n = Math.round(44100 * secs), b = ac.createBuffer(1, n, 44100), d = b.getChannelData(0);
+          for (let i = 0; i < n; i++) d[i] = 0.6 * Math.sin(2 * Math.PI * f * i / 44100) * (secs > 0.6 ? Math.min(1, i / 400) * Math.min(1, (n - i) / 2000) : Math.exp(-i / 3000));
+          return (await lw.own.create({ name, buffer: b, source: 'Aufnahme', from: 'mic', cls: 'tief' })).id;
+        };
+        return { a: await mk('Bumm 1', 200), b: await mk('Klack 1', 1000), c: await mk('Zisch 1', 5000), t: await mk('Ton A4', 440, 1) };
+      });
+      try {
+        // ----- Handy: Startkarte → Klatsch-Kit in einem Tipp, Kit-Werkbank, Pad-Wand, Instrument -----
+        {
+          const ctx = await bClap.newContext(PHONE);
+          const k = await openKw(base, ctx);
+          const page = k.page;
+          await page.waitForTimeout(600);
+          const card = await page.evaluate(() => {
+            const c = document.getElementById('start-card');
+            const bs = [...c.querySelectorAll('button')];
+            return { shown: !c.hidden && c.getClientRects().length > 0, text: bs.map((b) => b.textContent), h: bs.map((b) => Math.round(b.getBoundingClientRect().height)), scroll: document.documentElement.scrollWidth - innerWidth };
+          });
+          check('Startkarte (leerer Song, Handy): „● Mach ein Geräusch“, „Klatsch dein Kit“, „Ohne Mikro: Strom“, Tippziele ≥ 44 px, kein seitliches Scrollen', card.shown && card.text.join('|') === '● Mach ein Geräusch|Klatsch dein Kit|Ohne Mikro: Strom' && card.h.every((h) => h >= 44) && card.scroll <= 0, JSON.stringify(card));
+          const withCard = await countUi(page);
+          await page.evaluate(() => { document.getElementById('start-card').hidden = true; });
+          const noCard = await countUi(page);
+          await page.evaluate(() => { document.getElementById('start-card').hidden = false; });
+          check('Zählung Handy „Start mit Startkarte“: höchstens 3 Bedienelemente mehr als ohne', withCard.controls - noCard.controls <= 3 && withCard.minFont >= 11, `${withCard.controls} gegen ${noCard.controls}, kleinste Schrift ${withCard.minFont}`);
+          await sound3(page, 'kw-start-handy.png');
+          // ein Tipp, dann klatschen: Aufnahme endet nach 2 s Stille, das Kit spielt
+          const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+          await page.tap('#start-clap');
+          await page.waitForFunction(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length === 1, null, { timeout: 40000 });
+          await page.waitForTimeout(600);
+          const kit = await page.evaluate(async () => {
+            const lw = window.loopwerk, p = lw.store.project;
+            const clip = p.tracks.flatMap((t) => t.clips)[0];
+            const pat = p.patterns[clip.sampleId.slice(4)];
+            const kitObj = p.kits[pat.kit];
+            const zcr = (id) => { const b = lw.library.source(lw.library.get(id)); const d = b.getChannelData(0); let z = 0; for (let i = 1; i < d.length; i++) if ((d[i] >= 0) !== (d[i - 1] >= 0)) z++; return z / b.duration; };
+            return {
+              playing: lw.engine.playing, clips: p.tracks.flatMap((t) => t.clips).length, sample: clip.sampleId, kit: pat.kit, groove: pat.groove, bars: pat.bars, loop: p.loop.on,
+              pads: Object.keys(kitObj.map), kickZ: kitObj.map.kick ? zcr(kitObj.map.kick) : null, hatZ: kitObj.map.hat ? zcr(kitObj.map.hat) : null,
+              undo: lw.store.undoStack.length, hint: document.getElementById('hint-text').textContent, card: document.getElementById('start-card').hidden, sel: lw.ui.selectedClipId === clip.id,
+            };
+          });
+          check('Klatsch dein Kit: ein Tipp, Kit mit 5 bis 8 Pads, Muster „Gerade“, 1 Takt im Loop, spielt', kit.playing && kit.clips === 1 && /^pat-/.test(kit.sample) && /^k-/.test(kit.kit) && kit.pads.length >= 5 && kit.pads.length <= 8 && kit.groove === 'gerade' && kit.bars === 1 && kit.loop, JSON.stringify(kit));
+          check('Klatsch dein Kit: tiefster Schlag = Kick, hellster = Hi-Hat, ein Rückgängig-Schritt, Einblender „N Schläge – dein Kit spielt.“', kit.kickZ < kit.hatZ && kit.undo - u0 === 1 && kit.hint === `${kit.pads.length} Schläge – dein Kit spielt.`, JSON.stringify({ kickZ: kit.kickZ, hatZ: kit.hatZ, undo: kit.undo - u0, hint: kit.hint }));
+          check('Startkarte verschwindet mit dem ersten Clip', kit.card === true);
+          // Ein undo() entfernt Kit, Muster, Clip und Schnitte; der Aufnahme-Sound bleibt; die Karte kommt zurück
+          const und = await page.evaluate(async () => {
+            const lw = window.loopwerk;
+            lw.store.undo();
+            await new Promise((r) => setTimeout(r, 300));
+            return { kits: Object.keys(lw.store.project.kits || {}).length, pats: Object.keys(lw.store.project.patterns || {}).length, clips: lw.store.project.tracks.flatMap((t) => t.clips).length, vars: Object.keys(lw.store.project.recipes || {}).filter((i) => /^vr-/.test(i)).length, own: lw.library.list().filter((x) => x.category === 'own' && !/^vr-/.test(x.id)).length, card: !document.getElementById('start-card').hidden };
+          });
+          check('Ein Rückgängig: Kit, Muster, Clip und Schnitte weg, Aufnahme bleibt, Startkarte wieder da', und.kits === 0 && und.pats === 0 && und.clips === 0 && und.vars === 0 && und.own >= 1 && und.card, JSON.stringify(und));
+          await page.evaluate(() => window.loopwerk.store.redo());
+          await page.waitForTimeout(600);
+          await page.evaluate(() => { const lw = window.loopwerk; lw.ui.select(lw.store.project.tracks.flatMap((t) => t.clips)[0].id); lw.ui.setDock('werkbank'); });
+          await page.waitForTimeout(1200);
+          // Kit-Werkbank: 8 Pads ≥ 44 px, Schritt-Zeile als Raster
+          const kb = await page.evaluate(() => {
+            const pads = [...document.querySelectorAll('#werkbank .kb-pad')].map((b) => b.getBoundingClientRect());
+            const cells = [...document.querySelectorAll('#werkbank .kb-step')].filter((c) => c.getClientRects().length > 0);
+            return { n: pads.length, min: Math.min(...pads.map((r) => Math.min(r.width, r.height))), tabs: [...document.querySelectorAll('#werkbank .kb-tab')].filter((b) => !b.hidden).map((b) => b.textContent).join(','), grid: document.querySelector('#werkbank .kb-steps')?.getAttribute('role'), cells: cells.length, over: document.documentElement.scrollWidth - innerWidth, name: document.getElementById('kb-name')?.textContent };
+          });
+          check('Kit-Werkbank (Handy): 8 Pads ≥ 44 px, Reiter Kit · Clip, Schritt-Zeile role=grid mit 16 Schritten, kein seitliches Scrollen', kb.n === 8 && kb.min >= 44 && kb.tabs === 'Kit,Clip' && kb.grid === 'grid' && kb.cells === 16 && kb.over <= 0, JSON.stringify(kb));
+          const kz = await countUi(page);
+          check('Zählung Handy „Kit Mitte“ (8 Pads, Schritt-Zeile) ≤ 26 / ≤ 13 / ≤ 5 / ≥ 11', kz.controls <= 26 && kz.frames <= 13 && kz.sizes <= 5 && kz.minFont >= 11, JSON.stringify(kz));
+          check('Zählung je Reiter: Grund von Kit ≤ 5 Griffe', (await grundOf(page, 'kb-panel-kit')) <= 5 && (await grundOf(page, 'kb-panel-kit')) >= 1, String(await grundOf(page, 'kb-panel-kit')));
+          await sound3(page, 'kw-kit-handy.png');
+          // Pad antippen = spielt jetzt (pointerdown, nicht erst beim Loslassen) und wählt das Pad
+          const hit = await page.evaluate(() => {
+            const b = document.querySelector('#werkbank .kb-pad[data-row="snare"]');
+            const r = b.getBoundingClientRect();
+            b.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true, clientX: r.left + 10, clientY: r.top + 10 }));
+            const now = { lit: b.classList.contains('hit'), sel: b.getAttribute('aria-pressed') };
+            window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0, bubbles: true }));
+            return now;
+          });
+          check('Pad antippen: leuchtet schon beim Zeiger-Herunter und ist gewählt', hit.lit && hit.sel === 'true', JSON.stringify(hit));
+          // Schritt-Zeile per Tastatur: ←/→ wandern, Leertaste setzt
+          await page.evaluate(() => document.querySelector('#werkbank .kb-step[data-step="0"]').focus());
+          await page.keyboard.press('ArrowRight');
+          const f1 = await page.evaluate(() => document.activeElement?.dataset.step);
+          await page.keyboard.press('ArrowRight');
+          await page.keyboard.press('Space');
+          await page.waitForTimeout(200);
+          const row2 = await page.evaluate(() => { const lw = window.loopwerk; const p = Object.values(lw.store.project.patterns)[0]; return { focus: document.activeElement?.dataset.step, on: p.rows.snare[2], sel: document.activeElement?.getAttribute('aria-selected') }; });
+          check('Schritt-Zeile: Pfeil rechts wandert (Schritt 1, dann 2), Leertaste setzt den Schlag aufs gewählte Pad (Snare)', f1 === '1' && row2.focus === '2' && row2.on === 1 && row2.sel === 'true', JSON.stringify({ f1, ...row2 }));
+          await page.keyboard.press('Space');
+          const off = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.snare[2]);
+          check('Schritt-Zeile: Leertaste nochmal nimmt ihn zurück', off === 0, String(off));
+          // Halten = Anschlag 50 %
+          await press(page, '#werkbank .kb-step[data-step="3"]', 650);
+          const half = await page.evaluate(() => Object.values(window.loopwerk.store.project.patterns)[0].rows.snare[3]);
+          check('Schritt halten setzt den Anschlag auf 50 %', half === 0.5, String(half));
+          // Pad-Wand (Handy): Schublade ganz nach oben ziehen → Pads ≥ 88 px, Grund klappt zu, Schritt-Zeile bleibt
+          const cdp = await ctx.newCDPSession(page);
+          const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+          const grip = await page.evaluate(() => { const r = document.querySelector('#werkbank .sheet-grip').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+          await touch('touchStart', grip.x, grip.y);
+          for (let i = 1; i <= 12; i++) { await touch('touchMove', grip.x, grip.y - i * 40); await page.waitForTimeout(16); }
+          await page.waitForTimeout(160);
+          await touch('touchEnd');
+          await page.waitForTimeout(1300);
+          const wall = await page.evaluate(() => {
+            const pads = [...document.querySelectorAll('#werkbank .kb-pad')].map((b) => b.getBoundingClientRect());
+            return { on: document.querySelector('#werkbank .kb')?.classList.contains('wall'), min: Math.min(...pads.map((r) => Math.min(r.width, r.height))), tabs: document.querySelector('#werkbank .kb-tabs').getClientRects().length > 0, steps: document.querySelector('#werkbank .kb-steps').getClientRects().length > 0, over: document.documentElement.scrollWidth - innerWidth };
+          });
+          check('Pad-Wand (Handy, Schublade oben): Pads ≥ 88 px, Grund eingeklappt, Schritt-Zeile bleibt', wall.on && wall.min >= 88 && !wall.tabs && wall.steps && wall.over <= 0, JSON.stringify(wall));
+          await sound3(page, 'kw-padwand-handy.png');
+          // Pad lang drücken → Sound-Werkbank dieses Sounds, „‹ Kit“ im Kopf führt zurück
+          const kickId = await page.evaluate(() => { const lw = window.loopwerk; return lw.store.project.kits[Object.keys(lw.store.project.kits)[0]].map.kick; });
+          await press(page, '#werkbank .kb-pad[data-row="kick"]', 700);
+          await page.waitForTimeout(700);
+          const lp = await page.evaluate(() => ({ bench: window.loopwerk.ui.benchSoundId, back: document.getElementById('wb-back')?.textContent, backVis: document.getElementById('wb-back')?.getClientRects().length > 0, kit: !document.querySelector('#werkbank .kb').hidden }));
+          check('Pad lang drücken: Sound-Werkbank des Pad-Sounds, im Kopf „‹ Kit“', lp.bench === kickId && lp.back === '‹ Kit' && lp.backVis && lp.kit === false, JSON.stringify(lp));
+          await page.click('#wb-back');
+          await page.waitForTimeout(500);
+          const bk = await page.evaluate(() => ({ kit: !document.querySelector('#werkbank .kb').hidden, name: document.getElementById('kb-name')?.textContent, back: document.getElementById('wb-back').hidden, clip: !!window.loopwerk.ui.selectedClipId }));
+          check('„‹ Kit“ führt zurück zur Kit-Werkbank des Clips', bk.kit && /^Klatschen/.test(bk.name) && bk.back && bk.clip, JSON.stringify(bk));
+          // Leeres Pad antippen = Aufnahme für dieses Pad
+          // (der Klatsch-Test füllt bis zu 8 Pads: eines freiräumen)
+          await page.evaluate(() => { const lw = window.loopwerk; lw.store.setKitPad(Object.keys(lw.store.project.kits)[0], 'crash', null); });
+          await page.waitForTimeout(300);
+          const empty = await page.evaluate(() => document.querySelector('#werkbank .kb-pad.free')?.dataset.row);
+          // Mikrofon-Start abfangen (die Datei des Fake-Mikros ist nur einmal lesbar; echte Aufnahme: eigener Test unten)
+          await page.evaluate(() => { const r = window.loopwerk.recorder; r.start = async (o) => { r.tag = o.tag; r.state = 'recording'; r.emit('state'); }; });
+          await press(page, `#werkbank .kb-pad[data-row="${empty}"]`);
+          await page.waitForTimeout(400);
+          const pr = await page.evaluate(() => ({ state: window.loopwerk.recorder.state, tag: window.loopwerk.recorder.tag, rec: !!document.querySelector('#werkbank .kb-pad.rec') }));
+          check('Leeres Pad antippen startet die Aufnahme für dieses Pad (rote Form am Pad)', pr.state === 'recording' && pr.tag?.kind === 'pad' && pr.tag.row === empty && pr.rec, JSON.stringify(pr));
+          const landed = await page.evaluate(({ empty }) => {
+            const lw = window.loopwerk, r = lw.recorder, id = lw.library.list().find((x) => x.category === 'own' && !/^(vr|pat)-/.test(x.id)).id;
+            r.state = 'idle';
+            r.emit('recorded', { sample: lw.library.get(id), clipId: null, mode: 'sound', tag: r.tag });
+            const kit = lw.store.project.kits[Object.keys(lw.store.project.kits)[0]];
+            return { pad: kit.map[empty] === id, undo: lw.store.undoStack.length };
+          }, { empty });
+          check('Aufgenommener Sound landet auf dem Pad (ein Rückgängig-Schritt)', landed.pad, JSON.stringify(landed));
+          await page.evaluate(() => { delete window.loopwerk.recorder.start; });
+          // Ton → „Als Instrument“ → Instrument-Werkbank mit Tasten → „Auf die Spur“ = Melodie-Clip
+          const ids = await seedSounds(page);
+          await page.evaluate((id) => { const lw = window.loopwerk; lw.ui.openSound(id); lw.ui.setDock('werkbank'); }, ids.t);
+          await page.waitForTimeout(700);
+          await page.click('#wb-tab-ton');
+          check('Zählung je Reiter: Grund von Ton ≤ 5 Griffe, „Als Instrument“ darunter', (await grundOf(page, 'wb-panel-ton')) <= 5 && (await visible(page, '#wb-as-instrument')), String(await grundOf(page, 'wb-panel-ton')));
+          await page.click('#wb-as-instrument');
+          await page.waitForFunction(() => Object.keys(window.loopwerk.store.project.instruments || {}).length === 1, null, { timeout: 10000 });
+          await page.waitForTimeout(600);
+          const ins = await page.evaluate(() => {
+            const lw = window.loopwerk, p = lw.store.project, id = Object.keys(p.instruments)[0];
+            return { root: p.instruments[id].root, cents: p.instruments[id].cents, keys: [...document.querySelectorAll('#werkbank .kb-key')].map((b) => b.querySelector('.kb-key-note').textContent), rootKeys: [...document.querySelectorAll('#werkbank .kb-key.root')].length, tab: document.getElementById('kb-tab-inst')?.textContent, min: Math.min(...[...document.querySelectorAll('#werkbank .kb-key')].map((b) => Math.min(b.getBoundingClientRect().width, b.getBoundingClientRect().height))), hint: document.getElementById('hint-text').textContent };
+          });
+          check('Als Instrument: Grundton A4 (69) erkannt, 8 Tasten der Song-Tonart Am (A4 … A5), Grundton markiert, Tasten ≥ 44 px', ins.root === 69 && Math.abs(ins.cents) <= 5 && ins.keys.join(' ') === 'A4 H4 C5 D5 E5 F5 G5 A5' && ins.rootKeys >= 1 && ins.min >= 44, JSON.stringify(ins));
+          check('Zählung je Reiter: Grund von Instrument ≤ 5 Griffe', (await grundOf(page, 'kb-panel-inst')) >= 1 && (await grundOf(page, 'kb-panel-inst')) <= 5, String(await grundOf(page, 'kb-panel-inst')));
+          await sound3(page, 'kw-instrument-handy.png');
+          await page.click('#kb-place-inst');
+          await page.waitForTimeout(500);
+          const mel = await page.evaluate(() => { const lw = window.loopwerk, p = lw.store.project; const c = p.tracks.flatMap((t) => t.clips).find((x) => /^pat-/.test(x.sampleId) && p.patterns[x.sampleId.slice(4)].type === 'synth'); return { clip: !!c, preset: c && p.patterns[c.sampleId.slice(4)].preset, roll: document.getElementById('kb-roll')?.getClientRects().length > 0 }; });
+          check('Als Instrument + Auf die Spur: Melodie-Clip mit dem Instrument (in-…), Rolle ▸ steht bereit', mel.clip && /^in-/.test(mel.preset) && mel.roll, JSON.stringify(mel));
+          // Tasten-Aufnahme: ● heißt „Tasten“, eine Taste bei 1,02 Schlägen setzt eine Note auf Schlag 1 (ein Undo-Schritt je Durchgang)
+          const tl = await page.evaluate(() => document.querySelector('#rec-btn .rec-label').textContent);
+          const tu0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+          await page.tap('#rec-btn');
+          await page.evaluate(() => { window.__hb = window.loopwerk.engine.heardBeat; window.loopwerk.engine.heardBeat = () => 1.02; });
+          await press(page, '#werkbank .kb-key[data-degree="3"]', 60);
+          await page.evaluate(() => { window.loopwerk.engine.heardBeat = window.__hb; });
+          const kn = await page.evaluate(() => { const lw = window.loopwerk, p = lw.store.project; const pat = Object.values(p.patterns).find((x) => x.type === 'synth'); return { notes: pat.notes.map((n) => [n.pitch, n.start]), undo: lw.store.undoStack.length }; });
+          check('Tasten-Aufnahme: ● heißt „Tasten“, Taste 3 (C5) bei 1,02 Schlägen setzt eine Note auf Schlag 1, ein Undo-Schritt', tl === 'Tasten' && kn.notes.some(([pt, st]) => pt === 72 && st === 1) && kn.undo - tu0 === 1, JSON.stringify({ tl, ...kn, tu0 }));
+          await page.tap('#rec-btn');
+          check('Konsole ohne Fehler (Handy Kit und Instrument)', k.errors.length === 0, k.errors.join(' | '));
+          await ctx.close();
+        }
+
+        // ----- Desktop: Kit gewählt, Tasten A S D F, ● nimmt Pads auf, Pad-Wand mit ⤢, Ziehen aus der Kiste -----
+        {
+          const ctx = await bClap.newContext(DESK);
+          const k = await openKw(base, ctx);
+          const page = k.page;
+          await page.waitForTimeout(500);
+          // ein 4-s-Sound mit 6 Schlägen → Klatsch-Kit (die Kiste bleibt wie nach einer echten Aufnahme: ein Sound, eine Schnitt-Gruppe, ein Kit)
+          const made = await page.evaluate(async () => {
+            const lw = window.loopwerk; const ac = new AudioContext();
+            const n = 44100 * 4, b = ac.createBuffer(1, n, 44100), d = b.getChannelData(0);
+            for (let q = 0; q < 6; q++) for (let i = 0; i < 4000; i++) d[Math.round((0.2 + q * 0.6) * 44100) + i] = 0.7 * Math.exp(-i / 800) * Math.sin(i / (1 + q * 1.5));
+            const s = await lw.own.create({ name: 'Klopfen', buffer: b, source: 'Aufnahme', from: 'mic' });
+            const { kitFromSound } = await import('/src/cut-sound.js');
+            const res = await kitFromSound({ store: lw.store, library: lw.library, sampleId: s.id, atBeat: 0 });
+            lw.library.syncVariants(lw.store.project); lw.library.emit();
+            lw.ui.select(res.clipId);
+            return { sound: s.id, kit: res.kitId, pads: Object.keys(lw.store.project.kits[res.kitId].map).length };
+          });
+          const ids = { t: made.sound };
+          const kitId = made.kit;
+          await page.waitForTimeout(900);
+          const dk = await page.evaluate(() => ({ group: document.getElementById('shelf-cat-kits')?.textContent, item: [...document.querySelectorAll('#library .loop-object .loop-name')].map((e) => e.textContent), tabs: [...document.querySelectorAll('.kb-tab')].filter((b) => !b.hidden).map((b) => b.textContent).join(',') }));
+          check('Kiste: erste Gruppe „Kits und Instrumente“ mit dem Kit; Werkbank zeigt Reiter Kit · Clip', /Kits und Instrumente/.test(dk.group) && dk.item.includes('Klatschen 1') && dk.tabs === 'Kit,Clip', JSON.stringify(dk));
+          const dz = await countUi(page);
+          check('Zählung Desktop „Kit gewählt“ ≤ 45 / ≤ 30 / ≤ 5 / ≥ 11', dz.controls <= 45 && dz.frames <= 30 && dz.sizes <= 5 && dz.minFont >= 11, JSON.stringify(dz));
+          await sound3(page, 'kw-kit-desktop.png');
+          // Tasten A S D F spielen die Pads (wählen und leuchten)
+          await page.keyboard.press('d');
+          const dsel = await page.evaluate(() => ({ sel: document.querySelector('.kb-pad[aria-pressed="true"]')?.dataset.row, hit: !!document.querySelector('.kb-pad[data-row="clap"].hit') }));
+          check('Taste D spielt das dritte Pad (Clap), es leuchtet und ist gewählt', dsel.sel === 'clap' && dsel.hit, JSON.stringify(dsel));
+          // Pad-Aufnahme: ● mit Kit-Werkbank = Quelle „Pads“; Schläge bei 1,02 und 2,49 → Schritte 4 und 10, ein Undo-Schritt
+          const lab = await page.evaluate(() => document.querySelector('#rec-btn .rec-label').textContent);
+          check('● in der Kit-Werkbank heißt „Pads“', lab === 'Pads', lab);
+          const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+          await page.click('#rec-btn');
+          await page.evaluate(() => { window.__hb = window.loopwerk.engine.heardBeat; window.loopwerk.engine.heardBeat = () => 1.02; });
+          await page.keyboard.press('a');
+          await page.evaluate(() => { window.loopwerk.engine.heardBeat = () => 2.49; });
+          await page.keyboard.press('a');
+          await page.evaluate(() => { window.loopwerk.engine.heardBeat = window.__hb; });
+          const pr = await page.evaluate(() => { const lw = window.loopwerk; const p = Object.values(lw.store.project.patterns)[0]; return { rec: document.getElementById('rec-btn').getAttribute('aria-pressed'), kick: p.rows.kick.map((v, i) => (v ? i : null)).filter((i) => i != null), undo: lw.store.undoStack.length, label: document.querySelector('#rec-btn .rec-label').textContent }; });
+          check('Pad-Aufnahme: Schläge landen auf Schritt 4 und 10 (nächstes 1/16), ein Undo-Schritt je ●-Durchgang, ● zeigt „Stopp“', pr.rec === 'true' && pr.kick.includes(4) && pr.kick.includes(10) && pr.undo - u0 === 1 && pr.label === 'Stopp', JSON.stringify({ ...pr, u0 }));
+          await page.click('#rec-btn');
+          const after = await page.evaluate(() => ({ rec: document.getElementById('rec-btn').getAttribute('aria-pressed'), label: document.querySelector('#rec-btn .rec-label').textContent }));
+          check('● nochmal beendet die Pad-Aufnahme', after.rec === 'false' && after.label === 'Pads', JSON.stringify(after));
+          await page.evaluate(() => window.loopwerk.engine.pause?.());
+          // Muster wechseln (ersetzt die Schritte, ein Undo) und Swing
+          const g0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+          if (await page.evaluate(() => !document.getElementById('kb-groove').getClientRects().length)) await page.click('#kb-tab-kit');
+          await page.click('#kb-groove');
+          const g1 = await page.evaluate(() => { const lw = window.loopwerk; const p = Object.values(lw.store.project.patterns)[0]; return { groove: p.groove, undo: lw.store.undoStack.length, label: document.getElementById('kb-groove').textContent, kick: p.rows.kick.filter(Boolean).length }; });
+          check('Muster: Tipp wechselt Gerade → Halb, ersetzt die Schritte, ein Undo-Schritt', g1.groove === 'halb' && g1.undo - g0 === 1 && g1.label === 'Muster: Halb' && g1.kick === 1, JSON.stringify(g1));
+          check('Zählung je Reiter (Desktop): Grund von Kit ≤ 5 Griffe', (await grundOf(page, 'kb-panel-kit')) <= 5, String(await grundOf(page, 'kb-panel-kit')));
+          // Sound aus der Kiste aufs Pad ziehen = tauschen
+          const drag = await page.evaluate((t) => { const it = document.querySelector(`#library .loop-item[data-sample-id="${t}"]`); const p = document.querySelector('.kb-pad[data-row="open"]'); const a = it.getBoundingClientRect(), b = p.getBoundingClientRect(); return { x1: a.left + 40, y1: a.top + a.height / 2, x2: b.left + b.width / 2, y2: b.top + b.height / 2 }; }, ids.t);
+          await page.mouse.move(drag.x1, drag.y1);
+          await page.mouse.down();
+          await page.mouse.move(drag.x1 + 30, drag.y1 + 10, { steps: 3 });
+          await page.mouse.move(drag.x2, drag.y2, { steps: 8 });
+          await page.mouse.up();
+          await page.waitForTimeout(400);
+          const dr = await page.evaluate((id) => window.loopwerk.store.project.kits[id].map.open, kitId);
+          check('Sound aus der Kiste auf ein Pad ziehen legt ihn aufs Pad', dr === ids.t, String(dr));
+          // ⤢ = Pad-Wand: Pads ≥ 88 px, Grund zu, Schritt-Zeile bleibt
+          await page.click('#wb-wide');
+          await page.waitForTimeout(700);
+          const dw = await page.evaluate(() => { const pads = [...document.querySelectorAll('.kb-pad')].map((b) => b.getBoundingClientRect()); return { on: document.querySelector('.kb').classList.contains('wall'), min: Math.min(...pads.map((r) => Math.min(r.width, r.height))), steps: document.querySelector('.kb-steps').getClientRects().length > 0, tabs: document.querySelector('.kb-tabs').getClientRects().length > 0 }; });
+          check('Pad-Wand (Desktop, ⤢): Pads ≥ 88 px, Grund eingeklappt, Schritt-Zeile bleibt', dw.on && dw.min >= 88 && dw.steps && !dw.tabs, JSON.stringify(dw));
+          await sound3(page, 'kw-padwand-desktop.png');
+          await page.click('#wb-wide');
+          // Reiter Zerlegen: Grund ≤ 5 mit „Als Kit“ (langer Sound)
+          await page.evaluate((id) => { const lw = window.loopwerk; lw.store.addClip(lw.store.project.tracks[1].id, id, 0, 8); lw.ui.select(lw.store.project.tracks[1].clips[0].id); }, ids.t);
+          await page.waitForTimeout(700);
+          await page.click('#wb-tab-zerlegen');
+          await page.waitForFunction(() => document.querySelectorAll('.wb-mk').length > 0, null, { timeout: 8000 });
+          const zg = await grundOf(page, 'wb-panel-zerlegen');
+          const als = await page.evaluate(() => ({ kit: !!document.getElementById('wb-as-kit')?.getClientRects().length, box: !!document.getElementById('wb-cut-box')?.closest('.wb-fine') }));
+          check('Reiter Zerlegen: Grund = Quelle (2) · Empfindlichkeit · Als Kit · Auf die Spur (≤ 5), „In die Kiste“ steht in den Feinheiten', zg <= 5 && als.kit && als.box, JSON.stringify({ zg, ...als }));
+          const kc0 = await page.evaluate(() => Object.keys(window.loopwerk.store.project.kits).length);
+          await page.click('#wb-as-kit');
+          await page.waitForFunction((n) => Object.keys(window.loopwerk.store.project.kits).length === n + 1, kc0, { timeout: 10000 });
+          await page.waitForTimeout(500);
+          const ak = await page.evaluate(() => { const lw = window.loopwerk; return { bench: /^k-/.test(lw.ui.benchSoundId || ''), place: !!document.getElementById('kb-place-kit')?.getClientRects().length, clips: lw.store.project.tracks.flatMap((t) => t.clips).length }; });
+          check('Als Kit: Kit entsteht in der Kiste, seine Werkbank öffnet mit „Auf die Spur“ (kein Clip unaufgefordert)', ak.bench && ak.place && ak.clips === 2, JSON.stringify(ak));
+          await page.click('#kb-place-kit');
+          await page.waitForTimeout(500);
+          const pk = await page.evaluate(() => { const lw = window.loopwerk, p = lw.store.project; return { clips: p.tracks.flatMap((t) => t.clips).length, sel: !!lw.ui.selectedClipId }; });
+          check('Kit aus der Kiste: Auf die Spur legt ihn als Clip ab und wählt ihn', pk.clips === 3 && pk.sel, JSON.stringify(pk));
+          // Tipps: eigene Liste, nur als Einblender, kein Loopwerk-Text
+          await page.evaluate(() => { window.loopwerk.tips.reset?.(); window.loopwerk.tips.enable(); });
+          await page.waitForFunction(() => window.loopwerk.tips.shown, null, { timeout: 12000 });
+          const tp = await page.evaluate(() => ({ hint: document.getElementById('hint-text').textContent, bubble: !document.querySelector('.tip')?.hidden, cur: window.loopwerk.tips.current }));
+          check('Tipps: der erste (nach dem ersten Geräusch) kommt als Einblender, ohne Sprechblase und ohne Loopwerk-Text', /^Tipp auf den Clip – in der Werkbank formst du den Klang\.$/.test(tp.hint) && !tp.bubble && tp.cur === null, JSON.stringify(tp));
+          check('Konsole ohne Fehler (Desktop Kit)', k.errors.length === 0, k.errors.join(' | '));
+          await ctx.close();
+        }
+      } finally { await bClap.close(); }
+
+
+      // ----- Echte Aufnahme in ein leeres Pad (eigener Browser: die Fake-Mikro-Datei ist nur einmal lesbar) -----
+      {
+        const bPad = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${clapFile}%noloop`] });
+        try {
+          const ctx = await bPad.newContext(DESK);
+          const k = await openKw(base, ctx);
+          const page = k.page;
+          await page.waitForTimeout(500);
+          const ids = await seedSounds(page);
+          await page.evaluate(({ a }) => { const lw = window.loopwerk; const id = lw.store.addKit({ name: 'Klatschen 1', map: { kick: a } }); lw.ui.select(lw.store.placeKit(id, {}).clipId); }, ids);
+          await page.waitForTimeout(700);
+          const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+          await page.click('.kb-pad[data-row="hat"]');
+          await page.waitForFunction(() => window.loopwerk.store.project.kits && Object.values(window.loopwerk.store.project.kits)[0].map.hat, null, { timeout: 30000 });
+          const r = await page.evaluate((u) => { const lw = window.loopwerk; const kit = Object.values(lw.store.project.kits)[0]; const s = lw.library.get(kit.map.hat); return { own: s?.category === 'own' && s?.name !== 'Bumm 1', undo: lw.store.undoStack.length - u, hint: document.getElementById('hint-text').textContent }; }, u0);
+          check('Leeres Pad antippen + Geräusch: der Sound kommt aufs Pad, ein Rückgängig-Schritt', r.own && r.undo === 1, JSON.stringify(r));
+          await page.waitForTimeout(300);
+          await page.evaluate(() => window.loopwerk.store.undo());
+          const un = await page.evaluate(() => !Object.values(window.loopwerk.store.project.kits)[0].map.hat);
+          check('Rückgängig nimmt den Sound vom Pad (Aufnahme bleibt in der Kiste)', un);
+          check('Konsole ohne Fehler (Pad-Aufnahme)', k.errors.length === 0, k.errors.join(' | '));
+          await ctx.close();
+        } finally { await bPad.close(); }
+      }
+
+      // ----- Pad-Wand aus dem Prototyp: Vorlage in der Kiste, Tipp legt das Kit an -----
+      {
+        const ctx = await browser.newContext(DESK);
+        const seedKey = () => localStorage.setItem('loopwerk.make.pads.v1', JSON.stringify({ v: 1, pads: [{ sound: 'mk-test1' }, null, { synth: { kit: 'elektro', row: 'kick' } }, { sound: 'mk-test2' }, { sound: 'mk-test3' }] }));
+        const k = await openKw(base, ctx, { init: [seedPadWall, seedKey] });
+        const page = k.page;
+        await page.waitForTimeout(700);
+        const t0 = await page.evaluate(() => ({ tpl: document.querySelector('#library [data-template="pads"]')?.textContent ?? null, kits: Object.keys(window.loopwerk.store.project.kits || {}).length, hint: document.getElementById('hint-text').textContent, flag: localStorage.getItem('loopwerk.make.padNote') }));
+        check('Pad-Wand: Vorlage „Pad-Wand“ in der Kiste, einmal Einblender, noch kein Kit', /Pad-Wand/.test(t0.tpl) && t0.kits === 0 && /Pad-Wand/.test(t0.hint) && t0.flag === '1', JSON.stringify(t0));
+        await page.click('#library [data-template="pads"]');
+        await page.waitForTimeout(600);
+        const t1 = await page.evaluate(() => { const lw = window.loopwerk, p = lw.store.project; const id = Object.keys(p.kits || {})[0]; return { n: Object.keys(p.kits || {}).length, from: p.kits?.[id]?.from, pads: Object.keys(p.kits?.[id]?.map || {}).length, tpl: !!document.querySelector('#library [data-template="pads"]'), bench: lw.ui.benchSoundId === id, key: localStorage.getItem('loopwerk.make.pads.v1') != null }; });
+        check('Pad-Wand: Tipp legt das Kit an (from pads.v1, 3 Pads ohne Synth-Pad), Vorlage weg, Werkbank offen, Schlüssel bleibt liegen', t1.n === 1 && t1.from === 'pads.v1' && t1.pads === 3 && !t1.tpl && t1.bench && t1.key, JSON.stringify(t1));
+        check('Konsole ohne Fehler (Pad-Wand)', k.errors.length === 0, k.errors.join(' | '));
+        await ctx.close();
+      }
     }
 
     // ---------- 10: Pages-Build ----------

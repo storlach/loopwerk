@@ -17,6 +17,7 @@ import { fmtBpm, hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './so
 import { soundBounds, mixMono } from '../dsp/clean.js';
 import { runJob } from '../dsp/run.js';
 import { midiOf, snapToScale, voicing } from '../dsp/pitch.js';
+import { instrumentFromSound } from '../own-instruments.js';
 
 const TAB_KEY = lsKey('loopwerk.wbTab');
 const FINE_KEY = lsKey('loopwerk.wbFine');
@@ -65,7 +66,7 @@ export function treeText(s, r, lib) {
   return (s.parentId ? `Variante von ${root?.name ?? '?'} → ` : '') + parts[0];
 }
 
-export function mountSoundBench(box, { store, ui, library, engine, tools, own = null }) {
+export function mountSoundBench(box, { store, ui, library, engine, tools, own = null, back = null }) {
   const root = el('div', 'wb');
   box.setAttribute('aria-label', 'Sound-Werkbank');
   box.append(root);
@@ -101,7 +102,13 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   varBtn.type = 'button';
   varBtn.id = 'wb-variant';
   varBtn.title = 'Eigene Fassung nur für diesen Clip';
-  head.append(dot, nameBtn, nameIn, count, varBtn);
+  // „‹ Kit“: zurück zum Kit (oder Instrument), aus dem dieser Sound geöffnet wurde (Pad lang gedrückt)
+  const backBtn = el('button', 'wb-back');
+  backBtn.type = 'button';
+  backBtn.id = 'wb-back';
+  backBtn.hidden = true;
+  backBtn.addEventListener('click', () => back?.cur?.go());
+  head.append(backBtn, dot, nameBtn, nameIn, count, varBtn);
   const tree = el('p', 'wb-tree');
   tree.id = 'wb-tree';
   const matRow = el('div', 'wb-mat');
@@ -381,6 +388,19 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
       patch({ semis: clamp(semis, -24, 24) || null, cents: Math.round((shift - semis) * 100) || null });
     });
     auto.title = 'Rundet den erkannten Grundton auf die Tonart des Songs';
+    // Als Instrument (Scheibe 4): Grundton messen, Instrument anlegen, seine Werkbank öffnet (dort: Auf die Spur)
+    const asInst = btn(grund, 'Als Instrument', 'wb-as-instrument', async () => {
+      if (!cur.id || cur.kind !== 'sound' || asInst.disabled) return;
+      asInst.disabled = true;
+      try {
+        const res = await instrumentFromSound({ store, library, sampleId: cur.id });
+        if (!res) { ui.flash('Daraus lässt sich kein Instrument machen.'); return; }
+        ui.flash(res.sure ? `„${store.project.instruments[res.id].name}“ ist jetzt ein Instrument (${noteName(res.root)}).` : 'Kein klarer Ton – spielt als C4.');
+        ui.openSound(res.id);
+      } catch { ui.flash('Das Instrument konnte nicht angelegt werden.'); }
+      asInst.disabled = false;
+    });
+    asInst.title = 'Macht aus dem Klang ein Instrument: spielbar auf Tasten in der Tonart des Songs';
     const found = el('p', 'wb-note');
     found.id = 'wb-grundton';
     // Autotune (2b): Rezeptschritt hinter der Tonhöhe, Stärke 0 = aus
@@ -584,9 +604,27 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     sIn.addEventListener('input', () => { cut.sens = Number(sIn.value); save(SENS_KEY, { v: cut.sens }); setOut(sens.out, fmtPct(cut.sens)); findMarks(); });
     const acts = el('div', 'wb-acts wb-acts-2');
     grund.append(acts);
-    const box_ = btn(acts, 'In die Kiste', 'wb-cut-box', () => commit(false));
+    const asKit = btn(acts, 'Als Kit', 'wb-as-kit', async () => {
+      if (!cur.id || cur.kind !== 'sound' || cut.busy) return;
+      cut.busy = true;
+      render();
+      try {
+        const { kitFromSound } = await import('../cut-sound.js');
+        const res = await kitFromSound({ store, library, sampleId: cur.id, sensitivity: cut.sens, place: false });
+        if (!res.kitId) ui.flash('Nur ein Schlag gehört – nochmal?');
+        else {
+          library.syncVariants?.(store.project);
+          library.emit?.();
+          const n = Object.keys(store.project.kits[res.kitId].map).length;
+          ui.flash(`Kit mit ${n} ${n === 1 ? 'Pad' : 'Pads'} – Auf die Spur legt es in den Song.`);
+          ui.openSound(res.kitId);
+        }
+      } catch { ui.flash('Das Kit konnte nicht angelegt werden.'); }
+      cut.busy = false;
+      render();
+    });
+    asKit.title = 'Macht aus den Schlägen ein Kit mit Pads: dunkel wird Kick, hell Hi-Hat';
     const trk = btn(acts, 'Auf die Spur', 'wb-cut-track', () => commit(true));
-    box_.title = 'Legt die Schnitte als eigene Sounds in die Kiste';
     trk.title = 'Ersetzt den Clip durch die Schnitte an denselben Stellen';
     // Feinheiten: Anzahl gleiche, Ins Raster, Trennen
     const nRow = el('div', 'insp-row wb-row wb-count-row');
@@ -599,6 +637,11 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     const nBtns = [2, 4, 8, 16].map((n) => btn(nSeg, String(n), `wb-cut-n-${n}`, () => { cut.count = n; cut.mode = 'even'; render(); findMarks(); }, 'wb-toggle'));
     const grid = toggle(fine, 'Ins Raster', 'wb-cut-grid', () => cut.grid, (on) => { cut.grid = on; render(); });
     grid.title = 'Die Anfänge der Schnitt-Clips rasten auf das Raster ein';
+    // „In die Kiste“ steht in den Feinheiten: Als Kit und Auf die Spur legen die Schnitte ohnehin in die Kiste
+    const boxActs = el('div', 'wb-acts');
+    fine.append(boxActs);
+    const box_ = btn(boxActs, 'In die Kiste', 'wb-cut-box', () => commit(false));
+    box_.title = 'Legt die Schnitte als eigene Sounds in die Kiste';
     fine.append(el('p', 'wb-note', 'Trennen'));
     const sep = el('div', 'wb-acts');
     fine.append(sep);
@@ -618,6 +661,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
       for (const b of sepBtns) b.disabled = cut.busy;
       const ready = cut.forId === cur.id && cut.cuts.length > 0;
       box_.disabled = trk.disabled = !ready;
+      asKit.disabled = cut.busy || cur.kind !== 'sound';
     });
   }
 
@@ -662,6 +706,8 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   // ---------- Anzeige ----------
   function render() {
     const found = ui.selectedClipId ? store.findClip(ui.selectedClipId) : null;
+    backBtn.hidden = !back?.cur;
+    if (back?.cur) backBtn.textContent = `‹ ${back.cur.label}`;
     // Ohne Clip: Werkbank für einen Sound aus der Kiste
     const benchId = !found && !ui.selectedTrackId ? ui.benchSoundId : null;
     if (!found && !benchId) return;

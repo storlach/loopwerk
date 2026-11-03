@@ -166,6 +166,10 @@
 <link rel="modulepreload" href="src/ui/freeze-ui.js">
 <link rel="modulepreload" href="src/freeze.js">
 <link rel="modulepreload" href="src/sound-backup.js">
+<link rel="modulepreload" href="src/ui/kit-bench.js">
+<link rel="modulepreload" href="src/ui/start-card.js">
+<link rel="modulepreload" href="src/tips-make.js">
+<link rel="modulepreload" href="src/pad-wall.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2991,10 +2995,10 @@
   #app[data-density="calm"] .wb-count-row .wb-seg { flex-wrap: nowrap; }
   #app[data-density="calm"] .wb-count-row .wb-seg .wb-btn { flex: 0 0 auto; min-width: 44px; padding: 0 10px; }
   /* Reiter: Text mit Linie darunter, Gewählter in Weiß */
-  #app[data-density="calm"] .wb-tabs { display: flex; gap: 2px; margin: 0 -6px; box-shadow: inset 0 -1px 0 var(--line); }
-  #app[data-density="calm"] .wb-tab { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; }
-  #app[data-density="calm"] .wb-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
-  #app[data-density="calm"] .wb-tab:last-child { margin-left: 8px; border-left: 1px solid var(--line); }
+  #app[data-density="calm"] :is(.wb-tabs, .kb-tabs) { display: flex; gap: 2px; margin: 0 -6px; box-shadow: inset 0 -1px 0 var(--line); }
+  #app[data-density="calm"] :is(.wb-tab, .kb-tab) { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; }
+  #app[data-density="calm"] :is(.wb-tab, .kb-tab)[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+  #app[data-density="calm"] :is(.wb-tab, .kb-tab):last-child { margin-left: 8px; border-left: 1px solid var(--line); }
   #app[data-density="calm"] .loop-row.variant { padding-left: 18px; }
   #app[data-density="calm"] .loop-group-btn { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 7px 8px; border: 0; background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
   #app[data-density="calm"] .loop-group-btn:hover { color: var(--ink); }
@@ -3037,7 +3041,7 @@
     #app[data-density="calm"] .wb-grund .wb-btn { min-height: 42px; }
     #app[data-density="calm"] .wb-fine-btn { min-height: 40px; }
     #app[data-density="calm"] .wb-row { min-height: 40px; }
-    #app[data-density="calm"] .wb-tab { min-height: 40px; }
+    #app[data-density="calm"] :is(.wb-tab, .kb-tab) { min-height: 40px; }
     #app[data-density="calm"].dock-open :is(.sum-toggle, .add-track) { visibility: hidden; }
     #app[data-density="calm"] .wb-grund .insp-speed { grid-template-columns: minmax(0, 1fr) auto auto; min-height: 44px; }
     #app[data-density="calm"] .wb-grund .insp-speed .insp-run-btns { grid-row: 1 / 3; grid-column: 3; align-self: stretch; }
@@ -3070,6 +3074,56 @@
     #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .shelf > :not(.left-tabs), #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .left-tabs > :not(.kiste-fold) { display: none; }
     #app[data-density="calm"]:is(.kiste-zu, .insp-open.wb-wide) .left-tabs { padding: 10px 0 0; justify-content: center; }
   }
+  /* Kit und Instrument (Scheibe 4): Pads 2×4, Schritt-Zeile, Tasten, Pad-Wand, Startkarte. Nur Tokens; Rot nur für die Aufnahme */
+  #app[data-density="calm"] .kb { display: grid; gap: 10px; min-width: 0; padding-top: 6px; }
+  #app[data-density="calm"] .kb-dot { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; flex: none; }
+  #app[data-density="calm"] .wb-back { flex: none; min-height: 44px; padding: 0 10px 0 4px; border: 0; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+  #app[data-density="calm"] .wb-back:hover { color: var(--ink); }
+  #app[data-density="calm"] .kb-pads, #app[data-density="calm"] .kb-keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  #app[data-density="calm"] :is(.kb-pad, .kb-key) { position: relative; min-width: 0; min-height: 64px; padding: 6px 7px; border: 0; border-radius: var(--radius); background: var(--deck-2); box-shadow: none; color: var(--ink); display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; text-align: left; touch-action: manipulation; user-select: none; -webkit-user-select: none; cursor: pointer; overflow: hidden; }
+  #app[data-density="calm"] .kb-pad.full { background: color-mix(in srgb, var(--cat, var(--ink)) 16%, var(--deck-2)); box-shadow: inset 0 -2px 0 var(--cat, var(--ink)); }
+  #app[data-density="calm"] .kb-pad.free::after { content: "+"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--key-line); font: 300 var(--fs-24)/1 var(--font-display); }
+  #app[data-density="calm"] .kb-pad[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--amber); }
+  #app[data-density="calm"] .kb-pad.missing { opacity: 0.5; }
+  #app[data-density="calm"] .kb-pad.pad-over { box-shadow: inset 0 0 0 2px var(--amber), var(--glow-ink); }
+  #app[data-density="calm"] .kb.recording .kb-pad.full { box-shadow: inset 0 -2px 0 var(--danger); }
+  #app[data-density="calm"] :is(.kb-pad-row, .kb-key-deg) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-11); }
+  #app[data-density="calm"] :is(.kb-pad-name, .kb-key-note) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: var(--fs-13); font-weight: 600; }
+  #app[data-density="calm"] .kb-pad-key { position: absolute; top: 6px; right: 7px; display: none; color: var(--muted); font: 500 var(--fs-11)/1 var(--font-mono); }
+  @media (hover: hover) and (pointer: fine) { #app[data-density="calm"] .kb-pad-key { display: block; } }
+  #app[data-density="calm"] .kb-pad.hit { animation: kb-hit 0.32s ease-out; }
+  @keyframes kb-hit { from { background: color-mix(in srgb, var(--cat, var(--ink)) 34%, transparent); box-shadow: inset 0 0 0 1.5px var(--cat, var(--ink)), var(--glow-cat); } }
+  /* Aufnahme ins Pad: rote Form (Ring, Punkt), der Ring atmet mit dem Pegel */
+  #app[data-density="calm"] .kb-pad.rec { --lvl: 0; box-shadow: inset 0 0 0 2px var(--danger), 0 0 calc(6px + var(--lvl) * 26px) color-mix(in srgb, var(--danger) 55%, transparent); }
+  #app[data-density="calm"] .kb-pad.rec::after { content: ""; position: absolute; top: 50%; left: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--danger); transform: scale(calc(0.8 + var(--lvl) * 0.8)); inset: auto; }
+  #app[data-density="calm"] .kb-pad.rec :is(.kb-pad-row, .kb-pad-name) { visibility: hidden; }
+  #app[data-density="calm"] .kb-key.root::after { content: ""; position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--ink)); box-shadow: 0 0 6px var(--cat, var(--ink)); }
+  #app[data-density="calm"] .kb-key.on { background: color-mix(in srgb, var(--cat, var(--ink)) 34%, transparent); box-shadow: inset 0 0 0 1.5px var(--cat, var(--ink)), var(--glow-cat); }
+  #app[data-density="calm"] .kb-steps { display: grid; gap: 6px; }
+  #app[data-density="calm"] .kb-steprow { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); }
+  #app[data-density="calm"] .kb-step { height: 44px; padding: 0 1px; background: var(--deck-2); background-clip: content-box; touch-action: manipulation; cursor: pointer; outline: none; }
+  #app[data-density="calm"] .kb-step.alt { background-color: color-mix(in srgb, var(--ink) 9%, var(--deck-2)); }
+  #app[data-density="calm"] .kb-step[aria-selected="true"] { background-color: var(--cat, var(--ink)); }
+  #app[data-density="calm"] .kb-step.half[aria-selected="true"] { background-color: color-mix(in srgb, var(--cat, var(--ink)) 45%, var(--deck-2)); }
+  #app[data-density="calm"] .kb-step:focus-visible { outline: 2px solid var(--focus); outline-offset: -1px; }
+  /* Pad-Wand: Grund klappt zu, Pads werden groß (≥ 88 px) */
+  #app[data-density="calm"] .kb.wall :is(.kb-tabs, .kb-panel) { display: none; }
+  #app[data-density="calm"] .kb.wall :is(.kb-pad, .kb-key) { min-height: 96px; }
+  @media (max-width: 760px) {
+    #app[data-density="calm"] .kb.wall :is(.kb-pads, .kb-keys) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  }
+  @media (min-width: 761px) {
+    #app[data-density="calm"] .kb.wall :is(.kb-pad, .kb-key) { min-height: 132px; }
+  }
+  /* Startkarte im leeren Song: groß ●, klein die zwei anderen Wege */
+  #app[data-density="calm"] .arranger { position: relative; }
+  #app[data-density="calm"] .start-card { position: absolute; z-index: 4; display: grid; gap: 4px; max-width: 420px; }
+  #app[data-density="calm"] .start-big { min-height: 56px; border: 0; border-radius: var(--radius); background: var(--amber); color: var(--accent-ink); font-family: var(--font-display); font-size: var(--fs-15); font-weight: 600; cursor: pointer; }
+  #app[data-density="calm"] .start-small { display: flex; gap: 6px; }
+  #app[data-density="calm"] .start-link { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 6px; border: 0; background: var(--bg); color: var(--ink); box-shadow: inset 0 -1px 0 var(--line); cursor: pointer; white-space: nowrap; }
+  #app[data-density="calm"] .start-link:hover { box-shadow: inset 0 -2px 0 var(--amber); }
+  #app[data-density="calm"].start-card-on.song-empty .track-row:first-child .lane::after { content: none; }
+  #app[data-density="calm"] .loop-template .loop-name { font-style: italic; }
   /* Schmal: Werkbank als Schublade, Daumenleiste (Kiste · ▶ · ● · Werkbank), Deck als Lesezeile */
   @media (max-width: 760px) {
     #app[data-density="calm"] #werkbank .insp { display: block !important; border: 0; background: transparent; overflow: visible; }

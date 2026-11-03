@@ -8,6 +8,7 @@ import {
   GLIDE_OPTIONS, glideOf, SWING_OPTIONS, swingOf, midiVelocity, GM_DRUMS,
 } from '../instruments.js';
 import { patternSampleId } from '../patterns.js';
+import { kitOf } from '../model.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
 import { runJob } from '../dsp/run.js';
 import { startMicCapture } from '../recorder.js';
@@ -37,6 +38,9 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   const nameIn = $('pat-name');
   const barsSel = $('pat-bars');
   const kitSel = $('pat-kit');
+  // Projekt-Kit (ADR 012): Map statt Kit-ID für Anhören und Beschriftung; mitgelieferte Kits bleiben bei ihrer ID
+  const kitRef = (k) => kitOf(store.project, k)?.map ?? k;
+  const padName = (id) => library.get(id)?.name;
   const presetSel = $('pat-preset');
   const glideSel = $('pat-glide');
   const lenSel = $('pat-len');
@@ -313,16 +317,17 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const from = paged ? page * PAGE : 0;
     const n = paged ? PAGE : total;
     renderPages(p);
-    if (drumsEl.dataset.key !== `${id}|${total}|${from}|${n}|${p.kit}`) {
-      drumsEl.dataset.key = `${id}|${total}|${from}|${n}|${p.kit}`;
+    const kk = `${p.kit}|${JSON.stringify(kitOf(store.project, p.kit)?.map ?? '')}`;
+    if (drumsEl.dataset.key !== `${id}|${total}|${from}|${n}|${kk}`) {
+      drumsEl.dataset.key = `${id}|${total}|${from}|${n}|${kk}`;
       drumsEl.innerHTML = '';
       drumsEl.style.setProperty('--steps', n);
       for (const row of DRUM_ROWS) {
-        const rowLabel = drumLabel(p.kit, row.id);
+        const rowLabel = drumLabel(kitRef(p.kit), row.id, padName);
         const label = el('button', 'pat-row-label', rowLabel);
         label.type = 'button';
         label.title = 'Anhören';
-        label.addEventListener('click', async () => previewDrum(await audio(), engine.mix.master, pat().kit, row.id, library));
+        label.addEventListener('click', async () => previewDrum(await audio(), engine.mix.master, kitRef(pat().kit), row.id, library));
         drumsEl.append(label);
         for (let i = from; i < from + n; i++) {
           const cell = el('button', `pat-cell${Math.floor(i / 4) % 2 ? ' alt' : ''}${i % 16 === 0 ? ' bar' : ''}`);
@@ -372,7 +377,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
       if (painting.done.has(i)) return;
       painting.done.add(i);
       update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? brush : 0; }, `paint-${id}-${e.timeStamp}`);
-      if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
+      if (on) previewDrum(await audio(), engine.mix.master, kitRef(pat().kit), row, library);
     };
     paint(cell);
     trackPointer(e, (ev) => {
@@ -392,7 +397,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const cur = pat().rows?.[row]?.[i];
     const on = !cur || !sameVel(cur);
     update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? brush : 0; });
-    if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
+    if (on) previewDrum(await audio(), engine.mix.master, kitRef(pat().kit), row, library);
   });
   let lastTouch = false;
   drumsEl.addEventListener('pointerup', (e) => { if (e.pointerType === 'touch') lastTouch = true; }, true);
@@ -834,7 +839,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   // ---------- Drumpad ----------
 
   function renderPads(p) {
-    const key = `${p.kit}`;
+    const key = `${p.kit}|${JSON.stringify(kitOf(store.project, p.kit)?.map ?? '')}`;
     if (padsEl.dataset.key !== key) {
       padsEl.dataset.key = key;
       padsEl.innerHTML = '';
@@ -842,8 +847,9 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
         const pad = el('button', 'pat-pad');
         pad.type = 'button';
         pad.dataset.row = row.id;
-        pad.append(el('span', 'pat-pad-name', drumLabel(p.kit, row.id)), el('span', 'pat-pad-key', PAD_KEYS[i].toUpperCase()));
-        pad.setAttribute('aria-label', `${drumLabel(p.kit, row.id)} (Taste ${PAD_KEYS[i].toUpperCase()})`);
+        const label = drumLabel(kitRef(p.kit), row.id, padName);
+        pad.append(el('span', 'pat-pad-name', label), el('span', 'pat-pad-key', PAD_KEYS[i].toUpperCase()));
+        pad.setAttribute('aria-label', `${label} (Taste ${PAD_KEYS[i].toUpperCase()})`);
         padsEl.append(pad);
       });
     }
@@ -854,7 +860,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const p = pat();
     if (!p || p.type !== 'drums') return;
     const ctx = await audio();
-    previewDrum(ctx, engine.mix.master, p.kit, rowId, library, when, vel);
+    previewDrum(ctx, engine.mix.master, kitRef(p.kit), rowId, library, when, vel);
     const pad = padsEl.querySelector(`[data-row="${rowId}"]`);
     if (pad) {
       // Jeder Schlag leuchtet neu auf, auch wenn der vorige noch leuchtet
@@ -1365,6 +1371,8 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     $('pat-len-field').hidden = drums;
     recBtn.hidden = drums;
     recBtn.setAttribute('aria-pressed', String(rec));
+    const pk = kitOf(store.project, p.kit);
+    if (pk && !kitSel.querySelector(`option[value="${p.kit}"]`)) { const o = el('option', null, pk.name); o.value = p.kit; kitSel.append(o); }
     kitSel.value = p.kit || 'elektro';
     presetSel.value = p.preset || 'pluck';
     // Zwischenwerte (0–1, z. B. aus einer Projektdatei) zeigt die Wahl als nächstliegende Stufe

@@ -47,8 +47,11 @@ const visible = (n) => {
   return getComputedStyle(n).visibility !== 'hidden';
 };
 
-export function mountTips({ ui, store }) {
+// list (Krachwerk): eigene Tipps mit when() statt Element; sie erscheinen nur als Einblender, höchstens einer je Sitzung.
+// poll: Abstand in ms, in dem when() ohne Ereignis erneut gefragt wird (z. B. für laufende Durchgänge)
+export function mountTips({ ui, store, list = null, poll = 0 }) {
   const state = load();
+  let shownNow = false; // list: einer je Sitzung
   // In automatisierten Tests aus, außer ein Test schaltet sie ein
   let enabled = !navigator.webdriver;
   const box = el('div', 'tip');
@@ -94,6 +97,15 @@ export function mountTips({ ui, store }) {
 
   function check() {
     if (!enabled || state.off) { hide(); return; }
+    if (list) {
+      if (shownNow || ui.flashText) return; // einer je Sitzung, und nie über eine laufende Rückmeldung
+      const tip = list.find((t) => !state.seen.includes(t.id) && t.when?.());
+      if (!tip) return;
+      shownNow = true;
+      done(tip);
+      ui.flash?.(tip.text);
+      return;
+    }
     if (current) {
       // Der Bereich ist weg (z. B. Fach geschlossen): Tipp kommt beim nächsten Mal wieder
       if (!visible(current.target) || !document.contains(current.target)) hide();
@@ -124,11 +136,13 @@ export function mountTips({ ui, store }) {
   window.addEventListener('resize', () => { if (current) position(); });
   document.addEventListener('scroll', () => { if (current) position(); }, true);
   schedule();
+  if (list && poll) setInterval(schedule, poll);
 
   // Projekt-Menü / Fach „Song“: Tipps wieder einschalten
   document.getElementById('tips-reset')?.addEventListener('click', () => {
     state.off = false;
     state.seen = [];
+    shownNow = false;
     save(state);
     ui.flash?.('Tipps sind wieder an.');
     schedule();
@@ -137,8 +151,9 @@ export function mountTips({ ui, store }) {
   return {
     enable() { enabled = true; schedule(); },
     disable() { enabled = false; hide(); },
-    reset() { state.off = false; state.seen = []; save(state); schedule(); },
+    reset() { state.off = false; state.seen = []; shownNow = false; save(state); schedule(); },
     get current() { return current?.tip.id ?? null; },
+    get shown() { return shownNow; },
     check,
   };
 }

@@ -370,7 +370,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const found = ui.selectedClipId ? store.findClip(ui.selectedClipId) : null;
     const track = found?.track ?? (ui.selectedTrackId ? store.track(ui.selectedTrackId) : null);
     // „sound“: Werkbank für einen Sound aus der Kiste, ohne Clip (nur mit clipPanel)
-    const benchId = !found && !track && panel && ui.benchSoundId && library.get(ui.benchSoundId) ? ui.benchSoundId : null;
+    // Kits und Instrumente (Scheibe 4) liegen im Projekt, nicht in der Bibliothek
+    const benchOk = (id) => library.get(id) || store.project.kits?.[id] || store.project.instruments?.[id];
+    const benchId = !found && !track && panel && ui.benchSoundId && benchOk(ui.benchSoundId) ? ui.benchSoundId : null;
     const mode = found ? 'clip' : track ? 'track' : benchId ? 'sound' : 'song';
     clipSec.hidden = mode !== 'clip' && mode !== 'sound';
     trackSec.hidden = mode === 'song' || mode === 'sound' || (mode === 'clip' && !trackOnClip);
