@@ -9,7 +9,8 @@ import { fetchAsset } from './fetch-asset.js';
 import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { GUITAR_LOOP_DEFS, GUITAR_GENRES } from './loops-guitar.js';
 import { GUITAR_CATALOG } from './catalog-guitar.js';
-import { keyChangesOf, keySpans, keyDelta, harmonySpans, tapeRate } from './model.js';
+import { keyChangesOf, keySpans, keyDelta, harmonySpans, tapeRate, keySemis } from './model.js';
+import { minorOf, wrapSemis } from './keys.js';
 import { DEGREE_IDS, REST } from './harmony.js';
 import { normalizeRecipe, recipeKey, soundFields, materialOf, suggestMaterial, RECIPE } from './recipe.js';
 import { cookRecipe, peakOfChannels } from './dsp/recipe.js';
@@ -1520,6 +1521,19 @@ const nextTask = () => new Promise((resolve) => {
   ch.port2.postMessage(0);
 });
 
+// Eigener Sound mit Tonart, der der Song-Tonart folgt (Schalter im Inspektor, project.soundKeys)
+const ownFollows = (s) => !!s?.keyFollow && s.category === 'own' && !s.def && !s.make && !!minorOf(s.key);
+
+// Puffer umstimmen (gleiche Länge) im Rechen-Worker
+async function shiftBuffer(buffer, semis, loop) {
+  const { runJob } = await import('./dsp/run.js');
+  const chs = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
+  const out = await runJob('pitchshift', { chs, sampleRate: buffer.sampleRate, semis, loop });
+  const b = new AudioBuffer({ numberOfChannels: out.length, length: out[0].length, sampleRate: buffer.sampleRate });
+  out.forEach((d, c) => b.copyToChannel(d, c));
+  return b;
+}
+
 export class Library extends Emitter {
   constructor() {
     super();
@@ -1573,7 +1587,47 @@ export class Library extends Emitter {
   // mit verschobenen Noten (s.transpose). delta = Halbtöne gegenüber der Grundtonart. Fremd-Samples und Drums folgen nicht.
   followsKey(id) {
     const s = this.samples.get(id);
-    return !!s && (!!(s.def && s.key) || typeof s.transpose === 'function');
+    return !!s && (!!(s.def && s.key) || typeof s.transpose === 'function' || ownFollows(s));
+  }
+
+  // Eigene Sounds mit Tonart: Projekt-Einstellungen (store.project.soundKeys) übernehmen – Tonart (sonst die erkannte)
+  // und „folgt dem Song“. Folgende Sounds werden in die Song-Tonart umgestimmt (gleiche Länge). Rückgabe: geändert?
+  async applySoundKeys(map = this.soundKeyMap ?? {}) {
+    this.soundKeyMap = map;
+    const redo = [];
+    let changed = false;
+    for (const s of this.samples.values()) {
+      if (s.category !== 'own' || s.def || s.make) continue;
+      const { key, keyFollow } = this._keyState(s);
+      if (s.key === key && !!s.keyFollow === keyFollow) continue;
+      const before = this._tag(s, this.bpm);
+      s.key = key;
+      s.keyFollow = keyFollow;
+      changed = true;
+      if (this._tag(s, this.bpm) !== before && !s.lazy) redo.push(s);
+    }
+    for (const s of redo) await this._prepare(s, this.bpm);
+    if (changed) this.emit();
+    return changed;
+  }
+
+  // Tonart eines eigenen Sounds laut Projekt, sonst die erkannte (keyAuto)
+  _keyState(s) {
+    const e = this.soundKeyMap?.[s.id] || {};
+    const key = 'key' in e ? e.key : s.keyAuto ?? null;
+    return { key, keyFollow: !!e.follow && !!minorOf(key) };
+  }
+
+  // Halbtöne, um die ein folgender eigener Sound in der Grundtonart des Songs verschoben klingt
+  _ownShift(s) { return ownFollows(s) ? wrapSemis(this.semis - keySemis(minorOf(s.key))) : 0; }
+
+  // Eigener Sound im Tempo `bpm`, umgestimmt um die Grundverschiebung plus `delta` (Tonart je Takt)
+  async _ownAt(s, bpm, delta = 0) {
+    const src = this.source(s);
+    const r = s.kind === 'loop' ? { buffer: await stretchLoop(src, s.beats, bpm), lengthBeats: s.beats } : { ...padOneShot(src, bpm), oneShot: true };
+    const semis = wrapSemis(this._ownShift(s) + delta);
+    if (semis) r.buffer = await shiftBuffer(r.buffer, semis, s.kind === 'loop');
+    return r;
   }
 
   // Begleit-Patterns („folgt Akkorden“): klingen je Abschnitt des Akkord-Streifens auf der dortigen Stufe
@@ -1608,7 +1662,8 @@ export class Library extends Emitter {
           const baseRev = base.rev;
           const bpm = this.bpm;
           try {
-            const r = base.def ? await renderLoop(base.def, bpm, this.semis + delta) : await base.transpose(bpm, delta, chord);
+            const r = base.def ? await renderLoop(base.def, bpm, this.semis + delta)
+              : ownFollows(base) ? await this._ownAt(base, bpm, delta) : await base.transpose(bpm, delta, chord);
             const kv = {
               id: key, baseId: id, delta, chord, baseRev, atBpm: bpm, rev: ++this.variantRev,
               name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
@@ -1792,6 +1847,7 @@ export class Library extends Emitter {
     this._recipesJson = null;
     this._tint(sample);
     this.samples.set(sample.id, sample);
+    if (sample.category === 'own') Object.assign(sample, this._keyState(sample));
     await this._prepare(sample, this.bpm);
     this.emit();
     return sample;
@@ -1805,6 +1861,7 @@ export class Library extends Emitter {
     sample._load = load;
     sample.lengthBeats ??= sample.beats ?? 4;
     this._tint(sample);
+    if (sample.category === 'own') Object.assign(sample, this._keyState(sample));
     this.samples.set(sample.id, sample);
     return sample;
   }
@@ -1849,7 +1906,7 @@ export class Library extends Emitter {
 
   // Tonale synthetische Loops hängen auch von der Tonart ab
   _tag(s, bpm) {
-    const t = s.def && s.key ? `${bpm}|${this.semis}` : bpm;
+    const t = s.def && s.key ? `${bpm}|${this.semis}` : ownFollows(s) ? `${bpm}|k${this._ownShift(s)}` : bpm;
     return s.recipeKey ? `${t}|${s.recipeKey}` : t;
   }
 
@@ -1883,6 +1940,7 @@ export class Library extends Emitter {
     let r;
     if (p.def) r = await renderLoop(p.def, bpm, this.semis);
     else if (p.make) r = await p.make(bpm);
+    else if (p.orig && ownFollows(p)) r = await this._ownAt(p, bpm);
     else if (p.kind === 'loop' && p.orig) r = { buffer: await stretchLoop(this.source(p), p.beats, bpm), lengthBeats: p.beats };
     else if (p.orig) r = { ...padOneShot(this.source(p), bpm), oneShot: true };
     else return false; // fester Puffer ohne Original (z. B. Testsignal)
@@ -1900,11 +1958,11 @@ export class Library extends Emitter {
     return current;
   }
 
-  // Tonart wechseln: nur die tonalen synthetischen Loops werden neu gerendert
+  // Tonart wechseln: nur die tonalen synthetischen Loops und folgende eigene Sounds werden neu vorbereitet
   async setKey(semis) {
     this.semis = semis;
     for (const s of this.samples.values()) {
-      if (!(s.def && s.key) || s.lazy) continue;
+      if (!((s.def && s.key) || ownFollows(s)) || s.lazy) continue;
       await this._prepare(s, this.bpm);
       if (this.semis !== semis) return;
     }

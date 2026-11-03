@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, usedSampleIds, kitOf, instrumentOf } from './model.js';
+import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, usedSampleIds, kitOf, instrumentOf, soundKeysOf } from './model.js';
 import { accompanimentPlan, applyPlan } from './starter.js';
 import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
@@ -356,6 +356,22 @@ function mountSoundState({ store, engine, library, ui, arranger }) {
   run(true);
 }
 
+// Tonart eigener Sounds (Inspektor): Projekt-Einstellungen an die Bibliothek; folgende Sounds werden umgestimmt
+// (gleiche Länge, die Wiedergabe zieht über die Signatur nach)
+function mountSoundKeys({ store, library }) {
+  let last = null;
+  let chain = Promise.resolve();
+  const sync = () => {
+    const map = soundKeysOf(store.project);
+    const key = JSON.stringify(map);
+    if (key === last) return;
+    last = key;
+    chain = chain.then(() => library.applySoundKeys(map)).catch((err) => console.warn('Sound-Tonart:', err?.message || err));
+  };
+  store.on(sync);
+  sync();
+}
+
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
 // mode 'sound' (Krachwerk): ohne Vorzähler; der gesäuberte Klang kommt als Clip ab dem Takt der Marke in den Loop
 function mountRecording({ store, engine, ui, arranger, recorder, library, mode = 'song', bench = () => null }) {
@@ -534,6 +550,7 @@ async function boot() {
     sampleName: (id) => library.get(id)?.name,
     soundDuration: (id) => library.get(id)?.orig?.duration ?? library.get(id)?.duration ?? null,
   });
+  mountSoundKeys({ store, library });
   const engine = new Engine(store, library);
   const ui = createUi();
   // Speicher v2: hält ein anderer Tab mit altem Stand die Datenbank, sagt es ein Einblender (ADR 011)

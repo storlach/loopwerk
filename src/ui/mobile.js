@@ -7,6 +7,7 @@ import { formatDb } from './arranger.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
+import { mountSoundKey } from './sound-key.js';
 
 import { narrow, touch } from './place.js';
 
@@ -72,6 +73,9 @@ export function mountMobile({ store, ui, tools, library }) {
   $('lvl-tempo-song').addEventListener('click', () => useAsSongTempo(store, selSound()));
   tempoIn.addEventListener('change', () => setSoundBpm(store, selSound(), Number(String(tempoIn.value).replace(',', '.'))));
   tempoIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') tempoIn.blur(); });
+  // Tonart eigener Sounds (wie im Inspektor)
+  const skey = mountSoundKey({ store, prefix: 'lvl', className: 'lvl lvl-skey' });
+  $('lvl-tempo-row').after(skey.row);
   gainIn.addEventListener('input', () => {
     const c = selected();
     if (c) store.setClip(c.id, { gain: sliderToGain(Number(gainIn.value)) }, 'lvl-gain-' + c.id);
@@ -135,6 +139,7 @@ export function mountMobile({ store, ui, tools, library }) {
     $('lvl-tempo-row').hidden = !hasOwnTempo(snd);
     if (document.activeElement !== tempoIn) tempoIn.value = sb ? String(Math.round(sb * 10) / 10) : '';
     for (const id of ['lvl-tempo-half', 'lvl-tempo-double', 'lvl-tempo-song']) $(id).disabled = !sb;
+    skey.update(snd);
   }
 
   // ---------- Tempo ohne Bildschirmtastatur ----------
@@ -255,6 +260,8 @@ export function mountMobile({ store, ui, tools, library }) {
   const sync = () => { syncTabs(); syncBar(); showSong(); tempoPanel.hidden = ui.dock !== 'tempo'; if (!tempoPanel.hidden) showTempo(); };
   ui.on(sync);
   store.on(sync);
+  // Erkannte Tonart kommt im Hintergrund
+  library.on(() => { const c = selected(); if (c && showLevels) skey.update(library.get(c.sampleId)); });
   narrow.addEventListener('change', () => { layout(); setInputMode(); });
   touch.addEventListener('change', sync);
   window.addEventListener('resize', syncBar);

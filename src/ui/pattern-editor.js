@@ -1193,6 +1193,13 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   });
 
   let mic = null;
+  function cancelMic() {
+    if (!mic) return;
+    mic.cancel();
+    mic = null;
+    $('sing-rec').classList.remove('recording');
+    $('sing-rec').textContent = '● Aufnehmen';
+  }
   $('sing-rec').addEventListener('click', async () => {
     const btn = $('sing-rec');
     if (mic) {
@@ -1402,12 +1409,16 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     renderScale(p);
   }
 
+  // Eigener Merker statt root.hidden: wischt man die Schublade zu, blendet sie sich selbst aus, bevor das Fach wechselt –
+  // die Wiedergabe muss trotzdem enden
+  let shown = !root.hidden;
   ui.on(() => {
     const show = ui.dock === 'pattern';
-    if (root.hidden === !show) return;
+    if (shown === show) return;
+    shown = show;
     root.hidden = !show;
     if (show) requestAnimationFrame(render);
-    else { rec = false; looper.stop(); }
+    else { rec = false; looper.stop(); cancelMic(); }
   });
   store.on(() => {
     if (id && !store.project.patterns?.[id]) { id = null; if (ui.dock === 'pattern') ui.setDock(null); return; }

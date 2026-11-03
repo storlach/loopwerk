@@ -13,6 +13,7 @@ const AUDIO = 'audio';
 const V1 = 'sounds';
 const DB_VERSION = 2;
 const MAX_SECONDS = 480;
+const KEY_SECONDS = 90;
 
 // Eine Datenbank je Edition (Loopwerk „loopwerk“, Krachwerk „loopwerk-make“), gleiches Schema
 const dbs = new Map();
@@ -128,6 +129,10 @@ function toSample(rec, orig, duration = orig?.duration) {
     material: rec.material ?? null, // zuletzt gewählte Herkunft: nur Vorschlag (Rezept gewinnt)
     orig,
     duration,
+    // Erkannte Tonart („Am“, „C“; null = keine bzw. noch nicht erkannt), keyDone: Erkennung gelaufen
+    keyAuto: rec.key ?? null,
+    keyConf: rec.keyConf ?? null,
+    keyDone: !!rec.keyDone,
   };
   if (s.kind === 'loop' && s.beats && duration) s.bpm = Math.round((s.beats * 60 / duration) * 100) / 100;
   return s;
@@ -149,7 +154,39 @@ export class OwnSounds {
     this.blocked = false; // ein anderer Tab mit altem Stand hält die Datenbank (Einblender über onBlocked)
     this.onBlocked = null;
     blockedFns.set(db, () => { this.blocked = true; this.onBlocked?.(); });
+    this.keyJobs = new Map(); // id → laufende Tonart-Erkennung
   }
+
+  // Tonart erkennen (Rechen-Worker), im Sound und dauerhaft im Datensatz vermerken. Läuft im Hintergrund.
+  detectKey(sample) {
+    if (!sample?.orig || this.keyJobs.has(sample.id)) return this.keyJobs.get(sample?.id) ?? Promise.resolve(null);
+    const job = (async () => {
+      const { runJob } = await import('./dsp/run.js');
+      const n = Math.min(sample.orig.length, Math.round(KEY_SECONDS * sample.orig.sampleRate)); // reicht für die Tonart
+      const chs = Array.from({ length: sample.orig.numberOfChannels }, (_, c) => sample.orig.getChannelData(c).subarray(0, n));
+      const r = await runJob('key', { chs, sampleRate: sample.orig.sampleRate });
+      Object.assign(sample, { keyAuto: r.key ?? null, keyConf: r.key ? r.confidence : null, keyDone: true });
+      await this.library.applySoundKeys();
+      this.library.emit();
+      if (this.available) {
+        try {
+          // Speicher v2: Ergebnis in den meta-Datensatz (klein, beim Start gelesen), das Audio bleibt unberührt
+          await this.tx(META, 'readwrite', (st) => new Promise((res) => {
+            const g = st.get(sample.id);
+            g.onsuccess = () => { if (g.result) st.put({ ...g.result, key: sample.keyAuto, keyConf: sample.keyConf, keyDone: true }); res(); };
+            g.onerror = () => res();
+          }));
+        } catch { /* nur für diese Sitzung */ }
+      }
+      return sample.keyAuto;
+    })().catch((err) => { console.warn('Tonart-Erkennung:', err?.message || err); return null; })
+      .finally(() => this.keyJobs.delete(sample.id));
+    this.keyJobs.set(sample.id, job);
+    return job;
+  }
+
+  // Alle laufenden Erkennungen (Tests, Export)
+  keysReady() { return Promise.all([...this.keyJobs.values()]); }
 
   tx(stores, mode, fn) { return txOn(this.dbName, stores, mode, fn); }
 
@@ -164,6 +201,8 @@ export class OwnSounds {
       x.orig = await decodeAudio(wav.slice(0));
       x.duration = x.orig.duration;
       if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
+      // Sounds von vor der Tonart-Erkennung: beim ersten Gebrauch nachholen
+      if (!x.keyDone) this.detectKey(x);
     });
     if (sample.duration && !sample.beats) sample.lengthBeats = Math.max(1, Math.ceil(sample.duration / (60 / this.library.bpm) - 1e-6));
     return true;
@@ -227,8 +266,9 @@ export class OwnSounds {
 
   // Neuen eigenen Sound anlegen (aus Puffer) und dauerhaft speichern
   // cls/tags/from/src: optionale Herkunft und Einordnung (Krachwerk); landen auch in der Projektdatei.
+  // key/keyConf/keyDone: schon erkannte Tonart (Projektdatei); sonst wird sie im Hintergrund erkannt.
   // Doppel-Mono wird als 1 Kanal gespeichert (halber Platz). bits: 16 (Standard) oder 32 (Gleitkomma, übersteuert nicht)
-  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from, src, bits = 16 }) {
+  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from, src, bits = 16, key, keyConf, keyDone }) {
     if (buffer.duration > MAX_SECONDS) throw new Error(`„${name}“ ist länger als ${MAX_SECONDS / 60} Minuten – bitte vorher kürzen.`);
     const chs = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
     const store = buffer.numberOfChannels > 1 && isDoubleMono(chs)
@@ -240,6 +280,7 @@ export class OwnSounds {
     if (tags) rec.tags = tags;
     if (from) rec.from = from;
     if (Array.isArray(src) && src.length) rec.src = src.slice(0, 16);
+    if (keyDone) Object.assign(rec, { key: key ?? null, keyConf: keyConf ?? null, keyDone: true });
     const sample = await this.library.add(toSample(rec, buffer));
     if (this.available) {
       askPersist();
@@ -248,6 +289,7 @@ export class OwnSounds {
         console.warn('Eigener Sound nur für diese Sitzung gespeichert:', err?.message || err);
       }
     }
+    if (!sample.keyDone) this.detectKey(sample);
     return sample;
   }
 
@@ -307,6 +349,7 @@ export class OwnSounds {
       if (s.made?.tags?.length) e.tags = s.made.tags;
       if (s.made?.from) e.from = s.made.from;
       if (s.made?.src?.length) e.src = s.made.src;
+      if (s.keyDone) Object.assign(e, { key: s.keyAuto ?? null, keyConf: s.keyConf ?? null, keyDone: true });
       out.push(e);
     }
     return out;
@@ -323,7 +366,7 @@ export class OwnSounds {
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const buffer = await decodeAudio(bytes.buffer);
-      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from, src: e.src });
+      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from, src: e.src, key: e.key, keyConf: e.keyConf, keyDone: e.keyDone });
       n++;
     }
     return n;

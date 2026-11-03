@@ -422,7 +422,7 @@ const { check, finish } = createChecker();
     check('Drumpad zeigt acht Pads mit Tasten', pads.length === 8 && pads[0] === 'KickA' && pads[7].endsWith('K'), pads.join(' | '));
     check('Raster ist in der Pad-Ansicht ausgeblendet', await page.locator('#pat-drums').isHidden());
     await page.keyboard.down('d');
-    const flashed = await page.locator('#pat-pads .pat-pad[data-row="clap"]').evaluate((n) => n.classList.contains('hit'));
+    const flashed = await page.waitForFunction(() => document.querySelector('#pat-pads .pat-pad[data-row="clap"]')?.classList.contains('hit'), null, { timeout: 1500 }).then(() => true, () => false);
     await page.keyboard.up('d');
     check('Taste D spielt das Clap-Pad', flashed);
     const notRecorded = await page.evaluate(() => { const p = Object.values(window.loopwerk.store.project.patterns)[0]; return p.rows.clap.some(Boolean); });

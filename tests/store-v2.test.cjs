@@ -116,7 +116,7 @@ async function playsAll(ids) {
     // ---------- 9. Migration v1 → v2, beide Editionen ----------
     const V1 = [
       { id: 'own-a1', name: 'Eins', kind: 'oneshot', beats: null, source: 'Mikrofon', created: 1, secs: 0.5, hz: 220 },
-      { id: 'own-a2', name: 'Zwei', kind: 'loop', beats: 4, source: 'Import: x.wav', created: 2, secs: 2, hz: 330 },
+      { id: 'own-a2', name: 'Zwei', kind: 'loop', beats: 4, source: 'Import: x.wav', created: 2, secs: 2, hz: 330, key: 'Am', keyConf: 0.8, keyDone: true },
       { id: 'own-a3', name: 'Drei', kind: 'oneshot', beats: null, source: '', created: 3, secs: 1, hz: 440, ch: 1, material: 'stimme' },
     ];
     const MK = [
@@ -145,6 +145,9 @@ async function playsAll(ids) {
         const p3 = lib[ids.indexOf('mk-p3')];
         check('9 Krachwerk: Pad-Wand-Stand (mk-…) lesbar: Schleife als Loop mit 4 Schlägen, Herkunft und Klasse', p3?.kind === 'loop' && p3.beats === 4 && p3.from === 'loop' && lib[ids.indexOf('mk-p1')]?.cls === 'tief', JSON.stringify(lib.slice(3)));
       }
+      const k2 = st?.meta?.find((m) => m.id === 'own-a2');
+      const s2 = await page.evaluate(() => { const s = window.loopwerk.library.get('own-a2'); return s && { key: s.keyAuto, conf: s.keyConf, done: s.keyDone }; });
+      check(`9 ${label}: erkannte Tonart (key/keyConf/keyDone) wandert mit in meta und an den Sound`, k2?.key === 'Am' && k2.keyConf === 0.8 && k2.keyDone === true && s2?.key === 'Am' && s2.done, JSON.stringify({ meta: k2 && { key: k2.key, keyConf: k2.keyConf, keyDone: k2.keyDone }, s2 }));
       check(`9 ${label}: Material-Vorschlag bleibt am Datensatz`, lib[2]?.material === 'stimme', JSON.stringify(lib[2]));
       await ctx.close();
     }
@@ -293,6 +296,7 @@ async function playsAll(ids) {
           ids.push((await own.create({ name: `Z${k}`, buffer: b, tags: ['t' + k], from: 'mic' })).id);
         }
         await own.rememberMaterial(ids[0], 'dinge');
+        await own.keysReady?.(); // Tonart-Erkennung schreibt ihr Ergebnis in meta
         const before = await own.listMeta();
         const wavs = {};
         for (const id of ids) wavs[id] = Array.from(new Uint8Array(await own.readWav(id)));

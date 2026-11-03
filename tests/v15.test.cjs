@@ -375,7 +375,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await app.close();
 
     // ---------- Handy: Import und Einsingen-Feld ----------
-    app = await openApp({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 2 });
+    app = await openApp({ viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 2, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
     page = app.page;
     await page.tap('#tab-sounds');
     await page.setInputFiles('#import-input', { name: 'Sprachmemo.wav', mimeType: 'audio/wav', buffer: wav([voice([[60, 1]])]) });
@@ -396,7 +396,13 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     await page.tap('#pat-sing-btn');
     const ms = await page.evaluate(() => ({ visible: !document.getElementById('pat-sing').hidden, overflow: document.documentElement.scrollWidth - innerWidth, rec: document.getElementById('sing-rec').getBoundingClientRect().height }));
     check('Handy: Einsingen-Feld nutzbar', ms.visible && ms.overflow <= 0 && ms.rec >= 40, JSON.stringify(ms));
+    // Fach zu während des Einsingens: Mikrofon und Klick aus, die Ausgabe läuft danach wieder (Android: kein Rauschen)
+    await page.tap('#sing-rec');
+    await page.waitForFunction(() => document.getElementById('sing-rec').textContent.includes('Fertig'), null, { timeout: 5000 });
     await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    await page.waitForTimeout(400);
+    const micOff = await page.evaluate(() => ({ btn: document.getElementById('sing-rec').textContent, ctx: window.loopwerk.engine.ctx.state }));
+    check('Handy: Fach zu beendet das Einsingen', micOff.btn.includes('Aufnehmen') && micOff.ctx === 'running', JSON.stringify(micOff));
 
     // Spurname bearbeiten und daneben tippen: die Leiste unten muss wiederkommen
     const tabbar = () => page.evaluate(() => getComputedStyle(document.getElementById('tabbar')).display !== 'none' && !document.getElementById('app').classList.contains('kbd'));

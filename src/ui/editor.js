@@ -354,9 +354,13 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     }
   });
 
+  // Eigener Merker statt root.hidden: wischt man die Schublade zu, blendet sie sich selbst aus, bevor das Fach wechselt –
+  // die Wiedergabe muss trotzdem enden
+  let shown = !root.hidden;
   ui.on(() => {
     const show = ui.dock === 'editor';
-    if (root.hidden === !show) return;
+    if (shown === show) return;
+    shown = show;
     root.hidden = !show;
     if (show) requestAnimationFrame(render);
     else if (st) { engine.stopPreview(); st = null; }

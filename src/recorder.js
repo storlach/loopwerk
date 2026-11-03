@@ -104,6 +104,7 @@ export class Recorder extends Emitter {
     this.source.disconnect();
     this.node.disconnect();
     this.stream.getTracks().forEach((t) => t.stop());
+    releaseOutput(this.engine);
     try {
       if (!this.chunks.length) throw new RecorderError('empty', 'Die Aufnahme ist leer.');
       const sr = ctx.sampleRate;
@@ -151,6 +152,15 @@ export class Recorder extends Emitter {
   }
 }
 
+// Android schaltet die Tonausgabe bei offenem Mikrofon in den Gesprächsmodus (rauscht) und erst beim nächsten
+// Öffnen der Ausgabe zurück – darum nach dem Schließen des Mikrofons die Ausgabe kurz anhalten und neu starten
+async function releaseOutput(engine) {
+  const ctx = engine.ctx;
+  if (!ctx || ctx.state !== 'running' || engine.playing) return;
+  try { await ctx.suspend(); } catch { /* egal */ }
+  if (!engine.playing && ctx.state === 'suspended') await ctx.resume().catch(() => {});
+}
+
 // Einfache Mikrofon-Aufnahme mit Klick im Projekttempo (ein Takt Vorzähler), z. B. zum Einsingen einer Melodie.
 // Gibt die Aufnahme ab dem ersten Schlag nach dem Vorzähler zurück, um die Latenz korrigiert.
 let micWorklet = new WeakSet();
@@ -195,14 +205,24 @@ export async function startMicCapture(engine, { beatsPerBar = 4 } = {}) {
   clickSrc.start(t0 - bar);
   const inputLatency = stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
   const latency = (ctx.outputLatency || 0) + (ctx.baseLatency || 0) + inputLatency;
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    try { clickSrc.stop(); } catch { /* schon aus */ }
+    source.disconnect();
+    node.disconnect();
+    stream.getTracks().forEach((t) => t.stop());
+    releaseOutput(engine);
+  };
   return {
     startTime: t0,
+    // Abbrechen ohne Ergebnis (Fach geschlossen): Mikrofon und Klick sofort aus
+    cancel: close,
     async stop() {
       try { clickSrc.stop(); } catch { /* schon aus */ }
       await new Promise((resolve) => { doneFn = resolve; node.port.postMessage('stop'); setTimeout(resolve, 500); });
-      source.disconnect();
-      node.disconnect();
-      stream.getTracks().forEach((t) => t.stop());
+      close();
       if (!chunks.length) throw new RecorderError('empty', 'Die Aufnahme ist leer.');
       const sr = ctx.sampleRate;
       const first = chunks[0].frame;

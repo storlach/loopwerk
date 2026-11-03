@@ -272,6 +272,11 @@
 - Inspektor: Clip-Einstellungen ganz in der Clip-Farbe umrandet (Desktop und Handy-Clip-Leiste), Spur-Einstellungen neutral ohne Farbe – die Zuordnung ist auf einen Blick klar
 - Raumlicht: Rand-Glühen (Martins Wahl aus einer dritten Runde mit acht ruhigeren Entwürfen: Rand-Glühen, Bühnenlicht, Farbfelder, Plakat, Bokeh, Lamellen, Horizont, Wasserlicht). Man soll ablesen können, was klingt, ohne dass es von den Clips ablenkt: die Mitte bleibt ruhig (umgekehrte Vignette), an der Unterkante das ganze Spektrum von links tief nach rechts hoch mit feinem LED-Streifen, links trägt der Bass, rechts die Höhen die Seite, oben ein Hauch. Jede Stelle in der Farbe der Spur, die dort klingt (Spektrum je Spur, `engine.trackBands`); wie weit das Licht hereinreicht, zeigt den Pegel; Anstieg gut 50 ms, Ausklang gut 0,8 s, Farben gleiten in gut 0,4 s. Die Spektrum-Wand (Punktraster) ist gemerkt: Commit 293fdc2
 
+## ✅ Tonart-Erkennung
+- Eigene Sounds (Import, Aufnahme, Tab-Aufnahme, Link-Import, bearbeitete Sounds) bekommen nach dem Anlegen im Rechen-Worker eine Tonart (`src/dsp/key.js`): Spektrum-Spitzen C2–H6, Obertöne tieferer Töne aussortiert, Stimmung geschätzt, nur gehaltene Töne zählen; Abgleich mit den Dur-/Moll-Profilen von Krumhansl/Kessler. Schlagzeug, Rauschen, Einzeltöne und Unsicheres ergeben keine Tonart. Ergebnis im Sound (IndexedDB, Projektdatei), ältere Sounds beim ersten Gebrauch
+- Inspektor und Handy-Clip-Leiste: Zeile „Tonart · erkannt“ mit Auswahl (ändern, „keine“) und Schalter „Folgt Song“ (`src/ui/sound-key.js`, im Projekt `project.soundKeys`, Rückgängig). Folgende Sounds werden in die Song-Tonart umgestimmt (WSOLA + Umtasten, gleiche Länge, `pitchShift` in `src/dsp/stretch.js`), auch je Takt; Dur-Sounds über die parallele Moll-Tonart. Regal: Tonart im Hinweis wie bei Katalog-Sounds
+- Test `tests/key-detect.test.cjs` (24/24 Kadenzen, A-Moll-Folge, C-Dur-Tonleiter, Schlagzeug/Rauschen/Einzelton = keine, Tonhöhe 440 → 523,25/587,33/329,63 Hz)
+
 ## 🧪 Krachwerk – Loopwerk zum Selbermachen (Branch `werkstatt`)
 - Brainstorm mit ux-designer, ui-designer, architekt, creative-director: `docs/ux/krachwerk-brainstorm/` (Zielbild: Song · Werkbank · Kiste, ruhiger bei gleichem Funktionsumfang). Der erste Prototyp (Pad-Wand ohne Arranger) ist zurückgebaut.
 - ✅ Scheibe 1a „Gerüst und erster Laut“ (`docs/specs/krachwerk-1-geruest.md`, ADR 007): volle App unter `/werkstatt/` ohne mitgelieferte Sounds, leerer Song (2 Spuren, 90 BPM), eigener Speicher inkl. der Pad-Wand-Klänge, ● nimmt ohne Vorzähler auf, säubert und legt den Klang als Clip in den Loop; PWA, eigenes Icon; Zählung Desktop „Clip gewählt“ 55 statt 114 Bedienelemente
@@ -291,4 +296,4 @@
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
 
 ## Später
-- Tonart-Erkennung, Desktop-App (Tauri), Plugins
+- ~~Tonart-Erkennung~~, Desktop-App (Tauri), Plugins
