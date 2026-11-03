@@ -2,6 +2,7 @@
 // Ein Clip verweist auf ein Sample und wiederholt es über seine Länge (wie ein Objekt im Music Maker).
 
 import { Emitter } from './util.js';
+import { KEYS, KEY_MAJOR, minorOf, wrapSemis, isSoundKey } from './keys.js';
 import { withFx } from './effects.js';
 import { isChord } from './harmony.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
@@ -215,8 +216,7 @@ export function totalBeats(project) {
 }
 
 // Songtonarten: die mitgelieferten Loops stehen in A-Moll; jede Moll-Tonart (mit paralleler Dur) ist wählbar.
-export const KEYS = ['Cm', 'C♯m', 'Dm', 'E♭m', 'Em', 'Fm', 'F♯m', 'Gm', 'G♯m', 'Am', 'B♭m', 'Hm'];
-export const KEY_MAJOR = ['E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'H', 'C', 'D♭', 'D'];
+export { KEYS, KEY_MAJOR };
 export const keyOf = (project) => (KEYS.includes(project?.key) ? project.key : 'Am');
 // Halbtöne von A-Moll aus, kürzester Weg (−6 … +5), damit Bässe nicht zu weit wandern
 export function keySemis(key) {
@@ -244,6 +244,11 @@ export const keyAtBeat = (project, beat) => keyAtBar(project, barOfBeat(project,
 
 // Halbtöne von der Grundtonart zu `key` – so weit wandern Loops und Melodien, wie beim Wechsel der Songtonart
 export const keyDelta = (project, key) => keySemis(key) - keySemis(keyOf(project));
+
+// Eigene Sounds mit Tonart (project.soundKeys = { sampleId: { key, follow } }, optional): so weit wandert ein Sound
+// in `key` (Moll-Song-Tonart), auf kürzestem Weg; Dur-Sounds wie ihre parallele Moll-Tonart
+export const soundKeysOf = (project) => (project?.soundKeys && typeof project.soundKeys === 'object' && !Array.isArray(project.soundKeys) ? project.soundKeys : {});
+export const soundKeyShift = (soundKey, key) => (minorOf(soundKey) ? wrapSemis(keySemis(key) - keySemis(minorOf(soundKey))) : 0);
 
 // Abschnitte gleicher Tonart im Bereich [from, to) (Schläge): [{ from, to, key }]
 export function keySpans(project, from, to) {
@@ -907,6 +912,21 @@ export class Store extends Emitter {
     });
   }
 
+  // Tonart eines eigenen Sounds im Projekt: { key } überschreibt die erkannte (null = keine, undefined = wie erkannt),
+  // { follow } stimmt ihn in die Song-Tonart um. Ein Rückgängig-Schritt.
+  setSoundKey(sampleId, patch) {
+    const cur = soundKeysOf(this.project)[sampleId] || {};
+    const next = { ...cur };
+    if ('key' in patch) { if (patch.key === undefined) delete next.key; else if (patch.key === null || isSoundKey(patch.key)) next.key = patch.key; }
+    if ('follow' in patch) { if (patch.follow) next.follow = true; else delete next.follow; }
+    if (JSON.stringify(next) === JSON.stringify(cur)) return;
+    this.dispatch('sound-key', (p) => {
+      p.soundKeys = { ...soundKeysOf(p) };
+      if (Object.keys(next).length) p.soundKeys[sampleId] = next; else delete p.soundKeys[sampleId];
+      if (!Object.keys(p.soundKeys).length) delete p.soundKeys;
+    });
+  }
+
   // Tonart ab Takt `bar` (1 = Grundtonart). Dieselbe Tonart wie davor entfernt den Wechsel.
   setKeyAt(bar, key) {
     bar = Math.round(bar);
@@ -985,6 +1005,7 @@ export class Store extends Emitter {
       delete p.keyChanges;
       delete p.chords;
       delete p.sampleTempo;
+      delete p.soundKeys;
       if (p.master) delete p.master.automation;
       p.loop = { on: false, startBeat: 0, endBeat: 16 };
     });

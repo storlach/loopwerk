@@ -13,6 +13,7 @@ import { narrow } from './place.js';
 import { place } from './place.js';
 import { bindKeySelect } from './key-select.js';
 import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongTempo } from './sound-tempo.js';
+import { mountSoundKey } from './sound-key.js';
 import { mountMasteringControls } from './mastering.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
@@ -130,7 +131,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   stempo.append(el('span', null, 'Sound-Tempo'), stOut, stIn, stBtns);
   const btns = el('div', 'insp-btns');
   btns.id = 'insp-clip-btns';
-  clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, btns);
+  // Tonart eigener Sounds (erkannt oder gewählt) und „Folgt Song“
+  const skey = mountSoundKey({ store, prefix: 'insp', className: 'insp-row insp-skey' });
+  clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, skey.row, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: Number(gain.input.value) }, 'insp-gain-' + c.id); });
@@ -379,6 +382,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       for (const b of [stBtns.querySelector('#insp-stempo-half'), stBtns.querySelector('#insp-stempo-double'), stSong]) b.disabled = !sb;
       stSong.setAttribute('aria-pressed', String(!!sb && Math.abs(sb - store.project.bpm) < 0.05));
       stReset.hidden = !fixed;
+      skey.update(s);
     }
 
     if (mode !== 'song') {
@@ -492,6 +496,8 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
   ui.on(render);
   store.on(render);
+  // Erkannte Tonart kommt im Hintergrund: nur die Zeile nachziehen
+  library.on(() => { if (ui.selectedClipId) skey.update(selSample()); });
   render();
   return { render };
 }

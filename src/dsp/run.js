@@ -2,7 +2,8 @@
 import { separate } from './separate.js';
 import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
-import { timeStretch } from './stretch.js';
+import { timeStretch, pitchShift } from './stretch.js';
+import { detectKey } from './key.js';
 import { searchMaster } from './master-search.js';
 
 let worker = null;
@@ -39,6 +40,8 @@ const LOCAL = {
   pitch: ({ chs, sampleRate }) => detectPitch(toMono(chs), sampleRate),
   stretch: ({ chs, sampleRate, ratio, loop }) => timeStretch(chs, ratio, sampleRate, Math.round(chs[0].length * ratio), { loop }),
   master: ({ chs, sampleRate, style, target }) => searchMaster(chs, sampleRate, style, target),
+  key: ({ chs, sampleRate }) => detectKey(chs, sampleRate),
+  pitchshift: ({ chs, sampleRate, semis, loop }) => pitchShift(chs, semis, sampleRate, { loop }),
 };
 
 export function runJob(job, args, { onProgress } = {}) {
