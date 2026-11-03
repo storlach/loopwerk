@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, soundKeysOf } from './model.js';
+import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, soundKeysOf, clipSampleIds } from './model.js';
 import { accompanimentPlan, applyPlan } from './starter.js';
 import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
@@ -43,6 +43,8 @@ import { applySurfaces } from './ui/surfaces.js';
 import { clearInstruments } from './sampler.js';
 import { mountPwa } from './pwa.js';
 import { mountClipFloat } from './ui/clip-float.js';
+import { mountRecSetup } from './ui/rec-setup.js';
+import { stepTake } from './ui/take-row.js';
 
 // iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
 // Zoomen mit zwei Fingern bleibt erlaubt (Safari ignoriert die Grenze dafür). Für Gerüste, die wir nicht selbst schreiben.
@@ -72,7 +74,7 @@ async function loadSaved(library, patterns) {
     library.syncVariants(p); // Varianten (Klang-Rezept) vor dem Platzhalter-Check
     // Fehlt ein Sound (z. B. vom Browser gelöscht), bleibt der Clip als stummer Platzhalter „Sound fehlt“ –
     // sonst wäre das Arrangement beim nächsten Speichern für immer weg. Eine Projektdatei bringt den Klang zurück.
-    for (const t of p.tracks) for (const c of t.clips) if (!library.get(c.sampleId)) missingSound(library, c);
+    for (const t of p.tracks) for (const c of t.clips) for (const id of clipSampleIds(c)) if (!library.get(id)) missingSound(library, { ...c, sampleId: id });
     return p;
   } catch {
     return null;
@@ -398,16 +400,21 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }
     if (recorder.state === 'recording') { recorder.stop(); return; }
     if (recorder.state !== 'idle') return;
     const bpb = store.project.beatsPerBar;
-    const startBeat = target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
+    // Loop an: die Aufnahme beginnt am Loop-Anfang (Takes, recorder.js), egal wo die Marke steht
+    const loop = store.project.loop;
+    const inLoop = mode === 'song' && loop.on && loop.endBeat > loop.startBeat;
+    const startBeat = inLoop ? loop.startBeat : target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
     if (engine.playing && mode === 'song') engine.stop();
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
-    let trackId = target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, startBeat + (mode === 'sound' ? bpb : 16))?.id;
+    let trackId = target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, inLoop ? loop.endBeat : startBeat + (mode === 'sound' ? bpb : 16))?.id;
     if (!trackId && mode === 'song') trackId = store.addTrack();
     if (!trackId && mode === 'song') { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
     pending = { trackId, startBeat };
     try {
       await recorder.start({ trackId, startBeat, mode });
-      ui.flash(mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.' : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.');
+      ui.flash(mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.'
+        : inLoop ? 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ●, R oder Leertaste beendet.'
+          : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.');
     } catch (err) {
       ui.flash(err.code === 'denied'
         ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
@@ -420,7 +427,14 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }
     btn.setAttribute('aria-pressed', String(rec));
     label.textContent = recorder.state === 'recording' ? 'Stopp' : recorder.state === 'saving' ? 'Speichert …' : 'Aufnahme';
     if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
-    else if (what === 'recorded') { arranger.select(payload.clipId); ui.flash(`„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`); }
+    else if (what === 'recorded') {
+      arranger.select(payload.clipId);
+      ui.flash(payload.takes > 1 ? `${payload.takes} Takes – der letzte spielt. Wechseln: Alt+↑/↓.` : `„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`);
+      // Tipp „Einmessen“ (tips.js), solange auf diesem Gerät nicht gemessen wurde
+      document.getElementById('app').classList.toggle('rec-unmeasured', !recorder.latencyInfo?.measured);
+    }
+    if (what === 'latency') document.getElementById('app').classList.remove('rec-unmeasured');
+    if (what === 'locked') ui.flash('Während der Aufnahme nicht änderbar.');
     if (what === 'error') ui.flash(payload.message);
   });
   return { start };
@@ -494,7 +508,7 @@ async function boot() {
   const saved = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } })();
   // Sounds machen den Großteil der Ladezeit aus: 5–80 %
   // Nur die Katalog-Sounds, die das Projekt benutzt, vor dem Start laden – der Rest kommt im Hintergrund
-  const need = new Set((isValidProject(saved) ? saved : startProject()).tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
+  const need = new Set((isValidProject(saved) ? saved : startProject()).tracks.flatMap((t) => t.clips.flatMap(clipSampleIds)));
   const library = await buildLibrary({
     need,
     semis: keySemis(keyOf(isValidProject(saved) ? saved : null)),
@@ -531,7 +545,7 @@ async function boot() {
         else ui.flash('Variante gelöscht (Strg+Z holt sie zurück).');
         return;
       }
-      if (store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === id))) {
+      if (store.project.tracks.some((t) => t.clips.some((c) => clipSampleIds(c).includes(id)))) { // auch inaktive Takes
         ui.flash('Dieser Sound wird im Projekt benutzt. Entferne erst die Clips.');
         return;
       }
@@ -630,6 +644,7 @@ async function boot() {
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
   });
+  const recSetup = mountRecSetup({ ui, engine, recorder });
   layout.onEditorTab(() => {
     if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
     else tools.edit();
@@ -657,7 +672,7 @@ async function boot() {
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
-  if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools });
+  if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools, library });
   const sheets = mountSheets({ ui, arranger });
   // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
   if (EDITION.density === 'calm') {
@@ -747,6 +762,13 @@ async function boot() {
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();
+    } else if (!mod && !e.altKey && !e.shiftKey && key === 'r' && ui.dock !== 'pattern') {
+      // Aufnahme starten bzw. beenden (wie ●)
+      e.preventDefault();
+      if (!e.repeat) recording.start(null);
+    } else if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && ui.selectedClipId && !e.target.closest?.('.fxl')) {
+      // Take-Clip: vorigen bzw. nächsten Take wählen
+      if (stepTake(store, library, ui.selectedClipId, e.key === 'ArrowUp' ? -1 : 1)) e.preventDefault();
     } else if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       if (arranger.nudge(e.key === 'ArrowLeft' ? -1 : 1, e)) e.preventDefault();
     } else if (e.key === 'Home') {
@@ -764,7 +786,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

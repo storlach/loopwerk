@@ -19,7 +19,7 @@ export const EDITIONS = {
     surfaces: { starter: false, accomp: false, ai: false, link: false, catalog: false, demo: false, tips: false, editor: false },
     // Stufe 3 (data-tier="3") ist in „calm“ nicht sichtbar; hier steht, wo man es stattdessen findet (Schlüssel: ID oder .Klasse)
     twins: {
-      'home-btn': 'Pos1, Lineal antippen', 'metro-btn': 'Song-Fach (Klick)',
+      'home-btn': 'Pos1, Lineal antippen', 'metro-btn': 'Song-Fach (Klick)', 'rec-more': 'Song-Fach (Aufnahme)',
       '.lcd-more': 'Song-Fach, Werkbank Song', '.meter-wrap': 'Song-Fach, Werkbank Song',
       'zoom-in': 'Strg+Rad, zwei Finger', 'zoom-out': 'Strg+Rad, zwei Finger', 'zoomy-in': 'Alt+Rad, zwei Finger', 'zoomy-out': 'Alt+Rad, zwei Finger',
       'select-btn': 'lange drücken', 'select-all-btn': 'Strg+A', '.ltab': '+ Neu in der Kiste',

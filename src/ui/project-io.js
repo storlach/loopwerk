@@ -1,7 +1,7 @@
 // Projekt als Datei speichern und öffnen.
 // Im Artifact läuft das Speichern über die Capability `downloads`, lokal über einen normalen Download-Link.
 
-import { isValidProject } from '../model.js';
+import { isValidProject, normalizeClip } from '../model.js';
 import { saveFile, safeName } from './save-file.js';
 
 const fileName = (name) => `${safeName(name)}.json`;
@@ -65,6 +65,14 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns, keep
     if (patterns) await patterns.sync(project);
     library.syncVariants?.(project); // Varianten (Klang-Rezept) zählen als vorhandene Sounds
     let missing = 0, kept = 0;
+    // Takes ohne Sound fallen aus der Liste, der Clip bleibt (spielt dann einen vorhandenen Take)
+    for (const t of project.tracks) for (const c of t.clips) {
+      if (!Array.isArray(c.takes)) continue;
+      const have = c.takes.filter((id) => library.get(id));
+      if (!library.get(c.sampleId) && have.length) { c.sampleId = have[have.length - 1]; c.take = have.length - 1; }
+      c.takes = have;
+      normalizeClip(c);
+    }
     for (const t of project.tracks) {
       const before = t.clips.length;
       if (keepUnknown) { for (const c of t.clips) if (!library.get(c.sampleId)) { library.placeholder(c); kept++; } continue; }

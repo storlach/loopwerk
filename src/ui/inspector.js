@@ -17,6 +17,7 @@ import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongT
 import { mountSoundKey } from './sound-key.js';
 import { mountMasteringControls } from './mastering.js';
 import { mountClipSpeed } from './clip-speed.js';
+import { mountTakeRow } from './take-row.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
 import { AUTO_PARAMS, autoKeys, busUsed, isAutomated, laneOf, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
@@ -138,7 +139,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const skey = mountSoundKey({ store, prefix: 'insp', className: 'insp-row insp-skey' });
   // Mit clipPanel (Sound-Werkbank) entfällt der alte Clip-Abschnitt ganz; Teilen/Kopie/Löschen sind Werkzeug am Clip
   const panel = clipPanel ? clipPanel(clipSec, { store, ui, library, engine, tools }) : null;
-  if (!panel) clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, skey.row, btns);
+  // Takes einer Loop-Aufnahme (2.13): 1 2 3 ×, nur bei Take-Clips
+  const takeRow = mountTakeRow({ store, library, ui });
+  if (!panel) clipSec.append(clipHead, takeRow.row, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, skey.row, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: sliderToGain(Number(gain.input.value)) }, 'insp-gain-' + c.id); });
@@ -479,6 +482,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const from = Math.floor(clip.startBeat / bpb) + 1;
       const to = Math.ceil((clip.startBeat + clip.lengthBeats) / bpb - 1e-9);
       const bars = clip.lengthBeats / bpb;
+      takeRow.update(clip);
       clipMeta.textContent = `Takt ${from}${to > from ? `–${to}` : ''} · ${Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : fmtBeats(clip.lengthBeats)}`;
       const setR = (r, v, max, text) => { r.input.max = String(max); if (document.activeElement !== r.input) r.input.value = String(v); r.out.textContent = text; };
       setR(gain, gainToSlider(clipGain(clip)), GAIN_SLIDER_MAX, formatDb(clipGain(clip)));

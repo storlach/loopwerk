@@ -3,6 +3,7 @@
 
 import { decodeAudio } from './samples.js';
 import { encodeWav } from './wav.js';
+import { clipSampleIds } from './model.js';
 
 const STORE = 'sounds';
 const MAX_SECONDS = 480;
@@ -228,7 +229,7 @@ export class OwnSounds {
   // Für die Projektdatei: alle im Projekt benutzten eigenen Sounds als Base64-WAV, dazu die Eltern-Sounds benutzter
   // Varianten (Klang-Rezept, ADR 010) – die haben kein eigenes Audio
   async embed(project) {
-    const ids = project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId));
+    const ids = project.tracks.flatMap((t) => t.clips.flatMap(clipSampleIds)); // inaktive Takes gehören dazu
     const parents = ids.map((id) => project.recipes?.[id]?.parent).filter(Boolean);
     const used = new Set([...ids, ...parents].filter(isOwnId));
     const out = [];
