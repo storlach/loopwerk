@@ -56,7 +56,8 @@ function mountMark(engine, root, name, idle) {
     const move = loud && !reduced.matches;
     const k = reduced.matches ? 1 : 1 - Math.exp(-dt / (move ? FALL : BACK));
     bars.forEach((bar, i) => {
-      const target = move ? Math.max(FLOOR, Math.min(1, bands[i])) : idle[i];
+      // Pegel je Band, gewichtet mit der Grundform: der Klatscher bleibt erkennbar, schlägt aber mit dem Ton aus
+      const target = move ? Math.max(FLOOR, Math.min(1, bands[i] * (0.5 + idle[i]) * 1.6)) : idle[i];
       level[i] = target > level[i] && move ? target : level[i] + (target - level[i]) * k;
       if (Math.abs(level[i] - idle[i]) < 0.002 && !move) level[i] = idle[i];
       const s = Math.round(level[i] * 1000) / 1000;

@@ -1091,11 +1091,82 @@ async function seedPadWall() {
       await ctx.close();
     }
 
+    // ---------- 14: Zeichen im Deck (Klatscher, src/ui/brand-meter.js mit Option mark) ----------
+    {
+      // Klatscher: Rauschstoß direkt in den gemeinsamen Ausgang, alle 0,5 s
+      const clap = (n) => pk.evaluate(async (n) => {
+        const e = window.loopwerk.engine;
+        await e._ensure();
+        const sr = e.ctx.sampleRate, buf = e.ctx.createBuffer(1, sr * 0.4, sr), d = buf.getChannelData(0);
+        let seed = 3;
+        for (let i = 0; i < d.length; i++) d[i] = (((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1) * 0.6 * Math.exp(-i / (sr * 0.05));
+        const t0 = e.ctx.currentTime + 0.1;
+        for (let k = 0; k < n; k++) { const s = e.ctx.createBufferSource(); s.buffer = buf; s.connect(e.out); s.start(t0 + k * 0.5); }
+      }, n);
+      // pro Bild: Ausschlag (scaleY) je Balken, Mittellinie, Layout-Höhe
+      const track = (ms) => pk.evaluate((ms) => new Promise((res) => {
+        const root = document.getElementById('brand-bars');
+        const bars = [...root.children];
+        const out = [];
+        const t0 = performance.now();
+        const f = () => {
+          const r = root.getBoundingClientRect();
+          out.push({ live: root.classList.contains('live'), s: bars.map((b) => +(/scaleY\(([\d.]+)\)/.exec(b.style.transform)?.[1] ?? NaN)),
+            mid: bars.map((b) => { const q = b.getBoundingClientRect(); return Math.round(Math.abs(q.top + q.height / 2 - (r.top + r.height / 2)) * 10) / 10; }),
+            hpx: bars.map((b) => b.offsetHeight) });
+          if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(out);
+        };
+        requestAnimationFrame(f);
+      }), ms);
+      const K = await browser.newContext(DESK);
+      const pk = await K.newPage();
+      await pk.goto(`${base}/werkstatt/`);
+      await pk.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+      const mark = await pk.evaluate(() => {
+        const root = document.getElementById('brand-bars');
+        const c = getComputedStyle(root.children[0]);
+        return { mark: root.dataset.mark, n: root.children.length, splash: !!document.querySelector('#boot .splash-bars.splash-klatscher'),
+          color: c.backgroundColor, own: getComputedStyle(document.documentElement).getPropertyValue('--cat-own').trim() };
+      });
+      const idle = (await track(100)).at(-1);
+      const IDLE = [8, 20, 46, 34, 24, 14, 6].map((h) => h / 46);
+      check('Krachwerk: Deck zeigt den Klatscher (7 Balken, Pink aus --cat-own), Ladescreen seine Grundform', mark.mark === 'klatscher' && mark.n === 7 && mark.splash && /255, 98, 165/.test(mark.color) && /FF62A5/i.test(mark.own), JSON.stringify(mark));
+      check('Klatscher ohne Ton: Grundform wie im Icon, symmetrisch um die Mittellinie', idle.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005) && idle.mid.every((m) => m <= 0.5) && !idle.live, JSON.stringify(idle));
+      await clap(3);
+      const run = await track(1500);
+      const live = run.filter((x) => x.live);
+      const spread = Math.max(...run.map((x) => Math.max(...x.s.map((v, i) => Math.abs(v - IDLE[i])))));
+      let jump = 0;
+      for (let i = 1; i < run.length; i++) for (let b = 0; b < 7; b++) jump = Math.max(jump, Math.abs(run[i].s[b] - run[i - 1].s[b]) * 22);
+      check('Pegel bewegt den Klatscher: Ausschlag mit dem Ton, nur transform (keine Layout-Höhe), Mitte bleibt', live.length > 5 && spread > 0.25 && run.every((x) => x.hpx.every((h) => h === run[0].hpx[0]) && x.mid.every((m) => m <= 0.5)), `${live.length} Bilder laut, Ausschlag ${spread.toFixed(2)}`);
+      check('Klatscher ohne Sprung: höchstens 8 px Änderung je Bild', jump <= 8, `${jump.toFixed(1)} px`);
+      await pk.waitForTimeout(1600);
+      const back = (await track(60)).at(-1);
+      check('Nach dem Ton zurück in die Grundform', back.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005) && !back.live, JSON.stringify(back.s));
+      if (SHOTS) { await clap(1); await pk.waitForTimeout(160); await pk.screenshot({ path: path.join(DIR, 'kw-zeichen-desktop.png') }); }
+      await pk.emulateMedia({ reducedMotion: 'reduce' });
+      await pk.waitForTimeout(1200);
+      await clap(2);
+      const calm = await track(900);
+      check('Weniger Bewegung: Klatscher leuchtet auf, bleibt aber in der Grundform', calm.some((x) => x.live) && calm.every((x) => x.s.every((v, i) => Math.abs(v - IDLE[i]) < 0.005)), `${calm.filter((x) => x.live).length} Bilder laut`);
+      await K.close();
+      if (SHOTS) {
+        const H = await browser.newContext(PHONE);
+        const ph = await H.newPage();
+        await ph.goto(`${base}/werkstatt/`);
+        await ph.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+        await ph.evaluate(() => window.loopwerk.ui.setDock('song'));
+        await ph.waitForTimeout(700);
+        await ph.screenshot({ path: path.join(DIR, 'kw-zeichen-handy.png') });
+        await H.close();
+      }
+    }
+
     // ---------- 10: Pages-Build ----------
     require('child_process').execFileSync('node', [path.join(__dirname, '..', 'tools', 'build-pages.cjs')], { stdio: 'pipe' });
     const site = path.join(__dirname, '..', '_site', 'werkstatt');
     const html = fs.readFileSync(path.join(site, 'index.html'), 'utf8');
-    check('Pages-Build: /werkstatt/ ist die volle App mit Edition „make“', html.includes("LOOPWERK_EDITION = 'make'") && html.includes('src/main.js') && html.includes('Krach<b>werk</b>') && !html.includes('src/werkstatt/main.js') && fs.existsSync(path.join(site, 'sw.js')) && fs.existsSync(path.join(site, 'manifest.webmanifest')));
+    check('Pages-Build: /werkstatt/ ist die volle App mit Edition „make“', html.includes("LOOPWERK_EDITION = 'make'") && html.includes('src/main.js') && html.includes('Krach<b>werk</b>') && html.includes('splash-bars splash-klatscher') && !html.includes('src/werkstatt/main.js') && fs.existsSync(path.join(site, 'sw.js')) && fs.existsSync(path.join(site, 'manifest.webmanifest')));
 
     // ---------- 11: Loopwerk unverändert ----------
     const L = await browser.newContext(DESK);
@@ -1105,11 +1176,11 @@ async function seedPadWall() {
     const lwInfo = await lw.evaluate(() => {
       localStorage.setItem('loopwerk.snap', localStorage.getItem('loopwerk.snap') || '1');
       window.loopwerk.store.setProjectName('Prüfung'); // Projekt wird erst nach einer Änderung gesichert
-      return { off: document.querySelectorAll('[data-off]').length, ed: document.getElementById('app').dataset.edition, dens: document.getElementById('app').dataset.density, title: document.title, sw: !!navigator.serviceWorker.controller };
+      return { bars: document.querySelectorAll('#brand-bars > i').length, mark: document.getElementById('brand-bars').dataset.mark || '', splash: document.querySelectorAll('#boot .splash-klatscher').length, off: document.querySelectorAll('[data-off]').length, ed: document.getElementById('app').dataset.edition, dens: document.getElementById('app').dataset.density, title: document.title, sw: !!navigator.serviceWorker.controller };
     });
     await lw.waitForTimeout(600);
     const keys = await lw.evaluate(() => Object.keys(localStorage));
-    check('Loopwerk: keine abgeschalteten Flächen, Edition „full“, kein Service Worker', lwInfo.off === 0 && lwInfo.ed === 'full' && lwInfo.dens !== 'calm' && /Loopwerk$/.test(lwInfo.title) && !lwInfo.sw, JSON.stringify(lwInfo));
+    check('Loopwerk: keine abgeschalteten Flächen, Edition „full“, kein Service Worker, Bildmarke mit 5 Balken', lwInfo.off === 0 && lwInfo.bars === 5 && !lwInfo.mark && !lwInfo.splash && lwInfo.ed === 'full' && lwInfo.dens !== 'calm' && /Loopwerk$/.test(lwInfo.title) && !lwInfo.sw, JSON.stringify(lwInfo));
     check('Loopwerk: Schlüssel wie bisher (loopwerk.project.v1, loopwerk.snap)', keys.includes('loopwerk.project.v1') && keys.includes('loopwerk.snap') && !keys.some((k) => k.startsWith('loopwerk.make.')), keys.join(','));
     await L.close();
     const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'count-baseline.json'), 'utf8'));
