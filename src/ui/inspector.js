@@ -18,7 +18,7 @@ import { mountSoundKey } from './sound-key.js';
 import { mountMasteringControls } from './mastering.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
-import { AUTO_PARAMS, autoKeys, isAutomated, laneOf } from '../automation.js';
+import { AUTO_PARAMS, autoKeys, busUsed, isAutomated, laneOf } from '../automation.js';
 import { lsKey } from '../edition.js';
 
 // Laufzeit-Stufen für − und +
@@ -550,7 +550,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
       // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)
-      const used = (id) => store.project.tracks.some((t) => sendOf(t, id) > 0);
+      const used = (id) => busUsed(store.project, id);
       for (const [id, box] of busBoxes) box.hidden = !used(id);
       busGrp.hidden = ![...busBoxes.values()].some((box) => !box.hidden);
       for (const c of busCtl) {

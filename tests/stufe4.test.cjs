@@ -118,7 +118,8 @@ const { check, finish } = createChecker();
     await page.click('#mixer-btn');
     const visible = await page.locator('#mixer').isVisible();
     const stripCount = await page.locator('#mixer .strip').count();
-    check('Mixer öffnet mit Kanalzug je Spur plus Master', visible && stripCount === 9, `${stripCount} Kanalzüge`);
+    // 8 Spuren + Master + zwei Rückkanäle (Hall-Bus, Echo-Bus, 2.14)
+    check('Mixer öffnet mit Kanalzug je Spur plus Master und zwei Rückkanälen', visible && stripCount === 11 && await page.locator('#mixer .strip-bus').count() === 2, `${stripCount} Kanalzüge`);
 
     // Desktop: Klick auf „keine Effekte“ zeigt die Spur im Inspektor; dort liegen die Effekte
     await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').click();

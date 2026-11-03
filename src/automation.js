@@ -20,7 +20,7 @@
 //   Store: addAutoPoint, moveAutoPoint, setAutoCurve, deleteAutoPoint, clearAutomation, applyAutoTemplate (src/model.js)
 // Engine: planLane, autoWindow, handover.
 
-import { EFFECTS, cutoffHz, formatHz } from './effects.js';
+import { EFFECTS, cutoffHz, formatHz, sendOf } from './effects.js';
 
 export const STEP_BEATS = 1 / 128;
 const EPS = 1e-6;
@@ -61,6 +61,10 @@ fxParam('drive.mix', 'Verzerrer-Anteil', 'drive', 'mix', pct);
 
 export const fxOfKey = (key) => AUTO_PARAMS[key]?.fx ?? null;
 export const autoActive = (owner, key) => { const id = fxOfKey(key); return !id || !!owner?.fx?.[id]?.on; };
+
+// Sendet eine Spur zu diesem Bus? Bus „in Gebrauch“: mindestens eine Spur sendet (Rückkanäle und Song-Block zeigen sich dann)
+export const sendActive = (track, bus) => sendOf(track, bus) > 0;
+export const busUsed = (project, bus) => !!project?.tracks?.some((t) => sendActive(t, bus));
 
 export const autoRest = (owner, key) => {
   const s = AUTO_PARAMS[key];

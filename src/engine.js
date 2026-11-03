@@ -674,6 +674,16 @@ export class Engine extends Emitter {
       };
       this.mix.onStrip = tapStrip;
       for (const [id, strip] of this.mix.tracks) tapStrip(id, strip);
+      // Pegel der Rückkanäle (Ausgang des Busses, hinter seinem Fader); ein Bus entsteht erst mit dem ersten Send
+      this.busMeters = new Map();
+      const tapBus = (id, bus) => {
+        const a = this.ctx.createAnalyser();
+        a.fftSize = 512;
+        bus.output.connect(a);
+        this.busMeters.set(id, { analyser: a, data: new Float32Array(a.fftSize) });
+      };
+      this.mix.onBus = tapBus;
+      for (const [id, bus] of this.mix.buses) tapBus(id, bus);
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
       this.mix.output.connect(this.analyser);
@@ -1250,6 +1260,18 @@ export class Engine extends Emitter {
     const m = this.meters?.get(trackId);
     if (!m) return 0;
     return this._lagged(trackId, () => {
+      m.analyser.getFloatTimeDomainData(m.data);
+      let p = 0;
+      for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
+      return p;
+    });
+  }
+
+  // Pegel eines Rückkanals (Hall-/Echo-Bus); 0, solange der Bus noch nicht gebaut ist
+  busPeak(busId) {
+    const m = this.busMeters?.get(busId);
+    if (!m) return 0;
+    return this._lagged(`bus:${busId}`, () => {
       m.analyser.getFloatTimeDomainData(m.data);
       let p = 0;
       for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }

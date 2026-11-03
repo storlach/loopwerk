@@ -1,7 +1,7 @@
 // Mixer: ein Kanalzug pro Spur plus Master. Fader, Panorama, Mute/Solo, Effekt-Zusammenfassung, Pegel.
 // Effekte des gewählten Kanals: am Desktop im Inspektor, am Handy als eigene Seite im Mixer (mit Zurück).
 
-import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, sendOf } from '../effects.js';
+import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busDef, busOf, busParamDef, sendOf } from '../effects.js';
 import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
@@ -9,9 +9,13 @@ import { formatDb } from './arranger.js';
 import { narrow } from './place.js';
 import { makeKnob, relativeDrag } from './knob.js';
 import { autoLock, lockedValue } from './auto-lane.js';
-import { AUTO_PARAMS } from '../automation.js';
+import { AUTO_PARAMS, busUsed } from '../automation.js';
 
 const MASTER = '__master';
+// Rückkanäle (Send-Busse) haben im Mixer eigene Kennungen neben den Spuren
+const BUS_PREFIX = '__bus:';
+const busKey = (id) => (typeof id === 'string' && id.startsWith(BUS_PREFIX) ? id.slice(BUS_PREFIX.length) : null);
+const SEND_SHORT = { hall: 'H', echo: 'E' };
 const SHORT = { drive: 'Zerr', filter: 'Filter', eq: 'EQ', comp: 'Komp', pump: 'Pump', echo: 'Echo', hall: 'Hall' };
 
 export const formatParam = (p, v) => {
@@ -31,19 +35,22 @@ export function mountMixer({ root, store, engine, ui }) {
   let detailControls = new Map();
   let detailReset = null; // „Reihenfolge zurücksetzen“ auf der Effekt-Seite
   let detailSends = []; // Karte „Busse“: [[Bus, { input, out }]]
+  let detailBus = []; // Bus-Seite: [{ key, input, out, def }], mute
+  let detailMute = null;
 
   const fxOf = (id) => (id === MASTER ? withFx(masterOf(store.project).fx) : withFx(store.track(id)?.fx));
   const setFx = (id, fxId, patch, key) => (id === MASTER ? store.setMasterFx(fxId, patch, key) : store.setTrackFx(id, fxId, patch, key));
-  const nameOf = (id) => (id === MASTER ? 'Master' : store.track(id)?.name ?? '');
+  const nameOf = (id) => (id === MASTER ? 'Master' : busKey(id) ? busDef(busKey(id))?.label ?? '' : store.track(id)?.name ?? '');
   // Besitzer der Kurven eines Kanals (Master: Summen-Kurven, Ziel 'master')
   const ownerOf = (id) => (id === MASTER ? masterOf(store.project) : store.track(id));
 
   function makeStrip(id) {
-    const strip = el('div', `strip${id === MASTER ? ' strip-master' : ''}`);
+    const bk = busKey(id);
+    const strip = el('div', `strip${id === MASTER ? ' strip-master' : bk ? ' strip-bus' : ''}`);
     strip.dataset.stripId = id;
     const name = el('button', 'strip-name');
     name.type = 'button';
-    name.title = 'Effekte dieses Kanals bearbeiten';
+    name.title = bk ? 'Einstellungen dieses Rückkanals zeigen' : 'Effekte dieses Kanals bearbeiten';
     name.addEventListener('click', () => select(id));
     // Zusammenfassung statt sieben Schalter; Klick zeigt die Effekte der Spur (Inspektor bzw. Effekt-Seite)
     const sum = el('button', 'strip-sum');
@@ -60,7 +67,7 @@ export function mountMixer({ root, store, engine, ui }) {
       fxMap.set(e.id, b);
     }
     let pan = null;
-    if (id !== MASTER) {
+    if (id !== MASTER && !bk) {
       pan = document.createElement('input');
       pan.type = 'range';
       pan.min = '-1';
@@ -75,6 +82,24 @@ export function mountMixer({ root, store, engine, ui }) {
     const knob = pan ? makeKnob(pan, { wrapClass: 'strip-pan-wrap', center: true }) : null;
     // Panorama mit Kurve: Regler folgt ihr, Klick öffnet die Kurvenzeile (am Handy macht der Mixer dafür Platz)
     const lock = pan ? autoLock({ ui, key: 'pan', wrap: knob.wrap, input: pan, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } }) : null;
+    // Anteil zu Hall- und Echo-Bus („→H“, „→E“): kleine Drehregler über dem Panorama (am Handy ausgeblendet, dort steht
+    // die Karte „Busse“ auf der Effekt-Seite)
+    const sends = [];
+    const sendsEl = el('div', 'strip-sends');
+    if (!bk && id !== MASTER) {
+      for (const b of BUSES) {
+        const input = document.createElement('input');
+        Object.assign(input, { type: 'range', min: '0', max: '1', step: '0.01', id: `send-${id}-${b.id}`, className: 'strip-send-in' });
+        input.title = `Anteil zum ${b.label} (Doppelklick = aus)`;
+        input.addEventListener('input', () => store.setSend(id, b.id, Number(input.value), `send-${id}-${b.id}`));
+        input.addEventListener('dblclick', () => { input.value = '0'; store.setSend(id, b.id, 0); });
+        const sk = makeKnob(input, { wrapClass: 'strip-send-wrap' });
+        const cell = el('div', 'strip-send');
+        cell.append(sk.wrap, el('span', 'strip-send-label', `→${SEND_SHORT[b.id]}`));
+        sendsEl.append(cell);
+        sends.push({ b, input, knob: sk, cell });
+      }
+    }
     const faderRow = el('div', 'strip-fader-row');
     const fader = document.createElement('input');
     fader.type = 'range';
@@ -82,10 +107,12 @@ export function mountMixer({ root, store, engine, ui }) {
     fader.max = '1';
     fader.step = '0.01';
     fader.className = 'strip-fader';
-    fader.id = `fader-${id}`;
+    fader.id = bk ? `fader-bus-${bk}` : `fader-${id}`;
     fader.addEventListener('input', () => {
       const v = Number(fader.value);
-      if (id === MASTER) store.setMaster({ volume: v }, 'master-vol'); else store.setTrack(id, { volume: v }, 'vol-' + id);
+      if (id === MASTER) store.setMaster({ volume: v }, 'master-vol');
+      else if (bk) store.setBus(bk, { volume: v }, `bus-vol-${bk}`);
+      else store.setTrack(id, { volume: v }, 'vol-' + id);
     });
     const meter = el('canvas', 'strip-meter');
     faderRow.append(fader, meter);
@@ -96,7 +123,14 @@ export function mountMixer({ root, store, engine, ui }) {
     const ms = el('div', 'strip-ms');
     let mute = null;
     let solo = null;
-    if (id !== MASTER) {
+    if (bk) {
+      // Rückkanal: nur Stumm (Solo gilt für Spuren, der Hall der Solo-Spur bleibt hörbar)
+      mute = el('button', 'tbtn tbtn-mute', 'M');
+      mute.type = 'button';
+      mute.title = 'Stumm';
+      mute.addEventListener('click', () => store.setBus(bk, { mute: !busOf(store.project, bk).mute }));
+      ms.append(mute);
+    } else if (id !== MASTER) {
       mute = el('button', 'tbtn tbtn-mute', 'M');
       mute.type = 'button';
       mute.title = 'Stumm';
@@ -107,21 +141,25 @@ export function mountMixer({ root, store, engine, ui }) {
       solo.addEventListener('click', () => store.setTrack(id, { solo: !store.track(id).solo }));
       ms.append(mute, solo);
     }
-    strip.append(name, sum, fxBtns);
+    if (bk) strip.append(name);
+    else strip.append(name, sum, fxBtns);
+    if (sends.length) strip.append(sendsEl);
     if (pan) strip.append(knob.wrap);
     strip.append(faderRow, value, ms);
-    const s = { strip, name, sum, fxBtns, fxMap, pan, knob, lock, locked: false, fader, meter, value, mute, solo, peak: 0 };
+    const s = { strip, name, sum, fxBtns, fxMap, pan, knob, lock, locked: false, sends, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);
     return s;
   }
 
   function sync() {
     if (root.hidden) return;
-    const ids = [...store.project.tracks.map((t) => t.id), MASTER];
+    const ids = [...store.project.tracks.map((t) => t.id), ...BUSES.map((b) => BUS_PREFIX + b.id), MASTER];
     for (const [id, s] of strips) if (!ids.includes(id)) { s.strip.remove(); strips.delete(id); }
     ids.forEach((id, i) => {
       const s = strips.get(id) || makeStrip(id);
       if (stripsEl.children[i] !== s.strip) stripsEl.insertBefore(s.strip, stripsEl.children[i] || null);
+      const bk = busKey(id);
+      if (bk) { syncBusStrip(s, id, bk); return; }
       const fx = fxOf(id);
       s.name.textContent = nameOf(id);
       s.strip.classList.toggle('selected', selected === id);
@@ -143,10 +181,28 @@ export function mountMixer({ root, store, engine, ui }) {
         s.pan.setAttribute('aria-label', `Panorama ${t.name}`);
         s.mute.setAttribute('aria-pressed', String(t.mute));
         s.solo.setAttribute('aria-pressed', String(t.solo));
+        for (const sd of s.sends) {
+          const v = sendOf(t, sd.b.id);
+          if (document.activeElement !== sd.input) sd.input.value = String(v);
+          sd.input.setAttribute('aria-label', `Anteil zum ${sd.b.label} ${t.name}`);
+          sd.cell.classList.toggle('on', v > 0);
+          sd.knob.update();
+        }
       }
     });
     if (selected && !ids.includes(selected)) selected = null;
     renderDetail();
+  }
+
+  // Rückkanal: Fader, Stumm, gedimmt, solange keine Spur zu ihm sendet
+  function syncBusStrip(s, id, bk) {
+    const cfg = busOf(store.project, bk);
+    s.name.textContent = nameOf(id);
+    s.strip.classList.toggle('idle', !busUsed(store.project, bk));
+    if (document.activeElement !== s.fader) s.fader.value = String(cfg.volume);
+    s.fader.setAttribute('aria-label', `Lautstärke ${nameOf(id)}`);
+    s.value.textContent = formatDb(cfg.volume);
+    s.mute.setAttribute('aria-pressed', String(!!cfg.mute));
   }
 
   // Gesperrtes Panorama: Wert der Kurve an der Marke
@@ -161,10 +217,19 @@ export function mountMixer({ root, store, engine, ui }) {
   // am Handy das Detail im Mixer
   function select(id) {
     selected = id;
+    const bk = busKey(id);
     if (!narrow.matches) {
-      if (id === MASTER) { ui.select(null); ui.selectTrack?.(null); } else ui.selectTrack?.(id);
+      if (bk) { ui.select(null); ui.selectTrack?.(null); showBusSettings(bk); }
+      else if (id === MASTER) { ui.select(null); ui.selectTrack?.(null); } else ui.selectTrack?.(id);
     }
     sync();
+  }
+
+  // Desktop: Klick auf einen Rückkanal zeigt den Song-Block „Busse“ im Inspektor (er erscheint, sobald eine Spur sendet)
+  function showBusSettings(bk) {
+    const box = document.getElementById(`insp-bus-${bk}`);
+    if (box && box.offsetParent) box.scrollIntoView({ block: 'nearest' });
+    else ui.flash?.(`Noch sendet keine Spur zum ${busDef(bk).label}.`);
   }
 
   // ---------- Effekt-Details ----------
@@ -173,6 +238,7 @@ export function mountMixer({ root, store, engine, ui }) {
     root.dataset.view = narrow.matches && selected ? 'detail' : 'strips';
     if (!narrow.matches || !selected) { detailFor = null; detailEl.innerHTML = ''; return; }
     if (detailFor !== selected) buildDetail(selected);
+    if (busKey(selected)) { renderBusDetail(busKey(selected)); return; }
     const fx = fxOf(selected);
     detailEl.querySelector('.detail-title').textContent = `Effekte: ${nameOf(selected)}`;
     applyOrder(detailEl.querySelector('.fx-cards'), fxOrderOf(ownerOf(selected)), (fxId) => detailControls.get(fxId)?.card);
@@ -195,9 +261,80 @@ export function mountMixer({ root, store, engine, ui }) {
     }
   }
 
-  function buildDetail(id) {
+  // Effekt-Seite eines Rückkanals (Handy): Lautstärke, Stumm und die Einstellungen des Busses – der einzige Ort dafür am Handy
+  function buildBusDetail(id, bk) {
     detailFor = id;
     detailControls = new Map();
+    detailSends = [];
+    detailReset = null;
+    detailBus = [];
+    detailEl.innerHTML = '';
+    const back = el('button', 'detail-back', '‹ Alle Kanäle');
+    back.type = 'button';
+    back.addEventListener('click', () => select(null));
+    const head = el('div', 'detail-head');
+    head.append(back, el('h3', 'detail-title'));
+    detailEl.append(head);
+    const b = busDef(bk);
+    const grid = el('div', 'fx-cards fx-bus-page');
+    const card = el('section', 'fx-card fx-bus-card');
+    const ch = el('div', 'fx-card-head');
+    detailMute = el('button', 'fx-switch', 'Stumm');
+    detailMute.type = 'button';
+    detailMute.id = `fx-bus-${bk}-mute`;
+    detailMute.addEventListener('click', () => store.setBus(bk, { mute: !busOf(store.project, bk).mute }));
+    ch.append(el('span', 'fx-card-title', b.label), detailMute);
+    card.append(ch);
+    const add = (key, label, input, out, def) => {
+      const row = el('label', 'fx-param');
+      input.id = `fx-bus-${bk}-${key}`;
+      row.append(el('span', 'fx-param-label', label), input);
+      if (out) row.append(out);
+      card.append(row);
+      detailBus.push({ key, input, out, def });
+    };
+    const vol = document.createElement('input');
+    Object.assign(vol, { type: 'range', min: '0', max: '1', step: '0.01' });
+    vol.addEventListener('input', () => store.setBus(bk, { volume: Number(vol.value) }, `bus-${bk}-volume`));
+    vol.addEventListener('dblclick', () => { vol.value = String(b.defaults.volume); store.setBus(bk, { volume: b.defaults.volume }); });
+    add('volume', 'Lautstärke', vol, el('span', 'fx-param-value'), null);
+    for (const key of b.params) {
+      const p = busParamDef(bk, key);
+      let input;
+      let out = null;
+      if (p.options) {
+        input = document.createElement('select');
+        for (const o of p.options) { const op = el('option', null, o.label); op.value = o.id; input.append(op); }
+        input.addEventListener('change', () => store.setBus(bk, { [key]: input.value }));
+      } else {
+        input = document.createElement('input');
+        Object.assign(input, { type: 'range', min: String(p.min), max: String(p.max), step: String(p.step) });
+        input.addEventListener('input', () => store.setBus(bk, { [key]: clamp(Number(input.value), p.min, p.max) }, `bus-${bk}-${key}`));
+        input.addEventListener('dblclick', () => { input.value = String(b.defaults[key]); store.setBus(bk, { [key]: b.defaults[key] }); });
+        out = el('span', 'fx-param-value');
+      }
+      add(key, p.label, input, out, p);
+    }
+    grid.append(card);
+    detailEl.append(grid);
+  }
+
+  function renderBusDetail(bk) {
+    const cfg = busOf(store.project, bk);
+    detailEl.querySelector('.detail-title').textContent = busDef(bk).label;
+    detailMute.setAttribute('aria-pressed', String(!!cfg.mute));
+    for (const c of detailBus) {
+      const v = cfg[c.key];
+      if (document.activeElement !== c.input) c.input.value = String(v);
+      if (c.out) c.out.textContent = c.key === 'volume' ? formatDb(v) : formatParam(c.def, v);
+    }
+  }
+
+  function buildDetail(id) {
+    if (busKey(id)) { buildBusDetail(id, busKey(id)); return; }
+    detailFor = id;
+    detailControls = new Map();
+    detailBus = [];
     detailEl.innerHTML = '';
     const back = el('button', 'detail-back', '‹ Alle Kanäle');
     back.type = 'button';
@@ -307,7 +444,7 @@ export function mountMixer({ root, store, engine, ui }) {
   function drawMeters() {
     if (!root.hidden) {
       for (const [id, s] of strips) {
-        const level = id === MASTER ? engine.peakLevel() : engine.trackPeak(id);
+        const level = id === MASTER ? engine.peakLevel() : busKey(id) ? engine.busPeak(busKey(id)) : engine.trackPeak(id);
         const db = level > 0 ? 20 * Math.log10(level) : -60;
         const frac = clamp((db + 48) / 48, 0, 1);
         s.peak = Math.max(frac, s.peak - 0.015);
