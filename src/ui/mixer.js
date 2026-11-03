@@ -9,7 +9,7 @@ import { formatDb } from './arranger.js';
 import { narrow } from './place.js';
 import { makeKnob, relativeDrag } from './knob.js';
 import { autoLock, lockedValue } from './auto-lane.js';
-import { AUTO_PARAMS, busUsed } from '../automation.js';
+import { AUTO_PARAMS, busUsed, sendKey } from '../automation.js';
 
 const MASTER = '__master';
 // Rückkanäle (Send-Busse) haben im Mixer eigene Kennungen neben den Spuren
@@ -97,7 +97,9 @@ export function mountMixer({ root, store, engine, ui }) {
         const cell = el('div', 'strip-send');
         cell.append(sk.wrap, el('span', 'strip-send-label', `→${SEND_SHORT[b.id]}`));
         sendsEl.append(cell);
-        sends.push({ b, input, knob: sk, cell });
+        // Send mit Kurve: Regler folgt ihr, ein Klick öffnet die Kurvenzeile
+        const lock = autoLock({ ui, key: sendKey(b.id), wrap: sk.wrap, input, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } });
+        sends.push({ b, input, knob: sk, cell, lock, locked: false });
       }
     }
     const faderRow = el('div', 'strip-fader-row');
@@ -182,9 +184,11 @@ export function mountMixer({ root, store, engine, ui }) {
         s.mute.setAttribute('aria-pressed', String(t.mute));
         s.solo.setAttribute('aria-pressed', String(t.solo));
         for (const sd of s.sends) {
+          sd.input.setAttribute('aria-label', `Anteil zum ${sd.b.label} ${t.name}`);
+          sd.locked = sd.lock.update(t);
+          if (sd.locked) { showSend(sd, t); continue; }
           const v = sendOf(t, sd.b.id);
           if (document.activeElement !== sd.input) sd.input.value = String(v);
-          sd.input.setAttribute('aria-label', `Anteil zum ${sd.b.label} ${t.name}`);
           sd.cell.classList.toggle('on', v > 0);
           sd.knob.update();
         }
@@ -192,6 +196,15 @@ export function mountMixer({ root, store, engine, ui }) {
     });
     if (selected && !ids.includes(selected)) selected = null;
     renderDetail();
+  }
+
+  // Gesperrter Send-Regler: Wert der Kurve an der Marke
+  function showSend(sd, t) {
+    const v = Math.round(lockedValue(t, sendKey(sd.b.id), engine) * 100) / 100;
+    sd.cell.classList.toggle('on', v > 0);
+    if (Number(sd.input.value) === v) return;
+    sd.input.value = String(v);
+    sd.knob.update();
   }
 
   // Rückkanal: Fader, Stumm, gedimmt, solange keine Spur zu ihm sendet
@@ -244,6 +257,7 @@ export function mountMixer({ root, store, engine, ui }) {
     applyOrder(detailEl.querySelector('.fx-cards'), fxOrderOf(ownerOf(selected)), (fxId) => detailControls.get(fxId)?.card);
     detailReset?.update(ownerOf(selected));
     for (const [b, c] of detailSends) {
+      if (c.lock.update(store.track(selected))) { showDetailSend(b, c); continue; }
       const v = sendOf(store.track(selected), b.id);
       if (document.activeElement !== c.input) c.input.value = String(v);
       c.out.textContent = v > 0 ? `${Math.round(v * 100)} %` : 'aus';
@@ -421,12 +435,25 @@ export function mountMixer({ root, store, engine, ui }) {
         input.addEventListener('dblclick', () => { input.value = '0'; store.setSend(id, b.id, 0); });
         const out = el('span', 'fx-param-value');
         row.append(el('span', 'fx-param-label', `→ ${b.label}`), input, out);
-        card.append(row);
-        detailSends.push([b, { input, out }]);
+        const box = el('div', 'fx-param-box');
+        box.append(row);
+        const lock = autoLock({ ui, key: sendKey(b.id), wrap: box, input, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } });
+        card.append(box);
+        detailSends.push([b, { input, out, lock }]);
       }
       grid.append(card);
     }
     detailEl.append(grid, detailReset.node);
+  }
+
+  // Gesperrter Send-Regler der Effekt-Seite: Wert der Kurve an der Marke
+  function showDetailSend(b, c) {
+    const t = store.track(detailFor);
+    if (!t) return;
+    const v = Math.round(lockedValue(t, sendKey(b.id), engine) * 100) / 100;
+    if (Number(c.input.value) !== v) c.input.value = String(v);
+    const text = v > 0 ? `${Math.round(v * 100)} %` : 'aus';
+    if (c.out.textContent !== text) c.out.textContent = text;
   }
 
   // Gesperrter Effekt-Regler: Wert der Kurve an der Marke
@@ -462,8 +489,10 @@ export function mountMixer({ root, store, engine, ui }) {
         g.fillStyle = css.getPropertyValue(s.peak > 0.92 ? '--meter-hot' : s.peak > 0.75 ? '--meter-warm' : '--meter-ok').trim();
         g.fillRect(0, top, w, h - top);
         if (s.locked) { const t = store.track(id); if (t) showPan(s, t); }
+        for (const sd of s.sends || []) if (sd.locked) { const t = store.track(id); if (t) showSend(sd, t); }
       }
       if (detailFor) {
+        for (const [b, c] of detailSends) if (!c.lock.btn.hidden) showDetailSend(b, c);
         for (const e of EFFECTS) {
           for (const [k, ctl] of detailControls.get(e.id)?.params ?? []) if (ctl.lock && !ctl.lock.btn.hidden) showFx(ctl, e.params[k]);
         }

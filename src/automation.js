@@ -14,13 +14,15 @@
 //   autoBreaks(points, b0, b1)           Stützstellen [[beat, value], …] inkl. b0 und b1
 //   formatAutoValue(key, v)              Text fürs Fähnchen („−6,0 dB“)
 //   fxOfKey(key)                         Effekt-ID einer Effekt-Kurve ('filter.cutoff' → 'filter'), sonst null
+//   Send-Kurven ('send.hall', 'send.echo'): Anteil der Spur zum Bus (absolut, nur Spuren; target 'send:<bus>', send: <bus>);
+//   sendActive/busUsed: sendet eine Spur (Regler > 0 oder Kurve) bzw. ist ein Bus in Gebrauch
 //   autoActive(owner, key)               wirkt die Kurve? (Effekt-Kurven nur bei eingeschaltetem Effekt; sonst gestrichelt)
 //   AUTO_TEMPLATES, TEMPLATE_BARS        Vorlagen (fadeIn, fadeOut, filterOpen, filterClose) und Längen-Chips in Takten
 //   templateRange(project, target, name, { bars, playheadBeat }) → { fromBeat, toBeat } | null
 //   Store: addAutoPoint, moveAutoPoint, setAutoCurve, deleteAutoPoint, clearAutomation, applyAutoTemplate (src/model.js)
 // Engine: planLane, autoWindow, handover.
 
-import { EFFECTS, cutoffHz, formatHz, sendOf } from './effects.js';
+import { EFFECTS, BUSES, cutoffHz, formatHz, sendOf } from './effects.js';
 
 export const STEP_BEATS = 1 / 128;
 const EPS = 1e-6;
@@ -59,11 +61,23 @@ fxParam('hall.mix', 'Hall-Anteil', 'hall', 'mix', pct);
 fxParam('echo.mix', 'Echo-Anteil', 'echo', 'mix', pct);
 fxParam('drive.mix', 'Verzerrer-Anteil', 'drive', 'mix', pct);
 
+// Send-Kurven (2.14): Anteil einer Spur zum Hall- bzw. Echo-Bus, absolut wie ein Effekt-Wert; die Summe hat keine Sends.
+// Ohne Kurve gilt track.sends[bus]; eine Kurve hält den Send-Knoten der Engine am Leben.
+for (const b of BUSES) {
+  const key = `send.${b.id}`;
+  AUTO_PARAMS[key] = {
+    key, label: `→ ${b.label}`, min: 0, max: 1, def: 0, owner: 'absolute', target: `send:${b.id}`, track: true, master: false, send: b.id,
+    format: pct, map: (v) => v, rest: (owner) => sendOf(owner, b.id),
+  };
+}
+export const sendKey = (bus) => `send.${bus}`;
+
 export const fxOfKey = (key) => AUTO_PARAMS[key]?.fx ?? null;
 export const autoActive = (owner, key) => { const id = fxOfKey(key); return !id || !!owner?.fx?.[id]?.on; };
 
-// Sendet eine Spur zu diesem Bus? Bus „in Gebrauch“: mindestens eine Spur sendet (Rückkanäle und Song-Block zeigen sich dann)
-export const sendActive = (track, bus) => sendOf(track, bus) > 0;
+// Sendet eine Spur zu diesem Bus (Regler über 0 oder eine Kurve)? Bus „in Gebrauch“: mindestens eine Spur sendet
+// (Rückkanäle und Song-Block zeigen sich dann)
+export const sendActive = (track, bus) => sendOf(track, bus) > 0 || laneOf(track, sendKey(bus)).length > 0;
 export const busUsed = (project, bus) => !!project?.tracks?.some((t) => sendActive(t, bus));
 
 export const autoRest = (owner, key) => {
