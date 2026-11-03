@@ -1,4 +1,4 @@
-// Raumlicht als Shader (WebGL 2): fließender Nebel aus verzerrtem Rauschen, darin leuchtende Höhenlinien.
+// Raumlicht als Shader (WebGL 2): fließender Nebel aus verzerrtem Rauschen, darin Sternenstaub.
 // Die Musik steuert nur Werte (Bänder, Farben, Marke, Nachglühen); gezeichnet wird alles auf der Grafikkarte.
 // Ohne WebGL 2 gibt createRoomShader null zurück, glow.js malt dann wie bisher mit Canvas 2D.
 
@@ -32,7 +32,7 @@ void main() {
   o = vec4(hi, (f - hi) * 255.0, 0.0, 1.0);
 }`;
 
-// Zweiter Durchgang, volle Auflösung: Licht, Farben und scharfe Höhenlinien aus dem vergrößerten Nebel
+// Zweiter Durchgang, volle Auflösung: Licht und Farben der Musik, darin Sternenstaub nach dem vergrößerten Nebel
 const FS = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
@@ -58,105 +58,88 @@ uniform float uGlowMax;
 uniform float uPx;
 uniform sampler2D uField;
 out vec4 o;
-
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 vec3 toWhite(vec3 c, float k) { return mix(c, uWhite, k); }
-
-void main() {
-  float L = max(uRes.x, uRes.y);
-  vec2 uv = vec2(gl_FragCoord.x / uRes.x, 1.0 - gl_FragCoord.y / uRes.y); // y nach unten wie im Raum
-  vec2 P = uv * uRes / L;
-  float bass = uBand.x, mids = uBand.y, highs = uBand.z;
-
-  // Nebel aus der kleinen Textur (weich vergrößert), zwei Kanäle für 16 Bit Genauigkeit
-  vec4 tx = texture(uField, gl_FragCoord.xy / uRes);
-  float f = tx.r + tx.g / 255.0;
-  float d = smoothstep(0.22, 0.82, f);
-
-  // Grund: Anthrazit-Rauch, auch in der Stille
-  vec3 col = uGrey * uIdle * (0.35 + 1.1 * d);
-
-  // Bass: warmes Licht von unten, durch den Nebel gefiltert
-  float bot = smoothstep(1.0 - (0.42 + 0.36 * bass), 1.08, uv.y);
-  col += uC0 * uK * bass * bot * (0.25 + 1.3 * d) * 1.15;
-
-  // Mitten: Farbwolken leben im Nebel statt als flache Flecken
-  vec2 dc = (P - 0.5 * uRes / L) / vec2(0.6, 0.45);
-  col += uC1 * uK * (0.4 + 0.6 * uA) * 0.32 * exp(-dot(dc, dc) * 1.6) * (0.3 + 1.0 * d);
+float L() { return max(uRes.x, uRes.y); }
+// Nebel an einer Stelle (uv, y nach unten)
+float field(vec2 uv) { vec4 t = texture(uField, vec2(uv.x, 1.0 - uv.y)); return t.r + t.g / 255.0; }
+float beamAt(vec4 c, vec2 uv) {
+  if (c.y < 0.002) return 0.0;
+  float dx = (uv.x - c.x) * uRes.x / L();
+  float ys = smoothstep(c.z - 0.03, c.z + 0.05, uv.y) * smoothstep(c.w + 0.03, c.w - 0.05, uv.y);
+  return c.y * ys * exp(-dx * dx / 0.0035);
+}
+// Farbiges Licht der Musik ohne Struktur
+vec3 light(vec2 uv, out float beam) {
+  vec2 P = uv * uRes / L();
+  float bass = uBand.x, highs = uBand.z;
+  vec3 col = vec3(0.0);
+  col += uC0 * uK * bass * smoothstep(1.0 - (0.42 + 0.36 * bass), 1.08, uv.y) * 1.2;
+  vec2 dc = (P - 0.5 * uRes / L()) / vec2(0.6, 0.45);
+  col += uC1 * uK * (0.4 + 0.6 * uA) * 0.32 * exp(-dot(dc, dc) * 1.6);
   for (int i = 0; i < 6; i++) {
     vec4 c = uCloud[i];
     if (c.w < 0.002) continue;
     vec2 dp = (P - c.xy) / vec2(c.z, c.z * 0.8);
-    col += uCloudC[i] * c.w * exp(-dot(dp, dp) * 2.4) * (0.15 + 1.25 * d);
+    col += uCloudC[i] * c.w * exp(-dot(dp, dp) * 2.4);
   }
-
-  // Höhen: zarter Saum oben und funkelnde Punkte
-  float topg = smoothstep(0.42, 0.0, uv.y);
-  col += uC2 * uK * highs * topg * (0.25 + 0.6 * d) * 0.55;
-  if (highs > 0.01) {
-    vec2 g = P * 46.0;
-    vec2 id = floor(g);
-    float h = hash(id);
-    if (h > 0.93) {
-      vec2 st = fract(g) - 0.5 - (vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5) * 0.6;
-      float tw = pow(0.5 + 0.5 * sin(uT * (1.5 + 3.0 * hash(id + 1.3)) + h * 40.0), 3.0);
-      col += toWhite(uC2, 0.5) * uK * highs * smoothstep(0.55, 0.0, uv.y) * tw * exp(-dot(st, st) * 40.0) * 1.6;
-    }
-  }
-
-  // Säule an der Abspielmarke (und die ausblendende nach einem Sprung)
-  float beam = 0.0;
-  if (uCol.y > 0.002) {
-    float dx = (uv.x - uCol.x) * uRes.x / L;
-    float ys = smoothstep(uCol.z - 0.03, uCol.z + 0.05, uv.y) * smoothstep(uCol.w + 0.03, uCol.w - 0.05, uv.y);
-    beam = uCol.y * ys * exp(-dx * dx / 0.0035);
-    float trail = uCol.y * ys * exp(-pow(max(0.0, -dx - 0.01), 2.0) / 0.012) * step(dx, 0.0);
-    col += uColC * (0.75 * beam + 0.16 * trail) * (0.5 + 0.8 * d);
-  }
-  if (uGhost.y > 0.002) {
-    float dx = (uv.x - uGhost.x) * uRes.x / L;
-    float ys = smoothstep(uGhost.z - 0.03, uGhost.z + 0.05, uv.y) * smoothstep(uGhost.w + 0.03, uGhost.w - 0.05, uv.y);
-    float gb = uGhost.y * ys * exp(-dx * dx / 0.0035);
-    beam += gb;
-    col += uColC * 0.75 * gb * (0.5 + 0.8 * d);
-  }
-
-  // Höhenlinien des Nebels: dünne Lichtlinien, die Marke und die Taktwelle lassen sie aufleuchten
-  float lv = f * 7.0 - uT * 0.07;
-  float w = max(fwidth(lv), 1e-4);
-  float cd = abs(fract(lv - 0.5) - 0.5) / w;
-  float line = 1.0 - clamp(cd / uPx - 0.45, 0.0, 1.0);
-  float hc = cd / uPx;
-  float halo = exp(-hc * hc * 0.08);
-  float wave = 0.0;
+  col += uC2 * uK * highs * smoothstep(0.42, 0.0, uv.y) * 0.6;
+  beam = beamAt(uCol, uv) + beamAt(uGhost, uv);
+  col += uColC * 0.6 * beam;
+  vec2 gc = (P - 0.5 * uRes / L()) / vec2(0.5, 0.36);
+  float area = uGlow.x * smoothstep(0.45, 1.05, uv.y) + uGlow.y * exp(-dot(gc, gc)) + uGlow.z * smoothstep(0.4, 0.0, uv.y);
+  col += toWhite(normalize(col + 1e-4), 0.55) * uGlowMax * 0.6 * area;
+  return col;
+}
+float waveAt(vec2 uv) {
+  vec2 P = uv * uRes / L();
+  float w = 0.0;
   for (int i = 0; i < 4; i++) {
     vec4 wv = uWave[i];
     if (wv.w < 0.002) continue;
     float e = (length((P - wv.xy) / vec2(1.0, 0.85)) - wv.z) / 0.035;
-    wave += wv.w * exp(-e * e);
+    w += wv.w * exp(-e * e);
   }
-  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-  float lit = uIdle * 0.25 + uK * (0.04 + 0.12 * uA) + 1.2 * lum + 1.2 * beam + 0.8 * wave;
-  vec3 lc = toWhite(normalize(col + 1e-4) * 0.9, 0.35 + 0.4 * min(1.0, beam * 2.0));
-  col += lc * lit * (0.4 + 0.6 * d) * (0.38 * line + 0.1 * halo);
-
-  // Nachglühen nach lauten Stellen: heller Schimmer im Nebel
-  vec3 gsum = uGlow;
-  if (gsum.x + gsum.y + gsum.z > 0.01) {
-    vec2 gc = (P - 0.5 * uRes / L) / vec2(0.5, 0.36);
-    float area = gsum.x * smoothstep(0.45, 1.05, uv.y) + gsum.y * exp(-dot(gc, gc)) + gsum.z * smoothstep(0.4, 0.0, uv.y);
-    col += toWhite(normalize(col + 1e-4), 0.55) * uGlowMax * 0.6 * area * (0.3 + 1.0 * d);
-  }
-
-  // Kontrast: Ränder zurück ins Dunkel, wenn Licht da ist
+  return w;
+}
+void finish(vec3 col, vec2 uv) {
   float e = length((uv - 0.5) / 0.62);
   float vig = e < 0.6 ? 0.0 : (e < 0.8 ? 0.35 * (e - 0.6) / 0.2 : mix(0.35, 0.85, clamp((e - 0.8) / 0.2, 0.0, 1.0)));
   col *= 1.0 - uVig * vig;
-
   col = col / (1.0 + 0.35 * col);
-  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0; // ruhiges Rauschen gegen Farbstufen
+  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
   col = clamp(col, 0.0, 1.0);
   o = vec4(col, max(col.r, max(col.g, col.b)));
+}
+vec2 UV() { return vec2(gl_FragCoord.x / uRes.x, 1.0 - gl_FragCoord.y / uRes.y); }
+
+// Sternenstaub: Lichtpunkte sammeln sich, wo Nebel und Licht sind (viele kleine, wenige große); sie blenden weich
+// ein und aus, während der Nebel zieht, und funkeln mit der Musik schneller
+void main() {
+  vec2 uv = UV();
+  float beam;
+  vec3 ink = light(uv, beam);
+  vec3 col = ink * 0.3 + uGrey * uIdle * 0.1;
+  for (int k = 0; k < 2; k++) {
+    float cell = (k == 0 ? 6.0 : 15.0) * uPx;
+    vec2 g = gl_FragCoord.xy / cell;
+    vec2 id = floor(g);
+    float h = hash(id + float(k) * 17.0);
+    vec2 cuv = vec2((id.x + 0.5) * cell / uRes.x, 1.0 - (id.y + 0.5) * cell / uRes.y);
+    float bc;
+    vec3 ic = light(cuv, bc);
+    float lc = dot(ic, vec3(0.2126, 0.7152, 0.0722));
+    float dens = (smoothstep(0.35, 0.8, field(cuv)) * (0.15 + 2.2 * lc) + 0.8 * bc + 0.04 * uIdle + 0.6 * waveAt(cuv)) * (k == 0 ? 0.55 : 0.3);
+    float on = smoothstep(h - 0.06, h + 0.02, dens);
+    if (on < 0.002) continue;
+    vec2 jp = vec2(hash(id + 3.1), hash(id + 7.3)) - 0.5;
+    vec2 dp = (fract(g) - 0.5 - jp * 0.6) * cell;
+    float r = (k == 0 ? 0.9 : 1.7) * uPx * (0.7 + 0.6 * hash(id + 1.7));
+    float st = exp(-dot(dp, dp) / (r * r)) + 0.12 * exp(-dot(dp, dp) / (9.0 * r * r));
+    float tw = 0.6 + 0.4 * sin(uT * (0.8 + 2.2 * hash(id + 4.4)) + h * 50.0);
+    col += toWhite(normalize(ic + 1e-3), 0.5) * st * on * tw * (0.25 + 1.6 * lc + bc) * (k == 0 ? 0.8 : 1.2);
+  }
+  finish(col, uv);
 }`;
 
 export function createRoomShader(canvas) {
