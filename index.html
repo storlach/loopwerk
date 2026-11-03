@@ -1769,21 +1769,12 @@
   .dock, .more-panel, .tip, .pop, .hint, .track-menu, .clipbar, .shelf, .insp {
     -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
   }
-  /* Vorläufig: Umschalter der Licht-Varianten zum Vergleichen (kommt wieder weg, sobald eine gewählt ist) */
-  .licht-probe {
-    position: fixed; z-index: 60; left: 50%; bottom: 8px; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 10px;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
-    -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
-    font: 600 11px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
-  }
+  /* Vorläufig: Umschalter der Licht-Varianten im Projekt-Menü (kommt wieder weg, sobald eine gewählt ist) */
+  .licht-probe { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font: 600 11px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .licht-probe span { margin-right: auto; }
   .licht-probe[hidden] { display: none; }
-  .licht-probe button {
-    min-width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line);
-    background: transparent; color: var(--ink); font: inherit; cursor: pointer;
-  }
+  .licht-probe button { min-width: 32px; height: 32px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
   .licht-probe button[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); border-color: var(--amber); }
-  @media (max-width: 760px) { .licht-probe { left: auto; right: 8px; transform: none; bottom: calc(150px + env(safe-area-inset-bottom)); } }
   /* Lichtleiste ganz oben: dasselbe Licht wie der Hintergrund, hell und strahlend – wirkt auch am Handy */
   /* LED-Band in einer Nut: dunkler Kanal mit Kanten, darin einzelne Leuchtpunkte, knapper Schein nur nach unten */
   .lightbar-well {
