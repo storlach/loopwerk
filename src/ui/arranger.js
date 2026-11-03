@@ -11,6 +11,7 @@ import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
 import { mountChordRow } from './chord-row.js';
 import { mountAutoLanes, templateControls, applyTemplate } from './auto-lane.js';
+import { recipeKey } from '../recipe.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
@@ -44,8 +45,10 @@ const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
 const MAX_CANVAS = TOUCH ? 8000 : 16000;
 const canvasDpr = () => Math.min(TOUCH ? 2 : 4, window.devicePixelRatio || 1);
 
-export function mountArranger({ root, store, engine, library, ui, harmonyToggle = true }) {
+export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true }) {
   root.innerHTML = '';
+  // Roh → geformt (Krachwerk): ein Sound ohne Klang-Rezept zeichnet seine Welle als Korn (Punkte), mit Rezept als Linie
+  const shaped = (id) => !grainWave || !!recipeKey(store.project.recipes?.[id]);
   const grid = el('div', 'arr-grid');
   const rulerRow = el('div', 'ruler-row');
   const corner = el('div', 'corner');
@@ -179,7 +182,8 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
     chev.setAttribute('aria-expanded', 'false');
     btns.append(mute, solo, volKnob.wrap, chev);
     // Stufe 3: in „calm“ am Handy nicht sichtbar, die Spur-Werkbank hat M, S und Lautstärke (src/edition.js twins)
-    for (const n of [mute, solo, volKnob.wrap]) { n.dataset.tier = '3'; n.dataset.tierOnly = 'narrow'; }
+    // Scheibe 2a: auch am Desktop (M, S, Lautstärke und Kurve stehen in der Spur-Werkbank, Zwillinge in EDITION.twins)
+    for (const n of [mute, solo, volKnob.wrap, chev]) n.dataset.tier = '3';
     head.append(top, btns);
     const lane = el('div', 'lane');
     lane.dataset.trackId = track.id;
@@ -628,6 +632,7 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
       const peaks = sample.peaks;
       const perBeat = peaks.length / sample.lengthBeats;
       const PITCH = 2;
+      const line = shaped(sample.id) || sample.parentId; // Varianten haben immer ein Rezept
       for (let x = 0; x < w; x += PITCH) {
         const b0 = off + x / ppb();
         let m = 0;
@@ -636,7 +641,8 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
         for (let k = k0; k < k1; k++) m = Math.max(m, peaks[k % peaks.length]);
         const env = clipEnvelope(clip, (x + PITCH / 2) / ppb());
         const a = Math.max(0.5, Math.min(mid - 1, (m / 0.62) * mid * env));
-        c.fillRect(x, Math.round(mid - a), 1, Math.max(1, Math.round(2 * a)));
+        if (line) c.fillRect(x, Math.round(mid - a), 1, Math.max(1, Math.round(2 * a)));
+        else { c.fillRect(x, Math.round(mid - a), 1, 1); c.fillRect(x, Math.round(mid + a) - 1, 1, 1); }
       }
     }
     // Markierung, wo das Sample von vorn beginnt
@@ -707,7 +713,10 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
     node.style.left = clip.startBeat * ppb() + 'px';
     node.style.width = clip.lengthBeats * ppb() + 'px';
     node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
-    const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
+    // Schnitte eines Zerlegens („Klopfen · 4“): Nummer vorn, bei schmalen Clips nur die Nummer
+    const cutName = sample?.group && /^(.*) · (\d+)$/.exec(sample.name);
+    const label = el('span', 'clip-label', cutName ? (clip.lengthBeats * ppb() < 72 ? cutName[2] : `${cutName[2]} · ${cutName[1]}`) : sample?.name ?? 'Fehlendes Sample');
+    if (cutName) label.title = sample.name;
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
     if (clipGain(clip) > 1.001) label.append(el('span', 'clip-tag', formatDb(clipGain(clip))));
     // Geschwindigkeit wie im Inspektor (100 % = Original); „wie Tonband“ mit Zusatz
@@ -740,7 +749,7 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
   // Nur Spuren neu zeichnen, deren Clips sich geändert haben: schnelle Eingaben (Tasten, Pads) bleiben flüssig.
   // Während eines Ziehens verändert die Vorschau das DOM direkt – dann zeichnet der nächste Durchlauf alles neu.
   let forceAll = true;
-  const laneKey = (track, silent) => `${ppb()}|${headW()}|${rowH()}|${silent ? 'stumm' : 'laut'}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
+  const laneKey = (track, silent) => `${ppb()}|${headW()}|${rowH()}|${silent ? 'stumm' : 'laut'}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${library.get(c.sampleId)?.colorCat ?? ''}:${shaped(c.sampleId) ? 1 : 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
   function renderLane(r, track) {
     // Stumme Spuren zeichnen die Wellenform grau (--wave): beim Wechsel muss die Fläche neu gezeichnet werden
     const key = laneKey(track, r.silent);
@@ -811,7 +820,7 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
     syncHarmony();
     // Stufe 3 (calm, Handy), solange es keine Tonart- bzw. Akkordwechsel gibt; Zwilling: Song-Fach
     for (const [r, has] of [[keyRow.row, keyChangesOf(p).length], [chordRow.row, chordsOf(p).length]]) {
-      if (has || root.closest('#app')?.classList.contains('harmony-on')) { delete r.dataset.tier; delete r.dataset.tierOnly; } else { r.dataset.tier = '3'; r.dataset.tierOnly = 'narrow'; }
+      if (has || root.closest('#app')?.classList.contains('harmony-on')) { delete r.dataset.tier; delete r.dataset.tierOnly; } else { r.dataset.tier = '3'; }
     }
     syncRows();
     for (const t of p.tracks) renderLane(rows.get(t.id), t);

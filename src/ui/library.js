@@ -3,6 +3,7 @@
 import { CATEGORIES, GENRES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
 import { lsKey } from '../edition.js';
+import { suggestMaterial } from '../recipe.js';
 
 const FAV_KEY = lsKey('loopwerk.favs');
 const OPEN_KEY = lsKey('loopwerk.shelfOpen');
@@ -35,8 +36,8 @@ function saveFavs(favs) {
   try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch { /* Speicher nicht verfügbar */ }
 }
 
-const lengthLabel = (s) => {
-  if (s.kind !== 'loop') return 'One-Shot';
+const lengthLabel = (s, calm = false) => {
+  if (s.kind !== 'loop') return calm ? 'Einzelklang' : 'One-Shot';
   const bars = s.lengthBeats / 4;
   return bars >= 1 && Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : `${s.lengthBeats} Schläge`;
 };
@@ -50,18 +51,14 @@ const describe = (s) => {
   return parts.join(' · ');
 };
 
-// Herkunftsgruppen der Kiste (Edition mit shelfGroups): Aufnahme, Datei, Schleife, Strom (Pattern)
-const FROM = {
-  mic: (s) => s.category === 'own' && !isStrom(s) && (s.made?.from ?? 'mic') === 'mic',
-  file: (s) => s.category === 'own' && !isStrom(s) && s.made?.from === 'file',
-  loop: (s) => s.category === 'own' && !isStrom(s) && s.made?.from === 'loop',
-  pat: (s) => isStrom(s),
-};
-const isStrom = (s) => /^pat-/.test(s.id);
-// Farbe des Punkts: Ton → Stimme, sonst Dinge; Schleife und Strom haben eigene
-const originCat = (s, g) => (g.id === 'loop' || g.id === 'pat' ? g.cat : s.made?.cls === 'ton' ? 'synth' : g.cat);
+// Herkunftsgruppen der Kiste (Edition mit shelfGroups): nach Material – Körper, Dinge, Stimme, Strom, Schleife.
+// Reihenfolge der Wahl: Rezept (vom Nutzer gesetzt) → Eltern-Sound → letzte Wahl am Datensatz → Vorschlag aus der Herkunft
+const materialIn = (s, store, library) => store.project.recipes?.[s.id]?.material
+  ?? (s.parentId ? library.get(s.parentId)?.material : null) ?? s.material ?? suggestMaterial(s);
 
-export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null }) {
+// onBench(id): Werkbank für einen Sound (Doppelklick, lange drücken); Schnitte eines Zerlegens (s.group) stehen als eine
+// eingerückte Zeile „Name · 8 Schnitte“ unter dem Eltern-Sound und klappen auf
+export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null, onBench = null }) {
   const search = document.getElementById('shelf-search');
   const chipsEl = document.getElementById('shelf-chips');
   const totalEl = document.getElementById('shelf-total');
@@ -71,12 +68,13 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   const accordion = () => narrow.matches && !groupBy;
   let filter = 'all';
   const items = new Map();
+  const cutOpen = new Set(); // aufgeklappte Schnitt-Gruppen
 
   // Gruppen im Regal: nach Kategorie oder nach Genre (ein Sound kann in mehreren Genres stehen)
   let sort = 'cat';
   try { if (localStorage.getItem(SORT_KEY) === 'genre') sort = 'genre'; } catch { /* Standard */ }
   const groupsFor = (mode) => (groupBy
-    ? groupBy.map((g) => ({ ...g, cls: `cat-${g.cat}`, has: FROM[g.id] ?? (() => false) }))
+    ? groupBy.map((g) => ({ ...g, cls: `cat-${g.cat}`, has: (s) => (s.category === 'own' || /^pat-/.test(s.id)) && materialIn(s, store, library) === g.id }))
     : mode === 'genre'
     ? [
       // Sounds, deren Hauptgenre das ist, stehen oben
@@ -169,7 +167,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     const item = el('button', 'loop-item');
     item.type = 'button';
     item.dataset.sampleId = s.id;
-    item.append(el('span', 'loop-play'), el('span', 'loop-name', s.name), el('span', 'loop-len', lengthLabel(s)));
+    item.append(el('span', 'loop-play'), el('span', 'loop-name', s.name), el('span', 'loop-len', lengthLabel(s, !!groupBy)));
     item.title = describe(s);
     bindItem(item, s);
     const star = el('button', 'loop-fav', '★');
@@ -230,6 +228,14 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (filter !== 'all' && filter !== 'fav' && filter !== cat.id) continue;
       const samples = shown.filter(cat.has);
       if (cat.rank) samples.sort((a, b) => cat.rank(a) - cat.rank(b));
+      // Varianten stehen direkt unter ihrem Eltern-Sound (eingerückt), auch wenn sie später entstanden sind
+      if (groupBy) {
+        const roots = samples.filter((x) => !x.parentId);
+        const kids = (id) => samples.filter((x) => x.parentId === id);
+        const ordered = roots.flatMap((x) => [x, ...kids(x.id)]);
+        for (const x of samples) if (!ordered.includes(x)) ordered.push(x);
+        samples.splice(0, samples.length, ...ordered);
+      }
       if (!samples.length) continue;
       // Bei Suche oder Filter sind alle Treffer-Gruppen offen, sonst gilt der gemerkte Zustand
       const forced = !!q || len !== 'all' || filter === 'fav';
@@ -254,12 +260,43 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       const split = sort === 'cat' && samples.length > 24 && new Set(samples.map(section)).size > 1;
       if (split) samples.sort((a, b) => order[section(a)] - order[section(b)]);
       let lastSection = null;
+      const doneGroups = new Set();
       for (const s of samples) {
+        if (groupBy && s.group && s.parentId) {
+          if (doneGroups.has(s.group)) continue;
+          doneGroups.add(s.group);
+          const kids = samples.filter((x) => x.group === s.group);
+          const isOpen = cutOpen.has(s.group) || forced;
+          const gr = el('div', `loop-row cat-${groupBy ? cat.cat : s.category} variant loop-group`);
+          const gb = el('button', 'loop-group-btn');
+          gb.type = 'button';
+          gb.dataset.group = s.group;
+          gb.setAttribute('aria-expanded', String(isOpen));
+          const base = library.get(s.parentId)?.name ?? s.name.replace(/ · \d+$/, '');
+          gb.append(el('span', 'loop-name', `${base} · ${kids.length} ${kids.length === 1 ? 'Schnitt' : 'Schnitte'}`), el('span', 'shelf-chevron'));
+          gb.addEventListener('click', () => { if (cutOpen.has(s.group)) cutOpen.delete(s.group); else cutOpen.add(s.group); render(); });
+          gr.append(gb);
+          list.append(gr);
+          if (!isOpen) continue;
+          for (const k of kids) {
+            const made = makeItem(k, groupBy ? cat.cat : k.category);
+            made.row.classList.add('variant', 'group-kid');
+            if (!items.has(k.id)) items.set(k.id, []);
+            items.get(k.id).push(made.row);
+            const fav = favs.has(k.id);
+            made.star.classList.toggle('on', fav);
+            made.star.setAttribute('aria-pressed', String(fav));
+            made.star.setAttribute('aria-label', `${k.name} als Favorit ${fav ? 'entfernen' : 'markieren'}`);
+            list.append(made.row);
+          }
+          continue;
+        }
         if (split && section(s) !== lastSection) {
           lastSection = section(s);
           list.append(el('div', 'shelf-sub', `${lastSection} · ${samples.filter((x) => section(x) === lastSection).length}`));
         }
-        const { row, star } = makeItem(s, groupBy ? originCat(s, cat) : s.category);
+        const { row, star } = makeItem(s, groupBy ? cat.cat : s.category);
+        if (s.parentId) row.classList.add('variant');
         if (!items.has(s.id)) items.set(s.id, []);
         items.get(s.id).push(row);
         const fav = favs.has(s.id);
@@ -285,6 +322,15 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     if (accordion() && open.has(catId)) document.getElementById(`shelf-cat-${catId}`)?.scrollIntoView({ block: 'nearest' });
   }
 
+  // Werkbank für den Sound: ersetzt das Anwählen des Doppelklicks bzw. der langen Berührung
+  const benchable = (sample) => !!onBench && !/^pat-/.test(sample.id) && !sample.patternId && !sample.missing;
+  const openBench = (sample) => {
+    ui.arm(null);
+    engine.stopPreview();
+    onBench(sample.id);
+  };
+  let lastTap = { id: null, t: 0 };
+
   function bindItem(item, sample) {
     item.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
@@ -292,9 +338,12 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       const sy = e.clientY;
       let ghost = null;
       let target = null;
+      let long = false;
+      const timer = benchable(sample) ? setTimeout(() => { if (!ghost) { long = true; lastTap = { id: null, t: 0 }; openBench(sample); } }, 520) : 0;
       trackPointer(e, (ev) => {
         if (!ghost) {
           if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+          clearTimeout(timer);
           ghost = el('div', `drag-ghost cat-${sample.category}`, sample.name);
           document.body.append(ghost);
           document.body.classList.add('is-dragging');
@@ -302,19 +351,29 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 12}px)`;
         target = arranger.dropTargetAt(ev.clientX, ev.clientY, sample);
       }, () => {
-        if (!ghost) { activate(sample); return; }
+        clearTimeout(timer);
+        if (long) return;
+        if (!ghost) {
+          const now = performance.now();
+          if (benchable(sample) && lastTap.id === sample.id && now - lastTap.t < 350) { lastTap = { id: null, t: 0 }; openBench(sample); return; }
+          lastTap = { id: sample.id, t: now };
+          activate(sample);
+          return;
+        }
         ghost.remove();
         document.body.classList.remove('is-dragging');
         arranger.clearDropPreview();
         if (target) arranger.select(store.addClip(target.trackId, sample.id, target.startBeat, sample.lengthBeats));
       }, () => {
+        clearTimeout(timer);
         ghost?.remove();
         document.body.classList.remove('is-dragging');
         arranger.clearDropPreview();
       });
     });
-    // Tastatur (Enter): click ohne Zeigerbewegung
-    item.addEventListener('click', (e) => { if (e.detail === 0) activate(sample); });
+    if (onBench) item.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Tastatur: Enter hört an und wählt, Umschalt+Enter öffnet die Werkbank (click ohne Zeigerbewegung)
+    item.addEventListener('click', (e) => { if (e.detail !== 0) return; if (e.shiftKey && benchable(sample)) openBench(sample); else activate(sample); });
   }
 
   function sync() {

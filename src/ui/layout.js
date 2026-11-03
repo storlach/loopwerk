@@ -35,8 +35,9 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Dichte „calm“: Daumenleiste am Handy (Kiste · ▶ · ● · Werkbank), Mischen und FX-Pad im Fach „Song“, „+ Neu“ neben der Suche
   place($('play-btn'), { calm: { narrow: $('tabbar') } });
   place($('rec-btn'), { calm: { narrow: $('tabbar') } });
-  place($('mixer-btn'), { calm: { narrow: $('song-links') } });
-  place($('fxpad-btn'), { calm: { narrow: $('song-links') } });
+  place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
+  place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
+  place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') } }); // Tastenkürzel: Song-Werkbank
   place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------

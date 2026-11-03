@@ -63,6 +63,7 @@ export function mountProjectIO({ store, engine, ui, library, own, patterns, keep
     }
     delete project.ownSounds;
     if (patterns) await patterns.sync(project);
+    library.syncVariants?.(project); // Varianten (Klang-Rezept) zählen als vorhandene Sounds
     let missing = 0, kept = 0;
     for (const t of project.tracks) {
       const before = t.clips.length;
