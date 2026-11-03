@@ -109,6 +109,20 @@ const setups = [
       const s2 = await st();
       check(pre + 'Tastatur: Enter öffnet, Esc schließt', s.paneOpen && !s2.paneOpen && s2.expanded === 'false', JSON.stringify([s.paneOpen, s2.paneOpen, s2.expanded]));
       check(pre + 'Seite scrollt nicht waagrecht', s2.over <= 0, String(s2.over));
+      // Tipp beim ersten Sehen: der Regler-Knopf wird erklärt
+      if (S.touch) { await page.evaluate(() => window.loopwerk.ui.setDock('sounds')); await pause(700); }
+      await page.evaluate(() => { window.loopwerk.tips.reset(); window.loopwerk.tips.enable(); });
+      const seen = [];
+      for (let i = 0; i < 4 && !seen.includes('filter'); i++) {
+        await page.waitForSelector('.tip:not([hidden])', { timeout: 3000 }).catch(() => {});
+        const id = await page.evaluate(() => window.loopwerk.tips.current);
+        if (!id) break;
+        seen.push(id);
+        if (id !== 'filter') { await act('.tip-ok'); await pause(); }
+      }
+      const tipAt = await page.evaluate(() => document.querySelector('.tip-target')?.id);
+      check(pre + 'Tipp erklärt den Regler-Knopf', seen.includes('filter') && tipAt === 'shelf-filter-btn', JSON.stringify({ seen, tipAt }));
+      await page.evaluate(() => window.loopwerk.tips.disable());
       check(pre + 'Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
     } catch (err) {
       check(pre + 'Testlauf ohne Ausnahme', false, err.stack);
