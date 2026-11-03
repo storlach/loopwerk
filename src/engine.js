@@ -583,7 +583,14 @@ export class Engine extends Emitter {
         const a = this.ctx.createAnalyser();
         a.fftSize = 512;
         strip.out.connect(a);
-        this.meters.set(id, { analyser: a, data: new Float32Array(a.fftSize) });
+        // Spektrum je Spur fürs Raumlicht (welche Spur welches Band färbt), gleiche Skala wie der Ausgang
+        const sp = this.ctx.createAnalyser();
+        sp.fftSize = 2048;
+        sp.smoothingTimeConstant = 0.55;
+        sp.minDecibels = -78;
+        sp.maxDecibels = -18;
+        strip.out.connect(sp);
+        this.meters.set(id, { analyser: a, data: new Float32Array(a.fftSize), spec: sp, fft: null });
       };
       this.mix.onStrip = tapStrip;
       for (const [id, strip] of this.mix.tracks) tapStrip(id, strip);
@@ -1164,16 +1171,27 @@ export class Engine extends Emitter {
   // Pegel des gesamten Ausgangs in n Frequenzbändern (60 Hz … 12 kHz, logarithmisch), je 0…1; null ohne Ton-Kontext
   outputBands(n) {
     if (!this.outAnalyser || this.ctx.state !== 'running') return null;
-    const a = this.outAnalyser;
-    if (!this._fft) this._fft = new Uint8Array(a.frequencyBinCount);
-    a.getByteFrequencyData(this._fft);
-    const hz = this.ctx.sampleRate / 2 / this._fft.length;
+    if (!this._fft) this._fft = new Uint8Array(this.outAnalyser.frequencyBinCount);
+    return this._bands(this.outAnalyser, this._fft, n);
+  }
+
+  // Dasselbe für eine einzelne Spur (Ausgang ihres Kanalzugs); null ohne Ton-Kontext
+  trackBands(trackId, n) {
+    const m = this.meters?.get(trackId);
+    if (!m?.spec || this.ctx.state !== 'running') return null;
+    if (!m.fft) m.fft = new Uint8Array(m.spec.frequencyBinCount);
+    return this._bands(m.spec, m.fft, n);
+  }
+
+  _bands(a, buf, n) {
+    a.getByteFrequencyData(buf);
+    const hz = this.ctx.sampleRate / 2 / buf.length;
     const out = [];
     for (let k = 0; k < n; k++) {
       const lo = Math.max(1, Math.floor((60 * 200 ** (k / n)) / hz));
       const hi = Math.max(lo + 1, Math.ceil((60 * 200 ** ((k + 1) / n)) / hz));
       let m = 0;
-      for (let i = lo; i < hi && i < this._fft.length; i++) if (this._fft[i] > m) m = this._fft[i];
+      for (let i = lo; i < hi && i < buf.length; i++) if (buf[i] > m) m = buf[i];
       out.push(m / 255);
     }
     return out;

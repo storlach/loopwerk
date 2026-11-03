@@ -1,5 +1,5 @@
-// Raumlicht als Shader (WebGL 2): ein Punktraster aus der Musik – Spektrum-Wand und Spur-Pulse – über dem Licht der Clips.
-// Die Musik steuert nur Werte (Bänder, Spuren, Farben, Marke, Nachglühen); gezeichnet wird alles auf der Grafikkarte.
+// Raumlicht als Shader (WebGL 2): Spektrum-Wand als Punktraster in den Farben der Spuren, über dem Licht der Clips.
+// Die Musik steuert nur Werte (Bänder, Farben je Band, Marke, Nachglühen); gezeichnet wird alles auf der Grafikkarte.
 // Ohne WebGL 2 gibt createRoomShader null zurück, glow.js malt dann wie bisher mit Canvas 2D.
 
 const VS = `#version 300 es
@@ -59,9 +59,8 @@ uniform float uPx;
 uniform sampler2D uField;
 uniform float uSpec[32];
 uniform float uPeak[32];
-uniform vec4 uTrk[8];
-uniform vec3 uTrkC[8];
-uniform int uTrkN;
+uniform vec3 uSpecC[32];
+uniform vec2 uSpecX;
 out vec4 o;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 vec3 toWhite(vec3 c, float k) { return mix(c, uWhite, k); }
@@ -130,38 +129,17 @@ float dotOf(vec4 C, float v) { return 1.0 - clamp((C.z - dotR(C, v)) / uPx + 0.5
 float haloOf(vec4 C, float v) { return exp(-pow(max(0.0, C.z - dotR(C, v)) / (3.0 * uPx), 2.0)); }
 float specAt(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uSpec[i], uSpec[min(i + 1, 31)], fract(b)); }
 float peakAt(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uPeak[i], uPeak[min(i + 1, 31)], fract(b)); }
-vec3 bandCol(float x) { return x < 0.45 ? mix(uC0, uC1, smoothstep(0.1, 0.45, x)) : mix(uC1, uC2, smoothstep(0.55, 0.9, x)); }
+// Farbe eines Bandes: die Spuren, die dort klingen (aus room-react.js), weich zwischen den Bändern
+vec3 bandCol(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uSpecC[i], uSpecC[min(i + 1, 31)], fract(b)); }
 // Spektrum-Wand an einer Rasterzelle: Füllung von unten bis zum Pegel des Bandes, heller Spitzenpunkt; top = Spitzenpunkt
+float specX(float x) { return clamp((x - uSpecX.x) / max(uSpecX.y - uSpecX.x, 0.05), 0.0, 1.0); }
 float spectrum(vec4 C, out float top) {
   float h = 1.0 - C.y;
-  float s = specAt(C.x) * 0.9, pk = peakAt(C.x) * 0.9;
+  float s = specAt(specX(C.x)) * 0.75, pk = peakAt(specX(C.x)) * 0.75;
   float cellH = C.w / uRes.y;
   float on = 1.0 - smoothstep(s - cellH * 0.5, s + cellH * 0.5, h);
   top = (1.0 - clamp(abs(h - pk) / cellH, 0.0, 1.0)) * step(0.02, pk);
   return on * (0.3 + 0.7 * h / max(s, 0.05)) + top;
-}
-// Spur-Pulse an einer Rasterzelle: jeder Schlag einer Spur schickt eine senkrechte Lichtfront von der Marke nach links
-// und rechts, nahe ihrer Zeile am hellsten; was klingt, glüht als Band an der Marke. col = Mischfarbe der Spuren
-float pulses(vec2 cuv, out vec3 col) {
-  float v = 0.0;
-  vec3 acc = vec3(0.0);
-  float dx = abs(cuv.x - uCol.x) * uRes.x / L();
-  for (int i = 0; i < 8; i++) {
-    if (i >= uTrkN) break;
-    vec4 t = uTrk[i];
-    float yc = 0.5 * (t.x + t.y), hh = max(0.015, 0.5 * (t.y - t.x));
-    float dy = cuv.y - yc;
-    float age = t.w > 0.002 ? -0.32 * log(t.w) : 9.0;
-    float front = 0.02 + age * 0.9;
-    float spread = 0.1 + hh + 0.5 * age;
-    float wv = t.w * exp(-pow((dx - front) / (0.025 + 0.06 * age), 2.0)) * exp(-dy * dy / (spread * spread));
-    float core = t.z * exp(-dx * dx / 0.0015) * exp(-dy * dy / 0.04);
-    float e = 0.9 * wv + 0.5 * core;
-    v += e;
-    acc += uTrkC[i] * e;
-  }
-  col = v > 0.001 ? acc / v : uColC;
-  return v;
 }
 // Punkt zeichnen: Größe und Helligkeit nach v, ein knapper Schein
 vec3 drawDot(vec4 C, float v, vec3 c) {
@@ -169,9 +147,9 @@ vec3 drawDot(vec4 C, float v, vec3 c) {
 }
 `;
 
-// Varianten (vorläufig zum Vergleich, Martins Auswahl): 1 Spektrum-Wand, 2 Spur-Pulse, 3 beides
-const BODY = [`
-// 1 · Spektrum-Wand: jede Spalte ein Frequenzband (links tief, rechts hoch), füllt sich von unten, Spitzenpunkt fällt langsam
+// Spektrum-Wand: jede Spalte ein Frequenzband (links tief, rechts hoch) in der Farbe der Spuren, die dort klingen;
+// füllt sich von unten, satt im Körper, zur Spitze hin heller, der Spitzenpunkt fällt langsam
+const BODY = `
 void main() {
   vec2 uv = UV();
   float beam;
@@ -182,44 +160,20 @@ void main() {
   float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
   float kk = clamp(uK / max(uGlowMax, 0.01), 0.0, 1.0);
   float v = clamp((s + 0.7 * bc) * (0.25 + 0.75 * kk), 0.0, 1.0);
-  vec3 c = toWhite(bandCol(C.x), 0.15 + 0.55 * top + 0.4 * min(1.0, bc));
-  finish(ink * 0.18 + uGrey * uIdle * 0.05 + drawDot(C, v, c), uv);
-}
-`, `
-// 2 · Spur-Pulse: Lichtfronten der Spuren durchs Punktraster
-void main() {
-  vec2 uv = UV();
-  float beam;
-  vec3 ink = light(uv, beam);
-  vec4 C = cellAt(11.0);
-  vec3 pc;
-  float p = pulses(C.xy, pc);
-  float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
-  float v = clamp(p + 0.35 * bc, 0.0, 1.0);
-  vec3 c = toWhite(pc, 0.2 + 0.45 * min(1.0, p));
-  finish(ink * 0.2 + uGrey * uIdle * 0.05 + drawDot(C, v, c), uv);
-}
-`, `
-// 3 · Beides: die Spektrum-Wand als ruhiger Grund, die Spur-Pulse laufen hell darüber
-void main() {
-  vec2 uv = UV();
-  float beam;
-  vec3 ink = light(uv, beam);
-  vec4 C = cellAt(12.0);
-  float top;
-  float s = spectrum(C, top);
-  vec3 pc;
-  float p = pulses(C.xy, pc);
-  float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
-  float kk = clamp(uK / max(uGlowMax, 0.01), 0.0, 1.0);
-  float vs = s * 0.55 * (0.25 + 0.75 * kk);
-  float v = clamp(vs + p + 0.35 * bc, 0.0, 1.0);
-  vec3 sc = toWhite(bandCol(C.x), 0.1 + 0.5 * top);
-  vec3 c = toWhite(mix(sc, pc, p / max(vs + p, 1e-3)), 0.15 + 0.4 * min(1.0, p + bc));
-  finish(ink * 0.18 + uGrey * uIdle * 0.05 + drawDot(C, v, c), uv);
-}
-`];
-export const VARIANTS = ['Spektrum-Wand', 'Spur-Pulse', 'Spektrum und Pulse'];
+  float x = specX(C.x);
+  float h = (1.0 - C.y) / max(specAt(x) * 0.75, 0.05);
+  // satte Farbe der Spuren (Sättigung angehoben), zur Spitze und am Spitzenpunkt Weißglut
+  vec3 b0 = bandCol(x);
+  float g = dot(b0, vec3(0.2126, 0.7152, 0.0722));
+  vec3 base = clamp(mix(vec3(g), b0, 1.7), 0.0, 1.0);
+  vec3 c = toWhite(base, 0.2 * pow(clamp(h, 0.0, 1.0), 6.0) + 0.6 * top + 0.35 * min(1.0, bc));
+  float lit = step(0.04, v);
+  vec3 col = ink * 0.16 + uGrey * uIdle * 0.05;
+  col += c * dotOf(C, max(v, 0.03)) * mix(0.03, 0.2 + 0.85 * v, lit) + c * haloOf(C, v) * 0.3 * v;
+  // farbiger Schein über dem Raster: der Körper der Säulen leuchtet in die Fläche
+  col += base * s * 0.12 * (0.25 + 0.75 * kk);
+  finish(col, uv);
+}`;
 
 export function createRoomShader(canvas) {
   let gl = null;
@@ -244,22 +198,14 @@ export function createRoomShader(canvas) {
     return pr;
   };
   const NAMES = ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax', 'uPx', 'uField',
-    'uSpec', 'uPeak', 'uTrk', 'uTrkC', 'uTrkN'];
-  // Ein Programm je Variante, erst beim ersten Gebrauch übersetzt
-  const progs = [];
-  function program(v) {
-    if (!progs[v]) {
-      const pr = link(PRE + BODY[v]);
-      const U = {};
-      for (const n of NAMES) U[n] = gl.getUniformLocation(pr, n);
-      progs[v] = { pr, U };
-    }
-    return progs[v];
-  }
-  let fieldProg;
+    'uSpec', 'uPeak', 'uSpecC', 'uSpecX'];
+  let fieldProg, P;
   try {
     fieldProg = link(FIELD_FS);
-    program(2);
+    const pr = link(PRE + BODY);
+    const U = {};
+    for (const n of NAMES) U[n] = gl.getUniformLocation(pr, n);
+    P = { pr, U };
   } catch (e) {
     console.warn('Raumlicht ohne Shader:', e.message);
     return null;
@@ -279,7 +225,7 @@ export function createRoomShader(canvas) {
   let lost = false;
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
   const cloud = new Float32Array(24), cloudC = new Float32Array(18), waves = new Float32Array(16);
-  const trk = new Float32Array(32), trkC = new Float32Array(24);
+  const specC = new Float32Array(96);
   const c3 = (c) => [c[0] / 255, c[1] / 255, c[2] / 255];
 
   // Software-Renderer (kein Grafikchip): dann rechnet glow.js mit kleinerer Auflösung
@@ -311,8 +257,6 @@ export function createRoomShader(canvas) {
       gl.uniform1f(FU.bass, u.band[0]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // 2) Licht und Punkte in voller Auflösung
-      let P;
-      try { P = program(u.variant ?? 2); } catch (e) { console.warn('Raumlicht-Variante:', e.message); P = program(0); }
       const U = P.U;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.useProgram(P.pr);
@@ -323,11 +267,9 @@ export function createRoomShader(canvas) {
         const r = u.react;
         gl.uniform1fv(U.uSpec, r.spec);
         gl.uniform1fv(U.uPeak, r.peak);
-        trk.fill(0);
-        r.tracks.slice(0, 8).forEach((t, i) => { trk.set([t.y0, t.y1, t.env, t.flash], i * 4); trkC.set(c3(t.c), i * 3); });
-        gl.uniform4fv(U.uTrk, trk);
-        gl.uniform3fv(U.uTrkC, trkC);
-        gl.uniform1i(U.uTrkN, Math.min(8, r.tracks.length));
+        for (let i = 0; i < 96; i++) specC[i] = r.col[i] / 255;
+        gl.uniform3fv(U.uSpecC, specC);
+        gl.uniform2f(U.uSpecX, r.x0 ?? 0, r.x1 ?? 1);
       }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform2f(U.uRes, canvas.width, canvas.height);

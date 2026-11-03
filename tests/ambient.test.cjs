@@ -64,8 +64,9 @@ function sample() {
     edge: (area(0, W * 0.06, 0, H) + area(W * 0.94, W, 0, H) + area(0, W, 0, H * 0.06) + area(0, W, H * 0.94, H)) / 4,
     W, H, all: area(0, W, 0, H), top: area(0, W, 0, H / 4), bottom: area(0, W, (H * 3) / 4, H), sat,
     left: area(W * 0.03, W * 0.2, H * 0.6, H), right: area(W * 0.8, W * 0.97, H * 0.6, H),
-    atMark: mx >= 0 ? area(mx - 2, mx + 3, H * 0.3, H * 0.7) : 0,
-    far: mx >= 0 ? area(mx > W / 2 ? mx - W * 0.4 - 2 : mx + W * 0.4 - 2, mx > W / 2 ? mx - W * 0.4 + 3 : mx + W * 0.4 + 3, H * 0.3, H * 0.7) : 0,
+    // im oberen Viertel: dort reicht die Spektrum-Wand nicht hin, die Säule an der Marke schon
+    atMark: mx >= 0 ? area(mx - 2, mx + 3, H * 0.08, H * 0.24) : 0,
+    far: mx >= 0 ? area(mx > W / 2 ? mx - W * 0.4 - 2 : mx + W * 0.4 - 2, mx > W / 2 ? mx - W * 0.4 + 3 : mx + W * 0.4 + 3, H * 0.08, H * 0.24) : 0,
     room: st.room, roomCost: st.roomCost,
   };
 }
@@ -176,8 +177,10 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     check('Drop hinterlässt ein Nachglühen', peak > 0.25 && quietGlow < 0.05, JSON.stringify({ peak: +peak.toFixed(2), quietGlow }));
     check('Nachglühen löst sich über mindestens 1,5 s auf', span >= 1.5 && span < 4.5, `${span.toFixed(2)} s`);
     check('Nachglühen blitzt nicht (steigt weich)', gUp < 0.1, gUp.toFixed(3));
-    const dj = stats(jumps(drop));
-    check('Drop: Licht steigt gleichmäßig, ohne Sprung und Flackern', dj.max < 6 && flicker(drop) <= 1, JSON.stringify({ ...dj, flicker: flicker(drop) }));
+    // ohne die ersten 400 ms: da schaltet der Test vom vorigen Testklang um (neuer Start), nicht der Drop
+    const settled = drop.filter((r) => r.t > 400);
+    const dj = stats(jumps(settled));
+    check('Drop: Licht steigt gleichmäßig, ohne Sprung und Flackern', dj.max < 6 && flicker(settled) <= 1, JSON.stringify({ ...dj, flicker: flicker(settled) }));
 
     // ---------- Bild-zu-Bild: Beispielsong von vorn ----------
     await page.evaluate(() => {

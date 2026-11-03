@@ -4,9 +4,8 @@
 
 import { anySoloOf, isAbove, trackState, EPS } from '../model.js';
 import { headW } from './arranger.js';
-import { createRoomShader, VARIANTS } from './room-shader.js';
+import { createRoomShader } from './room-shader.js';
 import { createReact } from './room-react.js';
-import { lsKey } from '../edition.js';
 
 const CATS = ['drums', 'bass', 'chords', 'synth', 'fx', 'own'];
 const BEHIND = 150; // px hinter der Marke: Platz für Funken
@@ -25,45 +24,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   document.body.prepend(amb);
   // Shader, wenn der Browser WebGL 2 kann; sonst malt Canvas 2D dieselben Werte
   const shader = createRoomShader(amb);
-  const react = createReact({ engine });
+  const react = createReact({ engine, colorOf: (cat) => rgb[cat] || [136, 136, 136] });
   let lastReact = null;
-  // Vorläufig zum Vergleichen: Variante des Raumlichts (1 Spektrum-Wand, 2 Spur-Pulse, 3 beides),
-  // umschaltbar im Projekt-Menü, mit der Taste L oder am Handy über die Überschrift „Song“
-  const PROBE_KEY = lsKey('loopwerk.licht2');
-  const NV = VARIANTS.length;
-  let variant = NV;
-  try { const v = Number(localStorage.getItem(PROBE_KEY)); if (v >= 1 && v <= NV) variant = v; } catch { /* ohne Speicher */ }
-  const probe = document.createElement('div');
-  probe.className = 'licht-probe';
-  probe.setAttribute('role', 'group');
-  probe.setAttribute('aria-label', 'Licht-Variante (Test)');
-  probe.hidden = !shader;
-  probe.append(Object.assign(document.createElement('span'), { textContent: 'Licht' }));
-  for (let v = 1; v <= NV; v++) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.v = String(v);
-    b.textContent = String(v);
-    b.title = VARIANTS[v - 1];
-    b.addEventListener('click', () => setVariant(v));
-    probe.append(b);
-  }
-  const menu = document.getElementById('project-menu');
-  if (menu) menu.insertBefore(probe, document.getElementById('pop-about'));
-  // Am Handy (ohne Projekt-Menü): Antippen der Überschrift im Fach „Song“ schaltet weiter
-  document.querySelector('#song .dock-head h2')?.addEventListener('click', () => { if (shader) setVariant(variant + 1); });
-  function setVariant(v, say = true) {
-    variant = ((v - 1 + NV) % NV) + 1;
-    try { localStorage.setItem(PROBE_KEY, String(variant)); } catch { /* ohne Speicher */ }
-    for (const b of probe.querySelectorAll('button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === variant));
-    if (say) ui.flash?.(`Licht ${variant}: ${VARIANTS[variant - 1]}`);
-  }
-  setVariant(variant, false);
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'l' && e.key !== 'L') return;
-    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
-    setVariant(variant + 1);
-  });
   const beam = document.createElement('canvas');
   beam.className = 'beam';
   beam.setAttribute('aria-hidden', 'true');
@@ -551,18 +513,13 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     }
     const g = room.ghosts.reduce((m, x) => (x.i > (m?.i ?? 0) ? x : m), null);
     react.step(dt, engine.playing && !calm);
-    const vh = window.innerHeight || 1;
-    const tracks = [];
-    for (const [id, s] of react.tracks()) {
-      const lane = grid.querySelector(`.lane[data-track-id="${id}"]`);
-      if (!lane?.offsetParent) continue;
-      const r = lane.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh) continue;
-      tracks.push({ y0: r.top / vh, y1: r.bottom / vh, env: Math.min(1, s.env), flash: s.flash, c: rgb[s.cat] || GREY });
-    }
-    const reactU = lastReact = { spec: react.spec, peak: react.peak, tracks };
+    // Spektrum über die Breite des Arrangers (links tief, rechts hoch), nicht hinter den Seitenleisten
+    const ar = grid.getBoundingClientRect();
+    const vw = window.innerWidth || 1;
+    const x0 = Math.max(0, (ar.left + headW()) / vw), x1 = Math.min(1, Math.min(ar.right, root.getBoundingClientRect().right) / vw);
+    const reactU = lastReact = { spec: react.spec, peak: react.peak, col: react.col, x0, x1 };
     shader.draw({
-      variant: variant - 1, react: reactU,
+      react: reactU,
       t: flow, K: mix ? K : 0, A, band: mix ? [b0, b1, b2] : [0, 0, 0], glow: mix ? room.glow : [0, 0, 0],
       c0: bandC[0], c1: bandC[1], c2: bandC[2], white, clouds,
       col: { x: room.colX >= 0 ? room.colX / W : -1, i: room.colI, y0: (room.y0 ?? 0) / H, y1: (room.y1 ?? H) / H, c: room.colC || GREY },
@@ -816,9 +773,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, glQ, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader }; },
     // Für Tests und Bildschirmfotos: Auflösungsstufe des Shaders setzen (CSS-Pixel-Faktor)
     setQuality(q, { fixed = false } = {}) { glQ = q; glFixed = fixed; },
-    setVariant(v) { setVariant(v, false); },
-    get variant() { return variant; },
-    get react() { return { sent: lastReact && { tracks: lastReact.tracks },  tracks: react.tracks().map(([id, t]) => ({ id, env: t.env, flash: t.flash })), spec: [...react.spec] }; },
+    get react() { return { spec: [...react.spec], col: lastReact ? [...lastReact.col] : [] }; },
     // Für Tests: das Raumlicht als RGBA im Raum-Maß (lange Seite 160), gleich ob Shader oder Canvas 2D
     readRoom() {
       const W = room.W || amb.width, H = room.H || amb.height;
