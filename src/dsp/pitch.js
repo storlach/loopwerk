@@ -11,7 +11,7 @@ export const FMAX = 1000;
 export const midiOf = (hz) => 69 + 12 * Math.log2(hz / 440);
 
 // Tiefpass (gefenstertes Sinc) und Dezimierung auf etwa 11 kHz
-function downsample(mono, sampleRate) {
+export function downsample(mono, sampleRate) {
   const factor = Math.max(1, Math.round(sampleRate / ANALYSIS_RATE));
   if (factor === 1) return { data: mono, rate: sampleRate };
   const taps = 63;

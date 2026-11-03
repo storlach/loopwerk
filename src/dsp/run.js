@@ -2,7 +2,8 @@
 import { separate } from './separate.js';
 import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
-import { timeStretch } from './stretch.js';
+import { timeStretch, pitchShift } from './stretch.js';
+import { detectKey } from './key.js';
 import { searchMaster } from './master-search.js';
 import { cookRecipe } from './recipe.js';
 import { detectOnsets } from './slice.js';
@@ -44,6 +45,8 @@ const LOCAL = {
   master: ({ chs, sampleRate, style, target }) => searchMaster(chs, sampleRate, style, target),
   recipe: ({ chs, sampleRate, recipe }) => cookRecipe(chs, sampleRate, recipe),
   onsets: ({ chs, sampleRate, sensitivity }) => detectOnsets(mixMono(chs), sampleRate, { sensitivity }),
+  key: ({ chs, sampleRate }) => detectKey(chs, sampleRate),
+  pitchshift: ({ chs, sampleRate, semis, loop }) => pitchShift(chs, semis, sampleRate, { loop }),
 };
 
 export function runJob(job, args, { onProgress } = {}) {

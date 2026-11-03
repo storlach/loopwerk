@@ -81,3 +81,25 @@ export function timeStretch(channels, ratio, sampleRate, outLength, { loop = tru
     return r;
   });
 }
+
+// Tonhöhe um `semis` Halbtöne verschieben, Länge bleibt: erst auf das 2^(semis/12)-fache dehnen (WSOLA),
+// dann wieder auf die Ausgangslänge umtasten (kubisch, Catmull-Rom). Loops bleiben zyklisch.
+export function pitchShift(channels, semis, sampleRate, { loop = true } = {}) {
+  const len = channels[0].length;
+  if (!semis || len < 2) return channels.map((d) => d.slice());
+  const sLen = Math.max(2, Math.round(len * 2 ** (semis / 12)));
+  const stretched = timeStretch(channels, sLen / len, sampleRate, sLen, { loop });
+  const step = sLen / len;
+  const at = (d, i) => (loop ? d[((i % sLen) + sLen) % sLen] : d[Math.min(sLen - 1, Math.max(0, i))]);
+  return stretched.map((d) => {
+    const out = new Float32Array(len);
+    for (let i = 0; i < len; i++) {
+      const x = i * step;
+      const k = Math.floor(x);
+      const t = x - k;
+      const p0 = at(d, k - 1), p1 = at(d, k), p2 = at(d, k + 1), p3 = at(d, k + 2);
+      out[i] = p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+    }
+    return out;
+  });
+}
