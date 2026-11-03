@@ -29,8 +29,8 @@ export function createReact({ engine, colorOf }) {
       const b = bands ? bands[i] : 0;
       const rel = Math.min(1, Math.max(0, (b - top + 0.55) / 0.55));
       const v = smooth(rel) * smooth(Math.min(1, Math.max(0, (b - 0.04) / 0.3)));
-      // hoch in gut 50 ms, zurück in gut 0,3 s: die Ränder atmen mit der Musik, statt bei jedem Schlag zu zucken
-      spec[i] = v > spec[i] ? spec[i] + (v - spec[i]) * (1 - Math.exp(-dt / 0.05)) : Math.max(v, spec[i] * Math.exp(-dt / (0.3 * fade)));
+      // hoch in gut 50 ms, zurück in gut 0,8 s: die Ränder atmen mit der Musik und glühen nach, statt bei jedem Schlag zu zucken
+      spec[i] = v > spec[i] ? spec[i] + (v - spec[i]) * (1 - Math.exp(-dt / 0.05)) : Math.max(v, spec[i] * Math.exp(-dt / (0.8 * fade)));
     }
     // Farbe je Band: Spuren nach ihrem Anteil gemischt (hoch potenziert, damit die stärkste die Farbe trägt)
     if (live && heard.size) {
@@ -46,7 +46,7 @@ export function createReact({ engine, colorOf }) {
           target[i * 3] += c[0] * e; target[i * 3 + 1] += c[1] * e; target[i * 3 + 2] += c[2] * e;
         }
       }
-      const k = 1 - Math.exp(-dt / 0.15);
+      const k = 1 - Math.exp(-dt / 0.4); // Farben gleiten langsam von Spur zu Spur
       for (let i = 0; i < SPEC_N; i++) {
         if (w[i] < 1e-6) continue;
         const fresh = col[i * 3] + col[i * 3 + 1] + col[i * 3 + 2] < 1; // erstes Mal: gleich die Farbe, kein Einblenden aus Schwarz
