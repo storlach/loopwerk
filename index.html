@@ -382,7 +382,7 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
-  .shelf-head { display: grid; gap: 8px; }
+  .shelf-head { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); } /* nichts darf die Leiste aufdrücken */
   .shelf-title { display: flex; align-items: baseline; justify-content: space-between; }
   .shelf-total { font: 400 11px/1 var(--font-mono); color: var(--muted); }
   .shelf-sticky:empty { display: none; }
@@ -2136,7 +2136,8 @@
     .dock:not(#export) { margin: 0 1px 1px; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 10px 10px 2px 2px; clip-path: inset(-40px 0 0 0); }
   }
   .sheet-grip::before { width: 36px; height: 3px; border-radius: 2px; background: #3A3A40; }
-  .shelf-len .seg { white-space: nowrap; padding-inline: 6px; }
+  .shelf-len { min-width: 0; }
+  .shelf-len .seg { white-space: nowrap; padding-inline: 4px; flex: 1 1 auto; min-width: 0; }
   .shelf-len .shelf-sort-label { margin-right: 2px; }
   /* Handy und Touch: großer Griff, gut zu sehen und mit dem Daumen zu fassen */
   @media (max-width: 760px), (pointer: coarse) {
