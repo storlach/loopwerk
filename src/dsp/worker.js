@@ -9,7 +9,7 @@ const JOBS = {
   separate: ({ chs, sampleRate }, progress) => separate(chs, sampleRate, { onProgress: progress }),
   autotune: ({ chs, sampleRate, opts }) => autotune(chs, sampleRate, opts),
   pitch: ({ chs, sampleRate }) => detectPitch(toMono(chs), sampleRate),
-  stretch: ({ chs, sampleRate, ratio, loop }) => timeStretch(chs, ratio, sampleRate, Math.round(chs[0].length * ratio), { loop }),
+  stretch: ({ chs, sampleRate, ratio, outLength, loop }) => timeStretch(chs, ratio, sampleRate, outLength ?? Math.round(chs[0].length * ratio), { loop }),
   master: ({ chs, sampleRate, style, target }) => searchMaster(chs, sampleRate, style, target),
 };
 

@@ -9,7 +9,6 @@ import { fetchAsset } from './fetch-asset.js';
 import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { GUITAR_LOOP_DEFS, GUITAR_GENRES } from './loops-guitar.js';
 import { GUITAR_CATALOG } from './catalog-guitar.js';
-import { timeStretch } from './dsp/stretch.js';
 import { keyChangesOf, keySpans, keyDelta, harmonySpans, tapeRate } from './model.js';
 import { DEGREE_IDS, REST } from './harmony.js';
 
@@ -45,16 +44,17 @@ const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 // Frequenzen der sechs Rechteck-Oszillatoren eines 808/909-Beckens (metallischer Klang)
 const METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];
 
-// Rauschen einmal je Kontext erzeugen (gleich bei jedem Laden), auch wenn viele Kits entstehen (gehaltene Töne)
-const noiseCache = new WeakMap();
+// Rauschen einmal je Abtastrate erzeugen (gleich bei jedem Laden) und in allen Renderings nutzen – AudioBuffer gehören
+// keinem Kontext; sonst rechnet jeder Tempowechsel es für jeden Loop neu
+const noiseCache = new Map();
 function noiseFor(ctx) {
-  let noise = noiseCache.get(ctx);
+  let noise = noiseCache.get(ctx.sampleRate);
   if (!noise) {
     const rand = mulberry32(1234);
-    noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    noise = new AudioBuffer({ numberOfChannels: 1, length: ctx.sampleRate * 2, sampleRate: ctx.sampleRate });
     const nd = noise.getChannelData(0);
     for (let i = 0; i < nd.length; i++) nd[i] = rand() * 2 - 1;
-    noiseCache.set(ctx, noise);
+    noiseCache.set(ctx.sampleRate, noise);
   }
   return noise;
 }
@@ -1408,15 +1408,19 @@ export const LOOP_DEFS = [
 export function computePeaks(buffer, beats) {
   const n = Math.max(1, Math.round(beats * PEAKS_PER_BEAT));
   const peaks = new Float32Array(n);
-  const chans = Array.from({ length: buffer.numberOfChannels }, (_, c) => buffer.getChannelData(c));
   const per = buffer.length / n;
-  for (let i = 0; i < n; i++) {
-    let m = 0;
-    const end = Math.min(buffer.length, Math.floor((i + 1) * per));
-    for (let j = Math.floor(i * per); j < end; j++) {
-      for (const d of chans) { const v = Math.abs(d[j]); if (v > m) m = v; }
+  // Kanal für Kanal in einfachen Schleifen: hält den Hauptthread auch bei langen Loops kurz
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < n; i++) {
+      let m = peaks[i];
+      const end = Math.min(buffer.length, Math.floor((i + 1) * per));
+      for (let j = Math.floor(i * per); j < end; j++) {
+        const v = d[j];
+        if (v > m) m = v; else if (-v > m) m = -v;
+      }
+      peaks[i] = m;
     }
-    peaks[i] = m;
   }
   return peaks;
 }
@@ -1460,12 +1464,14 @@ async function renderLoop(def, bpm, semis = 0) {
   return { buffer, lengthBeats: beats };
 }
 
-// Echte Loops auf das Projekttempo strecken (Länge exakt in Schlägen).
-function stretchLoop(orig, beats, bpm) {
+// Echte Loops auf das Projekttempo strecken (Länge exakt in Schlägen). WSOLA rechnet der Rechen-Worker,
+// damit die Oberfläche beim Tempowechsel nicht stockt.
+async function stretchLoop(orig, beats, bpm) {
   const outLength = Math.round(beats * (60 / bpm) * orig.sampleRate);
   if (outLength === orig.length) return orig;
-  const chans = Array.from({ length: orig.numberOfChannels }, (_, c) => orig.getChannelData(c));
-  const out = timeStretch(chans, outLength / orig.length, orig.sampleRate, outLength, { loop: true });
+  const { runJob } = await import('./dsp/run.js');
+  const chs = Array.from({ length: orig.numberOfChannels }, (_, c) => orig.getChannelData(c));
+  const out = await runJob('stretch', { chs, sampleRate: orig.sampleRate, ratio: outLength / orig.length, outLength, loop: true });
   const buffer = new AudioBuffer({ numberOfChannels: out.length, length: outLength, sampleRate: orig.sampleRate });
   out.forEach((d, c) => buffer.copyToChannel(d, c));
   return buffer;
@@ -1497,12 +1503,29 @@ export { decode as decodeAudio };
 const chordOn = (chord) => !!chord && chord !== 'i' && chord !== REST;
 const variantKey = (id, delta, chord) => (chordOn(chord) ? `${id}~${delta}~${chord}` : `${id}~${delta}`);
 
+// Vorbereitet-Vermerk je Sound (id → Tempo-Schlüssel). delete() macht laufende Vorbereitungen dieses Sounds ungültig
+// (z. B. Pattern geändert): ihr Ergebnis wird dann verworfen.
+class PreparedMap extends Map {
+  constructor() { super(); this.epochs = new Map(); }
+  delete(id) { this.epochs.set(id, this.epochOf(id) + 1); return super.delete(id); }
+  epochOf(id) { return this.epochs.get(id) || 0; }
+}
+
+// Nächste Aufgabe der Ereignisschleife: zwischen zwei Vorbereitungen kommt die Oberfläche dran
+const nextTask = () => new Promise((resolve) => {
+  const ch = new MessageChannel();
+  ch.port1.onmessage = () => { ch.port1.close(); resolve(); };
+  ch.port2.postMessage(0);
+});
+
 export class Library extends Emitter {
   constructor() {
     super();
     this.samples = new Map();
     this.bpm = LIBRARY_BPM;
-    this.prepared = new Map(); // id → bpm, für das der Puffer vorbereitet ist
+    this.prepared = new PreparedMap(); // id → bpm, für das der Puffer vorbereitet ist
+    this._inflight = new Map(); // Sound → laufende Vorbereitung { key, promise }
+    this._tempoGen = 0;
     this.variants = new Map(); // „id@faktor“ → gedehnte Fassung (Clip-Laufzeit)
     this.pendingVariants = new Map();
     this.coreIds = []; // Grundausstattung (Tests warten darauf über catalogReady)
@@ -1514,14 +1537,17 @@ export class Library extends Emitter {
 
   // Gedehnte Fassung eines Sounds: faktor-fache Länge, gleiche Tonhöhe (WSOLA im Rechen-Worker).
   // Gilt nur, solange der Grund-Sound unverändert ist (gleiche rev, z. B. nach Tempowechsel neu).
-  stretched(id, factor) {
-    return this._stretchedOf(this.samples.get(id), factor);
+  // stale: nach einem Tempowechsel die Fassung im alten Tempo, bis die neue fertig ist (die Engine gleicht das Tempo aus)
+  stretched(id, factor, stale = false) {
+    return this._stretchedOf(this.samples.get(id), factor, stale);
   }
 
-  _stretchedOf(base, factor) {
+  _stretchedOf(base, factor, stale = false) {
     if (!base || !factor || factor === 1) return base;
     const v = this.variants.get(`${base.id}@${factor}`);
-    return v && v.baseRev === base.rev ? v : null;
+    if (!v) return null;
+    if (v.baseRev === base.rev) return v;
+    return stale && v.atBpm && v.atBpm !== base.atBpm ? v : null;
   }
 
   ensureStretched(id, factor) {
@@ -1551,8 +1577,8 @@ export class Library extends Emitter {
     const v = this.keyedVariants.get(variantKey(id, delta, chord));
     if (!v) return null;
     const fresh = v.baseRev === base.rev;
-    if (!fresh && !(stale && v.buffer.length === base.buffer.length)) return null;
-    return this._stretchedOf(v, stretch);
+    if (!fresh && !(stale && (v.buffer.length === base.buffer.length || (v.atBpm && v.atBpm !== base.atBpm)))) return null;
+    return this._stretchedOf(v, stretch, stale);
   }
 
   async ensureVariant(id, { delta = 0, chord = null, stretch = 1 } = {}) {
@@ -1566,10 +1592,11 @@ export class Library extends Emitter {
       if (!this.pendingVariants.has(pendingKey)) {
         this.pendingVariants.set(pendingKey, (async () => {
           const baseRev = base.rev;
+          const bpm = this.bpm;
           try {
-            const r = base.def ? await renderLoop(base.def, this.bpm, this.semis + delta) : await base.transpose(this.bpm, delta, chord);
+            const r = base.def ? await renderLoop(base.def, bpm, this.semis + delta) : await base.transpose(bpm, delta, chord);
             const kv = {
-              id: key, baseId: id, delta, chord, baseRev, rev: ++this.variantRev,
+              id: key, baseId: id, delta, chord, baseRev, atBpm: bpm, rev: ++this.variantRev,
               name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
               buffer: r.buffer, lengthBeats: r.lengthBeats,
             };
@@ -1629,9 +1656,14 @@ export class Library extends Emitter {
     if (this.pendingVariants.has(pendingKey)) return this.pendingVariants.get(pendingKey);
     const rerender = this._renderAt(base);
     const bpm = this.bpm;
+    const baseRev = base.rev;
     const job = this._queueStretch(key, async () => {
+      // Grund-Sound inzwischen neu (z. B. nächster Tempowechsel): nicht mehr rechnen, der neue Auftrag folgt
+      if (base.rev !== baseRev) return this._stretchedOf(base, factor);
       let buffer;
+      let atBpm = base.atBpm;
       if (rerender) {
+        atBpm = bpm;
         // Erzeugte Loops und Patterns: im passenden Tempo neu rendern – verlustfrei wie beim Tempowechsel (ADR 001)
         buffer = (await rerender(bpm / factor)).buffer;
       } else {
@@ -1643,7 +1675,7 @@ export class Library extends Emitter {
       }
       const lengthBeats = base.lengthBeats * factor;
       const v = {
-        id: key, baseId: id, factor, baseRev: base.rev, rev: ++this.variantRev,
+        id: key, baseId: id, factor, baseRev, atBpm, rev: ++this.variantRev,
         name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
         buffer, lengthBeats, peaks: computePeaks(buffer, lengthBeats),
       };
@@ -1753,7 +1785,16 @@ export class Library extends Emitter {
 
   async ensure(id) {
     const s = this.samples.get(id);
-    if (!s || !s.lazy) return s;
+    if (!s) return s;
+    if (!s.lazy) {
+      // Nach einem Tempowechsel noch nicht angepasst (kommt sonst im Hintergrund dran): bei Gebrauch sofort –
+      // jeder in einer eigenen Aufgabe, damit viele gleichzeitige Anfragen den Hauptthread nicht am Stück belegen
+      if (this._stale(s)) {
+        await nextTask();
+        if (this._stale(s)) await this._prepare(s, this.bpm);
+      }
+      return s;
+    }
     if (!this.pending.has(id)) {
       this.pending.set(id, (async () => {
         try {
@@ -1782,20 +1823,51 @@ export class Library extends Emitter {
   // Tonale synthetische Loops hängen auch von der Tonart ab
   _tag(s, bpm) { return s.def && s.key ? `${bpm}|${this.semis}` : bpm; }
 
-  async _prepare(s, bpm) {
+  // Folgt der Sound dem Tempo und ist noch nicht für das aktuelle vorbereitet?
+  _stale(s) {
+    return !!(s.def || s.make || s.orig) && (!s.buffer || this.prepared.get(s.id) !== this._tag(s, this.bpm));
+  }
+
+  // Sound passend zu Tempo (und Tonart) vorbereiten. Gleiche Aufträge laufen nur einmal. Ist das Ergebnis bei Fertigstellung
+  // veraltet (neues Tempo, neue Tonart, Sound geändert), wird es verworfen – außer es gibt noch gar keinen Puffer.
+  // Rückgabe: true, wenn der Sound jetzt diesen Stand hat. patch: neue Eigenschaften (Art, Länge), die erst mit dem
+  // neuen Puffer gelten – sie werden immer übernommen (bei neuem Tempo bereitet ensure() danach nach).
+  _prepare(s, bpm, patch = null) {
     const tag = this._tag(s, bpm);
-    if (this.prepared.get(s.id) === tag && s.buffer) return;
+    if (!patch && this.prepared.get(s.id) === tag && s.buffer) return Promise.resolve(true);
+    const epoch = this.prepared.epochOf(s.id);
+    const key = patch ? {} : `${tag}#${epoch}`;
+    const run = this._inflight.get(s);
+    if (run?.key === key) return run.promise;
+    // Während Art/Länge wechseln (patch), erst danach neu prüfen – sonst überholt ein Auftrag mit dem alten Stand
+    if (run?.patch && !patch) return run.promise.catch(() => {}).then(() => this._prepare(s, bpm));
+    const promise = this._prepareNow(s, bpm, tag, epoch, patch).finally(() => {
+      if (this._inflight.get(s)?.promise === promise) this._inflight.delete(s);
+    });
+    this._inflight.set(s, { key, promise, patch: !!patch });
+    return promise;
+  }
+
+  async _prepareNow(s, bpm, tag, epoch, patch) {
+    const p = patch ? { ...s, ...patch } : s;
     let r;
-    if (s.def) r = await renderLoop(s.def, bpm, this.semis);
-    else if (s.make) r = await s.make(bpm);
-    else if (s.kind === 'loop' && s.orig) r = { buffer: stretchLoop(s.orig, s.beats, bpm), lengthBeats: s.beats };
-    else if (s.orig) r = padOneShot(s.orig, bpm);
-    else return; // fester Puffer ohne Original (z. B. Testsignal)
+    if (p.def) r = await renderLoop(p.def, bpm, this.semis);
+    else if (p.make) r = await p.make(bpm);
+    else if (p.kind === 'loop' && p.orig) r = { buffer: await stretchLoop(p.orig, p.beats, bpm), lengthBeats: p.beats };
+    else if (p.orig) r = { ...padOneShot(p.orig, bpm), oneShot: true };
+    else return false; // fester Puffer ohne Original (z. B. Testsignal)
+    const current = tag === this._tag(s, this.bpm) && epoch === this.prepared.epochOf(s.id);
+    if (!current && s.buffer && !patch) return false;
+    if (patch) Object.assign(s, patch);
     s.buffer = r.buffer;
     s.lengthBeats = r.lengthBeats;
+    // Tempo, für das der Puffer gilt. Läuft der Song schon in einem anderen, gleicht die Engine es wie Tonband aus,
+    // bis die neue Fassung da ist. One-Shots klingen in jedem Tempo gleich (nur aufgefüllt): kein Ausgleich.
+    s.atBpm = r.oneShot ? undefined : bpm;
     s.peaks = computePeaks(s.buffer, s.lengthBeats);
     s.rev = (s.rev ?? 0) + 1;
-    this.prepared.set(s.id, tag);
+    if (current) this.prepared.set(s.id, tag);
+    return current;
   }
 
   // Tonart wechseln: nur die tonalen synthetischen Loops werden neu gerendert
@@ -1823,24 +1895,57 @@ export class Library extends Emitter {
       s.tempoBase ??= { kind: s.kind, beats: s.beats, bpm: s.bpm };
       const want = beats == null ? s.tempoBase : { kind: 'loop', beats, bpm: Math.round((beats * 60 / s.orig.duration) * 100) / 100 };
       if (s.kind === want.kind && s.beats === want.beats) { if (beats == null) delete s.tempoBase; continue; }
-      Object.assign(s, want);
+      // Art und Länge erst zusammen mit dem neuen Puffer übernehmen (das Dehnen läuft im Worker)
+      const patch = { ...want };
       if (beats == null) delete s.tempoBase;
       this.prepared.delete(id);
-      await this._prepare(s, this.bpm);
+      await this._prepare(s, this.bpm, patch);
       changed = true;
     }
     if (changed) this.emit();
     return changed;
   }
 
-  async setTempo(bpm) {
+  // Tempo wechseln: zuerst die Sounds aus `first` (die das Projekt benutzt, parallel), danach die übrigen geladenen
+  // im Hintergrund; was dort noch nicht dran war, bereitet ensure() bei Gebrauch sofort vor (Vorhören, Einsetzen).
+  // Meldungen dabei: emit('tempo') – das Regal zeigt nichts Tempoabhängiges und baut sich dafür nicht neu auf.
+  // Ein neuer Tempowechsel verwirft die alten Aufträge – beim schnellen Mehrfachändern rechnet nur der letzte.
+  // Rückgabe: Promise „alles fertig“ mit `.first` („benutzte fertig“); beide ergeben false, wenn überholt.
+  setTempo(bpm, { first = [] } = {}) {
     this.bpm = bpm;
-    for (const s of this.samples.values()) {
-      if (s.lazy) continue; // wird beim ersten Gebrauch im passenden Tempo erzeugt
-      await this._prepare(s, bpm);
-      if (this.bpm !== bpm) return; // inzwischen neues Tempo angefordert
-    }
-    this.emit();
+    const gen = ++this._tempoGen;
+    const live = () => gen === this._tempoGen;
+    const want = new Set(first);
+    const used = [...want].map((id) => this.samples.get(id)).filter((s) => s && !s.lazy && this._stale(s));
+    const firstDone = this._prepareAll(used, 4, live, true).then(live);
+    const done = firstDone.then(async (ok) => {
+      if (!ok) return false;
+      const rest = [...this.samples.values()].filter((s) => !want.has(s.id) && !s.lazy && this._stale(s));
+      await this._prepareAll(rest, 2, live, false);
+      if (live()) this.emit('tempo');
+      return live();
+    });
+    return Object.assign(done, { first: firstDone });
+  }
+
+  // Sounds vorbereiten, `lanes` gleichzeitig. Jeder Auftrag beginnt in einer eigenen Aufgabe des Hauptthreads,
+  // damit sich die kurzen Stücke Hauptthread-Arbeit (Noten einplanen, Puffer kopieren) nicht zu einer langen addieren.
+  async _prepareAll(list, lanes, live, emitEach) {
+    let i = 0;
+    const lane = async () => {
+      while (i < list.length && live()) {
+        const s = list[i++];
+        await nextTask();
+        if (!live() || !this._stale(s)) continue;
+        try {
+          // Jeder fertige Sound des Songs gleich bekanntgeben: die Engine tauscht ihn ohne Stopp ein
+          if (await this._prepare(s, this.bpm) && emitEach && live()) this.emit('tempo');
+        } catch (err) {
+          console.warn(`Sound ${s.id}: ${err.message}`);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(lanes, list.length) }, lane));
   }
 
   remove(id) {

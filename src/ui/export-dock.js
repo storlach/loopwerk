@@ -83,7 +83,7 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
 
   go.addEventListener('click', async () => {
     if (busy) { abort?.abort(); status.textContent = 'Wird abgebrochen …'; return; }
-    if (tempo.busy) { ui.flash('Einen Moment – die Sounds werden noch an das Tempo angepasst.'); return; }
+    if (tempo.usedBusy ?? tempo.busy) { ui.flash('Einen Moment – die Sounds werden noch an das Tempo angepasst.'); return; }
     busy = true;
     go.disabled = true;
     bar.value = 0;

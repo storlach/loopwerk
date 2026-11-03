@@ -329,7 +329,8 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   }
   ui.on(sync);
   engine.on(sync);
-  library.on?.(render);
+  // Tempowechsel ändert nichts, was das Regal zeigt (Loops in Takten, One-Shots ohne Länge): kein Neuaufbau
+  library.on?.((why) => { if (why !== 'tempo') render(); });
   narrow.addEventListener('change', () => {
     if (accordion() && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); saveOpen(open); }
     render();

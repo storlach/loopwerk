@@ -28,7 +28,7 @@
 
 ### Offen aus Stufe 3
 - ~~VCSL (echte Instrumente)~~ (erledigt in 2.4)
-- Tempowechsel schneller (Worker, benutzte Sounds zuerst)
+- ~~Tempowechsel schneller (Worker, benutzte Sounds zuerst)~~ (erledigt): `Library.setTempo(bpm, { first })` bereitet die Sounds des Songs zuerst vor (parallel), den Rest danach im Hintergrund; was dort noch nicht dran war, macht `ensure()` beim Vorhören/Einsetzen sofort. Echte Loops dehnt der Rechen-Worker (WSOLA), jeder Auftrag beginnt in einer eigenen Aufgabe – keine langen Aufgaben im Hauptthread. Ein neuer Wert verwirft ältere Aufträge (laufende Rechnungen werden fertig, aber nicht übernommen). Die Wiedergabe läuft weiter: die Engine setzt an der gehörten Stelle im neuen Tempo an; Sounds, die noch im alten Tempo vorliegen, klingen bis zur neuen Fassung mit `playbackRate` neu/alt (wie Tonband: Raster stimmt, Tonhöhe kurz verschoben) – lieber das als Stille; fertige tauscht `_resync` ohne Stopp ein. Gemessen auf der Testmaschine: Sounds des Songs nach etwa 0,35 s statt 1,2–3 s, alle geladenen nach etwa 2 s statt 3–7 s, längste Aufgabe im Hauptthread unter 50 ms statt etwa 0,9 s. Test: `tests/tempo-fast.test.cjs`.
 - ~~Tonart wählbar~~ (erledigt, auch je Takt)
 
 ## ✅ Stufe 4 – Mixer und Effekte (0.4)
