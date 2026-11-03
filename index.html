@@ -2574,7 +2574,7 @@
 
 
     /* Fach „Song“ */
-    .song-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 12px; align-content: start; padding: 8px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px)); }
+    .song-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 14px; align-content: start; padding: 8px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px)); }
     .song-name .project-name {
       display: block; box-sizing: border-box; width: 100%; height: 52px; padding: 0 16px; border: 0; border-radius: var(--radius-lg);
       background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--key-line); font: 600 20px/1 var(--font-display);
@@ -2614,11 +2614,11 @@
   /* ---------- Mastering der Summe (Inspektor „Song“, Export) ---------- */
   /* Kopf: Schalter + Name + Messwert; darunter (nur wenn an) die Einstellungen, eingerückt unter dem Namen */
   .mst { display: grid; gap: 6px; }
-  .mst-head { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; cursor: pointer; }
-  .mst-name { font-weight: 600; font-size: 13px; color: var(--ink); }
+  .mst-head { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; cursor: pointer; }
+  .mst-name { font: 600 11px/1.3 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
   .mst:not(.on) .mst-name { color: var(--muted); }
   .mst-meter { font: 500 10px/1.3 var(--font-mono); letter-spacing: 0.04em; color: var(--ink); }
-  .mst-body { display: grid; gap: 8px; padding-left: 42px; }
+  .mst-body { display: grid; gap: 12px; }
   .mst-body[hidden] { display: none; }
   .mst-row { display: grid; gap: 4px; }
   .mst-label { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
@@ -2626,7 +2626,13 @@
   .mst-seg .seg { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
   /* vier Stile als 2 × 2, damit „Ausgewogen“ ganz lesbar bleibt */
   .mst-styles { display: grid; grid-template-columns: 1fr 1fr; }
-  .insp-mst { margin: 2px 0 10px; }
+  .insp-mst { margin: 0; }
+  /* Song-Leiste: Blöcke mit Luft und feiner Trennlinie dazwischen */
+  .insp-grp { display: grid; gap: 10px; align-content: start; }
+  .insp-grp + .insp-grp { margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .insp-grp > .insp-sub, .insp-grp > .insp-auto > .insp-kind:first-child { margin-bottom: 2px; }
+  /* Blocküberschriften einheitlich wie „Master“ */
+  .insp-grp-auto > .insp-auto > .insp-kind:first-child { font: 600 11px/1.3 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
   .song-mst { padding: 4px 0 2px; }
   .ex-master { min-width: 0; }
 
@@ -2875,7 +2881,9 @@
   .song-auto .key { min-height: 44px; }
   /* Platz im Fach: ohne Mastering bleibt die Messzeile leer und fällt weg; die Summen-Zeile rückt an das Mastering heran */
   .song-mst .mst-meter:empty { display: none; }
-  .song-mst + .song-auto { margin-top: -4px; }
+  /* Fach „Song“: Mastering und Verlauf als eigene Blöcke mit feiner Linie darüber */
+  .song-mst, .song-mst + .song-auto { padding-top: 14px; border-top: 1px solid var(--line); }
+
   @media (hover: none) and (pointer: coarse) {
     .auto-head { padding-left: 10px; }
     .auto-close { width: 44px; height: 48px; margin-right: -4px; }

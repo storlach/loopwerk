@@ -10,7 +10,7 @@ const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d).replace('.', ',').r
 export function mountMasteringControls(root, { store, engine, analysis, prefix }) {
   const box = el('div', 'mst');
   box.id = `${prefix}`;
-  // Kopf: Schalter wie bei den Effekten, Name, Messwert rechts
+  // Kopf: Name links, Schalter rechts; darunter der Messwert
   const head = el('label', 'mst-head');
   const sw = el('button', 'fxl-switch mst-on');
   sw.type = 'button';
@@ -22,7 +22,7 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
   const name = el('span', 'mst-name', 'Mastering');
   const meter = el('output', 'mst-meter');
   meter.id = `${prefix}-meter`;
-  head.append(sw, name);
+  head.append(name, sw);
   // Einstellungen, nur bei eingeschaltetem Mastering
   const body = el('div', 'mst-body');
   const row = (label, node) => { const r = el('div', 'mst-row'); r.append(el('span', 'mst-label', label), node); return r; };
