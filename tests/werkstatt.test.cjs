@@ -870,6 +870,22 @@ async function seedPadWall() {
         return xs.slice(1).map((x, i) => Math.abs(x + 0.003 - t[i + 1]) * 1000);
       });
       check('Marken: jede Marke 3 ms vor ihrem Schlag (± 8 ms wegen Pixelraster)', near.length === 7 && near.every((e) => e < 60), near.map((e) => e.toFixed(0)).join(','));
+      // Welle in dB: ein −12-dB-Schlag (4. Schlag, 3,9 s) hat sichtbare Höhe (≥ 20 % der Wellenhöhe); −18 dB ergäbe nach der Skala 62 %
+      const hgt = await page.evaluate(() => {
+        const cv = document.querySelector('.wb-wave-cv');
+        const x = Math.round((3.95 / 10) * cv.width);
+        const d = cv.getContext('2d').getImageData(x - 2, 0, 5, cv.height).data;
+        let top = cv.height, bot = 0;
+        for (let y = 0; y < cv.height; y++) for (let xx = 0; xx < 5; xx++) if (d[(y * 5 + xx) * 4 + 3] > 40) { top = Math.min(top, y); bot = Math.max(bot, y); }
+        return { frac: (bot - top + 1) / cv.height };
+      });
+      check('Welle im Reiter Zerlegen: Hüllkurve in dB, der leise Schlag (−12 dB) füllt ≥ 20 % der Wellenhöhe', hgt.frac >= 0.2, JSON.stringify(hgt));
+      const wgt = await page.evaluate(() => {
+        const cs = (q) => getComputedStyle(document.querySelector(q));
+        const amber = (() => { const t = document.createElement('i'); t.style.color = 'var(--amber)'; document.body.append(t); const c = getComputedStyle(t).color; t.remove(); return c; })();
+        return { track: cs('#wb-cut-track').backgroundColor === amber, boxFill: cs('#wb-cut-box').backgroundColor, tog: cs('#wb-cut-onsets').color === amber, togBg: cs('#wb-cut-onsets').backgroundColor, off: cs('#wb-cut-even').color !== amber };
+      });
+      check('Gewicht: „Auf die Spur“ gefüllt in Weißglut, „In die Kiste“ ohne Fläche, gewählter Umschalter in Weißglut ohne Fläche', wgt.track && /rgba\(0, 0, 0, 0\)|transparent/.test(wgt.boxFill) && wgt.tog && /rgba\(0, 0, 0, 0\)|transparent/.test(wgt.togBg) && wgt.off, JSON.stringify(wgt));
       // Tastatur: Pfeil rechts +5 ms, runter wechselt, Entf löscht
       await page.focus('.wb-mk-slider');
       await page.keyboard.press('ArrowDown');
@@ -915,6 +931,12 @@ async function seedPadWall() {
       const u1 = done.undo - u0;
       check('Ablauf: Clip → Zerlegen → Auf die Spur = 3 Tipps ergibt 8 Clips mit vr-…, Namen „Klopfen · 1“ … „· 8“', done.n === 8 && done.ids && done.names.join('|') === [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Klopfen · ${n}`).join('|'), JSON.stringify(done));
       check('Kiste: eine eingerückte Zeile „Klopfen · 8 Schnitte“, Einblender „8 Schnitte auf der Spur“, ein Undo-Schritt', /Klopfen · 8 Schnitte/.test(done.kiste) && /8 Schnitte/.test(done.hint) && u1 === 1, `${done.kiste} / ${done.hint} / ${u1}`);
+      const narrowL = await page.evaluate(() => [...document.querySelectorAll('.lane[data-track-id="t1"] .clip .clip-label')].map((l) => l.textContent));
+      await page.evaluate(() => window.loopwerk.arranger.zoomTo(60));
+      await page.waitForTimeout(300);
+      const nums = await page.evaluate(() => [...document.querySelectorAll('.lane[data-track-id="t1"] .clip .clip-label')].map((l) => l.textContent));
+      check('Schnitt-Clips im Song: Nummer vorn („4 · Klopfen“), schmale nur die Nummer', nums.length === 8 && nums.includes('4 · Klopfen') && narrowL.every((t) => /^\d$/.test(t)), `${nums.join(' | ')} / schmal: ${narrowL.join(',')}`);
+      await page.evaluate(() => window.loopwerk.arranger.zoomTo(24));
       const cutRec = await page.evaluate((id) => { const rs = window.loopwerk.store.project.recipes; return { orig: !!rs[id] === false, groups: new Set(Object.values(rs).map((r) => r.group)).size, own: window.loopwerk.own.list?.().length }; }, kid);
       check('Alle 8 Schnitte tragen dieselbe Gruppe, der Sound selbst bekam kein Rezept', cutRec.orig && cutRec.groups === 1, JSON.stringify(cutRec));
       await page.evaluate(() => window.loopwerk.store.undo());
@@ -1041,6 +1063,14 @@ async function seedPadWall() {
         return { h: r.height, head: vis('.wb-name'), variant: vis('#wb-variant'), dock: window.loopwerk.ui.dock, bottom: r.bottom, bar: document.getElementById('tabbar').getBoundingClientRect().top };
       });
       check('Handy: Werkbank „zu“ (Herunterwischen) = 56 px (± 1), zeigt Kopf und „Als Variante“, liegt über der Daumenleiste', Math.abs(zu.h - 56) <= 1 && zu.head && zu.variant && zu.dock === 'werkbank' && Math.abs(zu.bottom - zu.bar) <= 2, JSON.stringify(zu));
+      await page.evaluate(() => window.loopwerk.ui.flash('Rückgängig: Zerlegen'));
+      await page.waitForTimeout(400);
+      const ov = await page.evaluate(() => {
+        const a = document.getElementById('hint').getBoundingClientRect();
+        const b = document.getElementById('werkbank').getBoundingClientRect();
+        return { shown: document.getElementById('hint').classList.contains('show'), hit: !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom) };
+      });
+      check('Handy: der Einblender sitzt über der 56-px-Schublade und überlappt ihren Kopf nicht', ov.shown && !ov.hit, JSON.stringify(ov));
       if (SHOTS) await page.screenshot({ path: path.join(DIR, 'kw-zu-handy.png') });
       // Tipp auf den Griff holt sie wieder auf Mitte; nochmal wischen + wischen schließt
       await page.evaluate(() => { const r = document.querySelector('#werkbank .sheet-grip').getBoundingClientRect(); window.__g = { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
@@ -1064,6 +1094,28 @@ async function seedPadWall() {
       check('Handy: kein seitliches Scrollen im Reiter Zerlegen', await page.evaluate(() => document.documentElement.scrollWidth - innerWidth) <= 0);
       check('Zerlegen Handy: keine Konsolenfehler', k.errors.length === 0, k.errors.join(' | '));
       await ctx.close();
+    }
+    if (SHOTS) {
+      // Bilder für den CD: Form mit 0-ms-Hüllkurve (vier Griffe), roh neben geformt im Song
+      for (const [dev, opts] of [['desktop', DESK], ['handy', PHONE]]) {
+        const ctx = await browser.newContext(opts);
+        const k = await openKw(base, ctx);
+        const page = k.page;
+        const id = await bumm(page, 2);
+        await page.evaluate((i) => {
+          const lw = window.loopwerk;
+          const c2 = lw.store.project.tracks[0].clips[1].id;
+          const vr = lw.store.addVariant(i, { clipId: c2 });
+          lw.library.syncVariants(lw.store.project);
+          lw.store.setRecipe(vr, { semis: -3, lp: 1800, warm: 0.5 });
+          lw.ui.select(lw.store.project.tracks[0].clips[0].id);
+        }, id);
+        await page.waitForTimeout(1200);
+        if (dev === 'handy') { await page.tap('#cf-werkbank'); await page.waitForTimeout(1200); }
+        await page.screenshot({ path: path.join(DIR, `kw-form-${dev}.png`) });
+        if (dev === 'desktop') await page.screenshot({ path: path.join(DIR, 'kw-roh-geformt-desktop.png'), clip: { x: 250, y: 90, width: 650, height: 230 } });
+        await ctx.close();
+      }
     }
     {
       const c = counts['desktop-klopfen'];

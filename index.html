@@ -2966,6 +2966,13 @@
   #app[data-density="calm"] .wb-prog { height: 2px; margin: 0 -4px; background: var(--line); }
   #app[data-density="calm"] .wb-prog > i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .2s linear; }
   #app[data-density="calm"] .wb-acts-2 .wb-btn { flex: 1 1 0; }
+  /* Gewicht (CD 2b): gewählter Umschalter in Weißglut mit Linie, „Auf die Spur“ die einzige gefüllte Fläche, „In die Kiste“ eine Linie */
+  #app[data-density="calm"] .wb-toggle { background: transparent; color: var(--muted); box-shadow: inset 0 -1px 0 var(--line); }
+  #app[data-density="calm"] .wb-toggle[aria-pressed="true"] { background: transparent; color: var(--amber); font-weight: 600; box-shadow: inset 0 -2px 0 var(--amber); }
+  #app[data-density="calm"] #wb-cut-box { background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); }
+  #app[data-density="calm"] #wb-cut-track { background: var(--amber); color: var(--accent-ink); font-weight: 600; }
+  #app[data-density="calm"] #wb-cut-track:hover:not(:disabled) { background: var(--amber); }
+  #app[data-density="calm"] #wb-cut-track:disabled, #app[data-density="calm"] #wb-cut-box:disabled { opacity: 0.4; }
   #app[data-density="calm"] .wb-count-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   #app[data-density="calm"] .wb-count-row .wb-seg { flex-wrap: nowrap; }
   #app[data-density="calm"] .wb-count-row .wb-seg .wb-btn { flex: 0 0 auto; min-width: 44px; padding: 0 10px; }
@@ -3058,6 +3065,7 @@
     #app[data-density="calm"] #werkbank.is-head .sheet-grip { height: 20px; } /* Griff 20 + Kopfzeile 36 = 56 px */
     #app[data-density="calm"] .hint { pointer-events: none; } /* der Einblender deckt sonst den Griff der 56-px-Schublade */
     #app[data-density="calm"] .hint-done { pointer-events: auto; }
+    #app[data-density="calm"]:has(#werkbank.is-head:not([hidden])) .hint { margin-bottom: 68px; } /* über der Kopfzeile, nicht darauf */
     #app[data-density="calm"] .tabbar { min-height: 64px; align-items: stretch; }
     #app[data-density="calm"] .tab-werkbank { display: grid; }
     #app[data-density="calm"] .tabbar > .tab, #app[data-density="calm"] .tabbar > .key { min-height: 56px; height: 100%; width: 100%; min-width: 0; border-radius: var(--radius); }

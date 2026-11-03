@@ -303,7 +303,23 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
     const norm = Math.max(0.1, ...op);
     const amp = (p) => Math.max(0.5, Math.min(mid - 3, (p / norm) * (mid - 6)));
     c.fillStyle = color;
-    for (let x = 0; x < W; x += 3) {
+    if (M) {
+      // Zerlegen: Hüllkurve in dB (Boden −48 dB) als gefüllte Fläche; leise Schläge bleiben sichtbar
+      const ref = Math.max(1e-4, ...op);
+      for (let x = 0; x < W; x++) {
+        const t = (x / W) * dur;
+        const ot = r.reverse ? dur - t : t;
+        const k0 = Math.min(BUCKETS - 1, Math.floor((ot / dur) * BUCKETS));
+        const k1 = Math.min(BUCKETS - 1, Math.max(k0, Math.floor((((x + 1) / W) * dur / dur) * BUCKETS)));
+        let m = 0;
+        for (let k = Math.min(k0, k1); k <= Math.max(k0, k1); k++) m = Math.max(m, op[k]);
+        const f = Math.max(0, Math.min(1, (20 * Math.log10(Math.max(m, 1e-6) / ref) + 48) / 48));
+        const a = Math.max(0.5, f * (mid - 3));
+        c.globalAlpha = x >= x0 && x < x1 ? 0.9 : 0.3;
+        c.fillRect(x, Math.round(mid - a), 1, Math.max(1, Math.round(2 * a)));
+      }
+    }
+    for (let x = 0; !M && x < W; x += 3) {
       const inside = x >= x0 && x < x1;
       if (inside) {
         // gebackene Welle über die Breite des Ausschnitts (folgt schon der Abspielrichtung)

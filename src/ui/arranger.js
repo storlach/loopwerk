@@ -681,7 +681,10 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     node.style.left = clip.startBeat * ppb() + 'px';
     node.style.width = clip.lengthBeats * ppb() + 'px';
     node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
-    const label = el('span', 'clip-label', sample?.name ?? 'Fehlendes Sample');
+    // Schnitte eines Zerlegens („Klopfen · 4“): Nummer vorn, bei schmalen Clips nur die Nummer
+    const cutName = sample?.group && /^(.*) · (\d+)$/.exec(sample.name);
+    const label = el('span', 'clip-label', cutName ? (clip.lengthBeats * ppb() < 72 ? cutName[2] : `${cutName[2]} · ${cutName[1]}`) : sample?.name ?? 'Fehlendes Sample');
+    if (cutName) label.title = sample.name;
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
     if (clip.stretch) label.append(el('span', 'clip-tag', `×${String(clip.stretch).replace('.', ',')}`));
     const canvas = el('canvas', 'clip-wave');
