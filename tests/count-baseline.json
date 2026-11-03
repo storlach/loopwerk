@@ -1,25 +1,25 @@
 {
   "desktop-start": {
-    "controls": 123,
-    "frames": 67,
+    "controls": 127,
+    "frames": 72,
     "sizes": 12,
     "minFont": 9
   },
   "desktop-clip": {
-    "controls": 122,
-    "frames": 70,
+    "controls": 125,
+    "frames": 75,
     "sizes": 11,
     "minFont": 9
   },
   "handy-start": {
-    "controls": 48,
-    "frames": 24,
+    "controls": 52,
+    "frames": 29,
     "sizes": 7,
     "minFont": 9
   },
   "handy-clip": {
-    "controls": 49,
-    "frames": 27,
+    "controls": 53,
+    "frames": 32,
     "sizes": 7,
     "minFont": 9
   }

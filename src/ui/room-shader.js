@@ -32,8 +32,8 @@ void main() {
   o = vec4(hi, (f - hi) * 255.0, 0.0, 1.0);
 }`;
 
-// Zweiter Durchgang, volle Auflösung: Licht und Farben der Musik, darin Sternenstaub nach dem vergrößerten Nebel
-const FS = `#version 300 es
+// Zweiter Durchgang, volle Auflösung: gemeinsamer Vorspann (Licht der Musik, Punktraster), dann je Variante ein main()
+const PRE = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
 uniform float uT;
@@ -57,6 +57,16 @@ uniform vec3 uGrey;
 uniform float uGlowMax;
 uniform float uPx;
 uniform sampler2D uField;
+uniform float uSpec[32];
+uniform float uPeak[32];
+uniform vec3 uCatE[6];
+uniform vec3 uCatC[6];
+uniform vec4 uTrk[8];
+uniform vec3 uTrkC[8];
+uniform int uTrkN;
+uniform sampler2D uHist;
+uniform float uHistFrac;
+const int HIST = 48;
 out vec4 o;
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 vec3 toWhite(vec3 c, float k) { return mix(c, uWhite, k); }
@@ -113,6 +123,23 @@ void finish(vec3 col, vec2 uv) {
 }
 vec2 UV() { return vec2(gl_FragCoord.x / uRes.x, 1.0 - gl_FragCoord.y / uRes.y); }
 
+// Punktraster: xy Mitte der Zelle (uv), z Abstand zur Mitte (px), w Zellgröße (px)
+vec4 cellAt(float css) {
+  float c = css * uPx;
+  vec2 g = gl_FragCoord.xy / c;
+  vec2 id = floor(g);
+  return vec4((id.x + 0.5) * c / uRes.x, 1.0 - (id.y + 0.5) * c / uRes.y, length(fract(g) - 0.5) * c, c);
+}
+float dotR(vec4 C, float v) { return (0.12 + 0.36 * sqrt(clamp(v, 0.0, 1.0))) * C.w; }
+float dotOf(vec4 C, float v) { return 1.0 - clamp((C.z - dotR(C, v)) / uPx + 0.5, 0.0, 1.0); }
+float haloOf(vec4 C, float v) { return exp(-pow(max(0.0, C.z - dotR(C, v)) / (3.0 * uPx), 2.0)); }
+float specAt(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uSpec[i], uSpec[min(i + 1, 31)], fract(b)); }
+float peakAt(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uPeak[i], uPeak[min(i + 1, 31)], fract(b)); }
+vec3 bandCol(float x) { return x < 0.45 ? mix(uC0, uC1, smoothstep(0.1, 0.45, x)) : mix(uC1, uC2, smoothstep(0.55, 0.9, x)); }
+`;
+
+// Varianten (vorläufig zum Vergleich): 0 Sternenstaub ruhig, 1 Spektrum-Wand, 2 Spur-Pulse, 3 Sternenstaub reaktiv, 4 Wasserfall
+const BODY = [`
 // Sternenstaub: Lichtpunkte sammeln sich, wo Nebel und Licht sind (viele kleine, wenige große); sie blenden weich
 // ein und aus, während der Nebel zieht, und funkeln mit der Musik schneller
 void main() {
@@ -126,8 +153,8 @@ void main() {
     vec2 id = floor(g);
     float h = hash(id + float(k) * 17.0);
     vec2 cuv = vec2((id.x + 0.5) * cell / uRes.x, 1.0 - (id.y + 0.5) * cell / uRes.y);
-    float bc;
-    vec3 ic = light(cuv, bc);
+    float bc = beamAt(uCol, cuv) + beamAt(uGhost, cuv);
+    vec3 ic = ink;
     float lc = dot(ic, vec3(0.2126, 0.7152, 0.0722));
     float dens = (smoothstep(0.35, 0.8, field(cuv)) * (0.15 + 2.2 * lc) + 0.8 * bc + 0.04 * uIdle + 0.6 * waveAt(cuv)) * (k == 0 ? 0.55 : 0.3);
     float on = smoothstep(h - 0.06, h + 0.02, dens);
@@ -140,7 +167,110 @@ void main() {
     col += toWhite(normalize(ic + 1e-3), 0.5) * st * on * tw * (0.25 + 1.6 * lc + bc) * (k == 0 ? 0.8 : 1.2);
   }
   finish(col, uv);
-}`;
+}
+`, `
+// 1 · Spektrum-Wand: jede Spalte ein Frequenzband (links tief, rechts hoch), füllt sich von unten, Spitzenpunkt fällt langsam
+void main() {
+  vec2 uv = UV();
+  float beam;
+  vec3 ink = light(uv, beam);
+  vec4 C = cellAt(12.0);
+  float h = 1.0 - C.y;
+  float s = specAt(C.x) * 0.9, pk = peakAt(C.x) * 0.9;
+  float cellH = C.w / uRes.y;
+  float on = 1.0 - smoothstep(s - cellH * 0.5, s + cellH * 0.5, h);
+  float top = (1.0 - clamp(abs(h - pk) / cellH, 0.0, 1.0)) * step(0.02, pk);
+  float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
+  float kk = clamp(uK / max(uGlowMax, 0.01), 0.0, 1.0);
+  float v = clamp((on * (0.3 + 0.7 * h / max(s, 0.05)) + top + 0.7 * bc) * (0.25 + 0.75 * kk), 0.0, 1.0);
+  vec3 c = toWhite(bandCol(C.x), 0.15 + 0.55 * top + 0.4 * min(1.0, bc));
+  vec3 col = ink * 0.18 + uGrey * uIdle * 0.05;
+  col += c * dotOf(C, max(v, 0.03)) * (0.03 + 0.95 * v) + c * haloOf(C, v) * 0.2 * v;
+  finish(col, uv);
+}
+`, `
+// 2 · Spur-Pulse: jeder Schlag einer Spur schickt eine senkrechte Lichtfront von der Marke nach links und rechts,
+// in ihrer Farbe und nahe ihrer Zeile am hellsten; was klingt, glüht als Band an der Marke
+void main() {
+  vec2 uv = UV();
+  float beam;
+  vec3 ink = light(uv, beam);
+  vec4 C = cellAt(11.0);
+  float v = 0.0;
+  vec3 acc = vec3(0.0);
+  for (int i = 0; i < 8; i++) {
+    if (i >= uTrkN) break;
+    vec4 t = uTrk[i];
+    float yc = 0.5 * (t.x + t.y), hh = max(0.015, 0.5 * (t.y - t.x));
+    float dy = C.y - yc;
+    float age = t.w > 0.002 ? -0.32 * log(t.w) : 9.0;
+    float dx = abs(C.x - uCol.x) * uRes.x / L();
+    float front = 0.02 + age * 0.9;
+    float spread = 0.1 + hh + 0.5 * age;
+    float wv = t.w * exp(-pow((dx - front) / (0.025 + 0.06 * age), 2.0)) * exp(-dy * dy / (spread * spread));
+    float core = t.z * exp(-dx * dx / 0.0015) * exp(-dy * dy / 0.04);
+    float e = 0.9 * wv + 0.5 * core;
+    v += e;
+    acc += uTrkC[i] * e;
+  }
+  float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
+  vec3 c = v > 0.001 ? toWhite(acc / v, 0.2 + 0.45 * min(1.0, v)) : uColC;
+  v = clamp(v + 0.35 * bc, 0.0, 1.0);
+  vec3 col = ink * 0.2 + uGrey * uIdle * 0.05;
+  col += c * dotOf(C, max(v, 0.03)) * (0.03 + 0.95 * v) + c * haloOf(C, v) * 0.22 * v;
+  finish(col, uv);
+}
+`, `
+// 3 · Sternenstaub, reaktiv: jeder Stern gehört zu einer Kategorie und blitzt mit ihren Schlägen auf;
+// große Sterne für Drums und Bass (Bass eher unten), kleine für alles andere
+void main() {
+  vec2 uv = UV();
+  float beam;
+  vec3 ink = light(uv, beam);
+  vec3 col = ink * 0.22 + uGrey * uIdle * 0.08;
+  for (int k = 0; k < 2; k++) {
+    float cell = (k == 0 ? 7.0 : 17.0) * uPx;
+    vec2 g = gl_FragCoord.xy / cell;
+    vec2 id = floor(g);
+    float h = hash(id + float(k) * 17.0);
+    vec2 cuv = vec2((id.x + 0.5) * cell / uRes.x, 1.0 - (id.y + 0.5) * cell / uRes.y);
+    float hc = hash(id + 5.5 + float(k));
+    int ci = k == 1 ? (hc < 0.55 ? 0 : 1) : min(5, int(hc * 6.0));
+    vec3 e = uCatE[ci];
+    float pos = ci == 1 ? smoothstep(0.25, 0.95, cuv.y) : 1.0;
+    float dens = 0.25 + 0.75 * smoothstep(0.3, 0.8, field(cuv));
+    float act = (0.05 + 1.3 * e.x + 1.8 * e.y) * pos * dens;
+    float on = smoothstep(h - 0.08, h + 0.01, act * (k == 0 ? 0.45 : 0.2) + 0.6 * beamAt(uCol, cuv));
+    if (on < 0.002) continue;
+    vec2 jp = vec2(hash(id + 3.1), hash(id + 7.3)) - 0.5;
+    vec2 dp = (fract(g) - 0.5 - jp * 0.6) * cell;
+    float r = (k == 0 ? 0.9 : 1.6) * uPx * (0.7 + 0.6 * hash(id + 1.7)) * (1.0 + 0.25 * e.y);
+    float st = exp(-dot(dp, dp) / (r * r)) + 0.12 * exp(-dot(dp, dp) / (9.0 * r * r)) * smoothstep(0.5 * cell, 0.25 * cell, length(dp));
+    float tw = 0.8 + 0.2 * sin(uT * (0.8 + 2.2 * hash(id + 4.4)) + h * 50.0);
+    col += toWhite(uCatC[ci], 0.25 + 0.5 * e.y) * st * on * tw * (0.15 + 0.8 * e.x + 1.2 * e.y) * (k == 0 ? 0.8 : 1.1);
+  }
+  finish(col, uv);
+}
+`, `
+// 4 · Wasserfall: das Spektrum der letzten drei Takte steigt als Punktraster von unten auf (unten = jetzt)
+void main() {
+  vec2 uv = UV();
+  float beam;
+  vec3 ink = light(uv, beam);
+  vec4 C = cellAt(10.0);
+  float age = 1.0 - C.y;
+  float v = texture(uHist, vec2(clamp(C.x, 0.0, 1.0), clamp((age * float(HIST) - uHistFrac + 0.5) / float(HIST), 0.0, 1.0))).r;
+  float kk = clamp(uK / max(uGlowMax, 0.01), 0.0, 1.0);
+  float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
+  v = pow(smoothstep(0.5, 0.95, v), 1.4);
+  v = clamp(v * (1.0 - 0.6 * age) * (0.3 + 0.7 * kk) + 0.5 * bc, 0.0, 1.0);
+  vec3 c = toWhite(bandCol(C.x), 0.15 + 0.45 * v);
+  vec3 col = ink * 0.18 + uGrey * uIdle * 0.05;
+  col += c * dotOf(C, max(v, 0.03)) * (0.03 + 0.95 * v) + c * haloOf(C, v) * 0.2 * v;
+  finish(col, uv);
+}
+`];
+export const VARIANTS = ['Sterne ruhig', 'Spektrum-Wand', 'Spur-Pulse', 'Sterne reaktiv', 'Wasserfall'];
 
 export function createRoomShader(canvas) {
   let gl = null;
@@ -164,10 +294,23 @@ export function createRoomShader(canvas) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr) || 'Programm');
     return pr;
   };
-  let prog, fieldProg;
+  const NAMES = ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax', 'uPx', 'uField',
+    'uSpec', 'uPeak', 'uCatE', 'uCatC', 'uTrk', 'uTrkC', 'uTrkN', 'uHist', 'uHistFrac'];
+  // Ein Programm je Variante, erst beim ersten Gebrauch übersetzt
+  const progs = [];
+  function program(v) {
+    if (!progs[v]) {
+      const pr = link(PRE + BODY[v]);
+      const U = {};
+      for (const n of NAMES) U[n] = gl.getUniformLocation(pr, n);
+      progs[v] = { pr, U };
+    }
+    return progs[v];
+  }
+  let fieldProg;
   try {
-    prog = link(FS);
     fieldProg = link(FIELD_FS);
+    program(0);
   } catch (e) {
     console.warn('Raumlicht ohne Shader:', e.message);
     return null;
@@ -177,18 +320,23 @@ export function createRoomShader(canvas) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const U = {};
-  for (const n of ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax', 'uPx', 'uField']) U[n] = gl.getUniformLocation(prog, n);
   const FU = { res: gl.getUniformLocation(fieldProg, 'uRes'), t: gl.getUniformLocation(fieldProg, 'uT'), bass: gl.getUniformLocation(fieldProg, 'uBass') };
   // Nebel-Textur (RGBA8, weich gefiltert) mit eigenem Framebuffer
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   const fbo = gl.createFramebuffer();
+  // Verlauf des Spektrums (32 Bänder × 48 Zeilen, oben die jüngste) für den Wasserfall
+  const histTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, histTex);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 32, 48, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array(32 * 48));
   let fw = 0, fh = 0;
   let lost = false;
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
   const cloud = new Float32Array(24), cloudC = new Float32Array(18), waves = new Float32Array(16);
+  const catE = new Float32Array(18), catC = new Float32Array(18), trk = new Float32Array(32), trkC = new Float32Array(24);
   const c3 = (c) => [c[0] / 255, c[1] / 255, c[2] / 255];
 
   // Software-Renderer (kein Grafikchip): dann rechnet glow.js mit kleinerer Auflösung
@@ -219,12 +367,35 @@ export function createRoomShader(canvas) {
       gl.uniform1f(FU.t, u.t);
       gl.uniform1f(FU.bass, u.band[0]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      // 2) Licht und Linien in voller Auflösung
+      // 2) Licht und Punkte in voller Auflösung
+      let P;
+      try { P = program(u.variant || 0); } catch (e) { console.warn('Raumlicht-Variante:', e.message); P = program(0); }
+      const U = P.U;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.useProgram(prog);
+      gl.useProgram(P.pr);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniform1i(U.uField, 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, histTex);
+      if (u.react) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 32, 48, gl.RED, gl.UNSIGNED_BYTE, u.react.hist);
+      gl.uniform1i(U.uHist, 1);
+      gl.activeTexture(gl.TEXTURE0);
+      if (u.react) {
+        const r = u.react;
+        gl.uniform1fv(U.uSpec, r.spec);
+        gl.uniform1fv(U.uPeak, r.peak);
+        catE.fill(0);
+        r.cats.forEach((c, i) => { catE.set([c.env, c.flash, 0], i * 3); catC.set(c3(c.c), i * 3); });
+        gl.uniform3fv(U.uCatE, catE);
+        gl.uniform3fv(U.uCatC, catC);
+        trk.fill(0);
+        r.tracks.slice(0, 8).forEach((t, i) => { trk.set([t.y0, t.y1, t.env, t.flash], i * 4); trkC.set(c3(t.c), i * 3); });
+        gl.uniform4fv(U.uTrk, trk);
+        gl.uniform3fv(U.uTrkC, trkC);
+        gl.uniform1i(U.uTrkN, Math.min(8, r.tracks.length));
+        gl.uniform1f(U.uHistFrac, r.histFrac);
+      }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform2f(U.uRes, canvas.width, canvas.height);
       gl.uniform1f(U.uT, u.t);

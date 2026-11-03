@@ -4,7 +4,9 @@
 
 import { anySoloOf, isAbove, trackState, EPS } from '../model.js';
 import { headW } from './arranger.js';
-import { createRoomShader } from './room-shader.js';
+import { createRoomShader, VARIANTS } from './room-shader.js';
+import { createReact } from './room-react.js';
+import { lsKey } from '../edition.js';
 
 const CATS = ['drums', 'bass', 'chords', 'synth', 'fx', 'own'];
 const BEHIND = 150; // px hinter der Marke: Platz für Funken
@@ -23,6 +25,40 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   document.body.prepend(amb);
   // Shader, wenn der Browser WebGL 2 kann; sonst malt Canvas 2D dieselben Werte
   const shader = createRoomShader(amb);
+  const react = createReact({ engine, cats: CATS });
+  let lastReact = null;
+  // Vorläufig zum Vergleichen: Variante des Raumlichts (1–4), umschaltbar mit L oder der kleinen Leiste unten rechts
+  const PROBE_KEY = lsKey('loopwerk.licht');
+  let variant = 3;
+  try { const v = Number(localStorage.getItem(PROBE_KEY)); if (v >= 1 && v <= 4) variant = v; } catch { /* ohne Speicher */ }
+  function setVariant(v, say = true) {
+    variant = ((v - 1 + 4) % 4) + 1;
+    try { localStorage.setItem(PROBE_KEY, String(variant)); } catch { /* ohne Speicher */ }
+    for (const b of probe.querySelectorAll('button')) b.setAttribute('aria-pressed', String(Number(b.dataset.v) === variant));
+    if (say) ui.flash?.(`Licht ${variant}: ${VARIANTS[variant]}`);
+  }
+  const probe = document.createElement('div');
+  probe.className = 'licht-probe';
+  probe.setAttribute('role', 'group');
+  probe.setAttribute('aria-label', 'Licht-Variante (Test)');
+  probe.hidden = !shader;
+  probe.append(Object.assign(document.createElement('span'), { textContent: 'Licht' }));
+  for (let v = 1; v <= 4; v++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.v = String(v);
+    b.textContent = String(v);
+    b.title = VARIANTS[v];
+    b.addEventListener('click', () => setVariant(v));
+    probe.append(b);
+  }
+  document.body.append(probe);
+  setVariant(variant, false);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'l' && e.key !== 'L') return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    setVariant(variant + 1);
+  });
   const beam = document.createElement('canvas');
   beam.className = 'beam';
   beam.setAttribute('aria-hidden', 'true');
@@ -147,7 +183,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     // Raumlicht (Hintergrund, Leiste oben) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde, auch bei 120 Hz
     // Shader: 30 Bilder pro Sekunde, damit der Nebel fließt; in der Stille genügen 15
     const roomIdle = !live && (room.K || 0) < 0.002 && room.glow.every((g) => g < 0.01);
-    if (now - roomAt >= (shader ? (roomIdle ? 66 : 32) : 45)) {
+    if (now - roomAt >= (shader ? (roomIdle ? 66 : shader.software ? 45 : 32) : 45)) {
       roomAt = now;
       const r0 = performance.now();
       drawRoom(now / 1000);
@@ -193,6 +229,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     for (const [id, g] of trackGlow) if (!hitIds.has(id)) { if (g < 0.003) trackGlow.delete(id); else trackGlow.set(id, g * 0.85); }
 
     litTracks(p, hits);
+    react.feed(hits);
     // Marke: aus, sobald Kern und Funken verglüht sind (der Hintergrund klingt unabhängig davon aus)
     if (!live && !sparks.length && !trackGlow.size) { hide(); return; }
     if (!shown) { shown = true; beam.hidden = false; }
@@ -470,7 +507,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   // Shader rechnet in Bildschirmauflösung (bis 1,25 Bildpunkte je CSS-Pixel), sonst wirkt er verpixelt
   const GL_DPR = 1.25;
   const GL_MAX = 2400;
-  const GL_LOW = 0.35; // kleinste Stufe (Software-Renderer, langsame Geräte)
+  const GL_LOW = 0.35; // kleinste Stufe für langsame Geräte
+  const GL_SOFT = 0.25; // Software-Renderer (ohne Grafikchip): noch gröber, höchstens 22 Bilder/s
   let glQ = null;
   let glFixed = false;
   // Wird die App beim Spielen langsam (unter etwa 40 Bilder/s), rechnet der Shader schrittweise gröber
@@ -482,7 +520,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     frameMs += (Math.min(100, dtMs) - frameMs) * 0.1;
     slowFor = live && frameMs > 25 ? slowFor + dtMs : 0;
     fastFor = live && frameMs < 18 ? fastFor + dtMs : 0;
-    const top = shader.software ? GL_LOW : Math.min(GL_DPR, window.devicePixelRatio || 1);
+    const top = shader.software ? GL_SOFT : Math.min(GL_DPR, window.devicePixelRatio || 1);
     if (slowFor > 1500 && glQ > GL_LOW) { glQ = Math.max(GL_LOW, glQ * 0.7); slowFor = 0; fastFor = 0; frameMs = 16; }
     else if (fastFor > 20000 && glQ < top) { glQ = Math.min(top, glQ / 0.8); fastFor = 0; }
   }
@@ -507,7 +545,22 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       });
     }
     const g = room.ghosts.reduce((m, x) => (x.i > (m?.i ?? 0) ? x : m), null);
+    react.step(dt, engine.playing && !calm);
+    const vh = window.innerHeight || 1;
+    const tracks = [];
+    for (const [id, s] of react.tracks()) {
+      const lane = grid.querySelector(`.lane[data-track-id="${id}"]`);
+      if (!lane?.offsetParent) continue;
+      const r = lane.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh) continue;
+      tracks.push({ y0: r.top / vh, y1: r.bottom / vh, env: Math.min(1, s.env), flash: s.flash, c: rgb[s.cat] || GREY });
+    }
+    const reactU = lastReact = {
+      spec: react.spec, peak: react.peak, hist: react.hist, histFrac: react.histFrac, tracks,
+      cats: CATS.map((c) => ({ env: Math.min(1, react.catEnv[c]), flash: react.catFlash[c], c: rgb[c] || GREY })),
+    };
     shader.draw({
+      variant, react: reactU,
       t: flow, K: mix ? K : 0, A, band: mix ? [b0, b1, b2] : [0, 0, 0], glow: mix ? room.glow : [0, 0, 0],
       c0: bandC[0], c1: bandC[1], c2: bandC[2], white, clouds,
       col: { x: room.colX >= 0 ? room.colX / W : -1, i: room.colI, y0: (room.y0 ?? 0) / H, y1: (room.y1 ?? H) / H, c: room.colC || GREY },
@@ -535,7 +588,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const Wn = vw >= vh ? 160 : Math.max(24, Math.round((160 * vw) / vh));
     const Hn = vw >= vh ? Math.max(24, Math.round((160 * vh) / vw)) : 160;
     if (shader) {
-      const sc = Math.min(glQ ?? (glQ = shader.software ? GL_LOW : Math.min(GL_DPR, window.devicePixelRatio || 1)), GL_MAX / Math.max(vw, vh));
+      const sc = Math.min(glQ ?? (glQ = shader.software ? GL_SOFT : Math.min(GL_DPR, window.devicePixelRatio || 1)), GL_MAX / Math.max(vw, vh));
       room.px = sc;
       const gw = Math.max(16, Math.round(vw * sc)), gh = Math.max(16, Math.round(vh * sc));
       if (amb.width !== gw || amb.height !== gh) { amb.width = gw; amb.height = gh; }
@@ -761,6 +814,9 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, glQ, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader }; },
     // Für Tests und Bildschirmfotos: Auflösungsstufe des Shaders setzen (CSS-Pixel-Faktor)
     setQuality(q, { fixed = false } = {}) { glQ = q; glFixed = fixed; },
+    setVariant(v) { setVariant(v, false); },
+    get variant() { return variant; },
+    get react() { return { sent: lastReact && { tracks: lastReact.tracks, hist: lastReact.hist.reduce((a, b) => a + b, 0), histFrac: lastReact.histFrac },  tracks: react.tracks().map(([id, t]) => ({ id, env: t.env, flash: t.flash })), spec: [...react.spec], cats: { ...react.catEnv } }; },
     // Für Tests: das Raumlicht als RGBA im Raum-Maß (lange Seite 160), gleich ob Shader oder Canvas 2D
     readRoom() {
       const W = room.W || amb.width, H = room.H || amb.height;
