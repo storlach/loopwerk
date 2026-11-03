@@ -137,6 +137,7 @@
 <link rel="modulepreload" href="src/ui/brand-meter.js">
 <link rel="modulepreload" href="src/ui/glow.js">
 <link rel="modulepreload" href="src/ui/room-shader.js">
+<link rel="modulepreload" href="src/ui/room-react.js">
 <link rel="modulepreload" href="src/ui/editor.js">
 <link rel="modulepreload" href="src/dsp/edit.js">
 <link rel="modulepreload" href="src/own-sounds.js">
@@ -1778,10 +1779,10 @@
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-wrap { position: relative; z-index: 1; }
   .ambient { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
-  /* Fenster über dem Arranger (Schubladen, Menüs, Tipps): durchscheinend mit Weichzeichner.
-     Seitenleisten brauchen ihn nicht: hinter ihnen liegt nur das ohnehin weiche Licht, die Amplitude bleibt im Arranger.
+  /* Fenster über dem Arranger (Schubladen, Menüs, Tipps) und die Seitenleisten: durchscheinend mit Weichzeichner,
+     damit der Sternenstaub hinter Schrift und Reglern weich wird (ihre Menüs hängen am body, nicht in den Leisten).
      Deck und Fachleiste bleiben ohne: ihr Weichzeichner würde die Menüs darin unter die Seitenfenster legen. */
-  .dock, .more-panel, .tip, .pop, .hint, .track-menu, .clipbar {
+  .dock, .more-panel, .tip, .pop, .hint, .track-menu, .clipbar, .shelf, .insp {
     -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
   }
   /* Lichtleiste ganz oben: dasselbe Licht wie der Hintergrund, hell und strahlend – wirkt auch am Handy */

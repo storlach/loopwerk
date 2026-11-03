@@ -63,8 +63,10 @@ function sample() {
     mid: area(W * 0.35, W * 0.65, H * 0.35, H * 0.65),
     edge: (area(0, W * 0.06, 0, H) + area(W * 0.94, W, 0, H) + area(0, W, 0, H * 0.06) + area(0, W, H * 0.94, H)) / 4,
     W, H, all: area(0, W, 0, H), top: area(0, W, 0, H / 4), bottom: area(0, W, (H * 3) / 4, H), sat,
-    atMark: mx >= 0 ? area(mx - 2, mx + 3, H * 0.3, H * 0.7) : 0,
-    far: mx >= 0 ? area(mx > W / 2 ? mx - W * 0.4 - 2 : mx + W * 0.4 - 2, mx > W / 2 ? mx - W * 0.4 + 3 : mx + W * 0.4 + 3, H * 0.3, H * 0.7) : 0,
+    left: area(W * 0.03, W * 0.2, H * 0.6, H), right: area(W * 0.8, W * 0.97, H * 0.6, H),
+    // im oberen Viertel: dort reicht die Spektrum-Wand nicht hin, die Säule an der Marke schon
+    atMark: mx >= 0 ? area(mx - 2, mx + 3, H * 0.08, H * 0.24) : 0,
+    far: mx >= 0 ? area(mx > W / 2 ? mx - W * 0.4 - 2 : mx + W * 0.4 - 2, mx > W / 2 ? mx - W * 0.4 + 3 : mx + W * 0.4 + 3, H * 0.08, H * 0.24) : 0,
     room: st.room, roomCost: st.roomCost,
   };
 }
@@ -118,9 +120,12 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     check('Bass füllt das Bassband, nicht die Höhen', bass.room.band[0] > 0.5 && bass.room.band[2] < 0.15, JSON.stringify(bass.room.band));
     check('Höhen füllen das Höhenband, nicht den Bass', high.room.band[2] > 0.4 && high.room.band[0] < 0.15, JSON.stringify(high.room.band));
     const dB = { top: bass.top - idle.top, bottom: bass.bottom - idle.bottom };
-    const dH = { top: high.top - idle.top, bottom: high.bottom - idle.bottom };
+    const dH = { left: high.left - idle.left, right: high.right - idle.right };
+    const dBl = { left: bass.left - idle.left, right: bass.right - idle.right };
     check('Bass färbt unten deutlich stärker als oben', dB.bottom > 1.5 * Math.max(1, dB.top), JSON.stringify(dB));
-    check('Höhen leuchten oben stärker als unten', dH.top > 1.3 * Math.max(1, dH.bottom), JSON.stringify(dH));
+    // Spektrum-Wand: Frequenzen von links (tief) nach rechts (hoch)
+    check('Höhen leuchten rechts stärker als links', dH.right > 1.3 * Math.max(1, dH.left), JSON.stringify(dH));
+    check('Bass leuchtet links stärker als rechts', dBl.left > 1.3 * Math.max(1, dBl.right), JSON.stringify(dBl));
 
     // ---------- Lichtwelle an der Marke ----------
     let near = 0;
@@ -172,8 +177,10 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     check('Drop hinterlässt ein Nachglühen', peak > 0.25 && quietGlow < 0.05, JSON.stringify({ peak: +peak.toFixed(2), quietGlow }));
     check('Nachglühen löst sich über mindestens 1,5 s auf', span >= 1.5 && span < 4.5, `${span.toFixed(2)} s`);
     check('Nachglühen blitzt nicht (steigt weich)', gUp < 0.1, gUp.toFixed(3));
-    const dj = stats(jumps(drop));
-    check('Drop: Licht steigt gleichmäßig, ohne Sprung und Flackern', dj.max < 6 && flicker(drop) <= 1, JSON.stringify({ ...dj, flicker: flicker(drop) }));
+    // ohne die ersten 400 ms: da schaltet der Test vom vorigen Testklang um (neuer Start), nicht der Drop
+    const settled = drop.filter((r) => r.t > 400);
+    const dj = stats(jumps(settled));
+    check('Drop: Licht steigt gleichmäßig, ohne Sprung und Flackern', dj.max < 6 && flicker(settled) <= 1, JSON.stringify({ ...dj, flicker: flicker(settled) }));
 
     // ---------- Bild-zu-Bild: Beispielsong von vorn ----------
     await page.evaluate(() => {
@@ -186,7 +193,8 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
     const song = await page.evaluate(record, 6000);
     const sj = stats(jumps(song));
     const fps = song.length / 6;
-    check('Weich: Bild-zu-Bild-Sprung des Raumlichts begrenzt, kein Flackern', sj.max < 4.5 && sj.p95 < 3 && flicker(song) <= 2, JSON.stringify({ ...sj, flicker: flicker(song) }));
+    // Das Punktraster reagiert bewusst auf Schläge (Martins Wunsch): einzelne Sprünge bis 6, aber kein Flackern
+    check('Weich: Bild-zu-Bild-Sprung des Raumlichts begrenzt, kein Flackern', sj.max < 6 && sj.p95 < 3 && flicker(song) <= 2, JSON.stringify({ ...sj, flicker: flicker(song) }));
     const gpu = await page.evaluate(() => window.loopwerk.glow.state.shader);
     check('Raumlicht läuft als Shader (WebGL 2)', gpu);
     check('Raumlicht zeichnet höchstens 30 Bilder pro Sekunde', fps <= 31 && fps >= 12, fps.toFixed(1));

@@ -1,5 +1,5 @@
-// Raumlicht als Shader (WebGL 2): fließender Nebel aus verzerrtem Rauschen, darin leuchtende Höhenlinien.
-// Die Musik steuert nur Werte (Bänder, Farben, Marke, Nachglühen); gezeichnet wird alles auf der Grafikkarte.
+// Raumlicht als Shader (WebGL 2): Spektrum-Wand als Punktraster in den Farben der Spuren, über dem Licht der Clips.
+// Die Musik steuert nur Werte (Bänder, Farben je Band, Marke, Nachglühen); gezeichnet wird alles auf der Grafikkarte.
 // Ohne WebGL 2 gibt createRoomShader null zurück, glow.js malt dann wie bisher mit Canvas 2D.
 
 const VS = `#version 300 es
@@ -32,8 +32,8 @@ void main() {
   o = vec4(hi, (f - hi) * 255.0, 0.0, 1.0);
 }`;
 
-// Zweiter Durchgang, volle Auflösung: Licht, Farben und scharfe Höhenlinien aus dem vergrößerten Nebel
-const FS = `#version 300 es
+// Zweiter Durchgang, volle Auflösung: gemeinsamer Vorspann (Licht der Musik, Punktraster), dann je Variante ein main()
+const PRE = `#version 300 es
 precision highp float;
 uniform vec2 uRes;
 uniform float uT;
@@ -57,106 +57,122 @@ uniform vec3 uGrey;
 uniform float uGlowMax;
 uniform float uPx;
 uniform sampler2D uField;
+uniform float uSpec[32];
+uniform float uPeak[32];
+uniform vec3 uSpecC[32];
+uniform vec2 uSpecX;
 out vec4 o;
-
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 vec3 toWhite(vec3 c, float k) { return mix(c, uWhite, k); }
-
-void main() {
-  float L = max(uRes.x, uRes.y);
-  vec2 uv = vec2(gl_FragCoord.x / uRes.x, 1.0 - gl_FragCoord.y / uRes.y); // y nach unten wie im Raum
-  vec2 P = uv * uRes / L;
-  float bass = uBand.x, mids = uBand.y, highs = uBand.z;
-
-  // Nebel aus der kleinen Textur (weich vergrößert), zwei Kanäle für 16 Bit Genauigkeit
-  vec4 tx = texture(uField, gl_FragCoord.xy / uRes);
-  float f = tx.r + tx.g / 255.0;
-  float d = smoothstep(0.22, 0.82, f);
-
-  // Grund: Anthrazit-Rauch, auch in der Stille
-  vec3 col = uGrey * uIdle * (0.35 + 1.1 * d);
-
-  // Bass: warmes Licht von unten, durch den Nebel gefiltert
-  float bot = smoothstep(1.0 - (0.42 + 0.36 * bass), 1.08, uv.y);
-  col += uC0 * uK * bass * bot * (0.25 + 1.3 * d) * 1.15;
-
-  // Mitten: Farbwolken leben im Nebel statt als flache Flecken
-  vec2 dc = (P - 0.5 * uRes / L) / vec2(0.6, 0.45);
-  col += uC1 * uK * (0.4 + 0.6 * uA) * 0.32 * exp(-dot(dc, dc) * 1.6) * (0.3 + 1.0 * d);
+float L() { return max(uRes.x, uRes.y); }
+// Nebel an einer Stelle (uv, y nach unten)
+float field(vec2 uv) { vec4 t = texture(uField, vec2(uv.x, 1.0 - uv.y)); return t.r + t.g / 255.0; }
+float beamAt(vec4 c, vec2 uv) {
+  if (c.y < 0.002) return 0.0;
+  float dx = (uv.x - c.x) * uRes.x / L();
+  float ys = smoothstep(c.z - 0.03, c.z + 0.05, uv.y) * smoothstep(c.w + 0.03, c.w - 0.05, uv.y);
+  return c.y * ys * exp(-dx * dx / 0.0035);
+}
+// Farbiges Licht der Musik ohne Struktur
+vec3 light(vec2 uv, out float beam) {
+  vec2 P = uv * uRes / L();
+  float bass = uBand.x, highs = uBand.z;
+  vec3 col = vec3(0.0);
+  col += uC0 * uK * bass * smoothstep(1.0 - (0.42 + 0.36 * bass), 1.08, uv.y) * 1.2;
+  vec2 dc = (P - 0.5 * uRes / L()) / vec2(0.6, 0.45);
+  col += uC1 * uK * (0.4 + 0.6 * uA) * 0.32 * exp(-dot(dc, dc) * 1.6);
   for (int i = 0; i < 6; i++) {
     vec4 c = uCloud[i];
     if (c.w < 0.002) continue;
     vec2 dp = (P - c.xy) / vec2(c.z, c.z * 0.8);
-    col += uCloudC[i] * c.w * exp(-dot(dp, dp) * 2.4) * (0.15 + 1.25 * d);
+    col += uCloudC[i] * c.w * exp(-dot(dp, dp) * 2.4);
   }
-
-  // Höhen: zarter Saum oben und funkelnde Punkte
-  float topg = smoothstep(0.42, 0.0, uv.y);
-  col += uC2 * uK * highs * topg * (0.25 + 0.6 * d) * 0.55;
-  if (highs > 0.01) {
-    vec2 g = P * 46.0;
-    vec2 id = floor(g);
-    float h = hash(id);
-    if (h > 0.93) {
-      vec2 st = fract(g) - 0.5 - (vec2(hash(id + 3.1), hash(id + 7.7)) - 0.5) * 0.6;
-      float tw = pow(0.5 + 0.5 * sin(uT * (1.5 + 3.0 * hash(id + 1.3)) + h * 40.0), 3.0);
-      col += toWhite(uC2, 0.5) * uK * highs * smoothstep(0.55, 0.0, uv.y) * tw * exp(-dot(st, st) * 40.0) * 1.6;
-    }
-  }
-
-  // Säule an der Abspielmarke (und die ausblendende nach einem Sprung)
-  float beam = 0.0;
-  if (uCol.y > 0.002) {
-    float dx = (uv.x - uCol.x) * uRes.x / L;
-    float ys = smoothstep(uCol.z - 0.03, uCol.z + 0.05, uv.y) * smoothstep(uCol.w + 0.03, uCol.w - 0.05, uv.y);
-    beam = uCol.y * ys * exp(-dx * dx / 0.0035);
-    float trail = uCol.y * ys * exp(-pow(max(0.0, -dx - 0.01), 2.0) / 0.012) * step(dx, 0.0);
-    col += uColC * (0.75 * beam + 0.16 * trail) * (0.5 + 0.8 * d);
-  }
-  if (uGhost.y > 0.002) {
-    float dx = (uv.x - uGhost.x) * uRes.x / L;
-    float ys = smoothstep(uGhost.z - 0.03, uGhost.z + 0.05, uv.y) * smoothstep(uGhost.w + 0.03, uGhost.w - 0.05, uv.y);
-    float gb = uGhost.y * ys * exp(-dx * dx / 0.0035);
-    beam += gb;
-    col += uColC * 0.75 * gb * (0.5 + 0.8 * d);
-  }
-
-  // Höhenlinien des Nebels: dünne Lichtlinien, die Marke und die Taktwelle lassen sie aufleuchten
-  float lv = f * 7.0 - uT * 0.07;
-  float w = max(fwidth(lv), 1e-4);
-  float cd = abs(fract(lv - 0.5) - 0.5) / w;
-  float line = 1.0 - clamp(cd / uPx - 0.45, 0.0, 1.0);
-  float hc = cd / uPx;
-  float halo = exp(-hc * hc * 0.08);
-  float wave = 0.0;
+  col += uC2 * uK * highs * smoothstep(0.42, 0.0, uv.y) * 0.6;
+  beam = beamAt(uCol, uv) + beamAt(uGhost, uv);
+  col += uColC * 0.6 * beam;
+  vec2 gc = (P - 0.5 * uRes / L()) / vec2(0.5, 0.36);
+  float area = uGlow.x * smoothstep(0.45, 1.05, uv.y) + uGlow.y * exp(-dot(gc, gc)) + uGlow.z * smoothstep(0.4, 0.0, uv.y);
+  col += toWhite(normalize(col + 1e-4), 0.55) * uGlowMax * 0.6 * area;
+  return col;
+}
+float waveAt(vec2 uv) {
+  vec2 P = uv * uRes / L();
+  float w = 0.0;
   for (int i = 0; i < 4; i++) {
     vec4 wv = uWave[i];
     if (wv.w < 0.002) continue;
     float e = (length((P - wv.xy) / vec2(1.0, 0.85)) - wv.z) / 0.035;
-    wave += wv.w * exp(-e * e);
+    w += wv.w * exp(-e * e);
   }
-  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-  float lit = uIdle * 0.25 + uK * (0.04 + 0.12 * uA) + 1.2 * lum + 1.2 * beam + 0.8 * wave;
-  vec3 lc = toWhite(normalize(col + 1e-4) * 0.9, 0.35 + 0.4 * min(1.0, beam * 2.0));
-  col += lc * lit * (0.4 + 0.6 * d) * (0.38 * line + 0.1 * halo);
-
-  // Nachglühen nach lauten Stellen: heller Schimmer im Nebel
-  vec3 gsum = uGlow;
-  if (gsum.x + gsum.y + gsum.z > 0.01) {
-    vec2 gc = (P - 0.5 * uRes / L) / vec2(0.5, 0.36);
-    float area = gsum.x * smoothstep(0.45, 1.05, uv.y) + gsum.y * exp(-dot(gc, gc)) + gsum.z * smoothstep(0.4, 0.0, uv.y);
-    col += toWhite(normalize(col + 1e-4), 0.55) * uGlowMax * 0.6 * area * (0.3 + 1.0 * d);
-  }
-
-  // Kontrast: Ränder zurück ins Dunkel, wenn Licht da ist
+  return w;
+}
+void finish(vec3 col, vec2 uv) {
   float e = length((uv - 0.5) / 0.62);
   float vig = e < 0.6 ? 0.0 : (e < 0.8 ? 0.35 * (e - 0.6) / 0.2 : mix(0.35, 0.85, clamp((e - 0.8) / 0.2, 0.0, 1.0)));
   col *= 1.0 - uVig * vig;
-
   col = col / (1.0 + 0.35 * col);
-  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0; // ruhiges Rauschen gegen Farbstufen
+  col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
   col = clamp(col, 0.0, 1.0);
   o = vec4(col, max(col.r, max(col.g, col.b)));
+}
+vec2 UV() { return vec2(gl_FragCoord.x / uRes.x, 1.0 - gl_FragCoord.y / uRes.y); }
+
+// Punktraster: xy Mitte der Zelle (uv), z Abstand zur Mitte (px), w Zellgröße (px)
+vec4 cellAt(float css) {
+  float c = css * uPx;
+  vec2 g = gl_FragCoord.xy / c;
+  vec2 id = floor(g);
+  return vec4((id.x + 0.5) * c / uRes.x, 1.0 - (id.y + 0.5) * c / uRes.y, length(fract(g) - 0.5) * c, c);
+}
+float dotR(vec4 C, float v) { return (0.12 + 0.36 * sqrt(clamp(v, 0.0, 1.0))) * C.w; }
+float dotOf(vec4 C, float v) { return 1.0 - clamp((C.z - dotR(C, v)) / uPx + 0.5, 0.0, 1.0); }
+float haloOf(vec4 C, float v) { return exp(-pow(max(0.0, C.z - dotR(C, v)) / (3.0 * uPx), 2.0)); }
+float specAt(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uSpec[i], uSpec[min(i + 1, 31)], fract(b)); }
+float peakAt(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uPeak[i], uPeak[min(i + 1, 31)], fract(b)); }
+// Farbe eines Bandes: die Spuren, die dort klingen (aus room-react.js), weich zwischen den Bändern
+vec3 bandCol(float x) { float b = clamp(x, 0.0, 0.9999) * 31.0; int i = int(b); return mix(uSpecC[i], uSpecC[min(i + 1, 31)], fract(b)); }
+// Spektrum-Wand an einer Rasterzelle: Füllung von unten bis zum Pegel des Bandes, heller Spitzenpunkt; top = Spitzenpunkt
+float specX(float x) { return clamp((x - uSpecX.x) / max(uSpecX.y - uSpecX.x, 0.05), 0.0, 1.0); }
+float spectrum(vec4 C, out float top) {
+  float h = 1.0 - C.y;
+  float s = specAt(specX(C.x)) * 0.75, pk = peakAt(specX(C.x)) * 0.75;
+  float cellH = C.w / uRes.y;
+  float on = 1.0 - smoothstep(s - cellH * 0.5, s + cellH * 0.5, h);
+  top = (1.0 - clamp(abs(h - pk) / cellH, 0.0, 1.0)) * step(0.02, pk);
+  return on * (0.3 + 0.7 * h / max(s, 0.05)) + top;
+}
+// Punkt zeichnen: Größe und Helligkeit nach v, ein knapper Schein
+vec3 drawDot(vec4 C, float v, vec3 c) {
+  return c * dotOf(C, max(v, 0.03)) * (0.03 + 0.95 * v) + c * haloOf(C, v) * 0.2 * v;
+}
+`;
+
+// Spektrum-Wand: jede Spalte ein Frequenzband (links tief, rechts hoch) in der Farbe der Spuren, die dort klingen;
+// füllt sich von unten, satt im Körper, zur Spitze hin heller, der Spitzenpunkt fällt langsam
+const BODY = `
+void main() {
+  vec2 uv = UV();
+  float beam;
+  vec3 ink = light(uv, beam);
+  vec4 C = cellAt(12.0);
+  float top;
+  float s = spectrum(C, top);
+  float bc = beamAt(uCol, C.xy) + beamAt(uGhost, C.xy);
+  float kk = clamp(uK / max(uGlowMax, 0.01), 0.0, 1.0);
+  float v = clamp((s + 0.7 * bc) * (0.25 + 0.75 * kk), 0.0, 1.0);
+  float x = specX(C.x);
+  float h = (1.0 - C.y) / max(specAt(x) * 0.75, 0.05);
+  // satte Farbe der Spuren (Sättigung angehoben), zur Spitze und am Spitzenpunkt Weißglut
+  vec3 b0 = bandCol(x);
+  float g = dot(b0, vec3(0.2126, 0.7152, 0.0722));
+  vec3 base = clamp(mix(vec3(g), b0, 1.7), 0.0, 1.0);
+  vec3 c = toWhite(base, 0.2 * pow(clamp(h, 0.0, 1.0), 6.0) + 0.6 * top + 0.35 * min(1.0, bc));
+  float lit = step(0.04, v);
+  vec3 col = ink * 0.16 + uGrey * uIdle * 0.05;
+  col += c * dotOf(C, max(v, 0.03)) * mix(0.03, 0.2 + 0.85 * v, lit) + c * haloOf(C, v) * 0.3 * v;
+  // farbiger Schein über dem Raster: der Körper der Säulen leuchtet in die Fläche
+  col += base * s * 0.12 * (0.25 + 0.75 * kk);
+  finish(col, uv);
 }`;
 
 export function createRoomShader(canvas) {
@@ -181,10 +197,15 @@ export function createRoomShader(canvas) {
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr) || 'Programm');
     return pr;
   };
-  let prog, fieldProg;
+  const NAMES = ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax', 'uPx', 'uField',
+    'uSpec', 'uPeak', 'uSpecC', 'uSpecX'];
+  let fieldProg, P;
   try {
-    prog = link(FS);
     fieldProg = link(FIELD_FS);
+    const pr = link(PRE + BODY);
+    const U = {};
+    for (const n of NAMES) U[n] = gl.getUniformLocation(pr, n);
+    P = { pr, U };
   } catch (e) {
     console.warn('Raumlicht ohne Shader:', e.message);
     return null;
@@ -194,8 +215,6 @@ export function createRoomShader(canvas) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const U = {};
-  for (const n of ['uRes', 'uT', 'uK', 'uA', 'uBand', 'uGlow', 'uC0', 'uC1', 'uC2', 'uWhite', 'uCloud', 'uCloudC', 'uCol', 'uColC', 'uGhost', 'uWave', 'uVig', 'uIdle', 'uGrey', 'uGlowMax', 'uPx', 'uField']) U[n] = gl.getUniformLocation(prog, n);
   const FU = { res: gl.getUniformLocation(fieldProg, 'uRes'), t: gl.getUniformLocation(fieldProg, 'uT'), bass: gl.getUniformLocation(fieldProg, 'uBass') };
   // Nebel-Textur (RGBA8, weich gefiltert) mit eigenem Framebuffer
   const tex = gl.createTexture();
@@ -206,6 +225,7 @@ export function createRoomShader(canvas) {
   let lost = false;
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
   const cloud = new Float32Array(24), cloudC = new Float32Array(18), waves = new Float32Array(16);
+  const specC = new Float32Array(96);
   const c3 = (c) => [c[0] / 255, c[1] / 255, c[2] / 255];
 
   // Software-Renderer (kein Grafikchip): dann rechnet glow.js mit kleinerer Auflösung
@@ -236,12 +256,21 @@ export function createRoomShader(canvas) {
       gl.uniform1f(FU.t, u.t);
       gl.uniform1f(FU.bass, u.band[0]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      // 2) Licht und Linien in voller Auflösung
+      // 2) Licht und Punkte in voller Auflösung
+      const U = P.U;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.useProgram(prog);
+      gl.useProgram(P.pr);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.uniform1i(U.uField, 0);
+      if (u.react) {
+        const r = u.react;
+        gl.uniform1fv(U.uSpec, r.spec);
+        gl.uniform1fv(U.uPeak, r.peak);
+        for (let i = 0; i < 96; i++) specC[i] = r.col[i] / 255;
+        gl.uniform3fv(U.uSpecC, specC);
+        gl.uniform2f(U.uSpecX, r.x0 ?? 0, r.x1 ?? 1);
+      }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform2f(U.uRes, canvas.width, canvas.height);
       gl.uniform1f(U.uT, u.t);
