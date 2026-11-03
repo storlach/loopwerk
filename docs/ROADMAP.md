@@ -227,7 +227,7 @@
 - Akkord-Streifen unter der Tonart-Zeile: je Takt oder Halbtakt ein leitereigener Akkord (i, III, iv, v, V, VI, VII, ii°, Pause), beliebte Folgen „ab hier“; Begleit-Patterns (Fläche, Bass, Arp, Klavier, Gitarre) folgen live, offline gleich, Undo, Projektdatei; Loops behalten bewusst ihre eigene Folge
 - Spec: `docs/specs/v2.9-song-starter-akkorde.md`, Tests: `tests/starter-chords.test.cjs`
 
-## 🔧 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven, Scheibe 4: Summe, Scheibe 6: Effekt-Pad aufnehmen)
+## ✅ 2.12 – Automation (Scheibe 1: Spur-Lautstärke, Scheibe 2: Panorama und Stufe, Scheibe 3: Effekt-Kurven samt Verzerrer-Anteil (Scheibe 5 ging darin auf), Scheibe 4: Summe, Scheibe 6: Effekt-Pad aufnehmen)
 - Lautstärke-Kurve je Spur, linear: Modell und Engine (`src/automation.js`, `tests/automation.test.cjs`), Kurven wandern mit Clips
 - Kurvenzeile unter der Spur (`src/ui/auto-lane.js`): Spur-Menü „Kurve“ oder Taste A; Maus: Klick setzt, Ziehen verschiebt (Raster, Umschalt frei), Doppelklick/Entf löscht, Fähnchen mit Wert und Position; Finger: Antippen setzt, Punkt ziehen, Halten löscht, Wischen scrollt; geschlossen als dünne Linie über den Clips
 - Vorlagen Einblenden/Ausblenden (1 · 2 · 4 · 8 Takte): Inspektor „Spur“, am Handy Spur-Menü → „Verlauf“; Tests: `tests/automation-ui.test.cjs`
@@ -283,4 +283,4 @@
 - Seit 2.2 „Phosphor“ (ADR 004), nur dunkel. Farben, Schriften und Bausteine nur über die Tokens in `:root`.
 
 ## Später
-- Automation, Tonart-Erkennung, Stem-Trennung, Desktop-App (Tauri), Plugins
+- Tonart-Erkennung, Desktop-App (Tauri), Plugins
