@@ -2,8 +2,10 @@
 const { chromium } = require('playwright');
 const { start } = require('./serve.cjs');
 
-// init: Funktion, die vor dem Laden der Seite im Browser läuft (page.addInitScript), z. B. eine MIDI-Attrappe
-async function openApp({ viewport = { width: 1400, height: 820 }, args = [], hasTouch = false, deviceScaleFactor = 1, init = null } = {}) {
+// init: Funktion, die vor dem Laden der Seite im Browser läuft (page.addInitScript), z. B. eine MIDI-Attrappe.
+// Ältere Tests erwarten das Regal mit offener Gruppe „Drums“ und sichtbare Tonart-/Akkordzeilen; die App startet
+// inzwischen mit allem zu. fresh: true lässt den echten Startzustand.
+async function openApp({ viewport = { width: 1400, height: 820 }, args = [], hasTouch = false, deviceScaleFactor = 1, init = null, fresh = false } = {}) {
   const server = await start();
   const url = `http://127.0.0.1:${server.address().port}/`;
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', ...args] });
@@ -11,6 +13,14 @@ async function openApp({ viewport = { width: 1400, height: 820 }, args = [], has
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  if (!fresh) {
+    await page.addInitScript(() => {
+      try {
+        if (!sessionStorage.getItem('loopwerk.shelfOpen')) sessionStorage.setItem('loopwerk.shelfOpen', '["drums"]');
+        if (!localStorage.getItem('loopwerk.harmonyRows')) localStorage.setItem('loopwerk.harmonyRows', 'on');
+      } catch { /* egal */ }
+    });
+  }
   if (init) await page.addInitScript(init);
   await page.goto(url);
   await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 15000 });

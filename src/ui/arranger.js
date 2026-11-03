@@ -50,11 +50,11 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
   const rulerRow = el('div', 'ruler-row');
   const corner = el('div', 'corner');
   corner.append(el('span', null, 'Takt'));
-  // Tonart- und Akkordzeile ein-/ausblenden: „auto“ = Desktop an, Handy nur bei Tonart- oder Akkordwechseln;
-  // ein Klick stellt fest an bzw. aus (je Gerät gemerkt). Verborgene Wechsel zeigt ein Leuchtpunkt am Schalter.
+  // Tonart- und Akkordzeile ein-/ausblenden: zu Beginn zu, ein Klick öffnet bzw. schließt (je Gerät gemerkt).
+  // Verborgene Tonart- oder Akkordwechsel zeigt ein Leuchtpunkt am Schalter.
   const HARM_KEY = lsKey('loopwerk.harmonyRows');
-  let harmMode = 'auto';
-  try { const v = localStorage.getItem(HARM_KEY); if (v === 'on' || v === 'off') harmMode = v; } catch { /* Standard */ }
+  let harmMode = 'off';
+  try { if (localStorage.getItem(HARM_KEY) === 'on') harmMode = 'on'; } catch { /* Standard */ }
   const harmBtn = harmonyToggle ? el('button', 'harm-toggle') : null;
   if (harmBtn) {
     harmBtn.type = 'button';
@@ -68,7 +68,7 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
     corner.append(harmBtn);
   }
   const harmUsed = () => keyChangesOf(store.project).length > 0 || chordsOf(store.project).length > 0;
-  const harmOn = () => harmMode === 'on' || (harmMode === 'auto' && (!narrow.matches || harmUsed()));
+  const harmOn = () => harmMode === 'on';
   function syncHarmony() {
     if (!harmBtn) return;
     const on = harmOn();
@@ -77,7 +77,6 @@ export function mountArranger({ root, store, engine, library, ui, harmonyToggle 
     harmBtn.title = on ? 'Tonart- und Akkordzeile ausblenden' : 'Tonart- und Akkordzeile zeigen';
     harmBtn.classList.toggle('has', !on && harmUsed());
   }
-  narrow.addEventListener('change', () => render());
   const ruler = el('div', 'ruler');
   const marks = el('div', 'ruler-marks');
   const loopBand = el('div', 'loop-band');

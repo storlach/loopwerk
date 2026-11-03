@@ -162,18 +162,18 @@ function registerSignals() {
     // ---------- Bedienung Mastering (Desktop) ----------
     await page.evaluate(() => { const { ui } = window.loopwerk; ui.select(null); ui.selectTrack(null); });
     await page.waitForTimeout(200);
-    await page.click('#insp-mst-ab');
+    await page.click('#insp-mst-ab-a');
     await page.waitForTimeout(250);
-    const abA = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, a: window.loopwerk.engine.mix.aGain.gain.value, b: window.loopwerk.engine.mix.bBus.gain.value, t: document.getElementById('insp-mst-ab').textContent }));
-    await page.click('#insp-mst-ab');
+    const abA = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, a: window.loopwerk.engine.mix.aGain.gain.value, b: window.loopwerk.engine.mix.bBus.gain.value, t: document.getElementById('insp-mst-ab-a').getAttribute('aria-pressed') }));
+    await page.click('#insp-mst-ab-b');
     await page.waitForTimeout(250);
-    const abB = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, a: window.loopwerk.engine.mix.aGain.gain.value, b: window.loopwerk.engine.mix.bBus.gain.value, t: document.getElementById('insp-mst-ab').textContent }));
-    check('A/B-Knopf: erst Vorher (A hörbar, B stumm)', abA.ab === 'A' && abA.a > 0.3 && abA.b < 0.01 && /Vorher/.test(abA.t), JSON.stringify(abA));
-    check('A/B-Knopf: dann Nachher (B leiser gestellt, A stumm)', abB.ab === 'B' && abB.a < 0.01 && abB.b > 0.05 && abB.b < 0.99 && /Nachher/.test(abB.t), JSON.stringify(abB));
+    const abB = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, a: window.loopwerk.engine.mix.aGain.gain.value, b: window.loopwerk.engine.mix.bBus.gain.value, t: document.getElementById('insp-mst-ab-b').getAttribute('aria-pressed') }));
+    check('Vergleich „Vorher“: A hörbar, B stumm', abA.ab === 'A' && abA.a > 0.3 && abA.b < 0.01 && abA.t === 'true', JSON.stringify(abA));
+    check('Vergleich „Nachher“: B leiser gestellt, A stumm', abB.ab === 'B' && abB.a < 0.01 && abB.b > 0.05 && abB.b < 0.99 && abB.t === 'true', JSON.stringify(abB));
     await page.click('#insp-mst-ab-end');
     await page.waitForTimeout(250);
     const abN = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, b: window.loopwerk.engine.mix.bBus.gain.value }));
-    check('Vergleich beenden: wieder volle Lautheit', abN.ab === null && abN.b > 0.99, JSON.stringify(abN));
+    check('Vergleich „Aus“: wieder volle Lautheit', abN.ab === null && abN.b > 0.99, JSON.stringify(abN));
 
     await page.click('#insp-mst-style-warm');
     await page.waitForTimeout(150);
@@ -185,6 +185,11 @@ function registerSignals() {
     await page.evaluate(() => window.loopwerk.store.undo());
     const un = await page.evaluate(() => window.loopwerk.store.project.master.mastering);
     check('Schalter aus, Rückgängig holt Mastering zurück', off === false && un.on === true && un.style === 'warm', JSON.stringify(un));
+    await page.click('#insp-mst-on');
+    await page.waitForTimeout(150);
+    const hid = await page.evaluate(() => ({ body: document.querySelector('#insp-mst .mst-body').hidden, styleVis: !!document.getElementById('insp-mst-style-warm').offsetParent }));
+    check('Mastering aus: Stil und Vergleich sind ausgeblendet, nur der Schalter bleibt', hid.body && !hid.styleVis, JSON.stringify(hid));
+    await page.evaluate(() => window.loopwerk.store.undo());
     await page.click('#export-btn');
     await page.waitForTimeout(300);
     const ex = await page.evaluate(() => ({ vis: !!document.getElementById('ex-mst-on')?.offsetParent, checked: document.getElementById('ex-mastering').checked, dis: document.getElementById('ex-mastering').disabled }));

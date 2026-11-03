@@ -17,15 +17,15 @@ const lenBucket = (s) => {
 // Auf schmalen Bildschirmen ist immer nur eine Kategorie offen (Akkordeon)
 const narrow = window.matchMedia('(max-width: 760px)');
 
-// Das große Regal startet mit geschlossenen Gruppen (die Akkordeons ersetzen die Kategorie-Filter);
-// wenige Herkunftsgruppen (groupBy) merken sich ihren Zustand
+// Das große Regal startet mit geschlossenen Gruppen (die Akkordeons ersetzen die Kategorie-Filter) und merkt sich
+// den Zustand nur für die laufende Sitzung (Neuladen); wenige Herkunftsgruppen (groupBy) merken ihn dauerhaft
+const openStore = (groupBy) => (groupBy ? localStorage : sessionStorage);
 function loadOpen(groupBy) {
-  if (!groupBy) return new Set();
-  try { const v = JSON.parse(localStorage.getItem(OPEN_KEY)); if (Array.isArray(v)) return new Set(v); } catch { /* Standard */ }
-  return new Set(groupBy.map((g) => g.id));
+  try { const v = JSON.parse(openStore(groupBy).getItem(OPEN_KEY)); if (Array.isArray(v)) return new Set(v); } catch { /* Standard */ }
+  return new Set(groupBy ? groupBy.map((g) => g.id) : []);
 }
-function saveOpen(open) {
-  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* Speicher nicht verfügbar */ }
+function saveOpen(open, groupBy) {
+  try { openStore(groupBy).setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* Speicher nicht verfügbar */ }
 }
 
 function loadFavs() {
@@ -280,7 +280,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (accordion()) open.clear();
       open.add(catId);
     }
-    saveOpen(open);
+    saveOpen(open, groupBy);
     render();
     if (accordion() && open.has(catId)) document.getElementById(`shelf-cat-${catId}`)?.scrollIntoView({ block: 'nearest' });
   }
@@ -331,7 +331,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   engine.on(sync);
   library.on?.(render);
   narrow.addEventListener('change', () => {
-    if (accordion() && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); saveOpen(open); }
+    if (accordion() && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); saveOpen(open, groupBy); }
     render();
   });
   if (accordion() && open.size > 1) { const first = [...open][0]; open.clear(); open.add(first); }
@@ -348,7 +348,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     if (len !== 'all' && lenBucket(s) !== len) len = 'all';
     if (accordion()) open.clear();
     open.add(group.id);
-    saveOpen(open);
+    saveOpen(open, groupBy);
     render();
     const row = items.get(sampleId)?.[0];
     if (!row) return;

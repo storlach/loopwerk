@@ -123,8 +123,20 @@ const { check, finish } = createChecker();
     const empty = await page.locator('#library .shelf-empty').textContent();
     check('Leere Suche erklärt sich', empty.includes('Keine Sounds gefunden'), empty);
     await page.fill('#shelf-search', '');
-    const closed = await page.evaluate(() => [...document.querySelectorAll('#library .shelf-cat')].every((h) => h.getAttribute('aria-expanded') === 'false'));
-    check('Regal startet mit geschlossenen Gruppen', closed, String(closed));
+    {
+      // Echter Startzustand (ohne die Test-Voreinstellung): Regal-Gruppen und Harmonie-Zeilen zu
+      const fresh = await openApp({ fresh: true });
+      const st = await fresh.page.evaluate(() => ({
+        closed: [...document.querySelectorAll('#library .shelf-cat')].every((h) => h.getAttribute('aria-expanded') === 'false'),
+        harm: document.querySelector('.arr-grid').classList.contains('harm-off') && document.getElementById('harm-toggle').getAttribute('aria-expanded') === 'false',
+      }));
+      await fresh.page.click('#harm-toggle');
+      const harmOpen = await fresh.page.evaluate(() => !document.querySelector('.arr-grid').classList.contains('harm-off') && !!document.querySelector('.key-row').offsetParent);
+      await fresh.close();
+      check('Start: Regal-Gruppen geschlossen, Tonart- und Akkordzeile zu', st.closed && st.harm, JSON.stringify(st));
+      check('„Harmonie“ antippen blendet Tonart- und Akkordzeile ein', harmOpen);
+    }
+    await page.click('#shelf-cat-drums'); // Test-Voreinstellung hat Drums offen: zu, damit gleich nur „Bass“ offen ist
     check('Filter: nur noch der Favoriten-Schalter', await page.evaluate(() => [...document.querySelectorAll('#shelf-chips .chip')].map((c) => c.dataset.filter).join(',')) === 'fav');
     await page.click('#shelf-cat-bass');
     const bassRows = await page.locator('#shelf-items-bass .loop-item').count();
