@@ -29,8 +29,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
   place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
-  place($('shelf-search'), { narrow: $('shelf-sticky') });
-  place($('shelf-filter-btn'), { narrow: $('shelf-sticky') });
+  place($('shelf-find'), { narrow: $('shelf-sticky') });
   place($('shelf-filters'), { narrow: $('shelf-sticky') });
   // Dichte „calm“: Daumenleiste am Handy (Kiste · ▶ · ● · Werkbank), Mischen und FX-Pad im Fach „Song“, „+ Neu“ neben der Suche
   place($('play-btn'), { calm: { narrow: $('tabbar') } });

@@ -402,8 +402,6 @@
   .shelf-title { display: flex; align-items: baseline; justify-content: space-between; }
   .shelf-total { font: 400 11px/1 var(--font-mono); color: var(--muted); }
   .shelf-sticky:empty { display: none; }
-  .shelf-filters { display: contents; }
-  .shelf-filter-btn { display: none; }
   .shelf-search {
     width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px;
     border: 1px solid var(--line); border-radius: 4px; background: var(--lane);
@@ -1498,29 +1496,12 @@
     /* Sound-Regal im Fach: Suche und Kategorien oben, das ganze Fach scrollt */
     .shelf-head { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 10px 12px 8px; }
     .shelf-title { display: none; }
-    .shelf-search { grid-column: 1 / -1; order: -2; height: 44px; font-size: 16px; }
     /* Suche bleibt beim Scrollen oben stehen (unter dem Griff) */
     .shelf-sticky { position: sticky; top: 24px; z-index: 3; padding: 4px 12px 8px; background: var(--sheet-bg, var(--panel)); box-shadow: 0 1px 0 var(--line); }
-    .shelf-sticky .shelf-search { width: 100%; }
-    /* Filter klappen unter der Suche auf und bleiben beim Scrollen mit ihr oben */
-    .shelf-sticky:not(:empty) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-    .shelf-filter-btn {
-      display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 14px;
-      border: 0; border-radius: var(--radius-lg); background: transparent; color: var(--ink);
-      box-shadow: inset 0 0 0 1px var(--key-line); font: 500 12px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
-    }
-    .shelf-filter-btn::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform 0.2s; }
-    .shelf-filter-btn[aria-expanded="true"]::after { transform: translateY(2px) rotate(-135deg); }
-    .shelf-filter-btn.active { box-shadow: inset 0 0 0 1px var(--ink); }
-    .shelf-filter-n:empty { display: none; }
-    .shelf-filter-n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ink); color: var(--accent-ink); display: grid; place-items: center; font-size: 11px; letter-spacing: 0; }
-    .shelf-sticky .shelf-search { grid-column: auto; }
-    .shelf-sticky .shelf-filters { grid-column: 1 / -1; display: grid; gap: 8px; }
-    .shelf-sticky .shelf-filters:not(.open) { display: none; }
-    .chips { grid-column: 1 / -1; order: -1; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-    .shelf-sort { grid-column: 1 / -1; order: -1; }
-    .shelf-len { overflow-x: auto; scrollbar-width: none; }
-    .shelf-len .seg { flex: none; }
+    .shelf-sticky:not(:empty) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    #app[data-density="calm"] .shelf-sticky:not(:empty) { grid-template-columns: minmax(0, 1fr) auto; }
+    .shelf-sticky .shelf-find { grid-column: 1; }
+    .shelf-sticky .shelf-filters { grid-column: 1 / -1; }
     .seg { min-height: 36px; padding: 0 14px; font-size: 12px; }
     .chip { flex: none; min-height: 44px; padding: 0 14px; }
     .shelf-make { display: contents; }
@@ -2155,9 +2136,6 @@
     .dock:not(#export) { margin: 0 1px 1px; border-left: 0; border-right: 0; border-bottom: 0; border-radius: 10px 10px 2px 2px; clip-path: inset(-40px 0 0 0); }
   }
   .sheet-grip::before { width: 36px; height: 3px; border-radius: 2px; background: #3A3A40; }
-  .shelf-len { min-width: 0; }
-  .shelf-len .seg { white-space: nowrap; padding-inline: 4px; flex: 1 1 auto; min-width: 0; }
-  .shelf-len .shelf-sort-label { margin-right: 2px; }
   /* Handy und Touch: großer Griff, gut zu sehen und mit dem Daumen zu fassen */
   @media (max-width: 760px), (pointer: coarse) {
     /* sichtbar 24 px, zum Fassen 40 px: der Rand ragt unsichtbar in den Inhalt, ohne ihm Platz zu nehmen */
@@ -2166,12 +2144,6 @@
     .shelf > .sheet-grip { position: sticky; top: 0; }
     .sheet-grip::before { width: 64px; height: 5px; border-radius: 3px; background: var(--muted); }
     .sheet-grip:active::before, .sheet.dragging .sheet-grip::before { background: var(--ink); }
-  }
-  /* Finger: Längenfilter als Raster aus sechs gleich großen Feldern (3 × 2), jedes fingerbreit */
-  @media (pointer: coarse) {
-    .shelf-len { display: grid; grid-template-columns: repeat(3, minmax(44px, 1fr)); overflow: visible; }
-    .shelf-len .shelf-sort-label { display: none; }
-    .shelf-len .seg { min-height: 44px; padding-inline: 4px; }
   }
   .dock-head h2 { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
   .dbtn { background: transparent; box-shadow: var(--key-shadow); border-radius: var(--radius); font: 500 10px/1 var(--font-mono); letter-spacing: 0.08em; }
@@ -3210,6 +3182,47 @@
     .arr-grid.rh-tiny .track-row .tbtn-chev { width: 40px; height: 30px; margin: 0; }
     .add-row .sum-toggle { height: 52px; --sumw: 88px; font-size: 11px; }
   }
+
+  /* Regal: Suche, Filter und Favoriten in einer Zeile (ADR/Entwurf docs/ux/filter-layouts, Variante 1).
+     Länge und Ordnen liegen in einem Fach hinter dem Regler-Knopf; der gewählte Wert steht im Knopf. */
+  .shelf-find { display: flex; align-items: stretch; height: 44px; min-width: 0; border-radius: var(--radius-lg); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
+  .shelf-find:focus-within { box-shadow: inset 0 0 0 1px var(--ink); }
+  .shelf-find .find-lead { flex: none; width: 36px; display: grid; place-items: center; padding: 0; border: 0; background: transparent; color: var(--muted); }
+  .shelf-find .find-lead svg { width: 16px; height: 16px; }
+  .shelf-find .find-reset { width: 44px; color: var(--ink); cursor: pointer; border-radius: var(--radius-lg); }
+  .shelf-find .find-reset[hidden], .shelf-find .find-lead[hidden] { display: none; }
+  .shelf-find .shelf-search { flex: 1 1 0; min-width: 0; order: 0; width: auto; height: auto; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--ink); font: 400 14px/1 var(--font-body); text-overflow: ellipsis; outline: none; }
+  .shelf-find .shelf-search::placeholder { color: var(--muted); opacity: 1; }
+  .shelf-find .shelf-search::-webkit-search-cancel-button { display: none; }
+  .find-sep { flex: none; width: 1px; margin: 10px 2px; background: var(--key-line); }
+  .find-btn { flex: none; min-width: 44px; padding: 0 3px; display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+  .find-fav { min-width: 46px; }
+  .find-k { display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 34px; height: 34px; padding: 0 6px; border-radius: 10px; font: 500 12px/1 var(--font-mono); letter-spacing: 0.04em; white-space: nowrap; }
+  .find-k svg { width: 16px; height: 16px; }
+  .shelf-filter-n:empty { display: none; }
+  .find-btn.set .find-k { color: var(--ink); text-shadow: var(--glow-ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); }
+  .find-btn.set:not(.find-fav) svg { display: none; }
+  .find-btn[aria-expanded="true"] .find-k { background: var(--ink); color: var(--accent-ink); text-shadow: none; box-shadow: none; }
+  .find-btn[aria-expanded="true"] svg circle { fill: var(--ink); }
+  .find-fav[aria-pressed="true"] { color: var(--ink); }
+  .find-fav[aria-pressed="true"] .find-k { box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); }
+  .find-fav[aria-pressed="true"] svg { fill: currentColor; filter: drop-shadow(0 0 5px rgb(255 255 255 / 0.55)); }
+  .shelf-filters { display: none; }
+  .shelf-filters.open { display: grid; gap: 6px; padding: 10px; border-radius: var(--radius-lg) 4px var(--radius-lg) var(--radius-lg); background: var(--well); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); }
+  .find-lbl { padding: 2px 2px 0; font: 500 9.5px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .shelf-filters .shelf-len, .shelf-filters .shelf-sort { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); padding: 0; border-radius: 10px; background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); }
+  .shelf-filters .seg { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px; min-width: 0; padding: 0 2px; border: 0; border-radius: 10px; }
+  .shelf-filters .seg:first-of-type, .shelf-filters .seg:last-of-type { border-radius: 10px; border: 0; }
+  .shelf-filters .seg:not(:first-of-type)::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: var(--key-line); }
+  .shelf-filters .seg[aria-pressed="true"]::before, .shelf-filters .seg[aria-pressed="true"] + .seg::before { display: none; }
+  .shelf-filters .seg[aria-pressed="true"] { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55); text-shadow: var(--glow-ink); }
+  .shelf-filters .seg:disabled { opacity: 0.4; cursor: default; }
+  .len-l { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+  .len-n { font: 400 9px/1 var(--font-mono); letter-spacing: 0.04em; opacity: 0.75; }
+  .len-bar { position: absolute; left: 22%; bottom: 4px; height: 2px; width: calc(56% * var(--p, 0)); border-radius: 1px; background: currentColor; opacity: 0.55; transition: width 0.12s ease-out; }
+  #app[data-density="calm"] .shelf-sticky #shelf-new { grid-column: 2; grid-row: 1; }
+  @media (prefers-reduced-motion: reduce) { .len-bar { transition: none; } }
+  @media (max-width: 760px), (pointer: coarse) { .shelf-find .shelf-search { font-size: 16px; } }
 </style>
 
 
@@ -3352,24 +3365,28 @@
         <button class="shelf-import" id="new-beat-btn" type="button" title="Neuen Beat im Stepsequencer bauen"><span class="lbl-long">+ Beat bauen</span><span class="lbl-short">+ Beat</span></button>
         <button class="shelf-import" id="new-melody-btn" type="button" title="Neue Melodie in der Piano-Roll schreiben">+ Melodie</button>
       </div>
-      <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
-      <button type="button" class="shelf-filter-btn" id="shelf-filter-btn" data-surface="catalog" aria-expanded="false" aria-controls="shelf-filters">Filter<span class="shelf-filter-n" id="shelf-filter-n"></span></button>
-      <div class="shelf-filters" id="shelf-filters">
-      <div class="shelf-sort" data-surface="catalog" role="group" aria-label="Ordnen nach">
-        <span class="shelf-sort-label">Ordnen:</span>
-        <button type="button" class="seg" data-sort="cat">Kategorie</button>
-        <button type="button" class="seg" data-sort="genre">Genre</button>
+      <div class="shelf-find" id="shelf-find">
+        <span class="find-lead" id="shelf-lupe" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.4 10.4L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+        <button type="button" class="find-lead find-reset" id="shelf-reset" hidden aria-label="Suche und Filter zurücksetzen" title="Suche und Filter zurücksetzen"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <input type="search" id="shelf-search" class="shelf-search" placeholder="Suchen …" aria-label="Sounds durchsuchen" autocomplete="off">
+        <span class="find-sep" data-surface="catalog" aria-hidden="true"></span>
+        <button type="button" class="find-btn shelf-filter-btn" id="shelf-filter-btn" data-surface="catalog" aria-expanded="false" aria-controls="shelf-filters" aria-label="Länge und Ordnen" title="Länge und Ordnen"><span class="find-k"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 5h12M2 11h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="10.5" cy="5" r="2.1" fill="var(--well)" stroke="currentColor" stroke-width="1.4"/><circle cx="5.5" cy="11" r="2.1" fill="var(--well)" stroke="currentColor" stroke-width="1.4"/></svg><span class="shelf-filter-n" id="shelf-filter-n"></span></span></button>
+        <button type="button" class="find-btn find-fav" id="shelf-fav" data-surface="catalog" aria-pressed="false" aria-label="Nur Favoriten zeigen" title="Nur Favoriten zeigen"><span class="find-k"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.85 3.95 4.3.5-3.2 2.95.85 4.3L8 11.35 4.2 13.5l.85-4.3-3.2-2.95 4.3-.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span></button>
       </div>
-      <div class="shelf-sort shelf-len" data-surface="catalog" role="group" aria-label="Länge">
-        <span class="shelf-sort-label">Länge:</span>
-        <button type="button" class="seg" data-len="all">Alle</button>
-        <button type="button" class="seg" data-len="1" title="Loops bis 1 Takt">1T</button>
-        <button type="button" class="seg" data-len="2" title="Loops mit 2 Takten">2T</button>
-        <button type="button" class="seg" data-len="4" title="Loops mit 3 bis 4 Takten">4T</button>
-        <button type="button" class="seg" data-len="8" title="Loops ab 5 Takten">8T+</button>
-        <button type="button" class="seg" data-len="shot" title="Einzelklänge ohne Takt">One-Shot</button>
-      </div>
-      <div class="chips" id="shelf-chips" data-surface="catalog" role="group" aria-label="Filter"></div>
+      <div class="shelf-filters" id="shelf-filters" data-surface="catalog">
+        <span class="find-lbl">Länge</span>
+        <div class="shelf-len" role="group" aria-label="Länge">
+          <button type="button" class="seg" data-len="1" title="Loops bis 1 Takt"><span class="len-l">1T</span><span class="len-n"></span><i class="len-bar" aria-hidden="true"></i></button>
+          <button type="button" class="seg" data-len="2" title="Loops mit 2 Takten"><span class="len-l">2T</span><span class="len-n"></span><i class="len-bar" aria-hidden="true"></i></button>
+          <button type="button" class="seg" data-len="4" title="Loops mit 3 bis 4 Takten"><span class="len-l">4T</span><span class="len-n"></span><i class="len-bar" aria-hidden="true"></i></button>
+          <button type="button" class="seg" data-len="8" title="Loops ab 5 Takten"><span class="len-l">8T+</span><span class="len-n"></span><i class="len-bar" aria-hidden="true"></i></button>
+          <button type="button" class="seg" data-len="shot" title="Einzelklänge ohne Takt"><span class="len-l">Shot</span><span class="len-n"></span><i class="len-bar" aria-hidden="true"></i></button>
+        </div>
+        <span class="find-lbl">Ordnen</span>
+        <div class="shelf-sort" role="group" aria-label="Ordnen nach">
+          <button type="button" class="seg" data-sort="cat">Kategorie</button>
+          <button type="button" class="seg" data-sort="genre">Genre</button>
+        </div>
       </div>
     </div>
     <div class="shelf-list" id="library"></div>

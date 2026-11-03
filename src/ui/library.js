@@ -60,7 +60,10 @@ const materialIn = (s, store, library) => store.project.recipes?.[s.id]?.materia
 // eingerückte Zeile „Name · 8 Schnitte“ unter dem Eltern-Sound und klappen auf
 export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null, onBench = null }) {
   const search = document.getElementById('shelf-search');
-  const chipsEl = document.getElementById('shelf-chips');
+  const favBtn = document.getElementById('shelf-fav');
+  const resetBtn = document.getElementById('shelf-reset');
+  const lupe = document.getElementById('shelf-lupe');
+  const find = document.getElementById('shelf-find');
   const totalEl = document.getElementById('shelf-total');
   const favs = loadFavs();
   const open = loadOpen(groupBy);
@@ -84,25 +87,15 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     : CATEGORIES.map((c) => ({ id: c.id, label: c.label, cls: `cat-${c.id}`, has: (s) => s.category === c.id })));
   let groups = groupsFor(sort);
 
-  // Nur noch der Favoriten-Schalter: Kategorien bzw. Genres wählt man über die Akkordeons darunter
-  function buildChips() {
-    chipsEl.innerHTML = '';
-    const chip = el('button', 'chip chip-fav', '★ Favoriten');
-    chip.type = 'button';
-    chip.dataset.filter = 'fav';
-    chip.title = 'Nur Favoriten zeigen';
-    chip.addEventListener('click', () => { filter = filter === 'fav' ? 'all' : 'fav'; render(); });
-    chipsEl.append(chip);
-  }
   const sortBtns = [...document.querySelectorAll('.shelf-sort .seg[data-sort]')];
   for (const b of sortBtns) {
     b.addEventListener('click', () => {
-      if (sort === b.dataset.sort) return;
+      if (sort === b.dataset.sort) { setPane(false); return; }
       sort = b.dataset.sort;
       try { localStorage.setItem(SORT_KEY, sort); } catch { /* egal */ }
       groups = groupsFor(sort);
       if (filter !== 'all' && filter !== 'fav') filter = 'all';
-      buildChips();
+      setPane(false);
       render();
     });
   }
@@ -113,40 +106,58 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     b.addEventListener('click', () => {
       len = len === b.dataset.len ? 'all' : b.dataset.len;
       try { localStorage.setItem(LEN_KEY, len); } catch { /* egal */ }
+      setPane(false);
       render();
     });
   }
-  // Handy: Filter hinter einem Knopf neben der Suche, die Zahl zeigt, wie viele gerade wirken
+  // Länge und Ordnen liegen in einem kleinen Fach hinter dem Regler-Knopf (Handy und Desktop gleich) und schließen nach der Wahl
   const filterBtn = document.getElementById('shelf-filter-btn');
   const filterBox = document.getElementById('shelf-filters');
   // Auf- und Zuklappen in Bewegung: die Fläche wächst, die Liste darunter rutscht sichtbar nach unten,
-  // die Filterzeilen gleiten nacheinander von oben herein (beim Schließen umgekehrt)
+  // die Zeilen gleiten nacheinander von oben herein (beim Schließen umgekehrt)
   const calm = window.matchMedia('(prefers-reduced-motion: reduce)');
   let filterAnim = null;
-  filterBtn?.addEventListener('click', () => {
-    const open = !filterBox.classList.contains('open');
-    filterBtn.setAttribute('aria-expanded', String(open));
+  function setPane(want) {
+    if (!filterBtn || !filterBox) return;
+    if (want === (filterBtn.getAttribute('aria-expanded') === 'true')) return;
+    filterBtn.setAttribute('aria-expanded', String(want));
     filterAnim?.cancel();
-    if (open) filterBox.classList.add('open');
-    if (calm.matches || !filterBox.animate) { filterBox.classList.toggle('open', open); return; }
+    if (want) filterBox.classList.add('open');
+    if (calm.matches || !filterBox.animate) { filterBox.classList.toggle('open', want); return; }
     const h = filterBox.scrollHeight;
     const ease = 'cubic-bezier(.2, .8, .2, 1)';
     filterBox.style.overflow = 'hidden';
     const frames = [{ height: '0px', opacity: 0, marginTop: '-8px' }, { height: `${h}px`, opacity: 1, marginTop: '0px' }];
-    filterAnim = filterBox.animate(open ? frames : [...frames].reverse(), { duration: open ? 280 : 200, easing: ease });
-    if (open) {
-      [...filterBox.children].forEach((row, i) => row.animate(
-        [{ transform: 'translateY(-10px)', opacity: 0 }, { transform: 'none', opacity: 1 }],
-        { duration: 260, delay: 50 + i * 45, easing: ease, fill: 'backwards' },
-      ));
-    }
+    filterAnim = filterBox.animate(want ? frames : [...frames].reverse(), { duration: want ? 180 : 140, easing: ease });
     filterAnim.onfinish = () => {
       filterBox.style.overflow = '';
       filterAnim = null;
-      if (!open) filterBox.classList.remove('open');
+      if (!want) filterBox.classList.remove('open');
     };
+  }
+  filterBtn?.addEventListener('click', () => setPane(filterBtn.getAttribute('aria-expanded') !== 'true'));
+  // Esc oder ein Tipp daneben schließt das Fach
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || filterBtn?.getAttribute('aria-expanded') !== 'true' || !(filterBox.contains(e.target) || find.contains(e.target))) return;
+    setPane(false);
+    filterBtn.focus();
+    e.stopPropagation();
   });
-  buildChips();
+  document.addEventListener('pointerdown', (e) => {
+    if (filterBtn?.getAttribute('aria-expanded') === 'true' && !filterBox.contains(e.target) && !find.contains(e.target)) setPane(false);
+  }, true);
+  favBtn?.addEventListener('click', () => { filter = filter === 'fav' ? 'all' : 'fav'; render(); });
+  // Ein Tipp setzt Suche, Länge, Ordnung und Favoriten zurück
+  resetBtn?.addEventListener('click', () => {
+    search.value = '';
+    filter = 'all';
+    len = 'all';
+    sort = 'cat';
+    groups = groupsFor(sort);
+    try { localStorage.setItem(LEN_KEY, 'all'); localStorage.setItem(SORT_KEY, 'cat'); } catch { /* egal */ }
+    setPane(false);
+    render();
+  });
   search.addEventListener('input', render);
 
   function activate(sample) {
@@ -207,15 +218,38 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     const shown = all.filter(match);
     root.innerHTML = '';
     items.clear();
-    for (const chip of chipsEl.children) chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter));
     for (const b of sortBtns) b.setAttribute('aria-pressed', String(b.dataset.sort === sort));
     for (const b of lenBtns) b.setAttribute('aria-pressed', String(b.dataset.len === len));
-    const active = (filter !== 'all') + (len !== 'all') + (sort !== 'cat');
-    if (filterBtn) {
-      document.getElementById('shelf-filter-n').textContent = active ? String(active) : '';
-      filterBtn.classList.toggle('active', active > 0);
-      filterBtn.setAttribute('aria-label', active ? `Filter, ${active} aktiv` : 'Filter');
+    // Anzahl und Pegel je Länge: die Treffer ohne Längenfilter, damit man vor dem Tipp sieht, was er bringt
+    const base = all.filter((s) => (!q || words(s).includes(q)) && inFilter(s));
+    const counts = { 1: 0, 2: 0, 4: 0, 8: 0, shot: 0 };
+    for (const s of base) counts[lenBucket(s)]++;
+    const top = Math.max(1, ...Object.values(counts));
+    const lenName = { 1: '1 Takt', 2: '2 Takte', 4: '4 Takte', 8: 'ab 5 Takten', shot: 'One-Shot' };
+    for (const b of lenBtns) {
+      const k = b.dataset.len;
+      const n = counts[k];
+      b.querySelector('.len-n').textContent = String(n);
+      b.style.setProperty('--p', String(Math.sqrt(n / top)));
+      b.disabled = n === 0 && len !== k;
+      b.setAttribute('aria-label', `${lenName[k]}, ${n} ${n === 1 ? 'Sound' : 'Sounds'}`);
     }
+    const lenShort = { 1: '1T', 2: '2T', 4: '4T', 8: '8T+', shot: 'Shot' };
+    const val = [len !== 'all' ? lenShort[len] : '', sort !== 'cat' ? 'Genre' : ''].filter(Boolean).join(' ');
+    const pane = len !== 'all' || sort !== 'cat';
+    if (filterBtn) {
+      document.getElementById('shelf-filter-n').textContent = val;
+      filterBtn.classList.toggle('set', pane);
+      filterBtn.setAttribute('aria-label', pane ? `Länge und Ordnen: ${[len !== 'all' ? lenName[len] : '', sort !== 'cat' ? 'nach Genre' : ''].filter(Boolean).join(', ')}` : 'Länge und Ordnen');
+    }
+    if (favBtn) {
+      favBtn.classList.toggle('set', filter === 'fav');
+      favBtn.setAttribute('aria-pressed', String(filter === 'fav'));
+    }
+    // × ersetzt die Lupe, sobald etwas wirkt
+    const anything = !!q || filter !== 'all' || pane;
+    if (resetBtn) { resetBtn.hidden = !anything; lupe.hidden = anything; }
+    search.placeholder = !all.length ? 'Suchen …' : shown.length === all.length ? `Suchen … (${all.length})` : `Suchen … (${shown.length} Treffer)`;
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {

@@ -279,6 +279,7 @@
 - ✅ Scheibe 2a „Sound-Werkbank“ (`docs/specs/krachwerk-2-werkbank.md`, ADR 010): Klang-Rezept am Sound (nicht-destruktiv, gebacken, eine Signalkette; Varianten), Werkbank mit Welle (Anfang/Ende/Anschlag/Ausklang) und Reitern Form · Ton · Farbe · Zeit · Clip, Herkunft (Material Körper/Dinge/Stimme/Strom/Schleife) mit gleicher Farbe in Kiste und Song, Stammbaum-Zeile; Zählung Desktop „Clip gewählt“ 45 / 11 / 4
 - ✅ Scheibe 2b „Zerlegen“ (`docs/specs/krachwerk-2b-zerlegen.md`): Reiter Zerlegen (An Anschlägen | In N gleiche, Empfindlichkeit, In die Kiste, Auf die Spur), verschiebbare Marken auf der Welle, Schnitte als Varianten (ein Undo), Autotune als Rezeptschritt, Trennen in der Werkbank, Werkbank direkt aus der Kiste, 56-px-Kopfzeile der Handy-Schublade, Sample-Editor in Krachwerk ersetzt (Zwillinge), eigenes Zeichen im Deck
 - Als Nächstes Scheibe 3: Takes (Aufnahme im Loop über den laufenden Song), Festhalten (Resampling), Speicher v2 und ZIP-Sicherung
+- ✅ Regal „Eine Zeile“ (Entwurf `docs/ux/filter-layouts/`, Variante 1 mit Anleihen aus 3): Suche, Regler-Knopf (Fach mit Länge und Ordnen, schließt nach der Wahl) und Favoriten-Stern in einer 44-px-Zeile für Handy und Desktop; gewählter Wert im Knopf, × setzt alles zurück, Anzahl und Pegel auf den Längen, Trefferzahl im Suchfeld, „Alle“ entfällt; Test `tests/filter-zeile.test.cjs`, Zählbasis Desktop-Start 92 → 85
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
