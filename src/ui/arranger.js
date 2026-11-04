@@ -842,8 +842,10 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   let freeView = false;
   let wasPlaying = false;
   let appLeft = root.scrollLeft;
-  const followChip = el('button', 'follow-chip', 'Marke folgen');
+  const followChip = el('button', 'follow-chip');
   followChip.type = 'button';
+  // Zeichen: Abspielmarke mit Pfeil darauf zu
+  followChip.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 2.5v11"/><path d="M2.5 8h6"/><path d="M6 5l3 3-3 3"/></svg><span>Marke folgen</span>';
   followChip.id = 'follow-btn';
   followChip.hidden = true;
   followChip.title = 'Die Ansicht folgt wieder der Abspielmarke';

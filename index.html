@@ -1831,6 +1831,19 @@
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-wrap { position: relative; z-index: 1; }
+  /* „Marke folgen“: schwebt unten rechts über den Spuren, nur wenn die Person beim Spielen weggescrollt hat */
+  .follow-chip {
+    position: absolute; right: calc(var(--zbar-r) + 14px); bottom: calc(var(--zbar-b) + 14px); z-index: 6;
+    display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 12px;
+    border: 0; border-radius: 999px; background: var(--sheet-bg); color: var(--ink); cursor: pointer;
+    box-shadow: inset 0 0 0 1px var(--key-line), 0 8px 24px rgb(0 0 0 / 0.5);
+    font: 600 10px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;
+  }
+  .follow-chip[hidden] { display: none; }
+  .follow-chip svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .follow-chip:hover, .follow-chip:focus-visible { box-shadow: inset 0 0 0 1px var(--amber), 0 0 14px rgb(255 255 255 / 0.25), 0 8px 24px rgb(0 0 0 / 0.5); }
+  .follow-chip:active { background: var(--amber); color: var(--accent-ink); }
+  @media (pointer: coarse) { .follow-chip { height: 44px; padding: 0 18px 0 16px; font-size: 11px; } }
   .ambient { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
   /* Fenster über dem Arranger (Schubladen, Menüs, Tipps) und die Seitenleisten: durchscheinend mit Weichzeichner,
      damit der Sternenstaub hinter Schrift und Reglern weich wird (ihre Menüs hängen am body, nicht in den Leisten).
