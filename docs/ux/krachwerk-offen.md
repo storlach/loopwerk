@@ -48,5 +48,7 @@ Alles bis Scheibe 5 ist auf dem Branch `werkstatt` gebaut, getestet und gepusht.
 
 ## 5. Wartet auf andere
 - **Scheibe 3b Takes** (über den laufenden Loop einsingen) wartet auf v2.13 B auf `main` (Spec `docs/specs/v2.13-aufnahme.md`, ADR 009).
-- **Wackler, die auf `main` genauso auftreten:** `v14`, `v17`, `v18`, `v20`, `scale-lock`, `editor-midi`, `more-loops`, `stufe7`. Sie sind zeitabhängig und schlagen nicht bei jedem Lauf fehl. Das ist eine Sache für die Session auf `main`.
+- **Testlauf am 2026-11-04 nach dem Merge von `main`:** 64 von 65 Dateien liefen beim ersten Mal grün (auch `ticker`). Nur `v17` „Marke zeigt die hörbare Position“ fiel durch. Die Prüfung las zu einem beliebigen Zeitpunkt, verlangte aber 40 ms Genauigkeit bei 33–50 ms Bildabstand im Headless-Browser. Jetzt liest sie im Bild-Takt und war danach dreimal grün.
+- **Bildrate in Loopwerk auf `werkstatt`:** Im Headless-Browser fällt ab und zu ein Bild mehr aus als auf `main` (längster Abstand 83 statt 50–67 ms, der Median ist gleich). Spürbar ist das nicht, sollte aber vor dem Merge einmal am echten Gerät angesehen werden (motion-designer).
+- **Ältere Wackler, die auf `main` genauso auftreten:** `v14`, `v18`, `v20`, `scale-lock`, `editor-midi`, `more-loops`, `stufe7`. In diesem Lauf waren alle grün.
 - **`npm test` am Stück** dauert länger als 30 Minuten (Zeitgrenze der Cloud-Session). Die Tests laufen deshalb in Teilen.

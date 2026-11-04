@@ -181,12 +181,13 @@ const { check, finish } = createChecker();
     });
     check('Am Loop-Sprung springt die Marke erst, wenn man den Sprung hört', jump.heard > 3.3 && jump.heard < 4 && jump.lcd === '4', JSON.stringify(jump));
     await page.waitForTimeout(80);
-    const ph = await page.evaluate(() => {
+    // im Bild-Takt lesen (nach der Aktualisierung der Marke im selben Bild), sonst misst der Test das Alter des letzten Bildes
+    const ph = await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())).then(() => {
       const e = window.loopwerk.engine;
       const x = parseFloat(document.querySelector('.playhead').style.transform.match(/translateX\(([-\d.]+)px/)[1]);
       const headW = parseFloat(getComputedStyle(document.querySelector('.arr-grid')).getPropertyValue('--head-w'));
       return { markBeat: (x - headW) / window.loopwerk.ui.pxPerBeat, heard: e.heardBeat(), now: e.currentBeat() };
-    });
+    }));
     check('Abspielmarke zeigt die hörbare Position', Math.abs(ph.markBeat - ph.heard) < 0.08 && Math.abs(ph.markBeat - ph.now) > 0.2, JSON.stringify(ph));
     await page.click('#play-btn');
 
