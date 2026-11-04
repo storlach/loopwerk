@@ -376,7 +376,25 @@ async function editorTest(vp, name, touch) {
   await app.close();
 }
 
+// ---------- Deck passt in jede Desktop-Breite (bei 1440 px fiel „Exportieren“ hinten raus) ----------
+async function deckFitTest() {
+  for (const w of [1100, 1280, 1366, 1440, 1520, 1600, 1920]) {
+    const app = await openApp({ viewport: { width: w, height: 900 } });
+    try {
+      const r = await app.page.evaluate(() => {
+        const d = document.querySelector('.deck');
+        const cut = [...d.querySelectorAll('button, input, select, .lcd-cell')].filter((n) => n.offsetParent).filter((n) => n.getBoundingClientRect().right > d.getBoundingClientRect().right + 0.5).map((n) => (n.textContent || n.id).trim().slice(0, 16));
+        return { over: d.scrollWidth - d.clientWidth, cut };
+      });
+      check(`Deck ${w} px: nichts abgeschnitten`, r.over <= 0 && !r.cut.length, JSON.stringify(r));
+    } finally {
+      await app.close();
+    }
+  }
+}
+
 (async () => {
+  await deckFitTest();
   await muteTest({ width: 1400, height: 900 }, 'Desktop');
   await muteTest({ width: 390, height: 844 }, 'Handy');
   await inspectorTest();

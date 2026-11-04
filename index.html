@@ -2062,7 +2062,12 @@
     .deck .meter-wrap { grid-template-rows: auto 21px; }
   }
   @media (min-width: 1280px) and (max-width: 1439px) { .key.project-menu-btn { max-width: 170px; } }
-  @media (min-width: 1440px) { #meter { width: 112px; } }
+  /* 1440–1599 px: alle Felder bleiben, Loop und Klick nur als Zeichen, Pegel schmaler – sonst fällt „Exportieren“ hinten raus */
+  @media (min-width: 1440px) and (max-width: 1599px) {
+    #loop-btn, #metro-btn { font-size: 0; gap: 0; width: 36px; padding: 0; }
+    #meter { width: 80px; }
+  }
+  @media (min-width: 1600px) { #meter { width: 112px; } }
   /* Tablet: Bildmarke nur als Lichtstriche; wird es noch enger, bricht das Deck um statt die Seite zu verschieben */
   @media (min-width: 761px) and (max-width: 1099px) {
     .deck .brand-name { display: none; }
@@ -2101,8 +2106,8 @@
   /* Master hebt sich ab: breiter, heller Grund, weiße Kante mit Lichtstrich oben, Name in Großbuchstaben */
   .strip.strip-master {
     flex-basis: 112px; margin-left: 10px;
-    background: color-mix(in srgb, var(--ink) 9%, color-mix(in srgb, var(--sheet-bg) 90%, transparent));
-    box-shadow: -14px 0 24px -10px #000, inset 0 0 0 1px rgb(255 255 255 / 0.42);
+    background: color-mix(in srgb, var(--ink) 9%, var(--sheet-bg));
+    box-shadow: -10px 0 0 var(--sheet-bg), -24px 0 24px -10px #000, inset 0 0 0 1px rgb(255 255 255 / 0.42);
   }
   .strip.strip-master::before {
     content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 2px; border-radius: 1px;
@@ -2114,8 +2119,9 @@
   @media (min-width: 761px) {
     .strip.strip-bus {
       position: sticky; z-index: 2;
-      background: color-mix(in srgb, var(--sheet-bg) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-      box-shadow: -10px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
+      background: var(--sheet-bg);
+      /* deckender Streifen links füllt die Lücke zum Nachbarn, dahinter der Schatten der durchscrollenden Spuren */
+      box-shadow: -10px 0 0 var(--sheet-bg), -20px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
     }
     .strip.strip-bus[data-strip-id="__bus:echo"] { right: 118px; }
     .strip.strip-bus[data-strip-id="__bus:hall"] { right: 210px; }
