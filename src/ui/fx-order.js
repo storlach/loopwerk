@@ -42,6 +42,14 @@ export function orderText(order, fxId, visible = order) {
   return LABEL[fxId];
 }
 
+// Griff (⠿) am Ende einer Effekt-Zeile: zeigt, dass sie sich verschieben lässt; mit dem Finger zieht er ohne Halten
+export function gripEl() {
+  const g = el('span', 'fx-grip');
+  g.setAttribute('aria-hidden', 'true');
+  g.title = 'Ziehen ändert die Reihenfolge';
+  return g;
+}
+
 // Ziehen einrichten. container: Liste; itemOf(fxId) → Zeile; handleOf(fxId) → Griff (Name bzw. Kartenkopf);
 // getOrder() → aktuelle Reihenfolge; onMove(fxId, toIndex) → Store; grid: Karten in Spalten (Einfügelinie senkrecht).
 export function mountFxDrag(container, { ids, itemOf, handleOf, getOrder, onMove, grid = false }) {
@@ -62,8 +70,11 @@ export function mountFxDrag(container, { ids, itemOf, handleOf, getOrder, onMove
     const handle = handleOf(id);
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || itemOf(id).hidden) return;
+      const onGrip = !!e.target.closest?.('.fx-grip');
+      // Schalter und Regler im Griff-Bereich bleiben Bedienelemente (mit der Maus); der Griff selbst zieht immer
+      if (!onGrip && e.pointerType !== 'touch' && e.target.closest?.('button, input, select')) return;
       suppressClick = false;
-      if (e.pointerType === 'touch') {
+      if (e.pointerType === 'touch' && !onGrip) {
         pressHold(e, { ms: HOLD, onHold: (down) => start(id, down) });
         return;
       }

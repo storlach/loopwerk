@@ -344,6 +344,24 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     await page.keyboard.press('Alt+ArrowUp');
     const mo = await page.evaluate(() => ({ order: window.loopwerk.store.project.master?.fxOrder ?? null, dom: [...document.querySelectorAll('.insp-grp-master .fxl-name')].map((n) => n.textContent) }));
     check('7 Master-Effekte: Alt+↑ stellt Hall vor Echo', JSON.stringify(mo.order) === '["drive","filter","eq","comp","pump","hall","echo"]' && mo.dom[5] === 'Hall', JSON.stringify(mo));
+    // Griff ⠿ am Ende jeder Zeile: sichtbar, Ziehen am Griff ordnet um (Master: Pumpen ganz nach oben)
+    const grip = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#insp .insp-grp-master .fxl-item')];
+      const g = rows.map((r) => r.querySelector('.fx-grip'));
+      const pump = rows.find((r) => r.querySelector('.fxl-name').textContent === 'Pumpen').querySelector('.fx-grip');
+      pump.scrollIntoView({ block: 'center', behavior: 'instant' });
+      const r = pump.getBoundingClientRect();
+      const t = rows[0].getBoundingClientRect();
+      return { n: g.filter((x) => x && x.getBoundingClientRect().width >= 8).length, rows: rows.length, x: r.left + r.width / 2, y: r.top + r.height / 2, top: t.top, cursor: getComputedStyle(pump).cursor };
+    });
+    check('7 Jede Effekt-Zeile hat einen Griff ⠿ (Cursor „grab“)', grip.n === grip.rows && grip.rows === 7 && grip.cursor === 'grab', JSON.stringify(grip));
+    await page.mouse.move(grip.x, grip.y);
+    await page.mouse.down();
+    await page.mouse.move(grip.x, grip.y - 10, { steps: 3 });
+    await page.mouse.move(grip.x, grip.top + 2, { steps: 8 });
+    await page.mouse.up();
+    const mg = await page.evaluate(() => [...document.querySelectorAll('.insp-grp-master .fxl-name')].map((n) => n.textContent));
+    check('7 Am Griff ziehen: Pumpen ganz nach oben', mg[0] === 'Pumpen', JSON.stringify(mg));
     check('7 Desktop: keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack || e.message);
@@ -406,6 +424,20 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     s = await st();
     check('7 Finger: Wischen ordnet nicht um (und scrollt, wenn es etwas zu scrollen gibt)', JSON.stringify(s.order) === JSON.stringify(before.order) && (before.scroll === null || s.scroll > before.scroll),
       `${JSON.stringify(s.order)}, Scroll ${before.scroll} → ${s.scroll}`);
+    // Am Griff ⠿ zieht der Finger sofort, ohne Halten: EQ vor den Filter
+    const gp = await p.evaluate(() => {
+      const g = document.getElementById('fx-eq-on').closest('.fx-card').querySelector('.fx-grip');
+      g.scrollIntoView({ block: 'center', behavior: 'instant' });
+      const r = g.getBoundingClientRect();
+      const f = document.getElementById('fx-filter-on').closest('.fx-card').querySelector('.fx-card-head').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, fx: f.left + 6, fy: f.top + f.height / 2 };
+    });
+    await T('touchStart', [{ x: gp.x, y: gp.y }]);
+    for (let i = 1; i <= 12; i++) { await T('touchMove', [{ x: gp.x + ((gp.fx - gp.x) * i) / 12, y: gp.y + ((gp.fy - gp.y) * i) / 12 }]); await p.waitForTimeout(16); }
+    await T('touchEnd', []);
+    await p.waitForTimeout(150);
+    s = await st();
+    check('7 Finger: am Griff ⠿ ohne Halten ziehen stellt EQ vor Filter', s.order?.indexOf('eq') < s.order?.indexOf('filter'), JSON.stringify(s.order));
     if (SHOTS) await p.screenshot({ path: path.join(SHOT_DIR, 'fx-order-phone.png') });
     check('7 Finger: keine Konsolenfehler', phone.errors.length === 0, phone.errors.join(' | '));
   } catch (e) {

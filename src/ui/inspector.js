@@ -4,7 +4,7 @@
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
 import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busOf, sendOf, busParamDef } from '../effects.js';
-import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
+import { applyOrder, gripEl, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
@@ -242,7 +242,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const name = el('span', 'fxl-name', e.label);
     name.addEventListener('click', () => sw.click());
     const sum = el('span', 'fxl-sum');
-    head.append(sw, name, sum);
+    head.append(sw, name, sum, gripEl());
     const params = el('div', 'fxl-params');
     const ctl = new Map();
     for (const [k, p] of Object.entries(e.params)) {
@@ -283,7 +283,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const fxDrag = mountFxDrag(fxl, {
     ids: EFFECT_IDS,
     itemOf: (id) => items.get(id).item,
-    handleOf: (id) => items.get(id).item.querySelector('.fxl-name'),
+    handleOf: (id) => items.get(id).item.querySelector('.fxl-head'),
     getOrder: () => fxOrderOf(fxOwner()),
     onMove: (id, to) => {
       if (!trackId) return;

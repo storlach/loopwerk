@@ -2,7 +2,7 @@
 // Effekte des gewählten Kanals: am Desktop im Inspektor, am Handy als eigene Seite im Mixer (mit Zurück).
 
 import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busDef, busOf, busParamDef, sendOf } from '../effects.js';
-import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
+import { applyOrder, gripEl, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
 import { formatDb } from './arranger.js';
@@ -364,8 +364,8 @@ export function mountMixer({ root, store, engine, ui }) {
       toggle.type = 'button';
       toggle.id = `fx-${e.id}-on`;
       toggle.addEventListener('click', () => setFx(id, e.id, { on: !fxOf(id)[e.id].on }));
-      head.append(toggle);
-      // Der ganze Kartenkopf ist Griff: kurz antippen schaltet, lange drücken ordnet um
+      head.append(toggle, gripEl());
+      // Der ganze Kartenkopf ist Griff: kurz antippen schaltet, lange drücken ordnet um; am ⠿ sofort ziehen
       head.addEventListener('click', (ev) => { if (ev.target === head) toggle.click(); });
       card.append(head);
       const params = new Map();
