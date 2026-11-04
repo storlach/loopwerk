@@ -1013,7 +1013,6 @@
   #editor.busy .ed-tools, #editor.busy .dock-actions { pointer-events: none; opacity: 0.5; }
   .ed-busy { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .ed-busy progress { width: 160px; accent-color: var(--amber); }
-  #pat-live[aria-pressed="true"] { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
   .pat-pads {
     flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(64px, 1fr); gap: 8px;
   }
@@ -1508,21 +1507,15 @@
     #pattern .dock-actions > * { flex: none; }
     /* Pattern-Editor: Kopf in einer Zeile (der Reiter „Editor“ sagt, was offen ist), der Rest gehört Klavier und Raster */
     #pattern > .dock-head { flex-wrap: nowrap; align-items: center; padding-bottom: 6px; }
-    #pattern > .dock-head h2 { display: none; }
     #pattern .dock-actions { order: 0; flex: 1 1 auto; width: auto; min-width: 0; }
     #pattern .pat-body { padding: 6px 8px 8px; }
     /* Pattern-Editor: alles in einer Zeile ohne Wischen – Anhören und Live als Tasten, der Rest im Menü „Mehr“ */
     #pattern .dock-actions { flex-wrap: nowrap; overflow: visible; padding-right: 0; }
-    #pat-play, #pat-live { order: -1; width: 48px; padding: 0; justify-content: center; font-size: 0; }
-    #pat-play::before { content: "▶"; font-size: 17px; }
-    #pat-live::before { content: "●"; font-size: 17px; color: var(--meter-hot); }
-    #pat-live[aria-pressed="true"]::before { content: "■"; color: #fff; }
     #pat-preset-field { flex: 1 1 auto; min-width: 0; }
     #pat-preset-field select { width: 100%; min-width: 0; }
     .pat-more-wrap { margin-left: auto; }
     .pat-more { width: min(300px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; }
     .pat-more .pat-field, .pat-more .dbtn, .pat-more .ed-name { width: 100%; box-sizing: border-box; justify-content: space-between; }
-    #pat-name { width: 100%; }
     .dbtn, .ed-beats, .ed-name { min-height: 44px; }
     .pat-field select { height: 44px; }
     .ed-check { min-height: 44px; }
@@ -1650,7 +1643,6 @@
       width: 0; height: 0; padding-left: 6px; pointer-events: none;
     }
     .pat-scale-bar > * { flex: none; pointer-events: auto; }
-    #pat-live { order: -1; }
     #sing-desc { font-size: 16px; height: 44px; }
     .pat-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); }
     .pat-pad-key { display: none; }
@@ -1902,7 +1894,6 @@
   .pat-field select, .ed-name, #pat-name, .ed-beats {
     border: 0; border-radius: 6px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink);
   }
-  #pat-live[aria-pressed="true"] { background: var(--meter-hot); color: var(--display-ink); }
 
   /* Drumpads: Gummi, der beim Schlag orange aufleuchtet */
   .pat-pad {
@@ -2242,7 +2233,6 @@
   /* Schalter im Editor (Anhören im Loop, Autotune): an = Weißglut */
   .dbtn[aria-pressed="true"], .dbtn[aria-pressed="true"]:hover:not(:disabled) { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 35%, transparent); }
   .pat-field select, .ed-name, #pat-name, .ed-beats { border-radius: var(--radius); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
-  #pat-live[aria-pressed="true"] { background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent); }
 
   /* Drumpads: Haarlinie, beim Schlag Licht in der Farbe der Spur */
   .pat-pad { border-radius: 6px; background: rgb(255 255 255 / 0.015); box-shadow: inset 0 0 0 1px var(--key-line); font: 600 13px/1.1 var(--font-body); }
@@ -3366,6 +3356,77 @@
     #app .rec-setup .key { height: 44px; }
     #app .rec-setup .key.rs-step { width: 44px; min-width: 44px; }
   }
+  /* ================= Editor-Kopf: große Überschrift mit Name, deutlicher Umschalter, Deck-Tasten ================= */
+  #pattern .dock-head { align-items: center; flex-wrap: wrap; gap: 4px 16px; padding: 6px 14px 6px 16px; }
+  #pattern .pat-headline { flex: 1 1 0; min-width: 150px; display: grid; gap: 2px; }
+  #pattern .pat-headline h2 { margin: 0; font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  /* Der Name sieht aus wie Text; Linie nur beim Überfahren und im Fokus (Finger: leise Linie immer) */
+  #pattern .pat-name {
+    width: 100%; height: auto; min-height: 0; box-sizing: border-box; margin: 0; padding: 0 0 2px; border: 0; border-radius: 0;
+    background: transparent; box-shadow: none; color: var(--ink); cursor: text; text-overflow: ellipsis;
+    font: 300 26px/1.05 var(--font-display); letter-spacing: -0.03em;
+  }
+  #pattern .pat-name:hover { box-shadow: 0 1px 0 var(--key-line); }
+  #pattern .pat-name:focus, #pattern .pat-name:focus-visible { outline: none; box-shadow: 0 1px 0 var(--amber); }
+  @media (hover: none) { #pattern .pat-name { box-shadow: 0 1px 0 var(--key-line); } #pattern .pat-name:focus { box-shadow: 0 1px 0 var(--amber); } }
+  /* Zwei ruhige Zeilen: Überschrift links, Anhören/Live/Umschalter rechts; darunter die Felder (Takte, Kit, Klang …) und „Mehr“ */
+  #pattern .dock-actions { display: contents; }
+  #pattern .dock-actions > * { order: 3; }
+  #pattern .dock-actions > :is(#pat-play, #pat-live, .pat-view, .pat-more-wrap) { order: 1; }
+  #pattern .dock-actions > :is(#pat-continue, #pat-sing-btn) { order: 0; }
+  #pattern .dock-head::after { content: ""; order: 2; flex: 1 0 100%; height: 0; }
+  #pattern .dock-head { justify-content: flex-start; }
+  /* Anhören und Live wie Abspielen und Aufnahme im Deck (gleiche Bausteine); die Weißglut gehört nur diesem Fach */
+  #pattern #pat-play:not(.on) { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5); }
+  #pattern #pat-play.on { background: var(--beam); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+  #pattern #pat-live.recording { background: var(--meter-hot); color: var(--accent-ink); box-shadow: none; }
+  #pattern #pat-live.recording svg { fill: var(--accent-ink); }
+  /* Umschalter Schritte | Pads: aktive Seite voll in Weißglut, die andere nur Linie */
+  #pattern .pat-view { gap: 0; padding: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); border-radius: var(--radius-lg); }
+  #pattern .pat-view .seg {
+    height: 44px; min-height: 44px; padding: 0 20px; border: 0; border-radius: var(--radius-lg);
+    background: transparent; box-shadow: none; text-shadow: none; color: var(--muted); font: 600 11px/1 var(--font-mono); letter-spacing: 0.08em;
+  }
+  #pattern .pat-view .seg:hover { color: var(--ink); }
+  #pattern .pat-view .seg[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+
+  /* Reihen und Pads teilen sich die Höhe des Fachs (Mindest- und Höchsthöhe); --sheet-cut: Überhang beim Verkleinern (sheets.js) */
+  #pattern .pat-drums { container-type: size; --pg: 3px; --rows: 8; --rmin: 28px; --rmax: 72px; gap: var(--pg); }
+  #pattern .pat-cell, #pattern .pat-row-label {
+    height: clamp(var(--rmin), round(down, calc((100cqh - var(--sheet-cut, 0px) - (var(--rows) - 1) * var(--pg)) / var(--rows)), 1px), var(--rmax));
+  }
+  #pattern .pat-pads {
+    container-type: size; overflow-y: auto; align-content: start; grid-auto-rows: auto;
+    --pg: 8px; --prows: 2; --pmin: 64px; --pmax: 220px; gap: var(--pg);
+  }
+  #pattern .pat-pad {
+    height: clamp(var(--pmin), round(down, calc((100cqh - var(--sheet-cut, 0px) - (var(--prows) - 1) * var(--pg)) / var(--prows)), 1px), var(--pmax));
+  }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) { #pattern .pat-drums { --rmin: 40px; } }
+  @media (max-width: 760px) {
+    /* Handy: Zeile 1 Überschrift und „Mehr“, Zeile 2 Anhören, Live, Umschalter bzw. Klang */
+    #pattern > .dock-head { flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 4px 8px 6px 12px; }
+    #pattern .pat-headline { min-width: 0; }
+    #pattern .pat-name { font-size: 24px; }
+    #pattern .dock-actions > .pat-more-wrap { order: 1; margin-left: 0; }
+    #pattern .dock-actions > :is(#pat-play, #pat-live, .pat-view) { order: 3; }
+    #pattern .pat-view .seg { padding: 0 12px; }
+    #pattern #pat-live { width: 44px; min-width: 44px; padding: 0; border-radius: 50%; }
+    #pattern #pat-live svg { width: 22px; height: 22px; }
+    #pattern .pat-drums { --pg: 4px; --rmin: 44px; }
+    #pattern .pat-pads { --prows: 4; --pmin: 60px; --pmax: 160px; }
+  }
+  /* Gespielte Klaviertasten leuchten wie die Drumpads: Farbe der Melodie, Glow, weiches Ausklingen */
+  .pat-key, .vkey { transition: background-color 0.28s ease-out, box-shadow 0.28s ease-out, color 0.28s ease-out; }
+  .pat-key.down, .pat-key:active, .vkey.down {
+    background: var(--cat-own); color: var(--accent-ink); transition: none;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), 0 0 16px 1px color-mix(in srgb, var(--cat-own) 80%, transparent);
+  }
+  .pat-key.black.down, .pat-key.black:active, .vkey.black.down {
+    background: color-mix(in srgb, var(--cat-own) 62%, var(--key-black)); color: var(--ink);
+  }
+  .pat-key.down.off, .vkey.down.off { opacity: 0.85; }
+  @media (prefers-reduced-motion: reduce) { .pat-key, .vkey { transition: none; } }
 </style>
 
 
@@ -3694,18 +3755,27 @@
     </div>
   </section>
 
-  <section class="dock" id="pattern" aria-label="Pattern-Editor" hidden>
+  <section class="dock" id="pattern" data-fit aria-label="Pattern-Editor" hidden>
     <div class="dock-head">
-      <h2 id="pat-title">Beat-Editor</h2>
+      <div class="pat-headline">
+        <h2 id="pat-title">Beat-Editor</h2>
+        <input class="pat-name" id="pat-name" type="text" maxlength="30" spellcheck="false" autocomplete="off" aria-label="Name des Patterns" title="Name ändern: Enter speichert, Esc verwirft">
+      </div>
       <div class="dock-actions">
-        <input class="ed-name" id="pat-name" type="text" maxlength="30" aria-label="Name des Patterns">
-        <label class="pat-field" id="pat-bars-field">Takte
-          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
-        </label>
+        <button class="key play" id="pat-play" type="button" aria-label="Anhören" title="Pattern im Loop anhören" aria-pressed="false">
+          <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg>
+          <svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg>
+        </button>
+        <button class="key rec" id="pat-live" type="button" aria-label="Live" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
+        </button>
         <div class="pat-view" id="pat-view" role="group" aria-label="Ansicht">
           <button type="button" class="seg" data-view="grid">Schritte</button>
           <button type="button" class="seg" data-view="pads">Pads</button>
         </div>
+        <label class="pat-field" id="pat-bars-field">Takte
+          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
+        </label>
         <label class="pat-field" id="pat-kit-field">Kit <select id="pat-kit"></select></label>
         <label class="pat-field" id="pat-preset-field">Klang <select id="pat-preset"></select></label>
         <label class="pat-field" id="pat-swing-field" title="Jede zweite Sechzehntel kommt etwas später – der Groove wird lockerer">Swing <select id="pat-swing"></select></label>
@@ -3724,12 +3794,10 @@
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
         <button class="dbtn" id="pat-continue" data-surface="ai" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
         <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
-        <button class="dbtn" id="pat-live" type="button" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">● Live</button>
         <label class="pat-field" id="pat-quant-field">Einrasten
           <select id="pat-quant"><option value="1" selected>1/16</option><option value="2">1/8</option></select>
         </label>
         <button class="dbtn" id="pat-quantize" type="button" title="Rückt Noten bzw. Schläge auf das Raster aus „Einrasten“. Rückgängig macht es wieder">Quantisieren</button>
-        <button class="dbtn" id="pat-play" type="button">▶ Anhören</button>
         <div class="menu-wrap pat-more-wrap">
           <button class="dbtn" id="pat-more-btn" type="button" aria-haspopup="true" aria-expanded="false">Mehr ▾</button>
           <div class="pop pat-more" id="pat-more" hidden></div>

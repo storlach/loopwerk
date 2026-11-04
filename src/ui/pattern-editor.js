@@ -65,13 +65,14 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   let viewLo = 60; // Handy: unterster sichtbarer Ton
   let drag = null; // Vorschau beim Ziehen in der Piano-Roll
   let midiTried = false;
+  let rollRow = 0; // Zeilenhöhe der zuletzt gezeichneten Piano-Roll
 
   for (const k of KITS.filter((x) => !kits || kits.includes(x.id))) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
   // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
   // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');
-  for (const node of [nameIn, $('pat-bars-field'), $('pat-kit-field'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-chord-field'), $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
-    const always = [nameIn, $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-clear')].includes(node);
+  for (const node of [$('pat-bars-field'), $('pat-kit-field'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-chord-field'), $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
+    const always = [$('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-clear')].includes(node);
     place(node, always ? { wide: moreEl, narrow: moreEl } : { narrow: moreEl });
   }
   // Menü „Mehr“ in den sichtbaren Bereich einpassen. Desktop: bricht die Kopfzeile um und „Mehr“ steht links in der
@@ -156,7 +157,16 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
 
   // ---------- Kopfzeile ----------
 
-  nameIn.addEventListener('change', () => { const v = nameIn.value.trim(); if (v) update((p) => { p.name = v.slice(0, 30); }); });
+  // Der Name ist die große Überschrift selbst: Enter oder Verlassen speichert (ein Rückgängig-Schritt), Esc verwirft
+  nameIn.addEventListener('change', () => {
+    const v = nameIn.value.trim().slice(0, 30);
+    if (!v) nameIn.value = pat()?.name ?? '';
+    else if (pat() && v !== pat().name) update((p) => { p.name = v; });
+  });
+  nameIn.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); nameIn.value = pat()?.name ?? ''; nameIn.blur(); }
+  });
   barsSel.addEventListener('change', () => {
     const bars = Number(barsSel.value);
     update((p) => {
@@ -245,7 +255,10 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const playing = !!engine.preview && engine.preview.sampleId === pid();
     if (playBtn.getAttribute('aria-pressed') !== String(playing)) {
       playBtn.setAttribute('aria-pressed', String(playing));
-      playBtn.textContent = playing ? '■ Stopp' : '▶ Anhören';
+      playBtn.setAttribute('aria-label', playing ? 'Anhören stoppen' : 'Anhören');
+      playBtn.classList.toggle('on', playing);
+      playBtn.querySelector('.ico-play').toggleAttribute('hidden', playing);
+      playBtn.querySelector('.ico-stop').toggleAttribute('hidden', !playing);
     }
     const key = `${step}|${drumsEl.dataset.key}`;
     if (key === litKey) return;
@@ -402,7 +415,8 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   // Sichtbarer Tonbereich der Piano-Roll: lo…hi, Zeilenhöhe, Abstand oben (Platz für ▲ am Handy)
   function pitchView() {
     // Am Tablet (Finger) höhere Zeilen, damit eine Note zu treffen ist
-    if (!narrow.matches) return { lo: PITCH_LOW, hi: PITCH_HIGH, row: touch.matches ? 22 : 14, top: 0 };
+    // Desktop: Zeilen wachsen mit der Höhe des Fachs (mindestens 14 px, am Tablet 22 px; höchstens 28 px)
+    if (!narrow.matches) return { lo: PITCH_LOW, hi: PITCH_HIGH, row: clamp(Math.floor(rollWrap.clientHeight / 24), touch.matches ? 22 : 14, 28), top: 0 };
     const avail = Math.max(240, rollWrap.clientHeight - 2 * OCT_BTN);
     const count = clamp(Math.floor(avail / MIN_ROW), 12, 25);
     const lo = clamp(viewLo, PITCH_LOW, PITCH_HIGH - count + 1);
@@ -433,6 +447,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const col = (v) => css.getPropertyValue(v).trim();
     const vw = pitchView();
     const rh = vw.row;
+    rollRow = rh;
     const y0 = vw.top;
     const y1 = vw.top + (vw.hi - vw.lo + 1) * rh;
     c.clearRect(0, 0, w, h);
@@ -1059,7 +1074,23 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     vkeys.append(octBtn(-1));
   }
   // Schublade größer oder kleiner: Tonbereich und Zeilen neu einpassen
-  new ResizeObserver(() => { if (!rollWrap.hidden && narrow.matches && pat()?.type === 'synth') render(); }).observe(rollWrap);
+  // Desktop: nur neu zeichnen, die Rollposition bleibt beim selben Ton
+  let rollRaf = 0;
+  new ResizeObserver(() => {
+    if (rollWrap.hidden || pat()?.type !== 'synth') return;
+    if (narrow.matches) { render(); return; }
+    if (rollRaf) return;
+    rollRaf = requestAnimationFrame(() => {
+      rollRaf = 0;
+      if (rollWrap.hidden || !pat()) return;
+      const old = rollRow;
+      const row = rowH();
+      if (row === old) return;
+      drawRoll(pat());
+      if (old) rollWrap.scrollTop = rollWrap.scrollTop * (row / old);
+      litKey = '';
+    });
+  }).observe(rollWrap);
   vkeys.addEventListener('pointerdown', (e) => {
     const k = e.target.closest('.vkey');
     if (!k) return;
@@ -1359,7 +1390,8 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     singBtn.setAttribute('aria-pressed', String(singOpen && !drums));
     singEl.hidden = drums || !singOpen;
     root.dataset.sing = singOpen && !drums ? '1' : '0';
-    liveBtn.textContent = looper.running ? '■ Live stoppen' : '● Live';
+    liveBtn.classList.toggle('recording', looper.running);
+    liveBtn.setAttribute('aria-label', looper.running ? 'Live stoppen' : 'Live');
     const pads = drums && view === 'pads';
     if (document.activeElement !== nameIn) nameIn.value = p.name;
     barsSel.value = String(p.bars);
