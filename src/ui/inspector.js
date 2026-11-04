@@ -3,7 +3,8 @@
 // (Spur-Lautstärke, Panorama, Verlauf, Effekte). Spur → nur der Spur-Abschnitt.
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
-import { EFFECTS, withFx } from '../effects.js';
+import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busOf, sendOf, busParamDef } from '../effects.js';
+import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
@@ -17,7 +18,7 @@ import { mountSoundKey } from './sound-key.js';
 import { mountMasteringControls } from './mastering.js';
 import { mountClipSpeed } from './clip-speed.js';
 import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
-import { AUTO_PARAMS, autoKeys, isAutomated, laneOf } from '../automation.js';
+import { AUTO_PARAMS, autoKeys, busUsed, isAutomated, laneOf, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
 
 // Laufzeit-Stufen für − und +
@@ -229,6 +230,13 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     sw.type = 'button';
     sw.setAttribute('aria-label', `${e.label} ein/aus`);
     sw.addEventListener('click', () => setFx(e.id, { on: !fxOf()[e.id].on }));
+    // Alt+↑/↓: einen Platz weiter (wie Alt+Pfeil bei Clips)
+    sw.addEventListener('keydown', (ev) => {
+      if (!ev.altKey || (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown')) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      fxDrag.step(e.id, ev.key === 'ArrowUp' ? -1 : 1);
+    });
     const name = el('span', 'fxl-name', e.label);
     name.addEventListener('click', () => sw.click());
     const sum = el('span', 'fxl-sum');
@@ -267,6 +275,42 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     fxl.append(item);
     items.set(e.id, { item, sw, sum, ctl });
   }
+  // Reihenfolge: oben ist der Eingang; am Namen ziehen ordnet um (ADR 008)
+  const fxOwner = () => (trackId === MASTER ? masterOf(store.project) : store.track(trackId));
+  const fxTarget = () => (trackId === MASTER ? 'master' : trackId);
+  const fxDrag = mountFxDrag(fxl, {
+    ids: EFFECT_IDS,
+    itemOf: (id) => items.get(id).item,
+    handleOf: (id) => items.get(id).item.querySelector('.fxl-name'),
+    getOrder: () => fxOrderOf(fxOwner()),
+    onMove: (id, to) => {
+      if (!trackId) return;
+      store.moveFx(fxTarget(), id, to);
+      const order = fxOrderOf(fxOwner());
+      ui.flash?.(orderText(order, id, order.filter((x) => !items.get(x).item.hidden)));
+    },
+  });
+  const fxReset = resetLink(() => { if (trackId) store.resetFxOrder(fxTarget()); });
+  fxReset.node.id = 'insp-fx-reset';
+
+  // Busse der Spur (hinter Fader und Panorama abgegriffen): je ein Anteil zum Hall- und Echo-Bus, 0 = aus
+  const busBlock = el('div', 'insp-buses');
+  busBlock.append(el('span', 'insp-kind', 'Busse'));
+  const sendRows = BUSES.map((b) => {
+    const r = slider(`→ ${b.label}`, `insp-send-${b.id}`, 0, 1, 0.01);
+    r.input.title = `Anteil zum ${b.label} (Doppelklick = aus)`;
+    r.input.addEventListener('input', () => { if (trackId && trackId !== MASTER) store.setSend(trackId, b.id, Number(r.input.value), `send-${trackId}-${b.id}`); });
+    // Doppelklick = aus; der Regler hat dann den Fokus, also den Wert selbst setzen
+    r.input.addEventListener('dblclick', () => { if (trackId && trackId !== MASTER) { r.input.value = '0'; store.setSend(trackId, b.id, 0); } });
+    // Send mit Kurve: gedimmt, folgt der Kurve, Klick öffnet die Kurvenzeile (wie die Effekt-Werte)
+    const box = el('div', 'insp-send-box');
+    box.append(r.row);
+    const lock = autoLock({ ui, key: sendKey(b.id), wrap: box, input: r.input, getTrackId: () => (trackId && trackId !== MASTER ? trackId : null) });
+    busBlock.append(box);
+    return [b, r, lock];
+  });
+  const sendText = (v) => (v > 0 ? `${Math.round(v * 100)} %` : 'aus');
+
   // Kompakt (Krachwerk): nur eingeschaltete Effekte, die übrigen über „+ Effekt“
   const addFx = el('button', 'wb-fine-btn', '+ Effekt');
   addFx.type = 'button';
@@ -361,8 +405,46 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   masterGrp.append(masterSub);
   const autoGrp = grp('insp-grp-auto');
   autoGrp.append(masterAuto);
+  // Busse: Rückkanal-Lautstärke und Effekt-Einstellungen (der einzige Ort dafür am Desktop)
+  const busGrp = grp('insp-grp-buses');
+  busGrp.id = 'insp-buses';
+  busGrp.append(el('p', 'insp-sub', 'Busse'));
+  const busCtl = [];
+  const busBoxes = new Map();
+  for (const b of BUSES) {
+    const box = el('div', 'insp-bus');
+    box.id = `insp-bus-${b.id}`;
+    busBoxes.set(b.id, box);
+    box.append(el('span', 'insp-kind', b.label));
+    const add = (key, input, out, def) => busCtl.push({ b, key, input, out, def });
+    const v = slider('Lautstärke', `insp-bus-${b.id}-volume`, 0, 1, 0.01);
+    v.input.addEventListener('input', () => store.setBus(b.id, { volume: Number(v.input.value) }, `bus-${b.id}-volume`));
+    v.input.addEventListener('dblclick', () => { v.input.value = String(b.defaults.volume); store.setBus(b.id, { volume: b.defaults.volume }); });
+    box.append(v.row);
+    add('volume', v.input, v.out, null);
+    for (const key of b.params) {
+      const p = busParamDef(b.id, key);
+      if (p.options) {
+        const row = el('label', 'insp-row');
+        const sel = document.createElement('select');
+        sel.id = `insp-bus-${b.id}-${key}`;
+        for (const o of p.options) { const op = el('option', null, o.label); op.value = o.id; sel.append(op); }
+        sel.addEventListener('change', () => store.setBus(b.id, { [key]: sel.value }));
+        row.append(el('span', null, p.label), sel);
+        box.append(row);
+        add(key, sel, null, p);
+      } else {
+        const r = slider(p.label, `insp-bus-${b.id}-${key}`, p.min, p.max, p.step);
+        r.input.addEventListener('input', () => store.setBus(b.id, { [key]: Number(r.input.value) }, `bus-${b.id}-${key}`));
+        r.input.addEventListener('dblclick', () => { r.input.value = String(b.defaults[key]); store.setBus(b.id, { [key]: b.defaults[key] }); });
+        box.append(r.row);
+        add(key, r.input, r.out, p);
+      }
+    }
+    busGrp.append(box);
+  }
   const mstSlot = grp('insp-mst');
-  songSec.append(songGrp, masterGrp, autoGrp, mstSlot);
+  songSec.append(songGrp, masterGrp, busGrp, autoGrp, mstSlot);
   if (mastering && !songPanel) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
@@ -449,7 +531,14 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
         pan.out.textContent = panText(track.pan || 0);
       }
-      if (fxl.parentElement !== trackSec) trackSec.append(fxl, addFx, fxPick, mixerLink);
+      if (fxl.parentElement !== trackSec) trackSec.append(fxl, fxReset.node, addFx, fxPick, busBlock, mixerLink);
+      for (const [b, r, lock] of sendRows) {
+        if (lock.update(track)) { showSend(track, b, r); continue; }
+        const v = sendOf(track, b.id);
+        if (document.activeElement !== r.input) r.input.value = String(v);
+        r.out.textContent = sendText(v);
+        r.row.classList.toggle('on', v > 0);
+      }
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
       autoBlock.hidden = fxCompact && !autoOpen;
       fineBtn.setAttribute('aria-expanded', String(autoOpen));
@@ -467,7 +556,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       lenOut.textContent = `${store.project.lengthBars} Takte`;
       // Master-Lautstärke und Master-Effekte unter „Master“
       const m = masterOf(store.project);
-      if (sb) { if (fxl.parentElement !== sb.slots.fx) sb.slots.fx.append(fxl, addFx, fxPick); } else if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl);
+      if (sb) { if (fxl.parentElement !== sb.slots.fx) sb.slots.fx.append(fxl, fxReset.node, addFx, fxPick); } else if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl, fxReset.node);
       masterTpl.update();
       const open = !!ui.autoLane?.isOpen('master');
       const has = autoKeys('master').some((k) => laneOf(m, k).length);
@@ -475,10 +564,22 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       masterCurve.classList.toggle('lit', has);
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
+      // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)
+      const used = (id) => busUsed(store.project, id);
+      for (const [id, box] of busBoxes) box.hidden = !used(id);
+      busGrp.hidden = ![...busBoxes.values()].some((box) => !box.hidden);
+      for (const c of busCtl) {
+        const v = busOf(store.project, c.b.id)[c.key];
+        if (document.activeElement !== c.input) c.input.value = String(v);
+        if (c.out) c.out.textContent = c.key === 'volume' ? formatDb(v) : formatParam(c.def, v);
+      }
     }
     if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();
+    const owner = mode === 'sound' ? null : fxOwner();
+    applyOrder(fxl, fxOrderOf(owner), (id) => items.get(id).item);
+    fxReset.update(owner);
     const compact = fxCompact && (mode === 'track' || (mode === 'song' && !!sb));
     addFx.hidden = !compact;
     if (!compact) fxPick.hidden = true;
@@ -507,8 +608,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const anyLocked = () => {
     if (!lockTrack()) return false;
     const fx = fxCtl().some(([c]) => !c.lock.btn.hidden);
-    return songMode() ? !(sb ? songBox : songSec).hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx);
+    return songMode() ? !(sb ? songBox : songSec).hidden && fx : !trackSec.hidden && (!panLock.btn.hidden || fx || sendRows.some(([, , l]) => !l.btn.hidden));
   };
+  // Gesperrter Send: Wert der Kurve an der Marke
+  function showSend(track, b, r) {
+    const v = Math.round(lockedValue(track, sendKey(b.id), engine) * 100) / 100;
+    if (Number(r.input.value) !== v) r.input.value = String(v);
+    const text = sendText(v);
+    if (r.out.textContent !== text) r.out.textContent = text;
+    r.row.classList.toggle('on', v > 0);
+  }
   function showFx(c, p) {
     const track = lockTrack();
     if (!track) return;
@@ -530,6 +639,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const track = lockTrack();
     if (!track || !anyLocked()) { follow = 0; return; }
     if (!songMode() && panLock.update(track)) showPan(track);
+    if (!songMode()) for (const [b, r, lock] of sendRows) if (lock.update(track)) showSend(track, b, r);
     for (const [c, p] of fxCtl()) if (c.lock.update(track)) showFx(c, p);
     const fx = fxOf();
     for (const e of EFFECTS) {

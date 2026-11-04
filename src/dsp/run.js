@@ -12,12 +12,24 @@ import { mixMono } from './clean.js';
 let worker = null;
 let nextId = 1;
 const pending = new Map();
+// Antwortet der Worker nicht (manche Seiten blockieren Worker still, ohne Fehler), rechnet der Hauptthread
+const PING_MS = 6000;
+let alive = false;
+
+function giveUp() {
+  if (!worker) return;
+  try { worker.terminate(); } catch { /* egal */ }
+  worker = false;
+  for (const [id, p] of pending) { pending.delete(id); p.fallback(); }
+}
 
 function getWorker() {
   if (worker === null) {
     try {
       worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
       worker.onmessage = (e) => {
+        alive = true;
+        if (e.data.pong) return;
         const p = pending.get(e.data.id);
         if (!p) return;
         if ('progress' in e.data) { p.onProgress?.(e.data.progress); return; }
@@ -27,9 +39,11 @@ function getWorker() {
       worker.onerror = (e) => {
         e.preventDefault?.();
         // Worker ließ sich nicht laden: offene Aufgaben im Hauptthread nachholen
-        worker = false;
-        for (const [id, p] of pending) { pending.delete(id); p.fallback(); }
+        giveUp();
       };
+      // Als Erstes ein Lebenszeichen anfordern – es kommt vor jeder Aufgabe zurück
+      worker.postMessage({ id: 0, job: 'ping' });
+      setTimeout(() => { if (!alive) giveUp(); }, PING_MS);
     } catch {
       worker = false;
     }

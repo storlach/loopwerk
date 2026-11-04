@@ -23,6 +23,7 @@ const JOBS = {
 
 self.onmessage = (e) => {
   const { id, job, args } = e.data;
+  if (job === 'ping') { self.postMessage({ id, pong: true }); return; }
   try {
     const result = JOBS[job](args, (p) => self.postMessage({ id, progress: p }));
     // Float32Arrays ohne Kopie zurückgeben

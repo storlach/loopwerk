@@ -1,4 +1,5 @@
-// Effekte: festes Rack pro Kanal (Verzerrer → Filter → EQ → Kompressor → Pumpen → Echo → Hall), wie im Music-Maker-Mixer.
+// Effekte: Rack pro Kanal (Grundreihenfolge Verzerrer → Filter → EQ → Kompressor → Pumpen → Echo → Hall, umstellbar
+// über fxOrder, ADR 008), wie im Music-Maker-Mixer.
 // Jeder Effekt funktioniert mit AudioContext und OfflineAudioContext (gleiche Signalkette für Export und Tests).
 // set(p, t, spb, grid, skip): grid ist die Kontextzeit von Schlag 0 des Songs – daran richten sich LFOs im Takt aus.
 // u.auto = { <param>: { param, map } }: AudioParams, die eine Kurve übernehmen kann (Automation, ADR 006). map rechnet den
@@ -364,7 +365,8 @@ export const EFFECTS = [
       feedback: { label: 'Wiederholungen', min: 0, max: 0.85, step: 0.01, default: 0.35, unit: '%' },
       mix: { label: 'Anteil', min: 0, max: 1, step: 0.01, default: 0.3, unit: '%' },
     },
-    create(ctx) {
+    // dry: false = nur nass (Send-Bus): der Eingang liegt nicht auf dem Ausgang, der Anteil bleibt fest bei 1
+    create(ctx, { dry = true } = {}) {
       const input = ctx.createGain();
       const output = ctx.createGain();
       const delay = ctx.createDelay(4);
@@ -373,7 +375,7 @@ export const EFFECTS = [
       tone.frequency.value = 5000;
       const fb = ctx.createGain();
       const wet = ctx.createGain();
-      input.connect(output);
+      if (dry) input.connect(output);
       input.connect(delay);
       delay.connect(tone);
       tone.connect(fb).connect(delay);
@@ -385,7 +387,7 @@ export const EFFECTS = [
           const beats = ECHO_TIMES.find((x) => x.id === p.time)?.beats ?? 0.75;
           ramp(delay.delayTime, Math.min(4, beats * spb), t);
           ramp(fb.gain, p.feedback, t);
-          if (!skip?.mix) ramp(wet.gain, p.mix, t);
+          if (!skip?.mix) ramp(wet.gain, dry ? p.mix : 1, t);
         },
       };
     },
@@ -396,19 +398,19 @@ export const EFFECTS = [
       size: { label: 'Raumgröße', min: 0, max: 1, step: 0.01, default: 0.5, unit: '%' },
       mix: { label: 'Anteil', min: 0, max: 1, step: 0.01, default: 0.25, unit: '%' },
     },
-    create(ctx) {
+    create(ctx, { dry = true } = {}) {
       const input = ctx.createGain();
       const output = ctx.createGain();
       const conv = ctx.createConvolver();
       const wet = ctx.createGain();
-      input.connect(output);
+      if (dry) input.connect(output);
       input.connect(conv).connect(wet).connect(output);
       let size = null;
       return {
         input, output,
         auto: { mix: { param: wet.gain, map: (v) => v } },
         set(p, t, spb, grid, skip) {
-          if (!skip?.mix) ramp(wet.gain, p.mix, t);
+          if (!skip?.mix) ramp(wet.gain, dry ? p.mix : 1, t);
           const s = Math.round(p.size * 20) / 20; // Impulsantwort nur in 5-%-Schritten neu erzeugen
           if (s !== size) { size = s; conv.buffer = hallImpulse(ctx.sampleRate, s); }
         },
@@ -482,28 +484,80 @@ export function withFx(fx) {
   return base;
 }
 
-// Baut die Effektkette für den aktuellen Zustand. Nur eingeschaltete Effekte liegen im Signalweg. Alle Parameter bekommen
-// ihren Reglerwert als Startwert; Kurven plant die Engine gleich danach darüber (Offline ab 0, live ab jetzt).
-export function buildFxChain(ctx, fxState, spb, grid = 0) {
+// Reihenfolge der Kette (ADR 008): owner.fxOrder ohne Unbekannte und Doppelte, fehlende Effekte in der Grundreihenfolge
+// hinten dran. Ohne Feld gilt EFFECT_IDS.
+export function fxOrderOf(owner) {
+  const list = Array.isArray(owner?.fxOrder) ? owner.fxOrder : null;
+  if (!list) return EFFECT_IDS;
+  const out = [];
+  for (const id of list) if (EFFECT_IDS.includes(id) && !out.includes(id)) out.push(id);
+  for (const id of EFFECT_IDS) if (!out.includes(id)) out.push(id);
+  return out;
+}
+export const isDefaultOrder = (order) => order.length === EFFECT_IDS.length && order.every((id, i) => id === EFFECT_IDS[i]);
+const EFFECT_BY_ID = Object.fromEntries(EFFECTS.map((e) => [e.id, e]));
+
+// Baut die Effektkette für den aktuellen Zustand. Nur eingeschaltete Effekte liegen im Signalweg, in der Reihenfolge
+// `order`. Alle Parameter bekommen ihren Reglerwert als Startwert; Kurven plant die Engine gleich danach darüber
+// (Offline ab 0, live ab jetzt).
+export function buildFxChain(ctx, fxState, spb, grid = 0, order = EFFECT_IDS) {
   const fx = withFx(fxState);
   const input = ctx.createGain();
   const output = ctx.createGain();
   const units = {};
   let last = input;
-  for (const e of EFFECTS) {
-    if (!fx[e.id].on) continue;
+  for (const id of order) {
+    const e = EFFECT_BY_ID[id];
+    if (!e || !fx[id].on) continue;
     const u = e.create(ctx);
-    u.set(fx[e.id], null, spb, grid);
+    u.set(fx[id], null, spb, grid);
     last.connect(u.input);
     last = u.output;
-    units[e.id] = u;
+    units[id] = u;
   }
   last.connect(output);
   const dispose = () => { for (const u of Object.values(units)) u.dispose?.(); };
-  return { input, output, units, key: fxKey(fx), dispose };
+  return { input, output, units, key: fxKey(fx, order), dispose };
 }
 
-export const fxKey = (fx) => EFFECT_IDS.filter((id) => fx?.[id]?.on).join('+');
+// Eingeschaltete Effekte in Reihenfolge; in der Grundreihenfolge derselbe Schlüssel wie vor 2.14
+export const fxKey = (fx, order = EFFECT_IDS) => order.filter((id) => fx?.[id]?.on).join('+');
+// Dieselbe Menge eingeschalteter Effekte (nur die Reihenfolge ist anders)?
+export const sameFxSet = (a, b) => a.split('+').sort().join('+') === b.split('+').sort().join('+');
+
+// ---------- Send-Busse (ADR 008): zwei feste Busse, Effekt „nur nass“, eigener Fader ----------
+// params: Effekt-Parameter des Busses (Bereiche und Format aus EFFECTS); volume/mute sind der Fader des Rückkanals
+export const BUSES = [
+  { id: 'hall', fx: 'hall', label: 'Hall-Bus', params: ['size'], defaults: { volume: 0.8, mute: false, size: 0.6 } },
+  { id: 'echo', fx: 'echo', label: 'Echo-Bus', params: ['time', 'feedback'], defaults: { volume: 0.8, mute: false, time: '1/8d', feedback: 0.4 } },
+];
+export const BUS_IDS = BUSES.map((b) => b.id);
+export const busDef = (id) => BUSES.find((b) => b.id === id) || null;
+export const busParamDef = (id, key) => EFFECT_BY_ID[busDef(id).fx].params[key];
+// Einstellungen eines Busses mit Voreinstellungen
+export function busOf(project, id) {
+  const b = busDef(id);
+  return b ? { ...b.defaults, ...(project?.buses?.[id] || {}) } : null;
+}
+// Send-Anteil einer Spur (0…1, fehlend = aus)
+export function sendOf(track, id) {
+  const v = Number(track?.sends?.[id]);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+}
+// Bus-Knoten: input → Effekt (nur nass) → level (Fader · Stumm) → Summe
+export function createBus(ctx, id) {
+  const b = busDef(id);
+  const input = ctx.createGain();
+  const unit = EFFECT_BY_ID[b.fx].create(ctx, { dry: false });
+  const level = ctx.createGain();
+  input.connect(unit.input);
+  unit.output.connect(level);
+  return {
+    id, input, unit, level, output: level,
+    set(cfg, t, spb, grid) { unit.set({ ...withFx(null)[b.fx], ...cfg, mix: 1 }, t, spb, grid); },
+    dispose() { unit.dispose?.(); },
+  };
+}
 
 // skip = { <effekt>: { <param>: true } }: Parameter, die gerade einer Kurve gehören
 export function updateFxParams(chain, fxState, t, spb, grid = 0, skip = null) {

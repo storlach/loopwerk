@@ -84,6 +84,7 @@
 <link rel="modulepreload" href="src/loops-more.js">
 <link rel="modulepreload" href="src/loops-guitar.js">
 <link rel="modulepreload" href="src/dsp/guitar.js">
+<link rel="modulepreload" href="src/loops-fx.js">
 <link rel="modulepreload" href="src/catalog-guitar.js">
 <link rel="modulepreload" href="src/dsp/stretch.js">
 <link rel="modulepreload" href="src/model.js">
@@ -123,6 +124,7 @@
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
+<link rel="modulepreload" href="src/ui/fx-order.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
 <link rel="modulepreload" href="src/ui/key-select.js">
 <link rel="modulepreload" href="src/ui/sound-tempo.js">
@@ -886,6 +888,22 @@
   .strip-meter { width: 8px; height: 100%; border-radius: 2px; }
   .strip-value { text-align: center; font: 500 11px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   .strip-ms { display: flex; justify-content: center; gap: 4px; min-height: 20px; }
+  /* Send-Regler „→H“ / „→E“ am Kanalzug und die Rückkanäle (Hall-Bus, Echo-Bus), 2.14 */
+  .strip-sends { display: flex; justify-content: center; gap: 6px; }
+  .strip-send { display: grid; justify-items: center; gap: 2px; }
+  .strip-send-wrap { position: relative; display: flex; justify-content: center; }
+  .strip-send-wrap .strip-send-in { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; pointer-events: none; }
+  .strip-send-wrap:focus-within .knob { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .strip-send .knob { width: 28px; height: 28px; }
+  .strip-send .knob-ind { top: 3px; height: 9px; transform-origin: 50% 11px; }
+  .strip-send:not(.on) .knob-ind { background: var(--muted); }
+  .strip-send-label { font: 600 9px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); }
+  .strip-send.on .strip-send-label { color: var(--ink); }
+  .strip:not(.strip-bus) + .strip-bus { margin-left: 14px; }
+  .strip-bus.idle > * { opacity: 0.45; }
+  .strip-bus.idle:hover > *, .strip-bus.idle:focus-within > * { opacity: 0.85; }
+  .fx-bus-card .fx-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .fx-cards.fx-bus-page { grid-template-columns: minmax(0, 1fr); }
   .mixer-detail { border-left: 1px solid var(--line); padding: 10px 14px; overflow: auto; min-width: 0; }
   .detail-title { margin: 0 0 8px; font: 700 12px/1.2 var(--font-display); letter-spacing: 0.08em; text-transform: uppercase; }
   .detail-empty, .detail-hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
@@ -1234,6 +1252,25 @@
   .fxl-params { display: grid; gap: 8px; padding: 2px 10px 10px 50px; }
   .fxl-item:not(.on) .fxl-params { display: none; }
   .fxl-params .fx-param select { height: 26px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  /* Reihenfolge (2.14): am Namen ziehen; die Zeile hebt sich, die anderen rücken weg, eine Linie zeigt den Platz */
+  .fxl, .fx-cards { position: relative; }
+  .fxl-name { cursor: grab; user-select: none; -webkit-user-select: none; }
+  .fx-card-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .fx-sorting, .fx-sorting * { cursor: grabbing; }
+  .fx-sorting > .fxl-item:not(.fx-lifted), .fx-sorting > .fx-card:not(.fx-lifted) { transition: transform 0.12s ease-out; }
+  .fx-lifted { position: relative; z-index: 2; background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--amber); }
+  .fx-drop-line { position: absolute; left: 0; width: 100%; height: 2px; border-radius: 1px; background: var(--amber); box-shadow: var(--beam-glow); pointer-events: none; z-index: 3; }
+  .fx-drop-line.grid { width: 2px; }
+  .fx-drop-line[hidden] { display: none; }
+  .fx-order-reset[hidden] { display: none; }
+  /* Busse (2.14): Anteile der Spur und Rückkanal-Einstellungen im Song – Linien, aktiv in Weißglut */
+  .insp-buses { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .insp-buses .insp-row.on > span:first-child { color: var(--ink); }
+  .insp-bus { display: grid; gap: 10px; }
+  .insp-bus + .insp-bus { margin-top: 4px; }
+  .insp-grp[hidden], .insp-bus[hidden] { display: none; }
+  .insp-bus select { height: 26px; grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  .fx-card-title { font: 600 11px/1.2 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 4px 0; }
 
   /* ---------- Erstellen: Karten zum Anklicken oder auf eine Spur ziehen ---------- */
   .create-panel { display: grid; gap: 8px; padding: 10px 12px 14px; overflow-y: auto; align-content: start; }
@@ -1570,14 +1607,16 @@
     .strip-fader-row { min-height: 90px; }
     .strip-fader { width: 30px; }
     .strip-ms { gap: 6px; }
-    .mixer-detail { flex: 1 1 auto; min-height: 0; border-left: 0; overflow-y: auto; padding: 4px 12px 16px; }
-    .detail-head { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 2; padding: 4px 0 8px; background: var(--panel); }
+    .mixer-detail { flex: 1 1 auto; min-height: 0; border-left: 0; overflow-y: auto; padding: 0 12px 16px; }
+    /* Kopfzeile bleibt oben stehen: deckend (das Panel ist halbdurchsichtig), sonst schimmern die Karten beim Scrollen durch */
+    .detail-head { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 2; padding: 4px 0 8px; background: var(--sheet-bg); }
+    .strip-sends { display: none; }
     .detail-back {
-      flex: none; height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 20px; background: var(--lane);
+      flex: none; height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 22px; background: var(--lane);
       color: var(--ink); cursor: pointer; font: 600 13px/1 var(--font-body);
     }
     .detail-head .detail-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .fx-switch { min-height: 40px; padding: 0 14px; }
+    .fx-switch { min-height: 44px; padding: 0 14px; }
     .fx-param input[type="range"] { height: 32px; }
     .fx-param select { height: 40px; }
 
@@ -2072,6 +2111,19 @@
   }
   .strip-master .strip-name { font: 600 11px/1.2 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; text-shadow: var(--glow-ink); }
   .strip-master .strip-value { color: var(--ink); }
+  /* Rückkanäle bleiben am Desktop neben dem Master stehen, wenn viele Spuren scrollen (Breite: Master 112 px, Kanal 86/100 px) */
+  @media (min-width: 761px) {
+    .strip.strip-bus {
+      position: sticky; z-index: 2;
+      background: color-mix(in srgb, var(--sheet-bg) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      box-shadow: -10px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
+    }
+    .strip.strip-bus[data-strip-id="__bus:echo"] { right: 118px; }
+    .strip.strip-bus[data-strip-id="__bus:hall"] { right: 210px; }
+  }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    .strip.strip-bus[data-strip-id="__bus:hall"] { right: 224px; }
+  }
   .bar-mark { font: 400 10px/1 var(--font-mono); color: var(--muted); }
   .loop-band { top: 3px; height: 2px; background: var(--ink); box-shadow: 0 0 6px rgb(255 255 255 / 0.5); }
   .loop-band.off { opacity: 0.25; box-shadow: none; }
@@ -2357,6 +2409,9 @@
     .knob-ind { top: 5px; height: 13px; transform-origin: 50% 15px; }
     .track-vol-wrap .knob { width: 34px; height: 34px; }
     .track-vol-wrap .knob-ind { top: 4px; height: 11px; transform-origin: 50% 13px; }
+    .strip-sends { gap: 4px; }
+    .strip-send .knob { width: 40px; height: 40px; }
+    .strip-send .knob-ind { top: 5px; height: 13px; transform-origin: 50% 15px; }
     .strip-ms { gap: 4px; }
 
     /* Menüs, Einblender, Tipps */
@@ -2856,8 +2911,9 @@
   }
   .auto-lock:hover svg, .auto-lock:focus-visible svg { box-shadow: inset 0 0 0 1px var(--amber); }
   .auto-lock:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .insp-pan-box .auto-lock svg { margin: 0; }
+  .insp-pan-box .auto-lock svg, .insp-send-box .auto-lock svg { margin: 0; }
   .strip-pan-wrap .auto-lock { inset: 50% auto auto 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  .strip-send-wrap .auto-lock { inset: 50% auto auto 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); }
   .auto-flag {
     position: absolute; z-index: 4; transform: translate(-50%, -100%); pointer-events: none; white-space: nowrap;
     padding: 4px 7px; border-radius: var(--radius); background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--key-line);
@@ -2903,6 +2959,7 @@
     .auto-bar { gap: 4px; padding: 4px; }
     .auto-bar-btn { min-width: 64px; height: 44px; font-size: 13px; }
     .strip-pan-wrap .auto-lock { width: 48px; height: 48px; }
+    .strip-send-wrap .auto-lock { width: 40px; height: 40px; }
   }
   @media (max-width: 760px) {
     /* schmaler Kopf: „Summe“ steht in der Zeile statt vor dem Chip */
@@ -2930,7 +2987,7 @@
   #app[data-density="calm"] :is(.insp-title, .left-title, .deck-name, .dock-head h2, .brand-name) { font-family: var(--font-display); font-size: var(--fs-15); }
   #app[data-density="calm"] .lcd-value { font-size: var(--fs-24); }
   /* Rahmen nur an Tasten: Flächen, Abschnitte, Regler, Felder und Etiketten verlieren Rahmen und Ring */
-  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item) { border-color: transparent; box-shadow: none; }
+  #app[data-density="calm"] :is(.deck, .shelf, .arranger, .insp, .dock, .lcd, .shelf-search, .insp-stempo input, .insp-sec, .song-tile, .project-name, .loop-item, .ccard, .seg, .chip, .fxl-item, .insp-buses, .insp-bus, .fx-bus-card) { border-color: transparent; box-shadow: none; }
   #app[data-density="calm"] .insp-sec { border-bottom: 0; }
   /* Weißglut nur an ▶ (spielend) und am gewählten Clip */
   #app[data-density="calm"] .key.play, #app[data-density="calm"] .key.play[aria-pressed="true"]:not(.on) { background: transparent; color: var(--ink); box-shadow: var(--key-shadow); }

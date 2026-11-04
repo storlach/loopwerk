@@ -8,6 +8,7 @@ import { VCSL_CATALOG } from './catalog-vcsl.js';
 import { fetchAsset } from './fetch-asset.js';
 import { MORE_LOOP_DEFS, MORE_GENRES } from './loops-more.js';
 import { GUITAR_LOOP_DEFS, GUITAR_GENRES } from './loops-guitar.js';
+import { FX_LOOP_DEFS } from './loops-fx.js';
 import { GUITAR_CATALOG } from './catalog-guitar.js';
 import { keyChangesOf, keySpans, keyDelta, harmonySpans, tapeRate, keySemis } from './model.js';
 import { minorOf, wrapSemis } from './keys.js';
@@ -2204,7 +2205,7 @@ async function loadCatalogEntry(entry) {
 // Synthetische Loops und die Katalog-Sounds, die das Projekt braucht, vor dem Start; die übrigen Katalog-Sounds
 // (zusammen viele MB) lädt `library.catalogReady` im Hintergrund nach – am Handy startet Loopwerk sonst ewig nicht.
 // Gesamte Bibliothek: eigene synthetische Loops und freie Katalog-Sounds (CC0)
-const ALL_LOOP_DEFS = [...LOOP_DEFS, ...MORE_LOOP_DEFS, ...GUITAR_LOOP_DEFS];
+const ALL_LOOP_DEFS = [...LOOP_DEFS, ...MORE_LOOP_DEFS, ...GUITAR_LOOP_DEFS, ...FX_LOOP_DEFS];
 const ALL_CATALOG = [...CATALOG, ...VCSL_CATALOG, ...GUITAR_CATALOG];
 
 // Alle Sounds als Einträge sofort im Regal; geladen bzw. erzeugt wird nur, was das Projekt braucht (need) –

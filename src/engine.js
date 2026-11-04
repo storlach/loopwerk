@@ -4,9 +4,9 @@
 import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, tapeRate, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
-import { buildFxChain, fxKey, updateFxParams } from './effects.js';
+import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS, BUSES, busOf, sendOf, createBus } from './effects.js';
 import { styleOf, masterLatency } from './dsp/master-core.js';
-import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey } from './automation.js';
+import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey, sendKey, sendActive } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
 // Stillstand mit ausgeblendeter Summe: so lange hält die Master-Kurve, damit Hall-/Echo-Fahnen nicht wieder aufleben
@@ -23,7 +23,7 @@ export function trackLevel(track, anySolo) {
 
 // Kanalzug: Eingang (Lautstärke/Mute/Solo) → Effektkette (austauschbar) → Überblend-Gain → Automation (auto, gehört
 // nur der Lautstärke-Kurve, ohne Kurve 1) → Einschleifpunkt fürs Effekt-Pad (pre → dry, das Pad hängt sich parallel
-// dazu) → Panorama → Ziel
+// dazu) → Panorama → Ziel. sends: { hall|echo: Gain } am Ausgang (hinter Fader, Kurve, Pad und Panorama) zu den Bussen
 function createStrip(ctx, dest, { pan = true } = {}) {
   const input = ctx.createGain();
   const out = pan ? ctx.createStereoPanner() : ctx.createGain();
@@ -32,7 +32,7 @@ function createStrip(ctx, dest, { pan = true } = {}) {
   const dry = ctx.createGain();
   auto.connect(pre).connect(dry).connect(out);
   out.connect(dest);
-  return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set() };
+  return { input, gain: input, pan: pan ? out : null, out, auto, pre, dry, chain: null, xf: null, autoOn: new Set(), sends: {} };
 }
 
 // AudioParams der Kanalzug-Kurven. Ein Besitzer je AudioParam: auto.gain gehört immer der Automation, das Panorama und
@@ -44,6 +44,11 @@ const STRIP_PARAMS = { volume: (strip) => strip.auto.gain, pan: (strip) => strip
 function laneTarget(strip, key) {
   const spec = AUTO_PARAMS[key];
   if (!spec) return null;
+  // Send-Kurve: Gain des Sends dieser Spur zum Bus – gibt es ihn (noch) nicht, wirkt die Kurve nicht
+  if (spec.send) {
+    const g = strip.sends?.[spec.send];
+    return g ? { param: g.gain, map: spec.map } : null;
+  }
   if (spec.fx) {
     const a = strip.chain?.units?.[spec.fx]?.auto?.[spec.param];
     return a ? { param: a.param, map: a.map } : null;
@@ -75,7 +80,8 @@ function autoStrips(project, mix) {
 // Regler-Parameter, die eine Kurve gerade übernimmt (syncStrip/updateFxParams lassen sie aus)
 const FX_KEYS = Object.values(AUTO_PARAMS).filter((p) => p.fx);
 function skipOf(owner) {
-  const skip = { pan: laneOf(owner, 'pan').length > 0, fx: null };
+  const skip = { pan: laneOf(owner, 'pan').length > 0, fx: null, sends: {} };
+  for (const b of BUSES) if (laneOf(owner, sendKey(b.id)).length) skip.sends[b.id] = true;
   for (const p of FX_KEYS) {
     if (!laneOf(owner, p.key).length) continue;
     skip.fx ||= {};
@@ -98,38 +104,66 @@ const dbGain = (db) => Math.pow(10, db / 20);
 // Verstärkungen fürs Mastering, solange die Analyse des Songs noch fehlt („Vorhalt“)
 export const defaultMasterGains = (style) => ({ pre: 0, drive: styleOf(style).drive });
 
-// Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet.
-function installChain(ctx, strip, fx, spb, live, grid) {
-  const chain = buildFxChain(ctx, fx, spb, grid);
+// Wie lange eine Kette nachklingt (Hall 0,6 + 3,5·Größe s, Echo bis 4 s, höchstens 4,5 s)
+function chainTail(chain, fx) {
+  let tail = 0.12;
+  if (chain.units.hall) tail = Math.max(tail, 0.6 + 3.5 * withFx(fx).hall.size);
+  if (chain.units.echo) tail = Math.max(tail, 4);
+  return Math.min(4.5, tail);
+}
+
+// Aufräumen nach Ablauf (keine Klangereignisse): Offline braucht es nicht, der Kontext endet ohnehin
+function later(ctx, seconds, fn) {
+  if (typeof OfflineAudioContext !== 'undefined' && ctx instanceof OfflineAudioContext) return;
+  setTimeout(fn, seconds * 1000);
+}
+
+// Neue Effektkette einsetzen; live wird in 30 ms von der alten auf die neue Kette überblendet. keepTail (nur die
+// Reihenfolge wechselt): die Eingänge werden überblendet, der Ausgang der alten Kette bleibt verbunden, bis Hall und Echo
+// ausgeklungen sind – die Fahne reißt nicht ab.
+function installChain(ctx, strip, fx, spb, live, grid, order = EFFECT_IDS, { keepTail = false } = {}) {
+  const chain = buildFxChain(ctx, fx, spb, grid, order);
   const xf = ctx.createGain();
   chain.output.connect(xf).connect(strip.auto);
   strip.input.connect(chain.input);
   const old = strip.chain;
   const oldXf = strip.xf;
   if (old) {
-    if (live) {
+    const drop = () => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); old.dispose(); };
+    if (live && keepTail) {
+      const t = ctx.currentTime;
+      chain.input.gain.setValueAtTime(0, t);
+      chain.input.gain.linearRampToValueAtTime(1, t + 0.03);
+      old.input.gain.setValueAtTime(old.input.gain.value, t);
+      old.input.gain.linearRampToValueAtTime(0, t + 0.03);
+      later(ctx, chainTail(old, strip.fx) + 0.1, drop);
+    } else if (live) {
       const t = ctx.currentTime;
       xf.gain.setValueAtTime(0, t);
       xf.gain.linearRampToValueAtTime(1, t + 0.03);
       oldXf.gain.setValueAtTime(oldXf.gain.value, t);
       oldXf.gain.linearRampToValueAtTime(0, t + 0.03);
-      setTimeout(() => { try { strip.input.disconnect(old.input); } catch { /* schon getrennt */ } oldXf.disconnect(); old.dispose(); }, 120);
+      setTimeout(drop, 120);
     } else {
-      strip.input.disconnect(old.input);
-      oldXf.disconnect();
-      old.dispose();
+      drop();
     }
   }
   strip.chain = chain;
   strip.xf = xf;
+  strip.fx = fx;
 }
 
-function syncStrip(ctx, strip, level, panValue, fx, spb, live, grid, skip = {}) {
+function syncStrip(ctx, strip, level, panValue, fx, order, spb, live, grid, skip = {}) {
   const t = live ? ctx.currentTime : null;
   if (live) strip.gain.gain.setTargetAtTime(level, t, 0.012); else strip.gain.gain.value = level;
   if (strip.pan && !skip.pan) { if (live) strip.pan.pan.setTargetAtTime(panValue, t, 0.012); else strip.pan.pan.value = panValue; }
-  if (!strip.chain || strip.chain.key !== fxKey(fx || {})) installChain(ctx, strip, fx, spb, live, grid);
-  else updateFxParams(strip.chain, fx, t, spb, grid, skip.fx);
+  const key = fxKey(fx || {}, order);
+  if (!strip.chain || strip.chain.key !== key) {
+    installChain(ctx, strip, fx, spb, live, grid, order, { keepTail: !!strip.chain && sameFxSet(strip.chain.key, key) });
+  } else {
+    strip.fx = fx;
+    updateFxParams(strip.chain, fx, t, spb, grid, skip.fx);
+  }
 }
 
 export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
@@ -180,7 +214,7 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
   const masterStrip = createStrip(ctx, post, { pan: false });
   const style = masteringOf(project).style;
   const mix = {
-    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, tracks: new Map(), grid,
+    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, tracks: new Map(), buses: new Map(), grid,
     canMaster: worklets && mastering !== false, mst: null,
     gains: mastering && typeof mastering === 'object' ? { ...mastering } : defaultMasterGains(style),
     monitor: { ab: null, aDb: 0, bDb: 0, ...(monitor || {}) },
@@ -261,12 +295,62 @@ export function syncMix(ctx, project, mix, spb, live = true) {
       mix.tracks.set(track.id, strip);
       mix.onStrip?.(track.id, strip);
     }
-    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, spb, live && strip.chain != null, mix.grid, skipOf(track));
+    syncStrip(ctx, strip, trackLevel({ ...track, ...trackState(project, track) }, anySolo), track.pan || 0, track.fx, fxOrderOf(track), spb, live && strip.chain != null, mix.grid, skipOf(track));
   }
   const m = masterOf(project);
-  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, spb, live && mix.masterStrip.chain != null, mix.grid, skipOf(m));
+  syncStrip(ctx, mix.masterStrip, m.volume, 0, m.fx, fxOrderOf(m), spb, live && mix.masterStrip.chain != null, mix.grid, skipOf(m));
+  syncBuses(ctx, project, mix, spb, live && mix.synced === true);
   syncMastering(ctx, project, mix, live && mix.masterStrip.chain != null && mix.synced === true);
   mix.synced = true;
+}
+
+// Send-Busse (ADR 008): Ein Bus entsteht, sobald eine Spur zu ihm sendet, und bleibt im laufenden Mix (die Fahne reißt
+// nicht ab, ein stiller Bus kostet nichts). Send-Gains entstehen und verschwinden mit dem Wert; live mit Rampe.
+// Rückkanäle sind keine Spuren: Solo stellt sie nicht stumm (die Sends der stummen Spuren sind ohnehin still).
+function syncBuses(ctx, project, mix, spb, live) {
+  const t = ctx.currentTime;
+  const to = (param, v) => { if (live) param.setTargetAtTime(v, t, 0.012); else param.value = v; };
+  for (const b of BUSES) {
+    let bus = mix.buses.get(b.id);
+    const fresh = !bus;
+    if (!bus) {
+      if (!project.tracks.some((tr) => sendActive(tr, b.id))) continue;
+      bus = createBus(ctx, b.id);
+      bus.output.connect(mix.master);
+      mix.buses.set(b.id, bus);
+      mix.onBus?.(b.id, bus);
+    }
+    const cfg = busOf(project, b.id);
+    bus.set(cfg, live && !fresh ? t : null, spb, mix.grid);
+    const level = cfg.mute ? 0 : cfg.volume;
+    if (fresh) bus.level.gain.value = level; else to(bus.level.gain, level);
+  }
+  for (const track of project.tracks) {
+    const strip = mix.tracks.get(track.id);
+    if (!strip) continue;
+    for (const b of BUSES) {
+      const v = sendOf(track, b.id);
+      // Mit Kurve gehört der Gain der Automation (ein Besitzer je AudioParam): der Regler schreibt nicht hinein
+      const curve = laneOf(track, sendKey(b.id)).length > 0;
+      const bus = mix.buses.get(b.id);
+      let g = strip.sends[b.id];
+      if ((v > 0 || curve) && bus) {
+        if (!g) {
+          g = ctx.createGain();
+          g.gain.value = live && !curve ? 0 : v;
+          strip.out.connect(g).connect(bus.input);
+          strip.sends[b.id] = g;
+          strip.sendGen = (strip.sendGen || 0) + 1; // neuer Knoten: _syncAutoChains plant die Kurve darauf
+        }
+        if (!curve) to(g.gain, v);
+      } else if (g) {
+        delete strip.sends[b.id];
+        strip.sendGen = (strip.sendGen || 0) + 1;
+        const drop = () => { try { strip.out.disconnect(g); } catch { /* schon getrennt */ } g.disconnect(); };
+        if (live) { to(g.gain, 0); later(ctx, 0.1, drop); } else drop();
+      }
+    }
+  }
 }
 
 // Automation der Clip-Hüllkurve (Lautstärke, Fades) für den Ausschnitt [fromBeat, toBeat] ab Kontextzeit `when`:
@@ -617,6 +701,16 @@ export class Engine extends Emitter {
       };
       this.mix.onStrip = tapStrip;
       for (const [id, strip] of this.mix.tracks) tapStrip(id, strip);
+      // Pegel der Rückkanäle (Ausgang des Busses, hinter seinem Fader); ein Bus entsteht erst mit dem ersten Send
+      this.busMeters = new Map();
+      const tapBus = (id, bus) => {
+        const a = this.ctx.createAnalyser();
+        a.fftSize = 512;
+        bus.output.connect(a);
+        this.busMeters.set(id, { analyser: a, data: new Float32Array(a.fftSize) });
+      };
+      this.mix.onBus = tapBus;
+      for (const [id, bus] of this.mix.buses) tapBus(id, bus);
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 1024;
       this.mix.output.connect(this.analyser);
@@ -809,10 +903,11 @@ export class Engine extends Emitter {
       const strip = id === MASTER_TARGET ? this.mix.masterStrip : this.mix.tracks.get(id);
       if (!strip) continue;
       let lanes = this._laneCache.get(id);
-      if (!lanes || lanes.strip !== strip || lanes.chain !== strip.chain) {
+      if (!lanes || lanes.strip !== strip || lanes.chain !== strip.chain || lanes.sendGen !== strip.sendGen) {
         lanes = stripLanes(strip, track, id);
         lanes.strip = strip;
         lanes.chain = strip.chain;
+        lanes.sendGen = strip.sendGen;
         this._laneCache.set(id, lanes);
       }
       for (const l of lanes) fn(l, strip);
@@ -871,16 +966,21 @@ export class Engine extends Emitter {
   _syncAutoChains(plan = true) {
     if (!this.mix) return;
     for (const [id, strip] of this._strips()) {
-      if (strip.autoChain === strip.chain) continue;
+      // Neue Kette (Effekt-Kurven) oder neue/entfernte Send-Knoten (Send-Kurven): die betroffenen Kurven gehören neuen Parametern
+      const chainNew = strip.autoChain !== strip.chain;
+      const sendsNew = (strip.autoSends ?? 0) !== (strip.sendGen ?? 0);
+      if (!chainNew && !sendsNew) continue;
       strip.autoChain = strip.chain;
+      strip.autoSends = strip.sendGen ?? 0;
+      const hit = (key) => (chainNew && !!fxOfKey(key)) || (sendsNew && !!AUTO_PARAMS[key]?.send);
       for (const key of [...strip.autoOn]) {
-        if (!fxOfKey(key)) continue;
+        if (!hit(key)) continue;
         strip.autoOn.delete(key);
         if (strip.autoHeld) delete strip.autoHeld[key];
       }
       const track = this._autoOwner(id);
       if (!plan || !track) continue;
-      const lanes = stripLanes(strip, track, id).filter((l) => fxOfKey(l.key) && l.points.length);
+      const lanes = stripLanes(strip, track, id).filter((l) => hit(l.key) && l.points.length);
       if (lanes.length) this._planNow(strip, lanes);
     }
   }
@@ -1208,6 +1308,18 @@ export class Engine extends Emitter {
     const m = this.meters?.get(trackId);
     if (!m) return 0;
     return this._lagged(trackId, () => {
+      m.analyser.getFloatTimeDomainData(m.data);
+      let p = 0;
+      for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }
+      return p;
+    });
+  }
+
+  // Pegel eines Rückkanals (Hall-/Echo-Bus); 0, solange der Bus noch nicht gebaut ist
+  busPeak(busId) {
+    const m = this.busMeters?.get(busId);
+    if (!m) return 0;
+    return this._lagged(`bus:${busId}`, () => {
       m.analyser.getFloatTimeDomainData(m.data);
       let p = 0;
       for (const v of m.data) { const a = Math.abs(v); if (a > p) p = a; }

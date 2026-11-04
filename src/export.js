@@ -8,7 +8,7 @@ import { analyzeMastering } from './mastering.js';
 import { audibleMap, trackState, EPS } from './model.js';
 import { makeZip, crc32 } from './zip.js';
 
-export const EXPORT_TAIL = 2.5; // Sekunden Ausklang für Hall und Echo
+export const EXPORT_TAIL = 2.5; // Sekunden Ausklang für Hall und Echo (auch der Send-Busse; Stems enthalten ihren Bus-Anteil)
 
 // Ende des letzten Clips, auf ganze Takte aufgerundet
 export function songEndBeat(project) {

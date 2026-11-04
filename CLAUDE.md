@@ -5,7 +5,7 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 ## Technik
 - Reine ES-Module ohne Build-Schritt, Web Audio API. `index.html` hat bewusst kein `<!doctype>`/`<head>`: die Artifact-Veröffentlichung ergänzt das Gerüst (lokal macht das `tests/serve.cjs`).
 - `src/model.js` – Projektmodell + `Store` (alle Änderungen über Aktionen → Undo/Redo). Positionen immer in Schlägen. Überlappende Clips bleiben erhalten; es klingt der obere (`clip.z`, `audibleRanges`).
-- `src/engine.js` – Scheduler mit Vorlauf, Loop-Sprünge, Live-Resync, Kanalzüge mit Effektketten (`buildMix`/`syncMix`), `renderProject` für Offline-Rendering/Export.
+- `src/engine.js` – Scheduler mit Vorlauf, Loop-Sprünge, Live-Resync, Kanalzüge mit Effektketten in wählbarer Reihenfolge (`fxOrder`, Umstellen mit `keepTail`) und Send-Bussen Hall/Echo (`syncBuses`, ADR 008) (`buildMix`/`syncMix`), `renderProject` für Offline-Rendering/Export.
 - `src/samples.js` + `src/catalog.js` – Bibliothek: synthetische Loops und CC0-Sounds (Sonic Pi), Tempo-Vorbereitung (`setTempo`).
 - `src/effects.js` – Effekt-Rack (Verzerrer, Filter, EQ, Kompressor, Pumpen, Echo, Hall); taktsynchrone LFOs über `mix.grid`.
 - `src/dsp/` – Time-Stretching (WSOLA), Bearbeitungsfunktionen, Aufnahme-Worklet, FFT, Tonhöhe (YIN → Noten), Autotune (PSOLA), Trennung (HPSS + Mitte, ADR 003). Lange Rechnungen über `runJob` im Worker.
