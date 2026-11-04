@@ -562,6 +562,21 @@ async function boot() {
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
   const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
   const patternEditor = mountPatternEditor({ root: document.getElementById('pattern'), store, engine, library, ui, kits: EDITION.synthKits ?? null });
+  // Wird der Clip des offenen Editors gelöscht, schließt sich der Editor (Pattern: sobald kein Clip es mehr spielt)
+  let patUsed = false;
+  const patInSong = () => {
+    if (ui.dock !== 'pattern' || !patternEditor.id) return false;
+    const sid = patternSampleId(patternEditor.id);
+    return store.project.tracks.some((t) => t.clips.some((c) => c.sampleId === sid));
+  };
+  // Beim Öffnen merken; das Löschen selbst ändert auch die Auswahl (ui) – der Merker darf dabei nicht zurückfallen
+  ui.on(() => { if (ui.dock !== 'pattern') patUsed = false; else if (patInSong()) patUsed = true; });
+  store.on(() => {
+    if (ui.dock === 'editor' && editor.state?.clipId && !store.findClip(editor.state.clipId)) editor.close();
+    const used = patInSong();
+    if (patUsed && !used && ui.dock === 'pattern') ui.setDock(null);
+    patUsed = used;
+  });
   // Pattern-Clips öffnen den Pattern-Editor, alle anderen den Sample-Editor
   const openClip = (clipId) => {
     const c = store.findClip(clipId)?.clip;
