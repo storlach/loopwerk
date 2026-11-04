@@ -82,6 +82,8 @@ async function reveal(page, sel) {
   await page.evaluate((s) => {
     const n = document.querySelector(s);
     if (!n) return;
+    // Clip-Editor: Tonhöhe, Autotune, Trennen, Loop sind eingeklappt
+    if (n.closest('#ed-tools')?.hidden) document.getElementById('clip-more').click();
     const pop = n.closest('.pop');
     if (pop && pop.hidden) pop.parentElement.querySelector('button').click();
     if (n.closest('.create-panel') && document.querySelector('.shelf').dataset.left !== 'create') document.getElementById('ltab-create').click();

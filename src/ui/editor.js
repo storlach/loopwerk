@@ -20,6 +20,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   const beatsIn = $('ed-beats');
   const bpmOut = $('ed-bpm');
   const pitchOut = $('ed-pitch-value');
+  let peaks = null;
   let st = null; // { clipId, src, chs, sr, history, sel, kind, beats, pitch }
 
   const len = () => st.chs[0].length;
@@ -120,16 +121,27 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     c.fillStyle = css.getPropertyValue('--wave').trim();
     const n = len();
     const per = n / w;
-    for (const [ci, d] of st.chs.entries()) {
-      const top = (h / st.chs.length) * ci;
+    if (!peaks || peaks.chs !== st.chs || peaks.w !== w) {
+      peaks = { chs: st.chs, w, cols: st.chs.map((d) => {
+        const out = new Float32Array(w * 2);
+        for (let x = 0; x < w; x++) {
+          let lo = 0;
+          let hi = 0;
+          const a = Math.floor(x * per);
+          const b = Math.min(n, Math.max(a + 1, Math.floor((x + 1) * per)));
+          for (let i = a; i < b; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+          out[x * 2] = lo;
+          out[x * 2 + 1] = hi;
+        }
+        return out;
+      }) };
+    }
+    for (const [ci, cols] of peaks.cols.entries()) {
       const ch = h / st.chs.length;
-      const mid = top + ch / 2;
+      const mid = ch * ci + ch / 2;
       for (let x = 0; x < w; x++) {
-        let lo = 0;
-        let hi = 0;
-        const a = Math.floor(x * per);
-        const b = Math.min(n, Math.max(a + 1, Math.floor((x + 1) * per)));
-        for (let i = a; i < b; i++) { const v = d[i]; if (v < lo) lo = v; if (v > hi) hi = v; }
+        const lo = cols[x * 2];
+        const hi = cols[x * 2 + 1];
         c.fillRect(x, mid - hi * (ch / 2 - 2), 1, Math.max(1, (hi - lo) * (ch / 2 - 2)));
       }
     }
@@ -295,6 +307,9 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     const on = isPlaying();
     playBtn.setAttribute('aria-pressed', String(on));
     playBtn.setAttribute('aria-label', on ? 'Stopp' : 'Anhören');
+    playBtn.classList.toggle('on', on);
+    playBtn.querySelector('.ico-play').toggleAttribute('hidden', on);
+    playBtn.querySelector('.ico-stop').toggleAttribute('hidden', !on);
     playBtn.title = on ? 'Stopp' : 'Anhören (im Loop)';
   };
   async function play(at = 0) {
@@ -366,6 +381,18 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     else if (st) { engine.stopPreview(); st = null; }
   });
   window.addEventListener('resize', () => render());
+  // Die Wellenform füllt die Schublade: wächst oder schrumpft sie (auch beim Ziehen), zeichnet sie im nächsten Bild neu
+  let raf = 0;
+  new ResizeObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }).observe(canvas);
+  // Tonhöhe, Autotune, Trennen, Loop: eingeklappt, damit die Wellenform den Platz bekommt
+  const moreBtn = $('clip-more');
+  moreBtn.addEventListener('click', () => {
+    const open = moreBtn.getAttribute('aria-expanded') !== 'true';
+    moreBtn.setAttribute('aria-expanded', String(open));
+    moreBtn.textContent = `Mehr: Tonhöhe, Autotune, Trennen, Loop ${open ? '▴' : '▾'}`;
+    $('ed-tools').hidden = !open;
+  });
+  nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); } });
 
   return { open, close, get state() { return st; } };
 }

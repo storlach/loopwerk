@@ -2780,8 +2780,6 @@
   .ed-actions { flex: none; flex-wrap: nowrap; }
   .dbtn.ed-ico { width: 32px; min-width: 32px; padding: 0; display: inline-grid; place-items: center; }
   .dbtn.ed-ico svg { width: 14px; height: 14px; fill: currentColor; }
-  #ed-play .ico-stop, #ed-play[aria-pressed="true"] .ico-play { display: none; }
-  #ed-play[aria-pressed="true"] .ico-stop { display: block; }
   #editor .editor-body { padding-top: 8px; }
   .ed-sw { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
   .ed-sw > span { font-size: 12px; color: var(--muted); }
@@ -3427,6 +3425,51 @@
   }
   .pat-key.down.off, .vkey.down.off { opacity: 0.85; }
   @media (prefers-reduced-motion: reduce) { .pat-key, .vkey { transition: none; } }
+  /* ================= Clip-Editor: Kopf wie bei Beat und Melodie, Schnittwerkzeuge als Icon-Knöpfe, Wellenform füllt das Fach ================= */
+  #editor { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  #editor .ed-top { gap: 6px; padding: 6px 14px 8px 16px; }
+  #editor .ed-headrow { margin: 0; padding: 0; border: 0; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+  #editor .ed-title { flex: 1 1 0; min-width: 150px; display: grid; gap: 2px; align-items: initial; }
+  #editor .ed-title h2 { margin: 0; font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  #editor .ed-name {
+    width: 100%; height: auto; min-height: 0; box-sizing: border-box; margin: 0; padding: 0 0 2px; border: 0; border-radius: 0;
+    background: transparent; box-shadow: none; color: var(--ink); cursor: text; text-overflow: ellipsis;
+    font: 300 26px/1.05 var(--font-display); letter-spacing: -0.03em;
+  }
+  #editor .ed-name:hover { box-shadow: 0 1px 0 var(--key-line); }
+  #editor .ed-name:focus, #editor .ed-name:focus-visible { outline: none; background: transparent; box-shadow: 0 1px 0 var(--amber); }
+  @media (hover: none) { #editor .ed-name { box-shadow: 0 1px 0 var(--key-line); } #editor .ed-name:focus { box-shadow: 0 1px 0 var(--amber); } }
+  #editor .ed-actions { gap: 6px; margin-left: 0; }
+  #editor #ed-play:not(.on) { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5); }
+  #editor #ed-play.on { background: var(--beam); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+  /* Schnittwerkzeuge: eigene Linien-Icons (24er Raster) mit kurzem Text */
+  .ico-line { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #editor .ed-cuts { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  #editor .ed-cutgroup { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 0; border: 0; border-radius: 0; }
+  #editor .ed-cutgroup .ed-group-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #editor .ed-tool { display: inline-flex; align-items: center; gap: 6px; height: 40px; min-height: 40px; padding: 0 12px; }
+  #editor .ed-tool span { font: 500 10px/1 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+  /* Wellenform: volle Höhe des Fachs; --sheet-cut hält sie beim Verkleinern der Schublade im Takt (sheets.js) */
+  #editor .ed-stage { container-type: size; min-height: 80px; padding: 8px 14px 0; }
+  #editor .ed-wave-wrap { height: max(80px, calc(100cqh - var(--sheet-cut, 0px))); }
+  #editor .editor-body { padding: 6px 14px 10px; gap: 6px; max-height: min(300px, 45vh); }
+  #editor .ed-more { justify-self: start; }
+  #editor .ed-tools[hidden] { display: none; }
+  @media (max-width: 760px) {
+    #editor .ed-top { padding: 4px 8px 6px 12px; }
+    #editor .ed-headrow { gap: 2px 8px; }
+    #editor .ed-title { flex: 1 1 100%; min-width: 0; }
+    #editor .ed-title h2 { display: block; }
+    #editor .ed-name { font-size: 24px; }
+    #editor .ed-actions { width: 100%; }
+    #editor #ed-apply { margin-left: auto; }
+    #editor .ed-cuts { gap: 4px 8px; }
+    #editor .ed-tool { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
+    #editor .ed-tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    #editor .ed-stage { padding: 6px 8px 0; }
+    #editor .editor-body { padding: 6px 8px 8px; }
+    #editor .ed-more { min-height: 44px; }
+  }
 </style>
 
 
@@ -3649,7 +3692,7 @@
     </div>
   </section>
 
-  <section class="dock" id="editor" data-surface="editor" aria-label="Sample-Editor" hidden>
+  <section class="dock" id="editor" data-surface="editor" data-fit aria-label="Sample-Editor" hidden>
     <div class="ed-top">
       <div class="dock-head ed-headrow">
         <div class="ed-title">
@@ -3657,37 +3700,42 @@
           <input class="ed-name" id="ed-name" type="text" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Name des Sounds" title="Name ändern">
         </div>
         <div class="dock-actions ed-actions">
-          <button class="dbtn ed-ico" id="ed-play" type="button" aria-label="Anhören" title="Anhören (im Loop)" aria-pressed="false"><svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg><svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5h9v9h-9z"/></svg></button>
+          <button class="key play" id="ed-play" type="button" aria-label="Anhören" title="Anhören (im Loop)" aria-pressed="false"><svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg><svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg></button>
           <button class="dbtn ed-ico" id="ed-undo" type="button" aria-label="Rückgängig" title="Rückgängig"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3L1 7l5 4V8h4a3 3 0 010 6H8v2h2a5 5 0 000-10H6z"/></svg></button>
           <button class="dbtn ed-ico" id="ed-cancel" type="button" aria-label="Abbrechen" title="Abbrechen – nichts ändern"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 2L2 3.4 6.6 8 2 12.6 3.4 14 8 9.4l4.6 4.6 1.4-1.4L9.4 8 14 3.4 12.6 2 8 6.6z"/></svg></button>
           <button class="dbtn primary" id="ed-apply" type="button">Übernehmen</button>
         </div>
       </div>
+      <div class="ed-cuts">
+        <div class="ed-group ed-cutgroup" role="group" aria-label="Auswahl">
+          <span class="ed-group-label">Schneiden · Auswahl</span>
+          <button class="dbtn ed-tool" id="ed-crop" type="button" title="Nur die Auswahl behalten"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14"/></svg><span>Zuschneiden</span></button>
+          <button class="dbtn ed-tool" id="ed-cut" type="button" title="Auswahl entfernen"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg><span>Entfernen</span></button>
+          <button class="dbtn ed-tool" id="ed-silence" type="button" title="Auswahl stumm schalten"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg><span>Stille</span></button>
+        </div>
+        <div class="ed-group ed-cutgroup" role="group" aria-label="Bearbeiten">
+          <span class="ed-group-label">Klang · Auswahl oder alles</span>
+          <button class="dbtn ed-tool" id="ed-fadein" type="button" title="Einblenden"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20L21 4M3 20h18M21 4v16"/></svg><span>Einblenden</span></button>
+          <button class="dbtn ed-tool" id="ed-fadeout" type="button" title="Ausblenden"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20L3 4M21 20H3M3 4v16"/></svg><span>Ausblenden</span></button>
+          <button class="dbtn ed-tool" id="ed-reverse" type="button" title="Rückwärts"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H5M11 6l-6 6 6 6"/></svg><span>Rückwärts</span></button>
+          <button class="dbtn ed-tool" id="ed-normalize" type="button" title="Auf −1 dB anheben"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20v-8M9 20V6M14 20v-6M19 20V6M2 3h20"/></svg><span>Normalisieren</span></button>
+          <button class="dbtn ed-tool" id="ed-louder" type="button" title="Lauter um 3 dB"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zM16 12h6M19 9v6"/></svg><span>+3 dB</span></button>
+          <button class="dbtn ed-tool" id="ed-quieter" type="button" title="Leiser um 3 dB"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zM16 12h6"/></svg><span>−3 dB</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="ed-stage">
       <div class="ed-wave-wrap cat-own">
         <canvas id="ed-wave" aria-label="Wellenform – ziehen wählt einen Bereich aus"></canvas>
         <div class="ed-sel" hidden></div>
         <div class="ed-head" hidden></div>
       </div>
-      <p class="ed-info" id="ed-info"></p>
-      <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
     </div>
     <div class="editor-body">
-      <div class="ed-tools">
-        <div class="ed-group" role="group" aria-label="Auswahl">
-          <span class="ed-group-label">Schneiden · Auswahl</span>
-          <button class="dbtn" id="ed-crop" type="button" title="Nur die Auswahl behalten">Zuschneiden</button>
-          <button class="dbtn" id="ed-cut" type="button" title="Auswahl entfernen">Entfernen</button>
-          <button class="dbtn" id="ed-silence" type="button" title="Auswahl stumm schalten">Stille</button>
-        </div>
-        <div class="ed-group" role="group" aria-label="Bearbeiten">
-          <span class="ed-group-label">Klang · Auswahl oder alles</span>
-          <button class="dbtn" id="ed-fadein" type="button">Einblenden</button>
-          <button class="dbtn" id="ed-fadeout" type="button">Ausblenden</button>
-          <button class="dbtn" id="ed-reverse" type="button">Rückwärts</button>
-          <button class="dbtn" id="ed-normalize" type="button" title="Auf −1 dB anheben">Normalisieren</button>
-          <button class="dbtn" id="ed-louder" type="button">+3 dB</button>
-          <button class="dbtn" id="ed-quieter" type="button">−3 dB</button>
-        </div>
+      <p class="ed-info" id="ed-info"></p>
+      <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
+      <button class="dbtn ed-more" id="clip-more" type="button" aria-expanded="false" aria-controls="ed-tools">Mehr: Tonhöhe, Autotune, Trennen, Loop ▾</button>
+      <div class="ed-tools" id="ed-tools" hidden>
         <div class="ed-group" role="group" aria-label="Tonhöhe">
           <span class="ed-group-label">Tonhöhe (Halbtöne)</span>
           <button class="dbtn" id="ed-pitch-down" type="button" aria-label="Einen Halbton tiefer">−</button>

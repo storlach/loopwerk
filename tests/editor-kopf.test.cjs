@@ -15,7 +15,7 @@ const VPS = [
 
 // Schublade merken: beide Editoren starten in der Mitte (Handy-Melodie sonst oben)
 const midInit = () => {
-  const m = { 'pattern-drums': 0.5, 'pattern-synth': 0.5 };
+  const m = { 'pattern-drums': 0.5, 'pattern-synth': 0.5, editor: 0.5 };
   localStorage.setItem('loopwerk.sheetH', JSON.stringify({ wide: m, narrow: m }));
 };
 
@@ -228,6 +228,50 @@ async function run({ name, vp, touch }) {
     if (SHOTS) {
       await page.mouse.move(0, 0);
     }
+
+    // ---------- Clip-Editor ----------
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    await page.waitForTimeout(300);
+    await page.evaluate(() => { const { store, editor } = window.loopwerk; editor.open(store.track('t4').clips[0].id); });
+    await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
+    await page.waitForTimeout(900);
+    const ce = await page.evaluate(() => {
+      const r = (e) => { const b = e.getBoundingClientRect(); return { w: b.width, h: b.height }; };
+      const n = document.getElementById('ed-name');
+      const tools = [...document.querySelectorAll('#editor .ed-tool')];
+      return {
+        kind: document.getElementById('editor-title').textContent, size: parseFloat(getComputedStyle(n).fontSize), nameW: r(n).w,
+        play: r(document.getElementById('ed-play')), dplay: r(document.getElementById('play-btn')), br: [getComputedStyle(document.getElementById('ed-play')).borderRadius, getComputedStyle(document.getElementById('play-btn')).borderRadius],
+        tools: tools.length, icons: tools.every((t) => t.querySelector('svg')), minTool: Math.min(...tools.map((t) => Math.min(r(t).w, r(t).h))), labels: tools.every((t) => t.getAttribute('title') || t.textContent.trim()),
+        groups: [...document.querySelectorAll('#editor .ed-cutgroup')].map((g) => g.getAttribute('aria-label')),
+      };
+    });
+    check(`${tag}: Clip-Editor: kleine Zeile „Clip-Editor“, Name groß (≥ 20 px)`, ce.kind === 'Clip-Editor' && ce.size >= 20 && ce.nameW > 40, JSON.stringify({ k: ce.kind, s: ce.size, w: ce.nameW }));
+    check(`${tag}: Clip-Editor: Anhören wie Abspielen im Deck`, Math.abs(ce.play.w - ce.dplay.w) <= 2 && Math.abs(ce.play.h - ce.dplay.h) <= 2 && ce.br[0] === ce.br[1], JSON.stringify([ce.play, ce.dplay, ce.br]));
+    check(`${tag}: Clip-Editor: neun Schnittwerkzeuge mit Icon und Titel${handy ? ', ≥ 44 px' : ''}`, ce.tools === 9 && ce.icons && ce.labels && JSON.stringify(ce.groups) === '["Auswahl","Bearbeiten"]' && (!handy || ce.minTool >= 43.5), JSON.stringify(ce));
+    const waveH = () => page.evaluate(() => Math.round(document.getElementById('ed-wave').getBoundingClientRect().height));
+    const wMid = await waveH();
+    const eTop = await page.evaluate(() => Math.round(document.getElementById('editor').getBoundingClientRect().top));
+    const wlog = [];
+    wlog.fn = waveH;
+    const g2 = await page.evaluate(() => { const r = document.querySelector('#editor > .sheet-grip').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 9 }; });
+    await page.mouse.move(g2.x, g2.y);
+    await page.mouse.down();
+    for (let i = 1; i <= 14; i++) { await page.mouse.move(g2.x, g2.y - ((eTop - 60) * i) / 14); await page.waitForTimeout(40); wlog.push(await waveH()); }
+    await page.waitForTimeout(250);
+    await page.mouse.up();
+    await page.waitForTimeout(900);
+    const wTop = await waveH();
+    const wFrac = await page.evaluate(() => { const w = document.getElementById('ed-wave').getBoundingClientRect(); const s = document.getElementById('editor').getBoundingClientRect(); const more = document.getElementById('clip-more').getBoundingClientRect(); return { waveBottom: Math.round(w.bottom), moreTop: Math.round(more.top), sheetBottom: Math.round(s.bottom) }; });
+    check(`${tag}: Clip-Editor: Wellenform wird höher, wenn die Schublade von Mitte auf oben geht und füllt das Fach`, wTop > wMid + 60 && wFrac.waveBottom <= wFrac.moreTop && wlog.every((v, i) => i === 0 || v >= wlog[i - 1] - 1), `${wMid} → ${wTop}, ${JSON.stringify(wFrac)}, ${wlog.join(',')}`);
+    const ed = await page.evaluate(() => { const c = document.getElementById('ed-wave'); return { w: c.clientWidth, h: c.clientHeight, cw: c.width, ch: c.height, dpr: window.devicePixelRatio || 1 }; });
+    check(`${tag}: Clip-Editor: Zeichenfläche passt zur Größe (kein verzerrtes Bild)`, Math.abs(ed.ch - Math.round(ed.h * ed.dpr)) <= 1 && Math.abs(ed.cw - Math.round(ed.w * ed.dpr)) <= 1, JSON.stringify(ed));
+    await page.click('#clip-more');
+    const more = await page.evaluate(() => [...document.querySelectorAll('#editor .ed-group')].filter((g) => g.offsetParent).map((g) => g.getAttribute('aria-label')));
+    check(`${tag}: Clip-Editor: „Mehr“ klappt Tonhöhe, Autotune, Trennen, Loop auf`, JSON.stringify(more.slice(2)) === '["Tonhöhe","Autotune","Trennen","Loop"]', JSON.stringify(more));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-clip-oben-mehr.png`) });
+    await page.click('#clip-more');
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-clip-oben.png`) });
 
     // ---------- Allgemein ----------
     const over = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth - innerWidth, dock: document.getElementById('pattern').scrollWidth - document.getElementById('pattern').clientWidth }));
