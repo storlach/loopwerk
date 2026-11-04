@@ -2596,6 +2596,37 @@
     .zbar-y .zbar-thumb.full { visibility: hidden; }
   }
 
+  /* Einheitliche Scrollleisten (Arranger-Zoomleisten und alle übrigen): feine Linie als Bahn, runder Griff in Tinte 40 %,
+     beim Überfahren/Ziehen Weißglut. Maus 6 px Griff, Finger 10 px; die Zoom-Greifer an den Enden 4 bzw. 5 px */
+  :root { --sb-thumb: 6px; --sb-grip: 4px; --sb-ink: color-mix(in srgb, var(--ink) 40%, transparent); }
+  @media (min-width: 761px) { :root { --zbar: 16px; --zbar-b: 16px; --zbar-r: 16px; } }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) { :root { --sb-thumb: 10px; --sb-grip: 5px; --zbar: 22px; --zbar-b: 22px; --zbar-r: 22px; } }
+  .zbar-thumb::before { border-radius: 999px; background: var(--sb-ink); }
+  .zbar-x .zbar-thumb::before, #app .zbar-x .zbar-thumb::before { height: var(--sb-thumb); margin-top: calc(var(--sb-thumb) / -2); }
+  .zbar-y .zbar-thumb::before, #app .zbar-y .zbar-thumb::before { width: var(--sb-thumb); margin-left: calc(var(--sb-thumb) / -2); }
+  .zbar-grip::after { border-radius: 2px; opacity: 0.8; }
+  .zbar-x .zbar-grip::after, #app .zbar-x .zbar-grip::after { top: 1px; bottom: 1px; width: var(--sb-grip); }
+  .zbar-y .zbar-grip::after, #app .zbar-y .zbar-grip::after { left: 1px; right: 1px; height: var(--sb-grip); }
+  .zbar-x .zbar-grip { width: 18px; }
+  .zbar-y .zbar-grip { height: 18px; }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    .zbar-x .zbar-grip { width: 44px; }
+    .zbar-y .zbar-grip { height: 44px; }
+  }
+  @media (max-width: 760px) {
+    #app .zbar-y .zbar-thumb::before { left: auto; right: 3px; margin: 0; width: 6px; }
+  }
+  ::-webkit-scrollbar { width: calc(var(--sb-thumb) + 6px); height: calc(var(--sb-thumb) + 6px); }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-track:vertical { background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
+  ::-webkit-scrollbar-track:horizontal { background: linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat; }
+  ::-webkit-scrollbar-thumb { background: var(--sb-ink); background-clip: padding-box; border: 3px solid transparent; border-radius: 999px; min-height: 40px; min-width: 40px; }
+  ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--ink); }
+  ::-webkit-scrollbar-corner, ::-webkit-scrollbar-button { display: none; background: transparent; }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-color: var(--sb-ink) transparent; }
+  }
+
   /* Gleiten am Handy: ein Knopf in der Kopfzeile, antippen wechselt Aus → Kurz → Lang (das Auswahlfeld liegt im Menü „Mehr“ des Editors) */
   .pat-glide-btn { display: none; }
   @media (max-width: 760px) {
