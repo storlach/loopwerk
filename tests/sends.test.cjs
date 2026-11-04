@@ -298,7 +298,7 @@ function installHelpers() {
       const g = document.querySelector('.insp-grp-buses');
       const m = document.querySelector('.insp-grp-master');
       const cs = getComputedStyle(g);
-      return { line: cs.borderTopStyle, pad: cs.paddingTop, mt: cs.marginTop, mLine: getComputedStyle(document.querySelector('.insp-grp-auto')).borderTopStyle, below: g.getBoundingClientRect().top >= m.getBoundingClientRect().bottom };
+      return { line: cs.borderTopStyle, pad: cs.paddingTop, mt: cs.marginTop, below: g.getBoundingClientRect().top >= m.getBoundingClientRect().bottom };
     });
     check('17 Block „Busse“ mit Trennlinie und gleichem Abstand wie die anderen Blöcke', busGeom.line === 'solid' && busGeom.pad === '18px' && busGeom.mt === '10px' && busGeom.below, JSON.stringify(busGeom));
     if (SHOTS) {

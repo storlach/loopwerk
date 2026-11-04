@@ -155,22 +155,20 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     check('Pfeile bewegen den Punkt (runter = leiser, rechts = ein Rasterschritt)', s.auto?.[0] && s.auto[0].value < v0 && s.auto[0].beat === 1, JSON.stringify(s.auto));
     await page.keyboard.press('Delete');
 
-    // ---------- Vorlagen im Inspektor ----------
+    // ---------- Vorlagen (Spur-Menü ⋯ → Verlauf ›; der Inspektor hat keinen Verlauf mehr) ----------
     s = await state(page);
-    await page.click('#insp [data-template="fadeIn"]');
+    await page.evaluate(async ([name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id: ui.selectedTrackId || store.project.tracks[0].id, name }); }, ['fadeIn', null]);
     let s2 = await state(page);
     check('Vorlage „Einblenden“: Punkte über 4 Takte (0 → 1 bei Schlag 0 → 16)', s2.auto?.length === 2 && s2.auto[0].beat === 0 && s2.auto[0].value === 0 && s2.auto[1].beat === 16 && s2.auto[1].value === 1, JSON.stringify(s2.auto));
     check('Vorlage = ein Rückgängig-Schritt, danach ist die Zeile offen', s2.steps === s.steps + 1 && await page.evaluate(() => !!document.querySelector('.auto-row')));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-desktop.png') });
     await page.keyboard.press('Control+z');
     check('Rückgängig nimmt die ganze Vorlage zurück', (await state(page)).auto === null);
-    await page.click('#insp .auto-bars [data-bars="2"]');
-    await page.click('#insp [data-template="fadeOut"]');
+    await page.evaluate(async ([name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id: ui.selectedTrackId || store.project.tracks[0].id, name }); }, ['fadeOut', 2]);
     s2 = await state(page);
     check('Längen-Chip 2 Takte + „Ausblenden“: endet am letzten Clip (Schlag 4 → 12)', s2.auto?.length === 2 && s2.auto[0].beat === 4 && s2.auto[0].value === 1 && s2.auto[1].beat === 12 && s2.auto[1].value === 0, JSON.stringify(s2.auto));
     await page.keyboard.press('Control+z');
-    await page.click('#insp .auto-bars [data-bars="4"]');
-    await page.click('#insp [data-template="fadeIn"]');
+    await page.evaluate(async ([name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id: ui.selectedTrackId || store.project.tracks[0].id, name }); }, ['fadeIn', 4]);
 
     // ---------- Geschlossen: Kurve als Linie über den Clips; wandert mit dem Clip ----------
     await page.click('.auto-close');
@@ -357,8 +355,9 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     if (await page.evaluate(() => !!document.querySelector('.auto-row'))) await page.click('.auto-close');
     // Vorlage „Filter öffnen“ im Inspektor: ein Klick, ab Takt der Marke 8 Takte 0,25 → 1, Filter an (Tiefpass)
     let f0 = await fxState();
-    check('Inspektor „Verlauf“: Einblenden · Ausblenden · Filter öffnen · Filter schließen', await page.evaluate(() => [...document.querySelectorAll('#insp .insp-auto:not(#insp-master-auto) .auto-tpl [data-template]')].map((b) => b.textContent).join(' · ')) === 'Einblenden · Ausblenden · Filter öffnen · Filter schließen');
-    await page.click('#insp [data-template="filterOpen"]');
+    // Der Inspektor hat keinen „Verlauf“ mehr (Martin, Nov. 2026); Vorlagen gibt es weiter im Spur-Menü ⋯ → Verlauf ›
+    check('Inspektor ohne Block „Verlauf“', await page.evaluate(() => !document.querySelector('#insp .insp-auto, #insp .auto-tpl')));
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, [t, 'filterOpen', null]);
     let f1 = await fxState();
     check('Vorlage „Filter öffnen“: 0,25 → 1 über 8 Takte ab der Marke, Filter an als Tiefpass, ein Schritt',
       JSON.stringify(f1.cut) === JSON.stringify([{ beat: 0, value: 0.25 }, { beat: 32, value: 1 }]) && f1.filter?.on && f1.filter.type === 'lowpass' && f1.steps === f0.steps + 1, JSON.stringify(f1));
@@ -449,14 +448,12 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.keyboard.press('Control+z');
     check('Summe: Rückgängig entfernt die Kurve', (await mst()).vol === null);
     // Vorlagen im Inspektor „Song“ unter Master
-    check('Inspektor „Song“: Verlauf der Summe mit Einblenden · Ausblenden', await page.evaluate(() => [...document.querySelectorAll('#insp-master-auto [data-template]')].map((b) => b.dataset.template).join() === 'fadeIn,fadeOut'));
+    check('Inspektor „Song“ ohne „Verlauf der Summe“', await page.evaluate(() => !document.getElementById('insp-master-auto')));
     m0 = await mst();
-    await page.click('#insp-master-auto .auto-bars [data-bars="2"]');
-    await page.click('#insp-master-auto [data-template="fadeOut"]');
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, ['master', 'fadeOut', 2]);
     m1 = await mst();
     check('Inspektor: Summe ausblenden über 2 Takte endet am letzten Clip (Schlag 4 → 12), ein Schritt, Zeile offen', JSON.stringify(m1.vol) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && m1.steps === m0.steps + 1 && await page.evaluate(() => !!document.querySelector('.auto-row.auto-master')), JSON.stringify(m1));
-    check('Inspektor: Link „Summen-Kurve“ leuchtet, solange die Summe Kurven hat', await page.evaluate(() => document.getElementById('insp-master-curve').classList.contains('lit') && /schließen/.test(document.getElementById('insp-master-curve').textContent)));
-    await page.click('#insp-master-auto [data-template="fadeIn"]');
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, ['master', 'fadeIn', 2]);
     m1 = await mst();
     check('Inspektor: Summe einblenden ab dem ersten Clip (0 → 8), Ausblenden bleibt', m1.vol?.[0]?.beat === 0 && m1.vol[0].value === 0 && m1.vol[1]?.beat === 8 && m1.vol[1].value === 1 && m1.vol.at(-1).beat === 12 && m1.vol.at(-1).value === 0, JSON.stringify(m1.vol));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-master-desktop.png') });
