@@ -338,12 +338,13 @@ async function editorTest(vp, name, touch) {
     await page.evaluate(() => { const { store, editor } = window.loopwerk; editor.open(store.project.tracks.find((x) => x.clips.length).clips[0].id); });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
     await page.waitForTimeout(600);
+    await page.click('#clip-more'); // Tonhöhe, Autotune, Trennen, Loop sind eingeklappt; Schnittwerkzeuge stehen oben im Kopf
     const d = await page.evaluate(() => {
       const ed = document.getElementById('editor');
       const groups = [...ed.querySelectorAll('.ed-group')];
       const vis = (n) => n.offsetParent !== null && n.getBoundingClientRect().height > 0;
       const wave = ed.querySelector('.ed-wave-wrap').getBoundingClientRect();
-      const gr = groups.map((g) => g.getBoundingClientRect());
+      const gr = [...ed.querySelectorAll('#ed-tools .ed-group')].map((g) => g.getBoundingClientRect());
       return {
         tabs: ed.querySelectorAll('.ed-tab, [role="tab"], .ed-tabs').length,
         visible: groups.filter(vis).length, total: groups.length,
