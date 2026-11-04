@@ -304,6 +304,8 @@
 - Als Nächstes Scheibe 3: Takes (Aufnahme im Loop über den laufenden Song), Festhalten (Resampling), Speicher v2 und ZIP-Sicherung
 - ✅ Regal „Eine Zeile“ (Entwurf `docs/ux/filter-layouts/`, Variante 1 mit Anleihen aus 3): Suche, Regler-Knopf (Fach mit Länge und Ordnen, schließt nach der Wahl) und Favoriten-Stern in einer 44-px-Zeile für Handy und Desktop; gewählter Wert im Knopf, × setzt alles zurück, Anzahl und Pegel auf den Längen, Trefferzahl im Suchfeld, „Alle“ entfällt; Test `tests/filter-zeile.test.cjs`, Zählbasis Desktop-Start 92 → 85
 
+- ✅ Editor-Kopf (Beat und Melodie): große Überschrift mit editierbarem Namen (Enter/Blur speichert, Esc verwirft), Umschalter Schritte | Pads in Weißglut, Anhören und Live als Deck-Tasten, Reihen/Pads/Piano-Roll wachsen mit der Schubladenhöhe (`data-fit`, `--sheet-cut`), Klaviertasten leuchten beim Spielen. Test `tests/editor-kopf.test.cjs`, Bilder `docs/ux/editor-kopf/`
+
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
 

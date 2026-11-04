@@ -139,6 +139,11 @@ export function mountSheets({ ui, arranger }) {
       ty = lay - p;
     }
     s.style.transform = `translate3d(0, ${ty}px, 0)`;
+    // Inhalt, der mit der sichtbaren Höhe mitwächst (data-fit): wie viel die Schublade beim Verkleinern noch überhängt
+    if (s.hasAttribute('data-fit')) {
+      const cut = `${Math.round(ty * 10) / 10}px`;
+      if (m.cut !== cut) { m.cut = cut; s.style.setProperty('--sheet-cut', cut); }
+    }
     // Desktop: was unter den Arranger-Rand rutscht, blitzt sonst unter der Fachleiste hervor (Schatten bleibt).
     // Am Handy deckt die Leiste bis zum Rand ab, dort spart das Malen.
     s.style.clipPath = ty > 0.5 && !narrow.matches ? `inset(-80px -80px ${ty}px -80px)` : '';
@@ -157,6 +162,7 @@ export function mountSheets({ ui, arranger }) {
     }
     s.style.transform = '';
     s.style.clipPath = '';
+    if (m.cut) { m.cut = ''; s.style.removeProperty('--sheet-cut'); }
     syncHead(s);
     lastAb = arr.getBoundingClientRect().bottom;
     follow(lastAb);
@@ -174,6 +180,7 @@ export function mountSheets({ ui, arranger }) {
     s.style.maxHeight = '';
     s.style.zIndex = '';
     s.style.removeProperty('--sheet-h');
+    if (m.cut) { m.cut = ''; s.style.removeProperty('--sheet-cut'); }
     follow();
     if (!busy()) syncPad();
     endFollow();

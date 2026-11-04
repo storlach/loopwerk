@@ -18,7 +18,7 @@ function geometry(pitch) {
   const touch = matchMedia('(hover: none) and (pointer: coarse)').matches;
   const keyW = narrow ? 72 : 30;
   if (!narrow) {
-    const row = touch ? 22 : 14;
+    const row = parseFloat(canvas.style.height) / 49;
     wrap.scrollTop = Math.max(0, (84 - pitch) * row - wrap.clientHeight / 2);
   }
   const r = canvas.getBoundingClientRect();
@@ -33,7 +33,7 @@ function geometry(pitch) {
     row = k0.height;
     yOf = (m) => { const k = document.querySelector(`#pat-vkeys .vkey[data-pitch="${m}"]`); const b = k.getBoundingClientRect(); return b.top + b.height / 2; };
   } else {
-    row = touch ? 22 : 14;
+    row = parseFloat(canvas.style.height) / 49;
     yOf = (m) => r.top + (84 - m) * row + row / 2;
   }
   const ys = {};
