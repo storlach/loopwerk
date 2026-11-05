@@ -2629,6 +2629,18 @@
     * { scrollbar-color: var(--sb-ink) transparent; }
   }
 
+  /* Handy-Spurkopf: Name und Knöpfe passen in die Zeile (vorher 78 px Inhalt in 70 px – der Name klebte oben).
+     Die Knopfzeile ist so hoch wie die sichtbaren Knöpfe; die Tippflächen ragen über ::after hinaus */
+  @media (max-width: 760px) {
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-head { align-content: center; gap: 6px; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-top { height: 22px; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-menu { height: 24px; align-self: center; margin-top: 0; }
+    /* Pfeil von knapp unter der Namenszeile bis zum Rand: 44 × 36, ohne die Fläche von ⋯ zu berühren */
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-chev { height: 36px; top: 0; padding-top: 6px; align-self: flex-end; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-chev::after { inset: -2px 0 -6px; } /* Tippfläche 44 × 44 bis zum Spurrand */
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-btns { height: 30px; }
+  }
+
   /* Gleiten am Handy: ein Knopf in der Kopfzeile, antippen wechselt Aus → Kurz → Lang (das Auswahlfeld liegt im Menü „Mehr“ des Editors) */
   .pat-glide-btn { display: none; }
   @media (max-width: 760px) {
