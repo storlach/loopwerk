@@ -2634,7 +2634,8 @@
   @media (max-width: 760px) {
     .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-head { align-content: center; gap: 6px; }
     .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-top { height: 22px; }
-    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-menu { height: 24px; align-self: center; margin-top: 0; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-menu { width: 22px; height: 24px; align-self: center; margin: 0 -4px 0 0; flex: none; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-menu::after { inset: -4px -6px -2px -8px; } /* schmal gezeichnet, Tippfläche wie vorher */
     /* Pfeil von knapp unter der Namenszeile bis zum Rand: 44 × 36, ohne die Fläche von ⋯ zu berühren */
     .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-chev { height: 36px; top: 0; padding-top: 6px; align-self: flex-end; }
     .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-chev::after { inset: -2px 0 -6px; } /* Tippfläche 44 × 44 bis zum Spurrand */
@@ -2825,7 +2826,9 @@
     .mst-seg .seg, .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 44px; height: 44px; }
     .mst-head { min-height: 44px; }
     /* 44 px hoch zum Tippen, sichtbar ist nur die 26 px hohe Bahn (Hintergrund im Inhaltsbereich) */
-    .mst .fxl-switch { width: 44px; height: 44px; padding: 9px 0; background-clip: content-box; border-radius: 13px / 13px; }
+    /* Box 44 × 44 (Tippfläche), sichtbar eine Pille 44 × 26: Fläche auf den Inhalt beschnitten; senkrechter Radius 13 + 9 px
+       Abstand, sonst schrumpft die innere Rundung auf 4 px und die Pille wirkt angeschnitten */
+    .mst .fxl-switch { width: 44px; height: 44px; padding: 9px 0; background-clip: content-box; border-radius: 13px / 22px; }
     .mst .fxl-switch::after { width: 20px; height: 20px; top: 12px; left: 3px; }
     .mst .fxl-switch[aria-pressed="true"]::after { transform: translateX(18px); }
     .mst-body { padding-left: 0; }
