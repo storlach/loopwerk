@@ -254,13 +254,14 @@
     },
     {
       "id": "automation",
-      "loopwerk": "Automation (Kurven)",
-      "state": "spur",
+      "loopwerk": "Automation (Kurven): Spur-Menü ⋯ → Kurve (seit main 88c554b statt „Verlauf“ im Inspektor)",
+      "state": "nichts",
       "steps": [
-        "#insp-fine"
+        ".track-head .tbtn-menu",
+        ".track-menu-item:text-is('Kurve')"
       ],
-      "expect": "#insp-auto-toggle",
-      "twins": 1
+      "expect": ".auto-row",
+      "twins": 0
     },
     {
       "id": "loop",
