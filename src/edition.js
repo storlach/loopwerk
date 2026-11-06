@@ -8,6 +8,8 @@ export const EDITIONS = {
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
     pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
     workbench: null, materialColors: false, grainWave: false, brandMark: null,
+    // Speichern als JSON mit eingebetteten Sounds; Öffnen nimmt auch ZIP (Sicherung, Song-ZIP; ADR 012). Kein Block „Werkstatt“
+    songFile: 'json', storagePanel: false,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -45,6 +47,8 @@ export const EDITIONS = {
     workbench: 'sound', materialColors: true, grainWave: true,
     // Zeichen im Deck: Klatscher als Ausschlag um die Mittellinie (assets/icons/krachwerk.svg), src/ui/brand-meter.js
     brandMark: 'klatscher',
+    // Scheibe 3a (ADR 012): Songs als ZIP mit ihren Sounds (am Handy übers Teilen-Menü), Block „Werkstatt“ mit Sichern/Zurückholen
+    songFile: 'zip', storagePanel: true,
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
       { id: 'koerper', label: 'Körper', cat: 'drums' },

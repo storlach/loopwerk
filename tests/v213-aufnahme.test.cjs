@@ -848,7 +848,7 @@ async function partC() {
     await download.saveAs(saved);
     await page.evaluate(() => { window.loopwerk.ui.setRecArm('t1', true); });
     await page.setInputFiles('#open-input', saved);
-    await page.waitForFunction(() => !window.loopwerk.store.canUndo && window.loopwerk.ui.recTracks.length === 0, null, { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(() => /geöffnet/.test(window.loopwerk.ui.flashText || '') && window.loopwerk.ui.recTracks.length === 0, null, { timeout: 15000 }).catch(() => {});
     await page.waitForTimeout(200);
     const opened = await page.evaluate(() => ({ name: window.loopwerk.store.project.name, rec: window.loopwerk.ui.recTracks.length, dots: document.querySelectorAll('.track-row.rec-armed').length }));
     check('C12 Nach „Projekt öffnen“ ist keine Spur scharf', opened.name === 'Mehrspur-Datei' && opened.rec === 0 && opened.dots === 0, JSON.stringify(opened));

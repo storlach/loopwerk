@@ -425,7 +425,10 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     busGrp.append(box);
   }
   const mstSlot = grp('insp-mst');
-  songSec.append(songGrp, masterGrp, busGrp, mstSlot);
+  // Platz am Ende der Song-Werkbank (Krachwerk: Block „Werkstatt“, storage-panel.js); leer unsichtbar
+  const endSlot = el('div', 'insp-end');
+  endSlot.id = 'insp-song-end';
+  songSec.append(songGrp, masterGrp, busGrp, mstSlot, endSlot);
   if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');

@@ -6,7 +6,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, readSaved } = require('./harness.cjs');
 
 const { check, finish } = createChecker();
 
@@ -455,9 +455,9 @@ function helpers() {
       return { id: snd.id, vr, d: Array.from(d), embedded, peak: T.peak(d) };
     });
     const [download] = await Promise.all([kw.waitForEvent('download'), kw.evaluate(() => document.getElementById('save-btn').click())]);
-    const saved = path.join(os.tmpdir(), 'loopwerk-rezept.json');
+    const saved = path.join(os.tmpdir(), 'loopwerk-rezept.zip');
     await download.saveAs(saved);
-    const json = JSON.parse(fs.readFileSync(saved, 'utf8'));
+    const json = readSaved(saved); // Krachwerk: Song-ZIP (Scheibe 3a); ownSounds = Sounds aus werkstatt.json
     check('16 Datei: recipes und version 1, Variante mit parent', json.version === 1 && json.recipes?.[k1.vr]?.parent === k1.id && json.recipes?.[k1.id]?.lp === 1200, JSON.stringify(json.recipes));
     check('16 Datei: ownSounds enthält den Eltern-Sound, der nur über die Variante benutzt wird', json.ownSounds?.some((e) => e.id === k1.id) && k1.embedded.includes(k1.id), JSON.stringify(k1.embedded));
     await page.setInputFiles('#open-input', saved);

@@ -119,6 +119,8 @@
 <link rel="modulepreload" href="src/ui/project-io.js">
 <link rel="modulepreload" href="src/ui/save-file.js">
 <link rel="modulepreload" href="src/zip.js">
+<link rel="modulepreload" href="src/archive.js">
+<link rel="modulepreload" href="src/ui/storage-panel.js">
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
@@ -3404,6 +3406,20 @@
   #app .rec-setup .key.rs-cal { width: 100%; }
   .rs-cal[aria-busy="true"] { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
   .song-rec:empty { display: none; }
+  /* Block „Werkstatt“ (Krachwerk 3a, src/ui/storage-panel.js): zuletzt gesichert · Sichern · Zurückholen. Erinnerung nur als Leuchtpunkt */
+  .insp-end:empty, .song-wk:empty { display: none; }
+  .insp-end { margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .song-wk { padding: 12px 0 4px; border-top: 1px solid var(--line); }
+  .wk { display: grid; gap: 8px; }
+  .wk-last { margin: 0; color: var(--muted); }
+  .wk-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .wk-btns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  #app .wk .key.wk-btn { position: relative; height: 44px; width: 100%; }
+  #app .wk .key.wk-btn[aria-busy="true"] { color: var(--amber); background: linear-gradient(var(--amber), var(--amber)) left bottom / calc(var(--p, 0) * 100%) 2px no-repeat; box-shadow: var(--key-shadow), 0 2px 10px -6px var(--amber); }
+  #app[data-remind] .insp-toggle { position: relative; }
+  #app[data-remind] :is(.insp-toggle, #wk-save)::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); box-shadow: var(--glow-ink); pointer-events: none; }
+  #app[data-remind] .deck-name { position: relative; padding-right: 14px; }
+  #app[data-remind] .deck-name::after { content: ""; position: absolute; right: 2px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--amber); box-shadow: var(--glow-ink); pointer-events: none; }
   #app[data-density="calm"] .rec-wrap { display: none; }
   /* Takes am Clip (2.13): aktiv = Weißglut, × löscht (Rot) */
   .insp-takes { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
@@ -3697,7 +3713,7 @@
       <input class="project-name" id="project-name" type="text" maxlength="40" aria-label="Projektname" title="Projektname – wird auch für gespeicherte und exportierte Dateien verwendet" autocomplete="off" spellcheck="false">
       <button class="key" id="open-btn" type="button" title="Projektdatei öffnen">Öffnen</button>
       <button class="key" id="save-btn" type="button" title="Projekt als Datei speichern">Speichern</button>
-      <input type="file" id="open-input" accept=".json,application/json" hidden>
+      <input type="file" id="open-input" accept=".json,.zip,application/json,application/zip" hidden>
       <button class="key" id="export-btn" type="button" title="Song als WAV oder MP3 exportieren" aria-pressed="false">Exportieren</button>
       <button class="key" id="demo-btn" data-surface="demo" type="button" title="Beispiel-Arrangement laden">Beispiel</button>
       <button class="key" id="new-btn" type="button" title="Alle Spuren leeren">Leeren</button>
@@ -4064,6 +4080,7 @@
       <div class="song-rec" id="song-rec"></div>
       <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
       <template id="harm-tpl"><button class="key" id="harm-btn" type="button" aria-pressed="false">Tonart und Akkorde</button></template>
+      <div class="song-wk" id="song-wk"></div>
       <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>
     </div>
   </section>

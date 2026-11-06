@@ -17,8 +17,13 @@ export function crc32(bytes) {
   return (c ^ 0xffffffff) >>> 0;
 }
 
+// Ohne ZIP64: unter 4 GB und unter 65 535 Einträgen (ADR 012)
+export const ZIP_TOO_BIG = 'Zu groß für eine Datei.';
+const LIMIT = 0xffffffff;
+
 // files: [{ name, data: Uint8Array }] oder [{ name, data: Blob, crc, size }] (CRC vorab berechnet, z. B. je Einzelspur)
 export function makeZip(files) {
+  if (files.length >= 0xffff) throw new Error(ZIP_TOO_BIG);
   const enc = new TextEncoder();
   const parts = [];
   const central = [];
@@ -58,6 +63,7 @@ export function makeZip(files) {
     cd.setUint32(42, offset, true);
     central.push(new Uint8Array(cd.buffer), name);
     offset += 30 + name.length + size;
+    if (offset >= LIMIT) throw new Error(ZIP_TOO_BIG);
   }
   const cdSize = central.reduce((n, p) => n + p.length, 0);
   const endRec = new DataView(new ArrayBuffer(22));
@@ -96,4 +102,61 @@ export function readZip(bytes) {
     p += 46 + nameLen + extra + comment;
   }
   return out;
+}
+
+export const ZIP_PACKED = 'Diese ZIP ist nachträglich gepackt – nimm die Original-Sicherung.';
+
+// Liest eine ZIP aus einem Blob (File), ohne sie ganz in den Speicher zu laden: nur das Verzeichnis über blob.slice,
+// jeder Eintrag einzeln. Gespeichert (0) und deflate (8, über DecompressionStream, wo es das gibt).
+// → { entries: [{ name, method, crc, size, csize }], has(name), entry(name), bytes(entry) → Uint8Array (prüft die CRC) }
+export async function readZipBlob(blob) {
+  const u8 = async (a, b) => new Uint8Array(await blob.slice(a, b).arrayBuffer());
+  const tailLen = Math.min(blob.size, 22 + 0xffff);
+  const tail = await u8(blob.size - tailLen, blob.size);
+  const tv = new DataView(tail.buffer);
+  let end = tail.length - 22;
+  while (end >= 0 && tv.getUint32(end, true) !== 0x06054b50) end--;
+  if (end < 0) throw new Error('Keine ZIP-Datei');
+  const count = tv.getUint16(end + 10, true);
+  const cdSize = tv.getUint32(end + 12, true);
+  const cdOff = tv.getUint32(end + 16, true);
+  if (count === 0xffff || cdSize === LIMIT || cdOff === LIMIT) throw new Error(ZIP_TOO_BIG);
+  if (cdOff + cdSize > blob.size) throw new Error('ZIP-Verzeichnis beschädigt');
+  const cd = await u8(cdOff, cdOff + cdSize);
+  const dv = new DataView(cd.buffer);
+  const dec = new TextDecoder();
+  const entries = [];
+  let p = 0;
+  for (let i = 0; i < count; i++) {
+    if (p + 46 > cd.length || dv.getUint32(p, true) !== 0x02014b50) throw new Error('ZIP-Verzeichnis beschädigt');
+    const nameLen = dv.getUint16(p + 28, true);
+    const e = {
+      name: dec.decode(cd.subarray(p + 46, p + 46 + nameLen)),
+      method: dv.getUint16(p + 10, true),
+      crc: dv.getUint32(p + 16, true),
+      csize: dv.getUint32(p + 20, true),
+      size: dv.getUint32(p + 24, true),
+      at: dv.getUint32(p + 42, true),
+    };
+    if (e.csize === LIMIT || e.size === LIMIT || e.at === LIMIT) throw new Error(ZIP_TOO_BIG);
+    entries.push(e);
+    p += 46 + nameLen + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  const byName = new Map(entries.map((e) => [e.name, e]));
+  async function bytes(e) {
+    const head = await u8(e.at, e.at + 30);
+    const hv = new DataView(head.buffer);
+    if (head.length < 30 || hv.getUint32(0, true) !== 0x04034b50) throw new Error('ZIP-Eintrag beschädigt');
+    const start = e.at + 30 + hv.getUint16(26, true) + hv.getUint16(28, true);
+    const raw = blob.slice(start, start + e.csize);
+    let data;
+    if (e.method === 0) data = new Uint8Array(await raw.arrayBuffer());
+    else if (e.method === 8) {
+      if (typeof DecompressionStream === 'undefined') throw new Error(ZIP_PACKED);
+      try { data = new Uint8Array(await new Response(raw.stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()); } catch { throw Object.assign(new Error('ZIP-Eintrag beschädigt'), { code: 'crc' }); }
+    } else throw new Error(ZIP_PACKED);
+    if (data.length !== e.size || crc32(data) !== e.crc) throw Object.assign(new Error(`„${e.name}“ ist beschädigt`), { code: 'crc' });
+    return data;
+  }
+  return { entries, has: (n) => byName.has(n), entry: (n) => byName.get(n) ?? null, bytes };
 }

@@ -2,6 +2,7 @@
 // Formate, die dort nicht erlaubt sind (WAV, MP3), werden in eine ZIP-Datei gepackt. Lokal: normaler Download.
 
 import { makeZip } from '../zip.js';
+import { touch } from './place.js';
 
 const ARTIFACT_OK = ['json', 'txt', 'md', 'csv', 'zip', 'pdf', 'png', 'jpg', 'webm', 'mp4'];
 
@@ -28,5 +29,22 @@ export async function saveFile(filename, blob) {
   return { filename, zipped: false };
 }
 
-export const safeName = (name, fallback = 'Loopwerk-Projekt') =>
+// Am Handy (Finger, Web Share mit Dateien): Teilen-Menü (Dateien, AirDrop, Messenger); sonst wie saveFile.
+// Abgebrochenes Teilen → { cancelled: true }. Ist die Geste nach langem Packen verfallen, kommt der Download.
+export async function shareOrSave(filename, blob, { title } = {}) {
+  const file = typeof File === 'function' ? new File([blob], filename, { type: blob.type || 'application/octet-stream' }) : null;
+  let can = false;
+  try { can = !!file && touch.matches && !!navigator.canShare?.({ files: [file] }); } catch { can = false; }
+  if (can) {
+    try {
+      await navigator.share({ files: [file], title: title || filename });
+      return { filename, shared: true };
+    } catch (err) {
+      if (err?.name === 'AbortError') return { filename, cancelled: true };
+    }
+  }
+  return saveFile(filename, blob);
+}
+
+export const safeName =(name, fallback = 'Loopwerk-Projekt') =>
   (name || fallback).replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || fallback;

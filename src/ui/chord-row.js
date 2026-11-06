@@ -203,7 +203,7 @@ export function mountChordRow({ store, engine, ui, library }) {
     const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 3, ArrowUp: -3 }[e.key];
     if (step && k >= 0) { e.preventDefault(); items[clamp(k + step, 0, items.length - 1)]?.focus(); }
   });
-  store.on((_, reason) => { if (reason === 'replace' || reason === 'undo' || reason === 'redo') close(); });
+  store.on((_, reason) => { if (reason === 'replace' || reason === 'open' || reason === 'undo' || reason === 'redo') close(); });
 
   return { row, strip, pop, render, open, close };
 }

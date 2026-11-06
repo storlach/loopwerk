@@ -3,7 +3,9 @@
 
 import { decodeAudio } from './samples.js';
 import { encodeWav } from './wav.js';
-import { clipSampleIds } from './model.js';
+import { clipSampleIds, isValidProject, remapSampleIds } from './model.js';
+import { crc32, makeZip, readZipBlob, ZIP_TOO_BIG, ZIP_PACKED } from './zip.js';
+import { MANIFEST, buildManifest, parseManifest, planImport, soundFile, soundMeta, songFileName } from './archive.js';
 
 const STORE = 'sounds';
 const MAX_SECONDS = 480;
@@ -147,17 +149,7 @@ export class OwnSounds {
       for (const rec of recs || []) {
         const had = this.library.get(rec.id);
         if (had && !had.missing) continue;
-        const sample = toSample(rec, null, wavDuration(rec.wav) ?? undefined);
-        this.library.stub(sample, async (x) => {
-          const r = await this.tx('readonly', (st) => st.get(x.id));
-          if (!r?.wav) throw new Error('nicht mehr im Browser gespeichert');
-          x.orig = await decodeAudio(r.wav.slice(0), { keepMono: true });
-          x.duration = x.orig.duration;
-          if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
-          // Sounds von vor der Tonart-Erkennung: beim ersten Gebrauch nachholen
-          if (!x.keyDone) this.detectKey(x);
-        });
-        if (sample.duration && !sample.beats) sample.lengthBeats = Math.max(1, Math.ceil(sample.duration / (60 / this.library.bpm) - 1e-6));
+        this._stub(rec);
       }
       if (recs?.length) askPersist();
       if (recs?.length) this.library.emit();
@@ -167,6 +159,23 @@ export class OwnSounds {
       console.warn('Eigene Sounds konnten nicht geladen werden:', err?.message || err);
       return 0;
     }
+  }
+
+  // Sound auf Abruf aus einem Datensatz (Name und Länge sofort, dekodiert beim ersten Gebrauch). mem: WAV ohne Speicher
+  _stub(rec, mem = null) {
+    const sample = toSample(rec, null, wavDuration(rec.wav) ?? undefined);
+    sample.bytes = rec.wav?.byteLength ?? null;
+    this.library.stub(sample, async (x) => {
+      const r = mem ? { wav: mem } : await this.tx('readonly', (st) => st.get(x.id));
+      if (!r?.wav) throw new Error('nicht mehr im Browser gespeichert');
+      x.orig = await decodeAudio(r.wav.slice(0), { keepMono: true });
+      x.duration = x.orig.duration;
+      if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
+      // Sounds von vor der Tonart-Erkennung: beim ersten Gebrauch nachholen
+      if (!x.keyDone) this.detectKey(x);
+    });
+    if (sample.duration && !sample.beats) sample.lengthBeats = Math.max(1, Math.ceil(sample.duration / (60 / this.library.bpm) - 1e-6));
+    return sample;
   }
 
   // Neuen eigenen Sound anlegen (aus Puffer) und dauerhaft speichern
@@ -181,6 +190,7 @@ export class OwnSounds {
     if (from) rec.from = from;
     if (keyDone) Object.assign(rec, { key: key ?? null, keyConf: keyConf ?? null, keyDone: true });
     const sample = await this.library.add(toSample(rec, buffer));
+    sample.bytes = wav.byteLength;
     if (this.available) {
       askPersist();
       try { await this.tx('readwrite', (s) => s.put(rec)); } catch (err) {
@@ -265,4 +275,167 @@ export class OwnSounds {
     }
     return n;
   }
+
+  // ---------- Sicherung als ZIP (ADR 012, Spec krachwerk-3 §5) ----------
+
+  // Alle eigenen Sounds dieses Geräts: im Speicher, dazu die nur in dieser Sitzung (Speicher voll oder aus)
+  async soundIds() {
+    const keys = this.available ? await this.tx('readonly', (s) => s.getAllKeys()).catch(() => []) : [];
+    const have = new Set(keys);
+    const extra = this.library.list().filter((s) => s.category === 'own' && isOwnId(s.id) && !s.missing && !s.parentId && !have.has(s.id)).map((s) => s.id);
+    return [...keys, ...extra];
+  }
+
+  // Ein Sound mit Metadaten und WAV, wie gespeichert (ohne Speicher: aus dem Original kodiert). Immer nur einer im Speicher.
+  async readSound(id) {
+    if (this.available) {
+      const rec = await this.tx('readonly', (s) => s.get(id)).catch(() => null);
+      if (rec?.wav) return { meta: soundMeta(rec), wav: rec.wav };
+    }
+    const s = this.library.get(id);
+    if (!s || s.missing || s.category !== 'own' || s.parentId) return null;
+    await this.library.ensure(id).catch(() => null);
+    if (!s.orig) return null;
+    const meta = { id, name: s._baseName ?? s.name, kind: s.kind, beats: s.beats, source: s.source, created: s.created ?? null };
+    if (s.made?.cls != null) meta.cls = s.made.cls;
+    if (s.made?.tags?.length) meta.tags = s.made.tags;
+    if (s.made?.from) meta.from = s.made.from;
+    if (s.material) meta.material = s.material;
+    if (s.keyDone) Object.assign(meta, { key: s.keyAuto ?? null, keyConf: s.keyConf ?? null, keyDone: true });
+    return { meta, wav: await encodeWav(s.orig).arrayBuffer() };
+  }
+
+  async *eachSound(ids) {
+    for (const id of ids ?? await this.soundIds()) {
+      const r = await this.readSound(id);
+      if (r) yield r;
+    }
+  }
+
+  // ZIP bauen: Sounds (ids; ohne = alle), dazu der Song (project) und die Pads. Jeder Sound wird einzeln gelesen, als Blob
+  // mit vorab berechneter CRC an makeZip gegeben und wieder losgelassen. → { blob, sounds, bytes }
+  async exportArchive({ project = null, ids = null, pads, app = 'Loopwerk', kind = 'werkstatt', onProgress, signal } = {}) {
+    const stop = () => { if (signal?.aborted) throw Object.assign(new Error('abgebrochen'), { name: 'AbortError' }); };
+    const list = ids ?? await this.soundIds();
+    const files = [];
+    const sounds = [];
+    let bytes = 0;
+    let done = 0;
+    onProgress?.(0, list.length);
+    for await (const { meta, wav } of this.eachSound(list)) {
+      stop();
+      const file = soundFile(meta.id);
+      const crc = crc32(new Uint8Array(wav));
+      files.push({ name: file, data: new Blob([wav], { type: 'audio/wav' }), crc, size: wav.byteLength });
+      sounds.push({ ...meta, file, crc, bytes: wav.byteLength });
+      bytes += wav.byteLength;
+      onProgress?.(++done, list.length);
+      await new Promise((r) => setTimeout(r, 40)); // Oberfläche und Blob-Ablage atmen lassen (kein Klangereignis)
+    }
+    stop();
+    const enc = new TextEncoder();
+    const songs = [];
+    const songFiles = [];
+    if (project) {
+      const { ownSounds, ...song } = project;
+      const file = songFileName(song.name);
+      songs.push({ file, name: song.name || 'Song', current: true });
+      songFiles.push({ name: file, data: enc.encode(JSON.stringify({ ...song, app }, null, 2)) });
+    }
+    const manifest = buildManifest({ app, kind, sounds, songs, pads });
+    const blob = makeZip([{ name: MANIFEST, data: enc.encode(JSON.stringify(manifest, null, 2)) }, ...songFiles, ...files]);
+    return { blob, sounds: sounds.length, bytes };
+  }
+
+  // Was es hier unter dieser ID gibt: { crc, bytes } (v1: CRC aus dem gespeicherten WAV), sonst null
+  async localInfo(id) {
+    const r = await this.readSound(id).catch(() => null);
+    return r ? { crc: crc32(new Uint8Array(r.wav)), bytes: r.wav.byteLength } : null;
+  }
+
+  // Datensatz mit fertigem WAV speichern und als Sound auf Abruf anmelden (Zurückholen: kein Dekodieren, bitgleich)
+  async putRecord(rec) {
+    let mem = this.available ? null : rec.wav;
+    if (this.available) {
+      try { await this.tx('readwrite', (s) => s.put(rec)); } catch (err) {
+        this.available = false;
+        mem = rec.wav;
+        console.warn('Eigener Sound nur für diese Sitzung gespeichert:', err?.message || err);
+      }
+    }
+    return this._stub(rec, mem);
+  }
+
+  // ZIP zurückholen (Sicherung oder Song-ZIP). Nie überschreiben: Gleiches (ID + CRC) überspringen, Abweichendes unter neuer
+  // ID anlegen und die Songs umschreiben. Bei einem Fehler wird nichts angelegt (schon Geschriebenes fällt wieder weg).
+  // Fehler tragen code: nozip | nomanifest | crc | packed | big | bad.
+  // → { added, skipped, untrashed, renamed, songs: [{ name, project, current }], pads, kind, app, map }
+  async importArchive(blob, { onProgress } = {}) {
+    const fail = (code, message) => Object.assign(new Error(message), { code });
+    let zip;
+    try { zip = await readZipBlob(blob); } catch (err) {
+      throw fail(err.message === ZIP_TOO_BIG ? 'big' : /beschädigt/.test(err.message) ? 'crc' : 'nozip', err.message);
+    }
+    const read = async (e) => {
+      try { return await zip.bytes(e); } catch (err) { throw fail(err.message === ZIP_PACKED ? 'packed' : 'crc', err.message); }
+    };
+    const dec = new TextDecoder();
+    if (!zip.has(MANIFEST)) throw fail('nomanifest', 'werkstatt.json fehlt');
+    let man;
+    try { man = parseManifest(dec.decode(await read(zip.entry(MANIFEST)))); } catch (err) { throw err.code ? err : fail('bad', err.message); }
+    // Songs zuerst prüfen (klein), dann die Sounds je einzeln
+    const songs = [];
+    for (const s of man.songs) {
+      const e = zip.entry(s.file);
+      if (!e) throw fail('bad', `${s.file} fehlt`);
+      let project;
+      try { project = JSON.parse(dec.decode(await read(e))); } catch (err) { throw err.code ? err : fail('bad', `${s.file} ist kein Song`); }
+      if (!isValidProject(project)) throw fail('bad', `${s.file} ist kein Song dieser Version`);
+      delete project.app;
+      delete project.ownSounds;
+      songs.push({ name: s.name || project.name, current: !!s.current, project });
+    }
+    const incoming = man.sounds.map((s) => {
+      const e = zip.entry(s.file);
+      if (!e) throw fail('bad', `${s.file} fehlt`);
+      return { id: s.id, crc: e.crc, bytes: e.size, meta: s, entry: e };
+    });
+    const local = new Map();
+    for (const s of incoming) { const l = await this.localInfo(s.id); if (l) local.set(s.id, l); }
+    const plan = planImport(incoming, (id) => local.get(id) ?? (this.library.get(id) && !this.library.get(id).missing ? {} : null), newId);
+    const byId = new Map(incoming.map((s) => [s.id, s]));
+    const made = [];
+    const out = { added: 0, skipped: 0, untrashed: 0, renamed: 0 };
+    let done = 0;
+    try {
+      for (const st of plan.steps) {
+        const s = byId.get(st.id);
+        if (st.action === 'skip') out.skipped++;
+        else if (st.action === 'untrash') { await this.untrash?.([st.id]); out.untrashed++; }
+        else {
+          const data = await read(s.entry);
+          const wav = data.byteOffset === 0 && data.byteLength === data.buffer.byteLength ? data.buffer : data.slice().buffer;
+          if (wavDuration(wav) == null) throw fail('bad', `${s.entry.name} ist kein WAV`);
+          const id = st.to ?? st.id;
+          made.push({ id, had: this.library.get(id) ?? null });
+          await this.putRecord({ ...soundMeta(s.meta), id, wav });
+          if (st.action === 'rename') out.renamed++; else out.added++;
+        }
+        onProgress?.(++done, plan.steps.length);
+        await new Promise((r) => setTimeout(r, 40));
+      }
+    } catch (err) {
+      // Nichts halb anlegen: Geschriebenes wieder entfernen, vorige Platzhalter („Sound fehlt“) zurück
+      for (const { id, had } of made.reverse()) {
+        if (this.available) { try { await this.tx('readwrite', (st) => st.delete(id)); } catch { /* egal */ } }
+        this.library.remove(id);
+        if (had) this.library.samples.set(id, had);
+      }
+      this.library.emit();
+      throw err.code ? err : fail('bad', err.message);
+    }
+    if (made.length) { askPersist(); this.library.emit(); }
+    return { ...out, songs: songs.map((s) => ({ ...s, project: remapSampleIds(s.project, plan.map) })), pads: man.pads ?? null, kind: man.kind ?? null, app: man.app ?? null, map: plan.map };
+  }
 }
+

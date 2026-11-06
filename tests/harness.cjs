@@ -104,4 +104,39 @@ async function toggleFx(page, trackId, fxId) {
   await page.click(`#fx-${fxId}-on`);
 }
 
-module.exports = { legacyStart, openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx };
+// ZIP in Node lesen (Sicherung, Song-ZIP aus Krachwerk): [{ name, method, crc, size, data: Buffer, crcOk }]
+function readZipFile(buf) {
+  const zlib = require('zlib');
+  let end = buf.length - 22;
+  while (end >= 0 && buf.readUInt32LE(end) !== 0x06054b50) end--;
+  if (end < 0) throw new Error('keine ZIP-Datei');
+  const count = buf.readUInt16LE(end + 10);
+  let p = buf.readUInt32LE(end + 16);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const method = buf.readUInt16LE(p + 10), crc = buf.readUInt32LE(p + 16), csize = buf.readUInt32LE(p + 20), size = buf.readUInt32LE(p + 24);
+    const nameLen = buf.readUInt16LE(p + 28), extra = buf.readUInt16LE(p + 30), comment = buf.readUInt16LE(p + 32), at = buf.readUInt32LE(p + 42);
+    const name = buf.subarray(p + 46, p + 46 + nameLen).toString('utf8');
+    const start = at + 30 + buf.readUInt16LE(at + 26) + buf.readUInt16LE(at + 28);
+    const raw = buf.subarray(start, start + csize);
+    const data = method === 8 ? zlib.inflateRawSync(raw) : raw;
+    out.push({ name, method, crc, size, data, crcOk: zlib.crc32(data) === crc });
+    p += 46 + nameLen + extra + comment;
+  }
+  return out;
+}
+
+// Gespeicherte Projektdatei lesen: JSON (Loopwerk) oder Song-ZIP (Krachwerk, Spec krachwerk-3 §5). Bei der ZIP kommt
+// das Song-JSON zurück, ownSounds = Sound-Metadaten aus werkstatt.json (wie die eingebetteten Sounds der JSON-Datei)
+function readSaved(file) {
+  const fs = require('fs');
+  const buf = fs.readFileSync(file);
+  if (buf.readUInt32LE(0) !== 0x04034b50) return JSON.parse(buf.toString('utf8'));
+  const entries = readZipFile(buf);
+  const man = JSON.parse(entries.find((e) => e.name === 'werkstatt.json').data.toString('utf8'));
+  const song = man.songs.find((s) => s.current) ?? man.songs[0];
+  const json = JSON.parse(entries.find((e) => e.name === song.file).data.toString('utf8'));
+  return { ...json, ownSounds: man.sounds, zip: { manifest: man, entries } };
+}
+
+module.exports = { legacyStart, openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx, readZipFile, readSaved };
