@@ -1,9 +1,9 @@
-# Krachwerk – offen für Martin (Stand 2026-11-03)
+# Krachwerk – offen für Martin (Stand 2026-11-06)
 
-Alles bis Scheibe 5 ist auf dem Branch `werkstatt` gebaut, getestet und gepusht. **Auf `main` ist nichts davon gemergt.** Bei jeder Frage steht schon eine Voreinstellung. Ein Wort von dir genügt.
+Alles bis Scheibe 5 und jetzt auch 3b (Takes) ist auf dem Branch `werkstatt` gebaut, getestet und gepusht. **Auf `main` ist nichts davon gemergt.** Bei jeder Frage steht schon eine Voreinstellung. Ein Wort von dir genügt.
 
 ## 1. Merge
-- **Krachwerk 3a–5 auf `main` mergen?** Danach steht es unter https://storlach.github.io/loopwerk/werkstatt/. Für Loopwerk ändert sich nichts: `/` ist im Zähltest exakt gleich geblieben, die Ruhe-Schicht kommt nur mit `?density=calm`. *Vorschlag: ja, als PR.*
+- **Krachwerk 3a–5 und 3b auf `main` mergen?** Danach steht es unter https://storlach.github.io/loopwerk/werkstatt/. Für Loopwerk ändert sich nichts: `/` ist im Zähltest exakt gleich geblieben, die Ruhe-Schicht kommt nur mit `?density=calm`. *Vorschlag: ja, als PR.*
 
 ## 2. Entscheidungen (Voreinstellung ist gebaut)
 | # | Frage | Gebaut | Alternative |
@@ -12,7 +12,7 @@ Alles bis Scheibe 5 ist auf dem Branch `werkstatt` gebaut, getestet und gepusht.
 | 2 | Was „Exportieren“ liefert | bis zum Ende des letzten Clips, der Kopf zeigt die echte Länge, „Länge“ heißt jetzt „Arbeitsfläche“ (Feinheiten) | eingestellte Songlänge |
 | 3 | Ruhe in Loopwerk (`shots-5/lw-calm-*.png`) | aus, nur `?density=calm` | b) Schalter in den Einstellungen *(Vorschlag)* · c) Standard |
 | 4 | Adresse | `/werkstatt/` (Umzug per `KW_PATH`, alte Adresse leitet weiter) | `/krachwerk/` *(Vorschlag: zusammen mit 3b)* |
-| 5 | „Krachwerk 1.0“ | bis 3b Vorschau | schon jetzt |
+| 5 | „Krachwerk 1.0“ | CD: ja, sobald du Hörprobe 1 und 2 der Takes bestanden hast (unten) | weiter Vorschau |
 | 6 | Rollen auf den Pads | Fachwörter klein, dein Klang groß | Klangwörter (Tief, Mitte, Hell) |
 | 7 | Quellen nach Festhalten | stumm, nur im Bereich (Clips werden geteilt) | klingen weiter |
 | 8 | Name des Festgehaltenen | „Schleife N“ | „Festgehalten N“ |
@@ -26,6 +26,8 @@ Alles bis Scheibe 5 ist auf dem Branch `werkstatt` gebaut, getestet und gepusht.
 | 16 | Zutatenliste | bei Export und Teilen | nur beim Teilen |
 | 17 | Aufnahme-Einstellungen | Reiter „Aufnahme“ der Song-Werkbank | am ● |
 | 18 | Fußzeile | Krachwerk „Nur privat“, Loopwerk „Private use only“ | beide deutsch |
+| 20 | Takes: auf welche Spur | freie Spur im Loop-Bereich (sonst neue), nicht über den gewählten Clip | auf die Spur des gewählten Clips |
+| 21 | ● bei laufendem Loop | Takes ab dem nächsten Sprung, Song läuft weiter; lang drücken = Geräusch | ● immer Geräusch, Takes nur lang drücken |
 | 19 | Scheibe 6 „Strom-Regler“ (Synth formen) | als nächstes | später |
 
 ## 3. Am Handy prüfen und hören
@@ -37,7 +39,15 @@ Alles bis Scheibe 5 ist auf dem Branch `werkstatt` gebaut, getestet und gepusht.
 6. **Sichern am iPhone:** sichern und zurückholen. Kommt die Datei in Dateien/iCloud an?
 7. Ein Pad tiefer stimmen, während der Beat läuft: kommt die Änderung ohne Stolpern?
 
+## 3b. Takes am Handy prüfen und hören
+1. Loop laufen lassen, ●: Merkst du am Zählen 4·3·2·1, wann es losgeht?
+2. Drei Durchgänge einsingen, mit Kopfhörer und über den Lautsprecher: Liegt die Stimme im Takt?
+3. Takes umschalten (3/3 am Clip): Sind leisere Takes leiser, verzerrt der lauteste nicht?
+4. In der Werkbank formen: klingen alle Takes gleich bearbeitet?
+5. Einen Take im Loop wiederholen: Knackt es am Sprung? (gilt auch für Loopwerk)
+
 ## 4. Später (CD, nicht blockierend)
+- 3b: „Zeit“ (Tempo) wirkt nur auf den aktiven Take (dort steht später „gilt für Take 3“); am Desktop klebt „Loop“ an ●; „Stopp nach Stille“ als Linie.
 - Am Handy rutscht der Grund unter die Falz (Kit Mitte, Reiter Projekt). Der Werkbank-Kopf soll stehen bleiben.
 - Kit-Clips sollen ihre Schläge als Punkte zeigen, ohne Hüllkurven-Griffe und ohne „P“.
 - Kleinigkeiten:
@@ -47,9 +57,9 @@ Alles bis Scheibe 5 ist auf dem Branch `werkstatt` gebaut, getestet und gepusht.
   - Den Reiter Aufnahme bis v2.13 in die Feinheiten legen.
 
 ## 5. Wartet auf andere
-- **Scheibe 3b Takes** (über den laufenden Loop einsingen) wartet auf v2.13 B auf `main` (Spec `docs/specs/v2.13-aufnahme.md`, ADR 009).
 - **Testlauf am 2026-11-04 nach dem Merge von `main`:** 64 von 65 Dateien liefen beim ersten Mal grün (auch `ticker`). Nur `v17` „Marke zeigt die hörbare Position“ fiel durch. Die Prüfung las zu einem beliebigen Zeitpunkt, verlangte aber 40 ms Genauigkeit bei 33–50 ms Bildabstand im Headless-Browser. Jetzt liest sie im Bild-Takt und war danach dreimal grün.
 - **Bildrate in Loopwerk auf `werkstatt`:** Im Headless-Browser fällt ab und zu ein Bild mehr aus als auf `main` (längster Abstand 83 statt 50–67 ms, der Median ist gleich). Spürbar ist das nicht, sollte aber vor dem Merge einmal am echten Gerät angesehen werden (motion-designer).
 - **Ältere Wackler, die auf `main` genauso auftreten:** `v14`, `v18`, `v20`, `scale-lock`, `editor-midi`, `more-loops`, `stufe7`. In diesem Lauf waren alle grün.
 - **`v213-aufnahme` A4 schlägt auch auf `main` fehl:** `OLD_COUNT` im Test ist nach 88c554b („Inspektor ohne Verlauf“, Basis 85 → 79) nicht nachgezogen. Die Prüfung „trifft die neue Basis exakt“ ist grün. Das ist eine Sache für die Session auf `main`.
+- **`takes-make` „Marker zum Song-Klick“** flackert selten (einmal 11047 Samples daneben, auch ohne die UI-Änderungen), sonst 0 Samples. Wohl die Loopback-Attrappe unter Last; vor 1.0 vom audio-engineer prüfen lassen.
 - **`npm test` am Stück** dauert länger als 30 Minuten (Zeitgrenze der Cloud-Session). Die Tests laufen deshalb in Teilen.
