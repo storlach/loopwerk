@@ -124,7 +124,9 @@ const loopback = () => {
         const d = s.orig.getChannelData(0);
         let peak = 0;
         for (let ch = 0; ch < s.orig.numberOfChannels; ch++) for (const v of s.orig.getChannelData(ch)) peak = Math.max(peak, Math.abs(v));
-        const mk = argmax(d, 0, Math.round(0.4 * sr)).at;
+        // Marker erst ab 0,1 s suchen: ist die Latenz ein paar Samples zu kurz eingemessen (Jitter der MediaStream-Strecke),
+        // beginnt Take k noch mit dem Ausklang von Ton k−1 – in Take 3 lauter (0,2) als Marker + Ton (0,15 + 0,05)
+        const mk = argmax(d, Math.round(0.1 * sr), Math.round(0.4 * sr)).at;
         const song = argmax(d, Math.round(0.4 * sr), Math.round(0.7 * sr)).at;
         // Ton k in der Mitte des Takes (ohne Marker und Song-Klick)
         const mid = d.subarray(Math.round(1 * sr), Math.round(3.5 * sr));
