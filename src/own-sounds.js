@@ -151,7 +151,7 @@ export class OwnSounds {
         this.library.stub(sample, async (x) => {
           const r = await this.tx('readonly', (st) => st.get(x.id));
           if (!r?.wav) throw new Error('nicht mehr im Browser gespeichert');
-          x.orig = await decodeAudio(r.wav.slice(0));
+          x.orig = await decodeAudio(r.wav.slice(0), { keepMono: true });
           x.duration = x.orig.duration;
           if (x.kind === 'loop' && x.beats) x.bpm = Math.round((x.beats * 60 / x.duration) * 100) / 100;
           // Sounds von vor der Tonart-Erkennung: beim ersten Gebrauch nachholen
@@ -259,7 +259,7 @@ export class OwnSounds {
       const bin = atob(e.wav);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const buffer = await decodeAudio(bytes.buffer);
+      const buffer = await decodeAudio(bytes.buffer, { keepMono: true });
       await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from, key: e.key, keyConf: e.keyConf, keyDone: e.keyDone });
       n++;
     }

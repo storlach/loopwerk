@@ -170,6 +170,7 @@
 <link rel="modulepreload" href="src/rec-settings.js">
 <link rel="modulepreload" href="src/ui/rec-setup.js">
 <link rel="modulepreload" href="src/ui/take-row.js">
+<link rel="modulepreload" href="src/ui/rec-arm.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3416,6 +3417,45 @@
   .cb-short, .clipbar-btns.with-take .cb-long { display: none; }
   .clipbar-btns.with-take .cb-short { display: inline; }
   .clip-tag.clip-take { font-variant-numeric: tabular-nums; }
+  /* Mehrspur (2.13 C): scharfe Spur = roter Punkt im Spurkopf (nur Anzeige), Schalter ● Scharf, Eingang je Spur */
+  #app .track-row.rec-armed .track-dot { display: block; background: var(--meter-hot); box-shadow: 0 0 8px var(--meter-hot); opacity: 1; border-radius: 50%; }
+  .track-menu-arm[aria-checked="true"]::before {
+    content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; vertical-align: 1px;
+    background: var(--meter-hot); box-shadow: 0 0 6px var(--meter-hot);
+  }
+  .insp-arm { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .insp-arm .key.arm-btn { height: 30px; padding: 0 12px; gap: 6px; font: 500 12px/1 var(--font-body); }
+  .insp-arm .key.arm-btn .arm-dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--meter-hot); }
+  .insp-arm .key.arm-btn[aria-pressed="true"] { color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 35%, transparent); }
+  .insp-arm .key.arm-btn[aria-pressed="true"] .arm-dot { background: var(--meter-hot); box-shadow: 0 0 6px var(--meter-hot); }
+  .insp-recin { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .recin-btns { display: flex; gap: 4px; }
+  .recin-btns .key { flex: 1 1 0; min-width: 0; height: 30px; padding: 0 4px; font: 500 12px/1 var(--font-body); }
+  .recin-btns .key[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); box-shadow: var(--glow-ink); }
+  .insp-arm[hidden], .insp-recin[hidden] { display: none; }
+  .rs-dev { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-width: 0; }
+  #app .rec-setup .rs-device {
+    min-width: 0; width: 100%; height: 36px; padding: 0 6px; text-overflow: ellipsis;
+    border: 0; border-radius: var(--radius); background: var(--well); color: var(--ink); box-shadow: inset 0 0 0 1px var(--key-line);
+  }
+  .rs-device option { background: var(--sheet-bg); color: var(--ink); }
+  .rs-ch { font: 500 10px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); white-space: nowrap; }
+  .rs-ch[hidden] { display: none; }
+  .rs-armed { display: grid; gap: 4px; padding: 2px 0 4px; border-bottom: 1px solid var(--line); }
+  .rs-armed[hidden] { display: none; }
+  .rs-armed-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name off" "pick pick"; gap: 4px 8px; }
+  .rs-track { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .rs-track::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; vertical-align: 1px; background: var(--meter-hot); box-shadow: 0 0 6px var(--meter-hot); }
+  .rs-armed-row .recin-btns { grid-area: pick; }
+  .rs-armed-row .rs-disarm { grid-area: off; }
+  #app .rec-setup .recin-btns .key { height: 30px; padding: 0 4px; }
+  #app .rec-setup .key.rs-disarm { width: 30px; min-width: 30px; height: 30px; padding: 0; color: var(--muted); }
+  @media (max-width: 760px), (pointer: coarse) {
+    #app .rec-setup .rs-device { height: 44px; font-size: 16px; }
+    .insp-arm .key.arm-btn, .recin-btns .key { height: 44px; min-width: 44px; }
+    #app .rec-setup .recin-btns .key, #app .rec-setup .key.rs-disarm { height: 44px; min-width: 44px; }
+
+  }
   /* Finger (Tablet): volle 44 px Tippfläche */
   @media (min-width: 761px) and (hover: none) and (pointer: coarse) { .deck .key.rec-more { width: 44px; min-width: 44px; } .rec-wrap { margin-left: 0; } }
   @media (max-width: 760px) {
@@ -4101,6 +4141,8 @@
           <dt><kbd>Esc</kbd></dt><dd>Fach schließen, Auswahl aufheben</dd>
           <dt><kbd>Strg</kbd><kbd>Z</kbd><span class="key-or">/</span><kbd>Strg</kbd><kbd>⇧</kbd><kbd>Z</kbd></dt><dd>Rückgängig / Wiederholen</dd>
           <dt><kbd>T</kbd></dt><dd>Clip an der Abspielmarke teilen</dd>
+          <dt><kbd>R</kbd></dt><dd>Aufnahme starten / beenden</dd>
+          <dt data-surface="recArm"><kbd>⇧</kbd><kbd>R</kbd></dt><dd data-surface="recArm">Gewählte Spur für die Aufnahme scharf schalten</dd>
           <dt><kbd>A</kbd></dt><dd>Kurve der gewählten Spur öffnen oder schließen, ohne Auswahl die Summen-Kurve (Klick setzt einen Punkt, Doppelklick löscht)</dd>
           <dt><span class="key-act">Rahmen ziehen</span></dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
           <dt><kbd>⇧</kbd><span class="key-act">Klick</span></dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>

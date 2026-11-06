@@ -1492,10 +1492,11 @@ export function padOneShot(orig, bpm) {
   return { buffer, lengthBeats: beats };
 }
 
-async function decode(arrayBuffer) {
+// keepMono: 1-Kanal-Sounds bleiben 1 Kanal (eigene Mono-Aufnahmen, 2.13 C; startVoice mischt beim Abspielen hoch)
+async function decode(arrayBuffer, { keepMono = false } = {}) {
   const ctx = new OfflineAudioContext(2, 1, SAMPLE_RATE);
   const decoded = await ctx.decodeAudioData(arrayBuffer);
-  if (decoded.numberOfChannels === 2) return decoded;
+  if (decoded.numberOfChannels === 2 || (keepMono && decoded.numberOfChannels === 1)) return decoded;
   // Mono auf Stereo verdoppeln, damit alle Puffer gleich aufgebaut sind
   const st = new AudioBuffer({ numberOfChannels: 2, length: decoded.length, sampleRate: decoded.sampleRate });
   st.copyToChannel(decoded.getChannelData(0), 0);

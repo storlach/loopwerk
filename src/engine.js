@@ -411,6 +411,8 @@ export function startVoice(ctx, dest, buffer, when, offset, stopAt, env = null, 
   src.buffer = buffer;
   if (rate !== 1) src.playbackRate.value = rate;
   const g = ctx.createGain();
+  // 1-Kanal-Sound (Mono-Aufnahme): hier auf L = R hochmischen, sonst nimmt der StereoPanner ihn als Mono (−3 dB)
+  if (buffer.numberOfChannels === 1) { g.channelCount = 2; g.channelCountMode = 'explicit'; }
   src.connect(g);
   if (env) {
     const e = ctx.createGain();
@@ -1222,6 +1224,7 @@ export class Engine extends Emitter {
     src.buffer = sample.buffer;
     const g = this.ctx.createGain();
     g.gain.value = 0.8;
+    if (src.buffer.numberOfChannels === 1) { g.channelCount = 2; g.channelCountMode = 'explicit'; } // wie startVoice
     src.connect(g).connect(this.mix.master);
     let duration = sample.buffer.duration;
     if (loop) {
@@ -1247,6 +1250,7 @@ export class Engine extends Emitter {
     src.buffer = buffer;
     const g = this.ctx.createGain();
     g.gain.value = 0.8;
+    if (src.buffer.numberOfChannels === 1) { g.channelCount = 2; g.channelCountMode = 'explicit'; } // wie startVoice
     src.connect(g).connect(this.mix.master);
     const when = this.ctx.currentTime + 0.02;
     if (loop) {
