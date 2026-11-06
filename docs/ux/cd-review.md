@@ -4,6 +4,41 @@ Neueste Prüfung oben.
 
 ---
 
+## Krachwerk 3b Takes (06.11.2026)
+
+**Geprüft:** `shots-3b/` (kw-takes-handy, kw-takes-desktop, kw-rec-lang-handy, kw-aufnahme-reiter-handy), Code `rec-context.js`, `sound-bench.js` (`also`), `clip-float.js`, `take-row.js`, `main.js` (`context`, `startAt:'next-wrap'`), `model.js` `cutSound`. Grundlage: Spec 3 Teil 3b, `synthese.md`, Martins Ziel „ganze Tracks über den laufenden Song einsingen“.
+
+### Urteil
+
+**Der Kern trägt.** Bei laufendem Loop wird ● von selbst zu „Takes“. Der Song läuft ohne Stopp weiter, jeder Durchgang wird ein Take, und danach steht „3 Takes – der letzte spielt.“ Am Clip steht „Take 3/3“, die Werkbank formt alle Takes in einem Schritt. Dafür gibt es keinen neuen Knopf und keinen Dialog, nur ein Wort unter ●. So hatte die Synthese das gemeint. Was noch fehlt: Wer singt, weiß nicht, wann der Take beginnt. Die Kiste zeigt drei gleiche Zeilen, und am Handy verdeckt das Werkzeug die Spur darüber.
+
+**Freigabe zur Durchsicht an Martin: ja, mit Auflagen.** Vorher werden die vier „jetzt“-Punkte behoben. Keiner braucht eine neue Spec.
+
+### Punkte
+
+| # | Befund | Lösung (klein) | Wann |
+|---|---|---|---|
+| a | **Kiste: drei Takes ergeben drei gleiche Zeilen „Aufnah… Einzelklang“** (Desktop). Der Name ist abgeschnitten, deshalb sieht man nicht, welcher Take welcher ist. „Einzelklang“ ist außerdem falsch, denn ein Take ist so lang wie der Loop. | Takes eines Clips stehen in der Kiste als **eine** Gruppe „Aufnahme 1 · 3 Takes“, genau wie „Klopfen · 8 Schnitte“. Darunter steht je Take eine Zeile „Take 1 … 3“ mit ▶, der spielende in Weißglut. Die Länge steht als „2 Takte“ (`kind:'loop'`) statt „Einzelklang“. | **jetzt** |
+| b | **Lang drücken auf ● sieht man nicht.** Das zählt nur halb: Der Kontext wählt meist richtig, lang drücken ist der Sonderfall. In der Zeile „Geräusch · Takes“ sieht man aber nicht, was ● ohne Wahl täte, und sie liegt auf dem Einblender (abgeschnittenes „T…“ in kw-rec-lang-handy). | Die Option, die ● gerade nehmen würde, bekommt eine Weißglut-Linie unten. Die Zeile verdrängt `#hint`, oder der Einblender geht zu, solange sie offen ist. Dazu kommt ein Tipp in `tips-make.js` beim ersten ● mit Loop: „Lang drücken: Geräusch statt Takes“. | **jetzt** |
+| c | **Handy: das Werkzeug am Clip liegt über Spurname und Clip der Spur darüber** („Loop-Klick“ ist ganz verdeckt). Ursache ist die neue Ausnahme in `clip-float.js`: Ist die Leiste zu breit, darf sie über die Spurköpfe ragen. Dabei steht „3/3“ schon am Clip selbst. | Die Ausnahme zurücknehmen. Am Handy fällt „Take 3/3“ in der Leiste weg, stattdessen wird das „3/3“ am Clip zum Schalter (Tippfläche 44 px, ein Tipp = nächster Take, wie `stepTake`). Danach passt die Leiste rechts der Spurköpfe. Test: Die Rechtecke von Leiste und `.track-head` schneiden sich nicht. | **jetzt** |
+| d | **Zerlegen und Zeit wirken nur auf den aktiven Take.** Zerlegen ist hier richtig: Man zerlegt den Take, den man behalten will, und der Clip wird durch die Schnitte ersetzt, also ist das zugleich die Auswahl. Zeit (`setSoundBpm`) ist dagegen ein Bruch, denn danach sind die Takes nicht mehr gleich lang (ADR 009). Weil Takes schon im Song-Tempo entstehen, braucht man Zeit hier aber kaum. | Zeit schreibt auf alle Takes, wie Form über `also`. Bis dahin steht in Zeit und Zerlegen bei Takes klein „gilt für Take 3“ (`--muted`). | später |
+| e | **Die Aufnahme beginnt erst am nächsten Loop-Sprung, ● ist dann ein Ring mit „wartet …“.** Das verlangt die Spec so (ohne Stopp, ohne Vorzähler), und es ist richtig. Wer singt, muss aber wissen, **wann** er einsetzen soll. „wartet …“ sagt das nicht, und bei einem Loop von 8 Takten kann das bis zu 16 s dauern. | Im letzten Takt vor dem Sprung zählt der Ring unter ● „4 · 3 · 2 · 1“ (Schläge aus `engine.heardBeat()` bis `loop.endBeat`), vorher steht „wartet …“. Es kommt kein Ton dazu und kein neues Bedienelement. Gilt auch für das Zählbild in der Daumenleiste. | **jetzt** |
+| f | Kleinigkeiten: Am Desktop klebt „Loop“ links an ●. „Stopp nach Stille“ im Reiter Aufnahme sieht aus wie ein Hauptknopf (weiße Fläche über die ganze Breite). | Abstand zwischen Loop und ● wie zwischen ▶ und Loop. Der Schalter bekommt die Linienform von `wb-toggle`. | später |
+
+### Was Martin am Handy hören soll
+
+1. **Einsingen über den Loop:** Einen Loop von 2 Takten mit Beat spielen lassen, ● tippen und drei Durchgänge singen. Fühlst du am Zählen, wann es losgeht? Wackelt der Beat beim Start oder beim Sprung?
+2. **Liegt der Take im Takt?** Den letzten Take mit Kopfhörer und dann über den Lautsprecher abspielen. Liegt die Stimme auf dem Schlag oder hörbar zu spät? Wenn zu spät: einmal „Einmessen“ im Reiter Aufnahme, dann noch einmal.
+3. **Takes vergleichen:** Mit „3/3“ durch die Takes tippen, während der Loop läuft. Ist der Wechsel ohne Knacks, und sind alle gleich laut (gemeinsamer Pegel)?
+4. **Form für alle:** Bei Take 2 Hall oder Farbe einstellen, dann auf Take 3 wechseln. Klingt der genauso?
+5. **Geräusch trotz Loop:** ● lang drücken und „Geräusch“ wählen. Kommt ein gesäuberter Einzelklang, und läuft der Song dabei weiter?
+
+### Darf es „Krachwerk 1.0“ heißen?
+
+**Ja, sobald die vier „jetzt“-Punkte erledigt sind und Martin Hörprobe 1 und 2 bestanden hat.** Mit den Takes ist der Ablauf vollständig: Geräusch, Kit, Instrument, über den Song einsingen, Festhalten, Export mit Zutatenliste. Hängt der Take am Handy hörbar nach, ist es noch eine Vorschau, egal wie die Oberfläche aussieht. Die Adresse (`/krachwerk/`, Entscheidung 4 aus 3a–5) zieht mit dem Namen um.
+
+---
+
 ## Krachwerk Scheiben 3a–5 (03.11.2026)
 
 **Geprüft:** `shots-3a/` (Festhalten Handy und Desktop, Sicherung im alten Song-Fach), `shots-4/` (Start mit Startkarte, Kit, Pad-Wand und Instrument am Handy, Kit und Pad-Wand am Desktop), `shots-5/` (Song-Werkbank je Reiter an beiden Geräten, Export mit Zutatenzeile, Projekt-Feinheiten, `lw-calm-*`). Grundlage: `synthese.md`, Specs `krachwerk-3-festhalten.md`, `-4-kit.md`, `-5-song.md`. **Zählung Endziel:** Desktop *Clip gewählt* 45/13/4/11 (Ziel ≤ 45/≤ 35, Start war 112/117), Handy 17/8/4/11 (Ziel ≤ 22/≤ 15, Start 44/60), Handy *Song Mitte* 22/6. Takes (3b) fehlen, sie warten auf v2.13.
