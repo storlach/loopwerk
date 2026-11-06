@@ -144,7 +144,7 @@ const { check, finish } = createChecker();
       const { library } = window.loopwerk;
       const stubs = defs.map((d) => {
         const s = library.get(d.id);
-        return s && { id: d.id, category: s.category, kind: s.kind, key: s.key, license: s.license, origin: s.origin, genres: s.genres, tags: s.tags, beats: s.beats };
+        return s && { id: d.id, tonal: !!d.tonal, category: s.category, kind: s.kind, key: s.key, license: s.license, origin: s.origin, genres: s.genres, tags: s.tags, beats: s.beats };
       });
       const otherIds = [...S.LOOP_DEFS, ...M.MORE_LOOP_DEFS, ...G.GUITAR_LOOP_DEFS, ...C.CATALOG, ...V.VCSL_CATALOG, ...GC.GUITAR_CATALOG].map((d) => d.id);
       const otherNames = library.list().filter((s) => !defs.some((d) => d.id === s.id)).map((s) => s.name);
@@ -183,9 +183,9 @@ const { check, finish } = createChecker();
     // ---------- Regal ----------
     const badStub = out.filter((x, i) => {
       const s = stubs[i];
-      return !s || s.category !== 'fx' || s.kind !== 'oneshot' || s.key !== null || s.license !== 'CC0' || s.origin !== 'Loopwerk' || s.beats !== x.bars * 4 || !s.tags?.length;
+      return !s || s.category !== 'fx' || s.kind !== 'oneshot' || (s.tonal ? !s.key : s.key !== null) || s.license !== 'CC0' || s.origin !== 'Loopwerk' || s.beats !== x.bars * 4 || !s.tags?.length;
     });
-    check('Im Regal: FX, One-Shot, ohne Tonart, CC0, Herkunft Loopwerk', badStub.length === 0, badStub.map((x) => x.id).join(', '));
+    check('Im Regal: FX, One-Shot, Tonart nur bei tonalen FX, CC0, Herkunft Loopwerk', badStub.length === 0, badStub.map((x) => x.id).join(', '));
 
     // ---------- Messungen ----------
     const badLen = ok.filter((x) => x.length !== x.expected || x.len93 !== x.exp93 || x.len150 !== x.exp150);
@@ -298,6 +298,60 @@ const { check, finish } = createChecker();
     check('Export-Weg (renderProject): alle FX hintereinander, kein NaN, keiner still, Spitze ≤ 1',
       eng.nan === 0 && eng.quiet.length === 0 && eng.peak <= 1 && Math.abs(eng.length - eng.expected) <= 1,
       `Spitze ${eng.peak.toFixed(3)}, ${eng.quiet.join(', ') || 'alle hörbar'}, ${eng.length}/${eng.expected} Frames`);
+
+    // Tonale FX folgen der Song-Tonart (Martin, Nov. 2026): Grundton verschiebt sich um die Halbtöne, Länge bleibt;
+    // Geräusch-FX bleiben unverändert
+    const tonal = await page.evaluate(async () => {
+      const S = await import('/src/samples.js');
+      const X = await import('/src/loops-fx.js');
+      const F = await import('/src/dsp/fft.js');
+      const render = async (id, semis) => {
+        const def = X.FX_LOOP_DEFS.find((d) => d.id === id);
+        const lib = new S.Library();
+        lib.bpm = 120;
+        lib.semis = semis;
+        const s = { id: def.id, name: def.name, category: 'fx', kind: 'oneshot', beats: def.bars * 4, bpm: null, key: def.tonal ? 'Am' : null, oneShot: true, def };
+        await lib.add(s);
+        return s.buffer;
+      };
+      // Spektraler Schwerpunkt der tiefsten starken Linie in der Mitte des Klangs
+      const pitch = (buf) => {
+        const N = 32768, d = buf.getChannelData(0), off = Math.max(0, Math.floor(d.length * 0.55) - N / 2);
+        const re = new Float64Array(N), im = new Float64Array(N);
+        for (let i = 0; i < N; i++) re[i] = (d[off + i] || 0) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / N));
+        F.fft(re, im);
+        const mag = Array.from({ length: N / 2 }, (_, k) => Math.hypot(re[k], im[k]));
+        const top = Math.max(...mag.slice(20));
+        const k0 = mag.findIndex((m, k) => k > 20 && m > top * 0.5 && m >= mag[k - 1] && m >= mag[k + 1]);
+        return (k0 * buf.sampleRate) / N;
+      };
+      const centroid = (buf) => {
+        const N = 65536, d = buf.getChannelData(0);
+        const re = new Float64Array(N), im = new Float64Array(N);
+        for (let i = 0; i < Math.min(N, d.length); i++) re[i] = d[i];
+        F.fft(re, im);
+        let num = 0, den = 0;
+        for (let k = 1; k < N / 2; k++) { const m = Math.hypot(re[k], im[k]); num += k * m; den += m; }
+        return num / den;
+      };
+      const out = {};
+      for (const id of ['fxs-swell', 'fxs-riser-filter', 'fxs-sparkle']) {
+        const a = await render(id, 0), b = await render(id, 3);
+        out[id] = { ratio: (id === 'fxs-sparkle' ? centroid(b) / centroid(a) : pitch(b) / pitch(a)), len: [a.length, b.length] };
+      }
+      const n0 = await render('fxs-noise-burst', 0), n3 = await render('fxs-noise-burst', 3);
+      let diff = 0; for (let i = 0; i < n0.length; i++) diff = Math.max(diff, Math.abs(n0.getChannelData(0)[i] - n3.getChannelData(0)[i]));
+      out.noise = diff;
+      out.flags = X.FX_LOOP_DEFS.filter((d) => d.tonal).map((d) => d.id);
+      return out;
+    });
+    const want = 2 ** (3 / 12);
+    for (const id of ['fxs-swell', 'fxs-riser-filter', 'fxs-sparkle']) {
+      const r = tonal[id];
+      check(`${id}: folgt der Tonart (3 Halbtöne höher ≈ ×${want.toFixed(3)}), Länge gleich`, Math.abs(r.ratio - want) < 0.03 && r.len[0] === r.len[1], JSON.stringify(r));
+    }
+    check('Geräusch-FX bleiben unabhängig von der Tonart', tonal.noise === 0, String(tonal.noise));
+    check('8 tonale FX markiert', tonal.flags.length === 8, tonal.flags.join(', '));
 
     check('Keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {

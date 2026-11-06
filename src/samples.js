@@ -1452,7 +1452,8 @@ async function renderLoop(def, bpm, semis = 0) {
   const ctx = new OfflineAudioContext(2, loopFrames + TAIL_SECONDS * SAMPLE_RATE, SAMPLE_RATE);
   const bus = ctx.createGain();
   bus.connect(ctx.destination);
-  def.render(createKit(ctx, bus, spb, def.category === 'drums' || def.category === 'fx' ? 0 : semis));
+  // Tonale FX (def.tonal) folgen der Tonart wie die übrigen tonalen Loops
+  def.render(createKit(ctx, bus, spb, def.category === 'drums' || (def.category === 'fx' && !def.tonal) ? 0 : semis));
   const rendered = await ctx.startRendering();
 
   const buffer = new AudioBuffer({ numberOfChannels: 2, length: loopFrames, sampleRate: SAMPLE_RATE });
@@ -2215,7 +2216,7 @@ export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, n
   for (const def of ALL_LOOP_DEFS) {
     lib.stub({
       id: def.id, name: def.name, category: def.category, kind: def.oneShot ? 'oneshot' : 'loop',
-      beats: def.bars * 4, bpm: null, key: def.category === 'drums' || def.category === 'fx' ? null : LIBRARY_KEY,
+      beats: def.bars * 4, bpm: null, key: def.category === 'drums' || (def.category === 'fx' && !def.tonal) ? null : LIBRARY_KEY,
       oneShot: !!def.oneShot, origin: 'Loopwerk', license: 'CC0', genres: def.genres || [], tags: def.tags, def,
     });
   }
