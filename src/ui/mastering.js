@@ -1,4 +1,4 @@
-// Mastering-Bedienung für die Summe: oben ein Schalter, darunter – nur wenn an – Stil, Vergleich und gemessene Lautheit.
+// Mastering-Bedienung für die Summe: oben ein Schalter, darunter – nur wenn an – Stil und gemessene Lautheit.
 // Dieselbe Bedienung sitzt im Inspektor „Song“ (Desktop) und im Export-Fach (Desktop-Klappfeld, Handy-Fach).
 
 import { MASTER_STYLES } from '../mastering.js';
@@ -39,21 +39,8 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
     styles.append(b);
     return b;
   });
-  // Vergleich: Aus · Vorher · Nachher (beide gleich laut) – drei feste Stellungen statt eines wechselnden Knopfs
-  const cmp = el('div', 'mst-seg mst-cmp');
-  cmp.setAttribute('role', 'group');
-  cmp.setAttribute('aria-label', 'Vergleich');
-  const cmpBtns = [[null, 'Aus', 'ab-end'], ['A', 'Vorher', 'ab-a'], ['B', 'Nachher', 'ab-b']].map(([v, label, id]) => {
-    const b = el('button', 'seg', label);
-    b.type = 'button';
-    b.id = `${prefix}-${id}`;
-    b.dataset.ab = v ?? '';
-    b.title = v === 'A' ? 'Ohne Mastering hören – gleich laut wie mit' : v === 'B' ? 'Mit Mastering hören – gleich laut wie ohne' : 'Normal hören';
-    b.addEventListener('click', () => analysis.setAB(v));
-    cmp.append(b);
-    return b;
-  });
-  body.append(meter, row('Stil', styles), row('Vergleich', cmp));
+  // Kein eigener Vergleich mehr (Martin): Aus- und Einschalten genügt
+  body.append(meter, row('Stil', styles));
   box.append(head, body);
   root.append(box);
 
@@ -65,8 +52,6 @@ export function mountMasteringControls(root, { store, engine, analysis, prefix }
     box.classList.toggle('on', !!m.on);
     body.hidden = !m.on;
     for (const c of chips) c.setAttribute('aria-pressed', String(!!m.on && c.dataset.style === m.style));
-    const mon = engine.monitor?.ab ?? null;
-    for (const b of cmpBtns) b.setAttribute('aria-pressed', String((b.dataset.ab || null) === (m.on ? mon : null)));
     const an = analysis.state.analysis;
     if (!m.on) meter.textContent = '';
     else if (analysis.state.busy || !an || an.style !== m.style) meter.textContent = `Ziel ${fmt(st.target, 0)} LUFS · misst …`;

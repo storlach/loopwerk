@@ -36,7 +36,6 @@ import { OwnSounds } from './own-sounds.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
 import { touch, place } from './ui/place.js';
-import { templateControls, MASTER_TEMPLATES } from './ui/auto-lane.js';
 import { doubleTapRanges } from './ui/touch.js';
 import { EDITION, lsKey } from './edition.js';
 import { applySurfaces } from './ui/surfaces.js';
@@ -648,8 +647,6 @@ async function boot() {
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
   mountMasteringControls(document.getElementById('song-mst-slot'), { store, engine, analysis: mastering, prefix: 'song-mst' });
   // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
-  const songAuto = templateControls({ store, ui, engine, getTarget: () => 'master', names: MASTER_TEMPLATES, bars: false, variant: 'song', onDone: () => ui.setDock(null) });
-  document.getElementById('song-auto-slot').append(songAuto.node);
   const inspector = mountInspector({
     root: document.getElementById('insp'), store, ui, library, tools, engine, mastering,
     // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)

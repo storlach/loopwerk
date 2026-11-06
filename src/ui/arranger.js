@@ -10,7 +10,7 @@ import { lsKey } from '../edition.js';
 import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
 import { mountChordRow } from './chord-row.js';
-import { mountAutoLanes, templateControls, applyTemplate } from './auto-lane.js';
+import { mountAutoLanes } from './auto-lane.js';
 import { recipeKey } from '../recipe.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
@@ -490,10 +490,6 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
       item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
-      // Ein-/Ausblenden direkt (zwei Tipps); Filter-Vorlagen und Länge unter „Verlauf ›“ – das Menü bleibt kurz
-      item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
-      item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
-      item('Verlauf ›', () => openFadeMenu(trackId, btn)),
       // gilt für den zuletzt gewählten Parameter der Kurvenzeile
       ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
       ...groupItems(trackId, item),
@@ -511,17 +507,6 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
     menu.style.top = menuTop(r, mh) + 'px';
     menu.querySelector('button:not(:disabled)')?.focus();
-  }
-
-  // Unterseite des Spur-Menüs: Vorlagen mit Länge (am Handy statt Inspektor)
-  function openFadeMenu(trackId, btn) {
-    const back = el('button', 'track-menu-item auto-menu-back', '‹ Verlauf');
-    back.type = 'button';
-    back.setAttribute('role', 'menuitem');
-    back.addEventListener('click', () => { menuFor = null; openMenu(trackId, btn); });
-    const tpl = templateControls({ store, ui, engine, getTarget: () => trackId, onDone: () => closeMenu(), variant: 'menu' });
-    menu.replaceChildren(back, tpl.node);
-    showMenu(btn);
   }
 
   document.addEventListener('pointerdown', (e) => {
