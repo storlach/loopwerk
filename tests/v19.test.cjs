@@ -159,7 +159,8 @@ const { check, finish } = createChecker();
     const key = await rect('#pat-vkeys .vkey');
     check('Handy: Melodie-Editor öffnet oben (100 %)', Math.abs(pat.h / marr.h - 1) < 0.02, `${pat.h} / ${marr.h}`);
     check('Handy: Klavier groß (Piano-Roll ≥ 380 px hoch, Tasten ≥ 70 × 34)', roll.h >= 380 && key.w >= 70 && key.h >= 34, JSON.stringify({ roll, key }));
-    check('Handy: Kopf des Editors in einer Zeile ohne Titel und Hinweistext', await page.evaluate(() => getComputedStyle(document.getElementById('pat-title')).display === 'none' && document.getElementById('pat-hint').hidden));
+    // Titel nur noch für Screenreader (unsichtbar, 1 px) – sichtbar steht der Name groß
+    check('Handy: Kopf des Editors ohne sichtbaren Titel und Hinweistext', await page.evaluate(() => { const t = document.getElementById('pat-title'); const r = t.getBoundingClientRect(); return (getComputedStyle(t).display === 'none' || (r.width <= 1 && r.height <= 1)) && document.getElementById('pat-hint').hidden; }));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v19-mobil-klavier.png') });
     // Die Sounds-Schublade bleibt in der Mitte
     await page.tap('#editor-tab');
