@@ -162,6 +162,7 @@
 <link rel="modulepreload" href="src/ui/surfaces.js">
 <link rel="modulepreload" href="src/pwa.js">
 <link rel="modulepreload" href="src/ui/clip-float.js">
+<link rel="modulepreload" href="src/ui/rec-context.js">
 <link rel="modulepreload" href="src/ui/sound-bench.js">
 <link rel="modulepreload" href="src/ui/wave-handles.js">
 <link rel="modulepreload" href="src/recipe.js">
@@ -3073,7 +3074,7 @@
   #app[data-density="calm"].playing .key.play, #app[data-density="calm"] .key.play.on { background: var(--amber); color: var(--accent-ink); }
   /* Werkzeug am Clip (src/ui/clip-float.js) */
   #app[data-density="calm"] .clip-float { position: absolute; z-index: 8; display: flex; gap: 2px; padding: 4px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow); }
-  #app[data-density="calm"] .cf-btn { min-width: 44px; height: 44px; padding: 0 6px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); cursor: pointer; }
+  #app[data-density="calm"] .cf-btn { white-space: nowrap; min-width: 44px; height: 44px; padding: 0 6px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); cursor: pointer; }
   #app[data-density="calm"] .cf-btn:hover:not(:disabled) { background: var(--deck-2); }
   #app[data-density="calm"] .cf-btn:disabled { opacity: 0.4; cursor: default; }
   #app[data-density="calm"] .cf-del { color: var(--danger); margin-left: 6px; }
@@ -3328,6 +3329,21 @@
   #app[data-density="calm"].start-card-on.song-empty .track-row:first-child .lane::after { content: none; }
   #app[data-density="calm"] .loop-template .loop-name { font-style: italic; }
   /* Schmal: Werkbank als Schublade, Daumenleiste (Kiste · ▶ · ● · Werkbank), Deck als Lesezeile */
+  /* ● mit Kontext (src/ui/rec-context.js): Text unter ●, Zeile „Geräusch · Takes“ beim langen Drücken */
+  #app[data-density="calm"] #rec-btn { position: relative; -webkit-touch-callout: none; user-select: none; touch-action: manipulation; }
+  #app[data-density="calm"] .rec-ctx { position: absolute; left: 0; right: 0; bottom: 3px; text-align: center; font: 500 var(--fs-11)/1 var(--font-mono); letter-spacing: 0.04em; color: var(--muted); pointer-events: none; white-space: nowrap; }
+  #app[data-density="calm"] #rec-btn.recording .rec-ctx { color: var(--accent-ink); }
+  @media (min-width: 761px) { #app[data-density="calm"] .deck .rec-ctx { top: calc(100% + 2px); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); } #app[data-density="calm"] .deck #rec-btn.recording .rec-ctx { color: var(--muted); } }
+  #app[data-density="calm"] #rec-btn.rec-wait { background: transparent; box-shadow: inset 0 0 0 2px var(--meter-hot); animation: pulse 0.9s ease-in-out infinite alternate; }
+  #app[data-density="calm"] #rec-btn.rec-wait svg { fill: var(--meter-hot); }
+  #app[data-density="calm"] #rec-btn.rec-wait .rec-ctx { color: var(--meter-hot); }
+  .rec-ctxrow { position: fixed; z-index: 90; display: flex; gap: 4px; padding: 4px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow); }
+  .rec-ctxrow[hidden] { display: none; }
+  .rec-ctxrow .rec-ctx-opt { min-width: 96px; height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); box-shadow: none; cursor: pointer; }
+  .rec-ctxrow .rec-ctx-opt:hover:not(:disabled) { background: var(--deck-2); }
+  .rec-ctxrow .rec-ctx-opt:disabled { color: var(--muted); opacity: 0.5; cursor: default; }
+  #app[data-density="calm"] .wb-del { color: var(--danger); }
+  @media (prefers-reduced-motion: reduce) { #app[data-density="calm"] #rec-btn.rec-wait { animation: none; } }
   @media (max-width: 760px) {
     #app[data-density="calm"] #werkbank .insp { display: block !important; border: 0; background: transparent; overflow: visible; }
     #app[data-density="calm"] #werkbank .insp-toggle, #app[data-density="calm"] .insp-wide { display: none; }
@@ -3342,6 +3358,7 @@
     #app[data-density="calm"] .tabbar > .tab, #app[data-density="calm"] .tabbar > .key { min-height: 56px; height: 100%; width: 100%; min-width: 0; border-radius: var(--radius); }
     #app[data-density="calm"] .tabbar .key { box-shadow: none; }
     #app[data-density="calm"] .tabbar .rec-label { display: none; }
+    #app[data-density="calm"] .tabbar #rec-btn svg { margin-top: -8px; }
     #app[data-density="calm"] #tab-sounds { order: 1; } #app[data-density="calm"] #play-btn { order: 2; } #app[data-density="calm"] #rec-btn { order: 3; } #app[data-density="calm"] #tab-werkbank { order: 4; }
     #app[data-density="calm"] .deck-name { display: block; order: -1; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #app[data-density="calm"] .lcd { flex: 0 0 auto; }

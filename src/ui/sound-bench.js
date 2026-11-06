@@ -12,6 +12,7 @@ import { lsKey } from '../edition.js';
 import { freezePrefs, setFreezePrefs } from '../freeze.js';
 import { formatCurve, formatDb } from './arranger.js';
 import { mountClipSpeed } from './clip-speed.js';
+import { removeActiveTake } from './take-row.js';
 import { mountWaveHandles, cookedSeconds } from './wave-handles.js';
 import { fmtBpm, hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
 import { soundBounds, mixMono } from '../dsp/clean.js';
@@ -59,7 +60,12 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   const sound = () => library.get(cur.id);
   const clipNow = () => (cur.clipId ? store.findClip(cur.clipId)?.clip : null);
   const durOf = () => sound()?.orig?.duration ?? sound()?.duration ?? 0;
-  const patch = (p, field) => store.setRecipe(cur.id, p, field ? { coalesce: gesture(cur.id, field) } : undefined);
+  // Formen gilt für alle Takes des Clips: die übrigen Takes bekommen denselben Patch (ein Undo-Schritt)
+  const others = () => { const t = clipNow()?.takes; return t ? t.filter((id) => id !== cur.id) : []; };
+  const patch = (p, field) => {
+    const also = others();
+    store.setRecipe(cur.id, p, { ...(field ? { coalesce: gesture(cur.id, field) } : {}), ...(also.length ? { also } : {}) });
+  };
 
   // ---------- Kopf ----------
   const head = el('header', 'wb-head');
@@ -169,7 +175,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   });
 
   // ---------- Welle ----------
-  const wave = mountWaveHandles(root, { store, library, engine, ui });
+  const wave = mountWaveHandles(root, { store, library, engine, ui, also: others });
 
   // ---------- Reiter und Flächen ----------
   const tabs = el('div', 'wb-tabs');
@@ -674,6 +680,9 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     mountClipSpeed(speedBox, { store, ui, library, chipsIn: chips });
     fine.append(chips);
     // Stumm (ein Undo-Schritt) und die Voreinstellungen fürs Festhalten (gemerkt, Spec 3a §2)
+    // Takes (Aufnahme im Loop): den aktiven löschen – der Sound bleibt unter „Eigene“
+    const delTake = btn(fine, 'Take löschen', 'wb-take-del', () => { const c = clipNow(); if (c) removeActiveTake(store, library, ui, c.id); }, 'wb-del');
+    updaters.push((ctx) => { const nt = ctx.clip?.takes?.length ?? 0; delTake.hidden = nt < 2; if (nt > 1) delTake.textContent = `Take ${ctx.clip.take + 1} löschen`; });
     toggle(fine, 'Stumm', 'wb-clip-mute', () => !!clipNow()?.mute, (on) => { const c = clipNow(); if (c) store.setClip(c.id, { mute: on }); });
     const pref = (label, id, key) => toggle(fine, label, id, () => !!freezePrefs()[key], (on) => { setFreezePrefs({ [key]: on }); render(); });
     pref('Festhalten mit Spur-Effekten', 'wb-fz-fx', 'fx').title = 'Festgehaltene Spuren klingen mit ihren Effekten';
@@ -707,8 +716,9 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     // Kopf
     if (nameIn.hidden) nameBtn.textContent = s?.name ?? 'Clip';
     const n = store.clipsOf(cur.id);
-    count.textContent = kind === 'missing' ? '' : `in ${n} ${n === 1 ? 'Clip' : 'Clips'}`;
-    varBtn.hidden = kind !== 'sound' || !clip;
+    const nt = clip?.takes?.length ?? 0;
+    count.textContent = kind === 'missing' ? '' : nt > 1 ? `${nt} Takes` : `in ${n} ${n === 1 ? 'Clip' : 'Clips'}`;
+    varBtn.hidden = kind !== 'sound' || !clip || nt > 1; // eine Variante gälte nur für einen Take
     dot.hidden = kind === 'missing';
     tree.textContent = treeText(s, r, library);
     tree.title = tree.textContent;

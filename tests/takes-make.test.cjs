@@ -2,7 +2,10 @@
 // ohne Stopp und Vorzähler, roh (Hochpass 45 Hz + gemeinsamer Pegel), Rezept für alle Takes (setRecipe … also).
 // node tests/takes-make.test.cjs
 // Mikrofon: Loopback-Attrappe wie in tests/v213-aufnahme.test.cjs (engine.out → DelayNode 0,12 s → MediaStreamDestination).
+const path = require('path');
 const { openApp, createChecker } = require('./harness.cjs');
+const SHOTS = process.argv.includes('--shots');
+const SHOT_DIR = process.env.SHOT_DIR || '.';
 
 const { check, finish } = createChecker();
 const SR = 44100;
@@ -198,6 +201,174 @@ const loopback = () => {
     check('setRecipe mit also: alle Takes dasselbe Rezept', rc.recs.length === 3 && rc.recs.every((r) => r === rc.recs[0]) && JSON.parse(rc.recs[0])?.lp === 1200, rc.recs.join(' | '));
     check('Alle Takes gebacken wie cookRecipe(orig, Rezept), gleich lang, leiser', rc.out.every((o) => o.cooked && o.len === N && o.diff < 1e-6 && o.db < -5), JSON.stringify(rc.out));
     check('Eine Geste = ein Rückgängig-Schritt; Undo nimmt das Rezept von allen Takes', rc.u1 === rc.u0 + 1 && rc.u2 === rc.u0 && rc.after.every((r) => r === null), JSON.stringify({ u0: rc.u0, u1: rc.u1, u2: rc.u2 }));
+
+
+    // ===== 2b. Bedienung: Kontext unter ●, Werkzeug „Take 3/3“, Werkbank „3 Takes“, Geste für alle Takes, Aufnahme-Reiter =====
+    const ctxTxt = await page.evaluate(() => {
+      const { store, ui, engine, record } = window.loopwerk;
+      const t = document.getElementById('rec-ctx')?.textContent;
+      const clipId = store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes).id;
+      ui.select(clipId);
+      return { loopStopped: record.context(), playing: engine.playing, txt: t, clipId };
+    });
+    check('● zeigt „Takes“ (Text, nicht bedienbar), solange der Loop spielt', ctxTxt.txt === 'Takes' || ctxTxt.txt === 'Geräusch', JSON.stringify(ctxTxt));
+    await page.evaluate(() => { const { engine, store } = window.loopwerk; engine.stop(); store.setLoop({ on: false }); });
+    await page.waitForFunction(() => document.getElementById('rec-ctx')?.textContent === 'Geräusch', null, { timeout: 5000 });
+    await page.evaluate(() => { const { engine, store } = window.loopwerk; store.setLoop({ on: true, startBeat: 0, endBeat: 8 }); engine.play(0); });
+    await page.waitForFunction(() => document.getElementById('rec-ctx')?.textContent === 'Takes', null, { timeout: 5000 });
+    check('Kontexttext folgt Stopp/Loop/Play: „Geräusch“ ohne Loop, „Takes“ im laufenden Loop', true);
+    const ctxEl = await page.evaluate(() => { const e = document.getElementById('rec-ctx'); return { tag: e.tagName, inBtn: !!e.closest('#rec-btn'), pe: getComputedStyle(e).pointerEvents, focusable: e.tabIndex >= 0 && e.tagName !== 'SPAN' }; });
+    check('Kontexttext ist reiner Text (keine Zeigerereignisse, nicht fokussierbar)', ctxEl.pe === 'none' && !ctxEl.focusable, JSON.stringify(ctxEl));
+    await page.evaluate((id) => { window.loopwerk.engine.stop(); window.loopwerk.ui.select(id); }, ctxTxt.clipId);
+    await page.waitForFunction(() => { const b = document.getElementById('cf-take'); return b && !b.hidden && /^Take \d\/\d$/.test(b.textContent); }, null, { timeout: 5000 });
+    const cf = await page.evaluate(() => { const b = document.getElementById('cf-take'); const r = b.getBoundingClientRect(); return { txt: b.textContent, w: r.width, h: r.height }; });
+    check('Werkzeug am Clip: „Take 3/3“, Ziel ≥ 44 px', cf.txt === 'Take 3/3' && cf.w >= 44 && cf.h >= 44, JSON.stringify(cf));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-takes-desktop.png') });
+    await page.click('#cf-take');
+    await page.waitForFunction(() => document.getElementById('cf-take').textContent === 'Take 1/3', null, { timeout: 5000 });
+    check('Tipp auf „Take“ schaltet weiter (3 → 1)', await page.evaluate(() => { const c = window.loopwerk.store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes); return c.take === 0 && c.sampleId === c.takes[0]; }));
+    await page.click('#cf-take');
+    await page.click('#cf-take');
+    await page.waitForFunction(() => document.getElementById('cf-take').textContent === 'Take 3/3', null, { timeout: 5000 });
+    // Handy: dasselbe Werkzeug (Bild)
+    await page.setViewportSize({ width: 400, height: 800 });
+    await page.waitForTimeout(500);
+    await page.evaluate((id) => window.loopwerk.ui.select(id), ctxTxt.clipId);
+    await page.waitForFunction(() => { const b = document.getElementById('cf-take'); return b && !b.hidden && b.getBoundingClientRect().height >= 44; }, null, { timeout: 5000 });
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-takes-handy.png') });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(500);
+    await page.evaluate((id) => window.loopwerk.ui.select(id), ctxTxt.clipId);
+
+    // Werkbank: Kopf „3 Takes“, Geste auf Farbe → alle Takes
+    await page.evaluate(() => window.loopwerk.ui.setDock('werkbank'));
+    await page.waitForSelector('#wb-count', { state: 'visible', timeout: 5000 });
+    const head = await page.evaluate(() => document.getElementById('wb-count').textContent);
+    check('Werkbank-Kopf: „3 Takes“ statt „in 1 Clip“', head === '3 Takes', head);
+    const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+    await page.click('#wb-tab-farbe');
+    await page.evaluate(() => { const i = document.getElementById('wb-lp'); i.value = '700'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+    const geste = await page.evaluate(() => {
+      const { store } = window.loopwerk;
+      const c = store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes);
+      return { lps: c.takes.map((id) => store.project.recipes?.[id]?.lp ?? null), steps: store.undoStack.length };
+    });
+    check('Werkbank-Geste (Dunkler) gilt für alle 3 Takes mit demselben Wert, ein Undo-Schritt', geste.lps.length === 3 && geste.lps.every((v) => v != null && v === geste.lps[0]) && geste.steps === u0 + 1, JSON.stringify({ geste, u0 }));
+    await page.evaluate(() => window.loopwerk.store.undo());
+    check('Undo nimmt die Geste von allen Takes', await page.evaluate(() => { const { store } = window.loopwerk; const c = store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes); return c.takes.every((id) => !store.project.recipes?.[id]); }));
+    // Take löschen in den Feinheiten des Reiters Clip
+    await page.click('#wb-tab-clip');
+    await page.evaluate(() => { const b = document.getElementById('wb-fine-btn-clip'); if (b && b.getAttribute('aria-expanded') !== 'true') b.click(); });
+    const delVis = await page.evaluate(() => { const b = document.getElementById('wb-take-del'); const r = b?.getBoundingClientRect(); return b ? { txt: b.textContent, vis: !b.hidden && r.height > 0, h: r.height } : null; });
+    check('Reiter Clip, Feinheiten: „Take 3 löschen“ sichtbar, ≥ 44 px', !!delVis && delVis.vis && delVis.h >= 44 && delVis.txt === 'Take 3 löschen', JSON.stringify(delVis));
+
+    await page.click('#wb-take-del');
+    await page.waitForFunction(() => window.loopwerk.store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes)?.takes.length === 2, null, { timeout: 5000 });
+    const afterDel = await page.evaluate(() => { const c = window.loopwerk.store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes); return { n: c.takes.length, take: c.take, ok: c.sampleId === c.takes[c.take], head: document.getElementById('wb-count').textContent }; });
+    check('Take löschen: aus 3 werden 2, der Clip spielt einen der übrigen, Kopf „2 Takes“', afterDel.n === 2 && afterDel.ok && afterDel.head === '2 Takes', JSON.stringify(afterDel));
+    // Ab hier ein stiller Song (das Mikrofon der Attrappe hört sonst den Loop)
+    await page.evaluate(() => { const { store, ui } = window.loopwerk; ui.select(null); store.deleteClips(store.project.tracks.flatMap((t) => t.clips.map((c) => c.id))); });
+
+    // Handy: Zeile per Lang-Drücken, Aufnahme-Reiter
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    await page.setViewportSize({ width: 400, height: 800 });
+    await page.waitForTimeout(400);
+
+    // Lang drücken auf ● (Maus): Zeile „Geräusch · Takes“, danach startet nichts von selbst
+    await page.evaluate(() => { const { engine, store, ui } = window.loopwerk; ui.select(null); store.setLoop({ on: true, startBeat: 0, endBeat: 8 }); engine.play(0); });
+    const rb = await page.evaluate(() => { const r = document.getElementById('rec-btn').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; });
+    check('● am Handy ≥ 44 px', rb.w >= 44 && rb.h >= 44, JSON.stringify(rb));
+    await page.mouse.move(rb.x, rb.y);
+    await page.mouse.down();
+    await page.waitForTimeout(150);
+    check('Nach 150 ms ist die Zeile noch zu', await page.evaluate(() => document.getElementById('rec-ctxrow').hidden));
+    await page.waitForTimeout(450);
+    await page.mouse.up();
+    const row = await page.evaluate(() => {
+      const r = document.getElementById('rec-ctxrow');
+      const b = [...r.querySelectorAll('button')].map((x) => { const q = x.getBoundingClientRect(); return { t: x.textContent, w: q.width, h: q.height }; });
+      const q = r.getBoundingClientRect();
+      return { hidden: r.hidden, b, inView: q.left >= 0 && q.right <= innerWidth && q.top >= 0 && q.bottom <= innerHeight, state: window.loopwerk.recorder.state, noScroll: document.documentElement.scrollWidth <= innerWidth };
+    });
+    check('Lang drücken (Maus, ~600 ms) öffnet „Geräusch · Takes“; Ziele ≥ 44 px, im Bild; es startet noch keine Aufnahme', !row.hidden && row.b.map((x) => x.t).join('|') === 'Geräusch|Takes' && row.b.every((x) => x.w >= 44 && x.h >= 44) && row.inView && row.state === 'idle', JSON.stringify(row));
+    check('Handy: kein waagerechtes Scrollen', row.noScroll);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-rec-lang-handy.png') });
+    await page.keyboard.press('Escape');
+    check('Esc schließt die Zeile', await page.evaluate(() => document.getElementById('rec-ctxrow').hidden));
+    // Tastatur: Umschalt+R öffnet sie, Fokus auf „Takes“; Esc zurück
+    await page.evaluate(() => document.activeElement?.blur?.());
+    await page.keyboard.press('Shift+R');
+    const kb = await page.evaluate(() => ({ hidden: document.getElementById('rec-ctxrow').hidden, focus: document.activeElement?.id }));
+    check('Umschalt+R öffnet die Zeile, Fokus in der Zeile', !kb.hidden && kb.focus === 'rec-ctx-takes', JSON.stringify(kb));
+    // Wahl „Geräusch“ startet sofort ein Einzelgeräusch (auch im laufenden Loop), Song läuft weiter
+    const nOwn = await page.evaluate(() => window.loopwerk.library.list().filter((x) => x.category === 'own').length);
+    await page.click('#rec-ctx-sound');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 10000 });
+    const sRun = await page.evaluate(() => { const { recorder, engine } = window.loopwerk; return { mode: recorder.mode, atWrap: recorder.atWrap, playing: engine.playing, row: document.getElementById('rec-ctxrow').hidden }; });
+    check('Wahl „Geräusch“ startet sofort im Modus sound, Zeile schließt', sRun.mode === 'sound' && !sRun.atWrap && sRun.row, JSON.stringify(sRun));
+    await page.evaluate(() => {
+      const { engine } = window.loopwerk;
+      const ctx = engine.ctx;
+      const sr = ctx.sampleRate;
+      const b = new AudioBuffer({ numberOfChannels: 1, length: Math.round(0.3 * sr), sampleRate: sr });
+      const d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = 0.3 * Math.sin(2 * Math.PI * 330 * i / sr) * Math.exp(-i / (0.08 * sr));
+      const src = new AudioBufferSourceNode(ctx, { buffer: b });
+      src.connect(window.__mock.extra);
+      src.start(ctx.currentTime + 0.4);
+    });
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'idle', null, { timeout: 20000 });
+    await page.waitForTimeout(400);
+    const lang = await page.evaluate(async (n) => {
+      const { library, store } = window.loopwerk;
+      const own = library.list().filter((x) => x.category === 'own');
+      const sel = window.loopwerk.ui.selectedClipId && store.findClip(window.loopwerk.ui.selectedClipId)?.clip;
+      const smp = sel && await library.ensure(sel.sampleId);
+      let peak = 0;
+      if (smp?.orig) for (let c = 0; c < smp.orig.numberOfChannels; c++) for (const v of smp.orig.getChannelData(c)) peak = Math.max(peak, Math.abs(v));
+      return { added: own.length - n, takes: !!sel?.takes, dur: smp?.orig?.duration, peak };
+    }, nOwn);
+    check('Lang drücken → „Geräusch“ → ein gesäubertes Einzelgeräusch (kurz, Spitze 0,89, kein Take)', lang.added === 1 && !lang.takes && lang.dur < 1.2 && Math.abs(lang.peak - 0.89) <= 0.01, JSON.stringify(lang));
+
+    // Kurzer Tipp unverändert: im laufenden Loop beginnt ● mit Takes (wartet auf den Sprung, Ring, dann gefüllt)
+    await page.evaluate(() => { const { engine, store, ui } = window.loopwerk; ui.select(null); store.setLoop({ on: true, startBeat: 0, endBeat: 8 }); engine.play(0); });
+    await page.waitForFunction(() => document.getElementById('rec-ctx')?.textContent === 'Takes', null, { timeout: 5000 });
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 10000 });
+    const wait = await page.evaluate(() => { const b = document.getElementById('rec-btn'); const r = window.loopwerk.recorder; return { waiting: r.waiting, cls: b.classList.contains('rec-wait'), txt: document.getElementById('rec-ctx').textContent, bg: getComputedStyle(b).backgroundColor }; });
+    check('Kurzer Tipp im Loop: Takes, wartet auf den Sprung (Ring am ●, Text „wartet …“)', wait.waiting && wait.cls && wait.txt === 'wartet …' && /rgba\(0, 0, 0, 0\)|transparent/.test(wait.bg), JSON.stringify(wait));
+    await page.waitForFunction(() => window.loopwerk.recorder.songStartTime != null, null, { timeout: 15000, polling: 20 });
+    const run = await page.evaluate(() => ({ cls: document.getElementById('rec-btn').classList.contains('rec-wait'), txt: document.getElementById('rec-ctx').textContent }));
+    check('Nach dem ersten Sprung gefüllt, Text wieder „Takes“', !run.cls && run.txt === 'Takes', JSON.stringify(run));
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'idle', null, { timeout: 20000 });
+    await page.evaluate(() => window.loopwerk.engine.stop());
+
+    // Reiter „Aufnahme“ der Song-Werkbank (Handy): Eingang, Latenz ±, Einmessen; am ● kein Klappfeld
+    await page.evaluate(() => window.loopwerk.ui.openSong());
+    await page.waitForSelector('#sb-tab-aufnahme', { state: 'visible', timeout: 5000 });
+    await page.click('#sb-tab-aufnahme');
+    await page.waitForFunction(() => /ms/.test(document.getElementById('rs-lat')?.textContent || ''), null, { timeout: 5000 });
+    const at = await page.evaluate(() => {
+      const q = (id) => { const e = document.getElementById(id); const r = e?.getBoundingClientRect(); return e ? { in: !!e.closest('#sb-panel-aufnahme'), w: r.width, h: r.height } : null; };
+      const stop = document.getElementById('sb-autostop');
+      const box = document.getElementById('rec-setup');
+      return { box: !!box?.closest('#sb-panel-aufnahme'), lat: document.getElementById('rs-lat').textContent, cal: q('rs-cal'), minus: q('rs-minus'), plus: q('rs-plus'), stopIn: !!stop?.closest('#sb-panel-aufnahme'),
+        popEmpty: document.getElementById('rec-pop').children.length === 0, scroll: document.documentElement.scrollWidth <= innerWidth };
+    });
+    check('Reiter Aufnahme: Latenz in ms, Einmessen und ± (≥ 44 px) dort, neben „Stopp nach Stille“', at.box && at.stopIn && /\d+ ms/.test(at.lat) && at.cal.in && at.cal.h >= 44 && at.minus.h >= 44 && at.plus.h >= 44, JSON.stringify(at));
+    check('Das Feld sitzt nicht mehr am ● (Klappfeld leer), Handy ohne waagerechtes Scrollen', at.popEmpty && at.scroll, JSON.stringify(at));
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-aufnahme-reiter-handy.png') });
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(400);
+    // Desktop: Reiter Aufnahme in der Song-Werkbank (rechte Spalte), nicht im Klappfeld
+    await page.evaluate(() => window.loopwerk.ui.openSong());
+    await page.waitForSelector('#sb-tab-aufnahme', { state: 'visible', timeout: 5000 });
+    await page.click('#sb-tab-aufnahme');
+    const dk = await page.evaluate(() => ({ box: !!document.getElementById('rec-setup')?.closest('#sb-panel-aufnahme'), more: getComputedStyle(document.getElementById('rec-more')).display }));
+    check('Desktop: Feld im Reiter Aufnahme; ▾ am ● bleibt unsichtbar (Zwilling)', dk.box && dk.more === 'none', JSON.stringify(dk));
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
 
     // ===== 3. Ohne Loop: gesäubertes Einzelgeräusch =====
     await page.evaluate(() => { const { store, engine } = window.loopwerk; engine.stop(); store.setLoop({ on: false }); engine.setPosition(16); });

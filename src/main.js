@@ -52,6 +52,7 @@ import { clearInstruments } from './sampler.js';
 import { mountPwa } from './pwa.js';
 import { mountClipFloat } from './ui/clip-float.js';
 import { mountRecSetup } from './ui/rec-setup.js';
+import { mountRecContext } from './ui/rec-context.js';
 import { stepTake } from './ui/take-row.js';
 
 // iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
@@ -716,6 +717,8 @@ async function boot() {
   const recorder = new Recorder({ engine, store, own });
   const benchRef = { kb: null };
   const recording = mountRecording({ store, engine, ui, arranger, recorder, library, mode: EDITION.record, recTakes: !!EDITION.recTakes, bench: () => benchRef.kb });
+  // ● mit Kontext (Text unter ●, lang drücken → „Geräusch · Takes“): nur mit Takes-Anbindung der Edition
+  if (EDITION.recTakes) recording.chooser = mountRecContext({ btn: document.getElementById('rec-btn'), recorder, engine, store, ui, record: recording });
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
@@ -922,6 +925,10 @@ async function boot() {
       // Aufnahme starten bzw. beenden (wie ●)
       e.preventDefault();
       if (!e.repeat) recording.start(null);
+    } else if (!mod && !e.altKey && e.shiftKey && key === 'r' && recording.chooser && ui.dock !== 'pattern') {
+      // Umschalt+R: die Zeile „Geräusch · Takes“ (wie langes Drücken auf ●)
+      e.preventDefault();
+      if (!e.repeat) recording.chooser.open(true);
     } else if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && ui.selectedClipId && !e.target.closest?.('.fxl')) {
       // Take-Clip: vorigen bzw. nächsten Take wählen
       if (stepTake(store, library, ui.selectedClipId, e.key === 'ArrowUp' ? -1 : 1)) e.preventDefault();

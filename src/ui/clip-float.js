@@ -67,7 +67,8 @@ export function mountClipFloat({ store, ui, tools, library, onFreeze = null }) {
     if (outside || y + bh > w.bottom - 2) { bar.hidden = true; return; }
     // Nur im Spurbereich: nie links der Kante der Spurköpfe; passt es nicht, bündig am rechten Rand
     const minX = Math.max(w.left + 4, (scroll.querySelector('.corner')?.getBoundingClientRect().right ?? 0) + 2);
-    const x = Math.max(minX, Math.min(c.left, w.right - bw - 4));
+    // Passt sie rechts der Spurköpfe nicht hin (Handy, mit Take-Schalter), darf sie über die Köpfe ragen
+    const x = bw > w.right - minX - 4 ? w.left + 4 : Math.max(minX, Math.min(c.left, w.right - bw - 4));
     bar.style.left = `${Math.round(x - w.left)}px`;
     bar.style.top = `${Math.round(y - w.top)}px`;
   }

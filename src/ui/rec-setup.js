@@ -4,6 +4,7 @@
 
 import { el } from '../util.js';
 import { place, narrow } from './place.js';
+import { slot } from './song-slots.js';
 import { deviceKey, loadLatency, saveLatency, estimateLatency, DEFAULT_INPUT } from '../rec-settings.js';
 
 const NUDGE_MAX = 500;
@@ -46,7 +47,9 @@ export function mountRecSetup({ ui, engine, recorder }) {
 
   // Handy: Fach „Song“; Krachwerk am Desktop in der Song-Werkbank
   const songRec = $('song-rec');
-  place(box, { narrow: songRec, calm: { narrow: songRec, wide: $('insp-song-tools') } });
+  // Mit Song-Werkbank (Krachwerk): Reiter „Aufnahme" neben „Stopp nach Stille“
+  const at = slot('rec');
+  place(box, { narrow: songRec, calm: { narrow: at ?? songRec, wide: at ?? $('insp-song-tools') } });
 
   let key = null;
   const keyNow = async () => (key = await deviceKey(null, engine.ctx));
@@ -124,6 +127,13 @@ export function mountRecSetup({ ui, engine, recorder }) {
   // Beim Öffnen frische Werte (Ausgang kann gewechselt haben); Klick auf ▾ ist eine Geste: Ton-Kontext darf starten
   more?.addEventListener('click', () => { if (!pop.hidden) engine._ensure().then(render).catch(render); });
   ui.on(() => { if (ui.dock === 'song') render(); });
+  // Song-Werkbank: beim Öffnen des Reiters „Aufnahme“ frische Werte (der Ton-Kontext darf dann starten)
+  let wasShown = false;
+  ui.on(() => {
+    const now = shown();
+    if (now && !wasShown && box.closest('.sb')) engine._ensure().then(render).catch(render);
+    wasShown = now;
+  });
   recorder.on((what) => { if (what === 'latency') render(); if (what === 'state') { cal.disabled = recorder.state !== 'idle' && !recorder.calibrating; } });
   narrow.addEventListener('change', render);
   render();

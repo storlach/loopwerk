@@ -351,7 +351,7 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
     });
   }
 
-  setSongSlots({ head: headSlot, song: slots.song, songFine: slots.songFine, mix: slots.mix, proj: slots.proj, projFine: slots.projFine });
+  setSongSlots({ rec: slots.recSetup, head: headSlot, song: slots.song, songFine: slots.songFine, mix: slots.mix, proj: slots.proj, projFine: slots.projFine });
   show();
 
   // ---------- Anzeige ----------

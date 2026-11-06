@@ -236,7 +236,7 @@ const shareStub = () => {
       // Aufnahme: Stopp nach Stille, Stille-Dauer, Säubern, Platz für das Feld aus v2.13
       await page.tap('#sb-tab-aufnahme');
       const au = await page.evaluate(() => ({ grund: [...document.querySelectorAll('#sb-panel-aufnahme .wb-grund button')].map((b) => b.textContent), slot: !!document.getElementById('sb-rec-slot'), setup: !!document.getElementById('rec-setup') }));
-      check('Aufnahme: „Stopp nach Stille“ im Grund, Platz für das Feld „Aufnahme“ (v2.13)', au.grund.join() === 'Stopp nach Stille' && au.slot, JSON.stringify(au));
+      check('Aufnahme: „Stopp nach Stille“ im Grund, dazu das Feld „Aufnahme“ (v2.13: Latenz −/+, Einmessen), höchstens 5 Griffe', au.grund.join() === 'Stopp nach Stille,−,+,Einmessen' && au.slot && au.grund.length <= 5, JSON.stringify(au));
       console.log(au.setup ? '   v2.13-Feld #rec-setup vorhanden' : '   Hinweis: Feld „Aufnahme“ aus v2.13 (#rec-setup) ist noch nicht gebaut – Reiter zeigt nur „Stopp nach Stille“ (Prüfung übersprungen)');
       await page.tap('#sb-fine-btn-aufnahme');
       const au2 = await page.evaluate(() => ({ fine: [...document.querySelectorAll('#sb-panel-aufnahme .wb-fine .wb-btn, #sb-panel-aufnahme .wb-fine input')].map((b) => b.id), silence: document.getElementById('sb-silence').getAttribute('aria-label') }));

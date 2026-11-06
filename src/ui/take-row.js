@@ -20,6 +20,18 @@ export function stepTake(store, library, clipId, dir) {
   return true;
 }
 
+// Aktiven Take löschen (Inspektor-Zeile und Werkbank): der letzte verbleibende spielt, der Sound bleibt unter „Eigene“
+export async function removeActiveTake(store, library, ui, clipId) {
+  const c = store.findClip(clipId)?.clip;
+  if (!c?.takes) return false;
+  const rest = c.takes.length - 1;
+  const keep = c.takes.filter((_, i) => i !== c.take);
+  await library.ensure?.(keep[keep.length - 1])?.catch?.(() => null);
+  store.removeTake(c.id, c.take);
+  ui.flash?.(rest > 1 ? `Take gelöscht – noch ${rest}.` : 'Take gelöscht – der Clip spielt jetzt die letzte Fassung.');
+  return true;
+}
+
 // variant: 'insp' (Desktop) oder 'phone' (Handy, Tippziele 44 px)
 export function mountTakeRow({ store, library, ui, variant = 'insp', idPrefix = 'insp' }) {
   const row = el('div', variant === 'phone' ? 'lvl lvl-takes' : 'insp-row insp-takes');
@@ -40,15 +52,7 @@ export function mountTakeRow({ store, library, ui, variant = 'insp', idPrefix = 
     const c = clip();
     if (b && c) chooseTake(store, library, c.id, Number(b.dataset.take));
   });
-  del.addEventListener('click', async () => {
-    const c = clip();
-    if (!c?.takes) return;
-    const rest = c.takes.length - 1;
-    const keep = c.takes.filter((_, i) => i !== c.take);
-    await library.ensure?.(keep[keep.length - 1])?.catch?.(() => null);
-    store.removeTake(c.id, c.take);
-    ui.flash?.(rest > 1 ? `Take gelöscht – noch ${rest}.` : 'Take gelöscht – der Clip spielt jetzt die letzte Fassung.');
-  });
+  del.addEventListener('click', () => { const c = clip(); if (c) removeActiveTake(store, library, ui, c.id); });
 
   function update(c = clip()) {
     const takes = c?.takes;

@@ -40,7 +40,8 @@ export function peaksOf(buf) {
 const fmtS = (v) => `${v.toFixed(2).replace('.', ',')} s`;
 const fmtMs = (v) => (v >= 1000 ? `${(v / 1000).toFixed(2).replace('.', ',')} s` : `${Math.round(v)} ms`);
 
-export function mountWaveHandles(container, { store, library, engine, ui }) {
+// also: () => weitere Sounds (die übrigen Takes des Clips), die dieselbe Geste bekommen
+export function mountWaveHandles(container, { store, library, engine, ui, also = () => [] }) {
   const box = el('div', 'wb-wave');
   const canvas = el('canvas', 'wb-wave-cv');
   const mark = el('span', 'wb-wave-mark');
@@ -100,7 +101,7 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
       const v = Math.max(Math.min(dur, d), ds + MIN_SPAN);
       patch = r.reverse ? { start: nullIf(dur - v, (x) => x <= 1e-4) } : { end: nullIf(v, (x) => x >= dur - 1e-4) };
     }
-    store.setRecipe(soundId, patch, { coalesce: key });
+    store.setRecipe(soundId, patch, { coalesce: key, also: also() });
   }
   function setEnv(which, ms) {
     const r = recipeOf(soundId);
@@ -109,7 +110,7 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
     const other = which === 'attack' ? r.release ?? 0 : r.attack ?? 0;
     const max = Math.min(which === 'attack' ? 2000 : 5000, Math.max(0, total - other));
     const v = Math.round(Math.min(Math.max(0, ms), max));
-    store.setRecipe(soundId, { [which]: v || null }, { coalesce: gesture(soundId, which) });
+    store.setRecipe(soundId, { [which]: v || null }, { coalesce: gesture(soundId, which), also: also() });
   }
 
   // x (Pixel in der Welle) → Anzeigezeit in Sekunden
@@ -157,7 +158,7 @@ export function mountWaveHandles(container, { store, library, engine, ui }) {
       // Bei „rückwärts“ liegt der Anfang, den man hört, am Ende des Originals
       const rev = !!recipeOf(soundId).reverse;
       const field = which === 'start' ? (rev ? 'end' : 'start') : which === 'end' ? (rev ? 'start' : 'end') : which;
-      store.setRecipe(soundId, { [field]: null });
+      store.setRecipe(soundId, { [field]: null }, { also: also() });
     });
   }
   bind(hStart, 'start');
