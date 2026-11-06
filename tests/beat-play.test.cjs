@@ -28,8 +28,8 @@ const DIR = process.env.SHOT_DIR || '/tmp';
       if (l.length === 1) seen.add(Number(l[0]));
       await page.waitForTimeout(60);
     }
-    const pv = await page.evaluate(() => ({ loop: !!window.loopwerk.engine.preview?.loop, label: document.getElementById('pat-play').textContent }));
-    check('Anhören läuft im Loop (auch nach Ende des Patterns)', pv.loop && /Stopp/.test(pv.label), JSON.stringify(pv));
+    const pv = await page.evaluate(() => ({ loop: !!window.loopwerk.engine.preview?.loop, label: document.getElementById('pat-play').getAttribute('aria-label') }));
+    check('Anhören läuft im Loop (auch nach Ende des Patterns)', pv.loop && /stopp/i.test(pv.label), JSON.stringify(pv));
     check('Genau ein Schritt leuchtet, er wandert über das Raster', seen.size >= 6, [...seen].sort((a, b) => a - b).join(','));
     if (SHOTS) await page.locator('#pattern').screenshot({ path: `${DIR}/beat-play.png` });
     // Schritt setzen während des Loops: neuer Klang, Loop läuft weiter

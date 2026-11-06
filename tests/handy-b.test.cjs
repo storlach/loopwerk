@@ -122,7 +122,15 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       // Einblender aus dem Loop-Schritt davor abwarten (liegt kurz über dem unteren Rand des Fachs)
       await page.waitForFunction(() => !window.loopwerk.ui.flashText, null, { timeout: 6000 });
       await page.waitForTimeout(400);
-      const songTargets = await page.evaluate(measureTargets, '#song button, #song select, #song input');
+      // Seit 2.13 (Feld „Aufnahme“) ist das Fach länger als der Bildschirm: jede Tippfläche muss oben oder nach dem
+      // Scrollen des Fachs ganz erreichbar sein
+      const SONG_SEL = '#song button, #song select, #song input';
+      const songTop = await page.evaluate(measureTargets, SONG_SEL);
+      await page.evaluate(() => { const b = document.querySelector('#song .song-body'); b.scrollTop = b.scrollHeight; });
+      await page.waitForTimeout(200);
+      const songEnd = await page.evaluate(measureTargets, SONG_SEL);
+      await page.evaluate(() => { document.querySelector('#song .song-body').scrollTop = 0; });
+      const songTargets = songTop.map((t, i) => (t.ok || !songEnd[i]?.ok ? t : songEnd[i]));
       check(`Handy ${w} px: alle Tippflächen im Fach „Song“ ≥ 44 px`, songTargets.length >= 10 && songTargets.every((t) => t.w >= 44 && t.h >= 44 && t.ok), JSON.stringify(songTargets));
       await shot('song');
 

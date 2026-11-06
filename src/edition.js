@@ -23,7 +23,7 @@ export const EDITIONS = {
     // Stufe 3 (data-tier="3") ist in „calm“ nicht sichtbar; hier steht, wo man es stattdessen findet (Schlüssel: ID oder .Klasse)
     twins: {
       ...CALM_TWINS,
-      'metro-btn': 'Song-Werkbank, Reiter Song (Klick)', '.lcd-more': 'Song-Werkbank, Reiter Song', '.meter-wrap': 'Song-Werkbank, Reiter Song',
+      'metro-btn': 'Song-Werkbank, Reiter Song (Klick)', 'rec-more': 'Song-Werkbank, Reiter Aufnahme', '.lcd-more': 'Song-Werkbank, Reiter Song', '.meter-wrap': 'Song-Werkbank, Reiter Song',
       '.key-row': 'Song-Werkbank, Reiter Song (Tonart und Akkorde)', '.chord-row': 'Song-Werkbank, Reiter Song (Tonart und Akkorde)',
       'mixer-btn': 'Song-Werkbank, Reiter Mischen', 'fxpad-btn': 'Song-Werkbank, Reiter Mischen (FX-Pad)', 'editor-tab': 'Werkbank (Form · Ton · Zerlegen)', 'tab-song': 'Tipp auf das Deck',
       '.tabbar-end': 'Song-Werkbank, Reiter Projekt (Hilfe)',

@@ -34,7 +34,7 @@ description: Wissen und Regeln für die Audio-Engine von Loopwerk – Web Audio 
 - Worklet-Module als eigene Dateien unter `src/dsp/`, geladen mit `ctx.audioWorklet.addModule()` – für Realtime **und** OfflineAudioContext.
 
 ## Latenz (Aufnahme)
-- Ausgleich = `ctx.outputLatency + ctx.baseLatency` + Eingangslatenz (`track.getSettings().latency`), umgesetzt in `src/recorder.js`. Offen: per Loopback-Klick kalibrierbar machen.
+- Ausgleich = `ctx.outputLatency + ctx.baseLatency` + Eingangslatenz (`track.getSettings().latency`), umgesetzt in `src/recorder.js`. Ist das Gerät eingemessen (Loopback-Chirps, `src/dsp/loopback.js`, gemerkt je „Eingang|Ausgang“ in `src/rec-settings.js`), gilt der gemessene Wert statt der Schätzung; Song-Aufnahmen gleichen zusätzlich `engine.playbackDelay()` (Limiter/Mastering) aus. Jedes geöffnete Mikrofon schließen und danach `releaseOutput` aufrufen (Android-Gesprächsmodus).
 
 ## Lizenzen
 - Time-Stretching: eigenes WSOLA (`src/dsp/stretch.js`, ADR 001). Alternative für tonales Material: Signalsmith Stretch (MIT). Rubber Band ist GPL – nicht einbinden.

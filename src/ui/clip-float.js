@@ -5,10 +5,11 @@
 
 import { el } from '../util.js';
 import { narrow } from './place.js';
+import { stepTake } from './take-row.js';
 
 const GAP = 6;
 
-export function mountClipFloat({ store, ui, tools, onFreeze = null }) {
+export function mountClipFloat({ store, ui, tools, library, onFreeze = null }) {
   const wrap = document.getElementById('arr-wrap');
   const scroll = document.getElementById('arr-scroll');
   const bar = el('div', 'clip-float');
@@ -27,6 +28,8 @@ export function mountClipFloat({ store, ui, tools, onFreeze = null }) {
     return b;
   };
   const wbBtn = add('cf-werkbank', 'Werkbank', 'Werkbank für diesen Clip öffnen', () => ui.setDock('werkbank'));
+  // Take-Clip (2.13): schaltet zum nächsten Take
+  const takeBtn = add('cf-take', 'Take', 'Nächster Take (Alt+↓)', () => { const id = ui.selectedClipId; if (id && library) stepTake(store, library, id, 1); });
   const splitBtn = add('cf-split', 'Teilen', 'Clip an der Abspielmarke teilen (T)', () => tools.split());
   const dupBtn = add('cf-dup', 'Kopie', 'Kopie direkt dahinter legen (Strg+D)', () => tools.duplicate());
   // Bei Mehrfachauswahl nimmt „Festhalten“ den Platz von „Kopie“ (Krachwerk, Scheibe 3a)
@@ -49,6 +52,9 @@ export function mountClipFloat({ store, ui, tools, onFreeze = null }) {
     splitBtn.disabled = many;
     if (fzBtn) { fzBtn.hidden = !many; dupBtn.hidden = many; }
     wbBtn.hidden = !narrow.matches;
+    const tc = store.findClip(id)?.clip;
+    takeBtn.hidden = many || !tc?.takes || !library;
+    if (!takeBtn.hidden) takeBtn.textContent = `Take ${tc.take + 1}/${tc.takes.length}`;
     const w = wrap.getBoundingClientRect();
     const c = node.getBoundingClientRect();
     const bw = bar.offsetWidth;

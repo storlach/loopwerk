@@ -155,22 +155,20 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     check('Pfeile bewegen den Punkt (runter = leiser, rechts = ein Rasterschritt)', s.auto?.[0] && s.auto[0].value < v0 && s.auto[0].beat === 1, JSON.stringify(s.auto));
     await page.keyboard.press('Delete');
 
-    // ---------- Vorlagen im Inspektor ----------
+    // ---------- Vorlagen (Spur-Menü ⋯ → Verlauf ›; der Inspektor hat keinen Verlauf mehr) ----------
     s = await state(page);
-    await page.click('#insp [data-template="fadeIn"]');
+    await page.evaluate(async ([name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id: ui.selectedTrackId || store.project.tracks[0].id, name }); }, ['fadeIn', null]);
     let s2 = await state(page);
     check('Vorlage „Einblenden“: Punkte über 4 Takte (0 → 1 bei Schlag 0 → 16)', s2.auto?.length === 2 && s2.auto[0].beat === 0 && s2.auto[0].value === 0 && s2.auto[1].beat === 16 && s2.auto[1].value === 1, JSON.stringify(s2.auto));
     check('Vorlage = ein Rückgängig-Schritt, danach ist die Zeile offen', s2.steps === s.steps + 1 && await page.evaluate(() => !!document.querySelector('.auto-row')));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-desktop.png') });
     await page.keyboard.press('Control+z');
     check('Rückgängig nimmt die ganze Vorlage zurück', (await state(page)).auto === null);
-    await page.click('#insp .auto-bars [data-bars="2"]');
-    await page.click('#insp [data-template="fadeOut"]');
+    await page.evaluate(async ([name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id: ui.selectedTrackId || store.project.tracks[0].id, name }); }, ['fadeOut', 2]);
     s2 = await state(page);
     check('Längen-Chip 2 Takte + „Ausblenden“: endet am letzten Clip (Schlag 4 → 12)', s2.auto?.length === 2 && s2.auto[0].beat === 4 && s2.auto[0].value === 1 && s2.auto[1].beat === 12 && s2.auto[1].value === 0, JSON.stringify(s2.auto));
     await page.keyboard.press('Control+z');
-    await page.click('#insp .auto-bars [data-bars="4"]');
-    await page.click('#insp [data-template="fadeIn"]');
+    await page.evaluate(async ([name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id: ui.selectedTrackId || store.project.tracks[0].id, name }); }, ['fadeIn', 4]);
 
     // ---------- Geschlossen: Kurve als Linie über den Clips; wandert mit dem Clip ----------
     await page.click('.auto-close');
@@ -357,8 +355,9 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     if (await page.evaluate(() => !!document.querySelector('.auto-row'))) await page.click('.auto-close');
     // Vorlage „Filter öffnen“ im Inspektor: ein Klick, ab Takt der Marke 8 Takte 0,25 → 1, Filter an (Tiefpass)
     let f0 = await fxState();
-    check('Inspektor „Verlauf“: Einblenden · Ausblenden · Filter öffnen · Filter schließen', await page.evaluate(() => [...document.querySelectorAll('#insp .insp-auto:not(#insp-master-auto) .auto-tpl [data-template]')].map((b) => b.textContent).join(' · ')) === 'Einblenden · Ausblenden · Filter öffnen · Filter schließen');
-    await page.click('#insp [data-template="filterOpen"]');
+    // Der Inspektor hat keinen „Verlauf“ mehr (Martin, Nov. 2026); Vorlagen gibt es weiter im Spur-Menü ⋯ → Verlauf ›
+    check('Inspektor ohne Block „Verlauf“', await page.evaluate(() => !document.querySelector('#insp .insp-auto, #insp .auto-tpl')));
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, [t, 'filterOpen', null]);
     let f1 = await fxState();
     check('Vorlage „Filter öffnen“: 0,25 → 1 über 8 Takte ab der Marke, Filter an als Tiefpass, ein Schritt',
       JSON.stringify(f1.cut) === JSON.stringify([{ beat: 0, value: 0.25 }, { beat: 32, value: 1 }]) && f1.filter?.on && f1.filter.type === 'lowpass' && f1.steps === f0.steps + 1, JSON.stringify(f1));
@@ -449,14 +448,12 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.keyboard.press('Control+z');
     check('Summe: Rückgängig entfernt die Kurve', (await mst()).vol === null);
     // Vorlagen im Inspektor „Song“ unter Master
-    check('Inspektor „Song“: Verlauf der Summe mit Einblenden · Ausblenden', await page.evaluate(() => [...document.querySelectorAll('#insp-master-auto [data-template]')].map((b) => b.dataset.template).join() === 'fadeIn,fadeOut'));
+    check('Inspektor „Song“ ohne „Verlauf der Summe“', await page.evaluate(() => !document.getElementById('insp-master-auto')));
     m0 = await mst();
-    await page.click('#insp-master-auto .auto-bars [data-bars="2"]');
-    await page.click('#insp-master-auto [data-template="fadeOut"]');
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, ['master', 'fadeOut', 2]);
     m1 = await mst();
     check('Inspektor: Summe ausblenden über 2 Takte endet am letzten Clip (Schlag 4 → 12), ein Schritt, Zeile offen', JSON.stringify(m1.vol) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && m1.steps === m0.steps + 1 && await page.evaluate(() => !!document.querySelector('.auto-row.auto-master')), JSON.stringify(m1));
-    check('Inspektor: Link „Summen-Kurve“ leuchtet, solange die Summe Kurven hat', await page.evaluate(() => document.getElementById('insp-master-curve').classList.contains('lit') && /schließen/.test(document.getElementById('insp-master-curve').textContent)));
-    await page.click('#insp-master-auto [data-template="fadeIn"]');
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, ['master', 'fadeIn', 2]);
     m1 = await mst();
     check('Inspektor: Summe einblenden ab dem ersten Clip (0 → 8), Ausblenden bleibt', m1.vol?.[0]?.beat === 0 && m1.vol[0].value === 0 && m1.vol[1]?.beat === 8 && m1.vol[1].value === 1 && m1.vol.at(-1).beat === 12 && m1.vol.at(-1).value === 0, JSON.stringify(m1.vol));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-master-desktop.png') });
@@ -499,7 +496,8 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
 
     // Öffnen über das Spur-Menü
     await page.tap('.track-row .tbtn-menu');
-    check('Handy: Spur-Menü hat „Kurve“, „Einblenden“, „Ausblenden“ und „Verlauf ›“', await page.evaluate(() => { const l = [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent); return l.includes('Kurve') && l.includes('Einblenden') && l.includes('Ausblenden') && l.includes('Verlauf ›'); }));
+    // Kein Verlauf mehr im Spur-Menü (Martin, Nov. 2026): nur noch „Kurve“
+    check('Handy: Spur-Menü hat „Kurve“, aber kein Einblenden/Ausblenden/„Verlauf ›“', await page.evaluate(() => { const l = [...document.querySelectorAll('.track-menu-item')].map((b) => b.textContent); return l.includes('Kurve') && !l.includes('Einblenden') && !l.includes('Ausblenden') && !l.includes('Verlauf ›'); }));
     await page.tap('.track-menu-item:text-is("Kurve")');
     await page.waitForSelector('.auto-row');
     let g = await geom(page);
@@ -562,24 +560,9 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.evaluate((id) => window.loopwerk.store.clearAutomation(id, 'volume'), t);
     await page.tap('.auto-close');
     const st0 = (await state(page)).steps;
-    await page.tap('.track-row .tbtn-menu');
-    await page.tap('.track-menu-item:text-is("Verlauf ›")');
-    check('Handy: Verlauf zeigt Längen-Chips 1 · 2 · 4 · 8 und beide Knöpfe', await page.evaluate(() => [...document.querySelectorAll('.track-menu .auto-bars button')].map((b) => b.textContent).join() === '1,2,4,8' && !!document.querySelector('.track-menu [data-template="fadeIn"]') && !!document.querySelector('.track-menu [data-template="fadeOut"]')));
-    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-phone-menu.png') });
-    const mt = (await page.evaluate(measureTargets)).filter((x) => /track-menu-item|„\d Takte?“/.test(x.label));
-    check('Handy: Menü-Knöpfe Verlauf (Zurück, Einblenden, Ausblenden, Längen-Chips) ≥ 44 px hoch', mt.length >= 4 && mt.every((x) => x.h >= 44), JSON.stringify(mt.map((x) => `${x.label} ${x.w}×${x.h}`)));
-    await page.tap('.track-menu .auto-bars [data-bars="2"]');
-    await page.tap('.track-menu [data-template="fadeIn"]');
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, [t, 'fadeIn', 2]);
     s = await state(page);
-    check('Handy: Menü → Einblenden über 2 Takte = ein Schritt, Menü zu, Zeile offen', s.auto?.length === 2 && s.auto[1].beat === 8 && s.steps === st0 + 1 && await page.evaluate(() => document.querySelector('.track-menu').hidden && !!document.querySelector('.auto-row')), JSON.stringify(s.auto));
-    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-phone-fade.png') });
-    // Zwei Tipps: Spur-Menü → Ausblenden (Länge wie zuletzt gewählt: 2 Takte)
-    await page.tap('.auto-close');
-    const st1 = (await state(page)).steps;
-    await page.tap('.track-row .tbtn-menu');
-    await page.tap('.track-menu-item:text-is("Ausblenden")');
-    s = await state(page);
-    check('Handy: Spur-Menü → Ausblenden in zwei Tipps, ein Schritt, Zeile offen', s.steps === st1 + 1 && s.auto?.length >= 3 && await page.evaluate(() => document.querySelector('.track-menu').hidden && !!document.querySelector('.auto-row')), JSON.stringify(s.auto));
+    check('Handy: Einblenden über 2 Takte = ein Schritt, Zeile offen', s.auto?.length === 2 && s.auto[1].beat === 8 && s.steps === st0 + 1 && await page.evaluate(() => !!document.querySelector('.auto-row')), JSON.stringify(s.auto));
     // ---------- Scheibe 2 am Finger: Parameter wählen, Mini-Leiste, gesperrter Regler im Mixer ----------
     const panOf = () => page.evaluate(() => window.loopwerk.store.project.tracks[0].automation?.pan ?? null);
     await page.tap('.auto-chip');
@@ -631,14 +614,16 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.tap('.track-row .tbtn-menu');
     const tm = await page.evaluate(() => { const m = document.querySelector('.track-menu'); const r = m.getBoundingClientRect(); return { items: [...m.querySelectorAll('.track-menu-item')].map((b) => b.textContent), top: r.top, bottom: r.bottom, vh: innerHeight }; });
     const tabTop = await page.evaluate(() => document.getElementById('tabbar').getBoundingClientRect().top);
-    check('Handy: Spur-Menü kurz – Einblenden, Ausblenden direkt, Filter unter „Verlauf ›“; Menü über der Fachleiste', tm.items.includes('Einblenden') && tm.items.includes('Verlauf ›') && !tm.items.includes('Filter öffnen') && tm.top >= 0 && tm.bottom <= tabTop + 1, JSON.stringify({ ...tm, tabTop }));
+    check('Handy: Spur-Menü kurz, ohne Verlauf; Menü über der Fachleiste', !tm.items.includes('Einblenden') && !tm.items.includes('Verlauf ›') && tm.top >= 0 && tm.bottom <= tabTop + 1, JSON.stringify({ ...tm, tabTop }));
     const mi = (await page.evaluate(measureTargets)).filter((x) => /track-menu-item/.test(x.label));
-    check('Handy: Spur-Menü-Einträge ≥ 44 px hoch', mi.length >= 8 && mi.every((x) => x.h >= 44 && x.w >= 44), JSON.stringify(mi.map((x) => `${x.label} ${x.w}×${x.h}`)));
+    check('Handy: Spur-Menü-Einträge ≥ 44 px hoch', mi.length >= 5 && mi.every((x) => x.h >= 44 && x.w >= 44), JSON.stringify(mi.map((x) => `${x.label} ${x.w}×${x.h}`)));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone-menu.png') });
-    await page.tap('.track-menu-item:text-is("Verlauf ›")');
-    await page.tap('.track-menu [data-template="filterOpen"]');
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.evaluate(() => { const m = document.querySelector('.track-menu'); if (m && !m.hidden) m.hidden = true; });
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, [t, 'filterOpen', null]);
+    await page.waitForTimeout(200);
     const fp = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[0]; return { cut: t.automation?.['filter.cutoff'], filter: t.fx?.filter, steps: window.loopwerk.store.undoStack.length, key: document.querySelector('.auto-row')?.dataset.key }; });
-    check('Handy: Spur-Menü → Verlauf → Filter öffnen, ein Schritt, Zeile mit Filter-Frequenz offen', fp.cut?.length === 2 && fp.cut[0].value === 0.25 && fp.cut[1].value === 1 && fp.filter?.on && fp.filter.type === 'lowpass' && fp.steps === st2 + 1 && fp.key === 'filter.cutoff', JSON.stringify(fp));
+    check('Handy: Vorlage Filter öffnen, ein Schritt, Zeile mit Filter-Frequenz offen', fp.cut?.length === 2 && fp.cut[0].value === 0.25 && fp.cut[1].value === 1 && fp.filter?.on && fp.filter.type === 'lowpass' && fp.steps === st2 + 1 && fp.key === 'filter.cutoff', JSON.stringify(fp));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-filter-phone.png') });
     // Mixer → Kanal → Effekte: Frequenz-Regler gesperrt, Antippen öffnet die Zeile
     await page.tap('.auto-close');
@@ -663,15 +648,13 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     const sm0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
     await page.tap('#tab-song');
     await page.waitForTimeout(350);
-    await page.evaluate(() => document.getElementById('song-auto-slot').scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(150);
-    const sa = await page.evaluate(measureTargets, '#song-auto-slot button');
-    check('Handy, Fach „Song“: Einblenden · Ausblenden der Summe, Tippflächen ≥ 44 px', sa.length === 2 && sa.every((x) => x.w >= 44 && x.h >= 44), JSON.stringify(sa));
-    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-master-phone-song.png') });
-    await page.tap('#song-auto-slot [data-template="fadeOut"]');
+    check('Handy, Fach „Song“: keine Zeile „Summe: Einblenden/Ausblenden“ mehr', await page.evaluate(() => !document.getElementById('song-auto-slot')));
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    await page.waitForTimeout(300);
+    await page.evaluate(async ([id, name, bars]) => { const { applyTemplate } = await import('./src/ui/auto-lane.js'); const { store, ui, engine } = window.loopwerk; if (bars) ui.autoBars = bars; applyTemplate({ store, ui, engine, id, name }); }, ['master', 'fadeOut', 2]);
     await page.waitForTimeout(300);
     const sm = await page.evaluate(() => { const { store, ui } = window.loopwerk; const r = document.querySelector('.auto-row.auto-master'); const b = r?.getBoundingClientRect(); return { vol: store.project.master?.automation?.volume, steps: store.undoStack.length, dock: ui.dock, open: !!r, inView: !!b && b.top >= 0 && b.bottom <= innerHeight }; });
-    check('Handy: Song → Ausblenden = ein Schritt, endet am letzten Clip (4 → 12), Fach zu, Summen-Zeile offen und im Bild', JSON.stringify(sm.vol) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && sm.steps === sm0 + 1 && !sm.dock && sm.open && sm.inView, JSON.stringify(sm));
+    check('Handy: Summe ausblenden = ein Schritt, endet am letzten Clip (4 → 12), Summen-Zeile offen und im Bild', JSON.stringify(sm.vol) === JSON.stringify([{ beat: 4, value: 1 }, { beat: 12, value: 0 }]) && sm.steps === sm0 + 1 && !sm.dock && sm.open && sm.inView, JSON.stringify(sm));
     // Einblender abwarten (liegt kurz über der untersten Zeile)
     await page.waitForFunction(() => !window.loopwerk.ui.flashText, null, { timeout: 6000 });
     await page.waitForTimeout(400);

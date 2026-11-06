@@ -181,6 +181,10 @@
 <link rel="modulepreload" href="src/ui/start-card.js">
 <link rel="modulepreload" href="src/tips-make.js">
 <link rel="modulepreload" href="src/pad-wall.js">
+<link rel="modulepreload" href="src/dsp/loopback.js">
+<link rel="modulepreload" href="src/rec-settings.js">
+<link rel="modulepreload" href="src/ui/rec-setup.js">
+<link rel="modulepreload" href="src/ui/take-row.js">
 <link rel="icon" href="assets/icons/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1024,7 +1028,6 @@
   #editor.busy .ed-tools, #editor.busy .dock-actions { pointer-events: none; opacity: 0.5; }
   .ed-busy { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .ed-busy progress { width: 160px; accent-color: var(--amber); }
-  #pat-live[aria-pressed="true"] { background: var(--meter-hot); border-color: var(--meter-hot); color: #fff; }
   .pat-pads {
     flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(64px, 1fr); gap: 8px;
   }
@@ -1170,10 +1173,22 @@
   .pop-item:hover, .pop-item:focus-visible { background: var(--lane); outline: none; }
   .pop-about { margin: 4px 2px 0; font-size: 11px; color: var(--muted); }
   .pop-about a { color: inherit; }
-  .keys-pop { bottom: calc(100% + 6px); top: auto; width: 360px; }
+  .keys-pop { bottom: calc(100% + 6px); top: auto; width: 440px; max-height: calc(100dvh - 140px); overflow: auto; }
   .keys-list { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 12px; }
   .keys-list dt { font: 600 11px/1.4 var(--font-mono); white-space: nowrap; }
   .keys-list dd { margin: 0; color: var(--muted); }
+  /* Tasten als Tasten: Umriss mit Tiefe unten, Beschriftung in Mono; Mausaktionen nur als Text daneben */
+  .keys-list.for-mouse { grid-template-columns: max-content 1fr; align-items: center; row-gap: 9px; }
+  .keys-list.for-mouse dt { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .keys-list kbd {
+    display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+    min-width: 24px; height: 24px; padding: 0 6px; border-radius: 5px;
+    border: 1px solid var(--key-line); border-bottom-width: 3px; background: var(--deck-2); color: var(--ink);
+    font: 600 11px/1 var(--font-mono); letter-spacing: 0;
+  }
+  .keys-list kbd.key-wide { min-width: 84px; }
+  .key-act { color: var(--ink); font: 500 11px/1 var(--font-body); margin-left: 2px; }
+  .key-or { color: var(--muted); font: 400 11px/1 var(--font-mono); margin: 0 2px; }
 
   /* ---------- Inspektor: zeigt immer das Ausgewählte (Clip, Spur oder Song) ---------- */
   .insp {
@@ -1239,7 +1254,7 @@
   .fxl { display: grid; gap: 2px; }
   .fxl-item { border-radius: 5px; }
   .fxl-item.on { background: color-mix(in srgb, var(--amber) 9%, var(--lane)); }
-  .fxl-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 6px 8px; }
+  .fxl-head { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; padding: 6px 8px; }
   .fxl-switch {
     position: relative; width: 32px; height: 18px; border-radius: 999px; border: 0; padding: 0; cursor: pointer;
     background: var(--line);
@@ -1256,6 +1271,16 @@
   .fxl, .fx-cards { position: relative; }
   .fxl-name { cursor: grab; user-select: none; -webkit-user-select: none; }
   .fx-card-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  /* Griff ⠿: zwei Spalten mit je drei Punkten, ruhig grau; über dem Griff und beim Ziehen weiß */
+  .fx-grip {
+    position: relative; flex: none; width: 10px; height: 16px; color: var(--muted); cursor: grab; touch-action: none;
+    background-image: radial-gradient(circle, currentColor 1.3px, transparent 1.7px); background-size: 5px 5.33px; opacity: 0.8;
+  }
+  .fx-grip::before { content: ""; position: absolute; inset: -10px -8px; }
+  .fxl-head:hover .fx-grip, .fx-card-head:hover .fx-grip, .fx-lifted .fx-grip { color: var(--ink); opacity: 1; }
+  .fx-card > .fx-card-head { display: flex; align-items: center; gap: 8px; }
+  .fx-card > .fx-card-head > .fx-grip { margin-left: auto; margin-right: 6px; }
+  @media (pointer: coarse) { .fx-grip::before { inset: -14px -17px; } }
   .fx-sorting, .fx-sorting * { cursor: grabbing; }
   .fx-sorting > .fxl-item:not(.fx-lifted), .fx-sorting > .fx-card:not(.fx-lifted) { transition: transform 0.12s ease-out; }
   .fx-lifted { position: relative; z-index: 2; background: var(--sheet-bg); box-shadow: inset 0 0 0 1px var(--amber); }
@@ -1509,21 +1534,15 @@
     #pattern .dock-actions > * { flex: none; }
     /* Pattern-Editor: Kopf in einer Zeile (der Reiter „Editor“ sagt, was offen ist), der Rest gehört Klavier und Raster */
     #pattern > .dock-head { flex-wrap: nowrap; align-items: center; padding-bottom: 6px; }
-    #pattern > .dock-head h2 { display: none; }
     #pattern .dock-actions { order: 0; flex: 1 1 auto; width: auto; min-width: 0; }
     #pattern .pat-body { padding: 6px 8px 8px; }
     /* Pattern-Editor: alles in einer Zeile ohne Wischen – Anhören und Live als Tasten, der Rest im Menü „Mehr“ */
     #pattern .dock-actions { flex-wrap: nowrap; overflow: visible; padding-right: 0; }
-    #pat-play, #pat-live { order: -1; width: 48px; padding: 0; justify-content: center; font-size: 0; }
-    #pat-play::before { content: "▶"; font-size: 17px; }
-    #pat-live::before { content: "●"; font-size: 17px; color: var(--meter-hot); }
-    #pat-live[aria-pressed="true"]::before { content: "■"; color: #fff; }
     #pat-preset-field { flex: 1 1 auto; min-width: 0; }
     #pat-preset-field select { width: 100%; min-width: 0; }
     .pat-more-wrap { margin-left: auto; }
     .pat-more { width: min(300px, calc(100vw - 24px)); max-height: 60vh; overflow-y: auto; }
     .pat-more .pat-field, .pat-more .dbtn, .pat-more .ed-name { width: 100%; box-sizing: border-box; justify-content: space-between; }
-    #pat-name { width: 100%; }
     .dbtn, .ed-beats, .ed-name { min-height: 44px; }
     .pat-field select { height: 44px; }
     .ed-check { min-height: 44px; }
@@ -1651,7 +1670,6 @@
       width: 0; height: 0; padding-left: 6px; pointer-events: none;
     }
     .pat-scale-bar > * { flex: none; pointer-events: auto; }
-    #pat-live { order: -1; }
     #sing-desc { font-size: 16px; height: 44px; }
     .pat-pads { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(48px, 1fr); }
     .pat-pad-key { display: none; }
@@ -1832,6 +1850,19 @@
   /* Licht aus der Musik: Umgebungslicht hinter den Spuren, Leuchten an der Marke */
   .arranger { position: relative; isolation: isolate; }
   .arranger > .arr-wrap { position: relative; z-index: 1; }
+  /* „Marke folgen“: schwebt unten rechts über den Spuren, nur wenn die Person beim Spielen weggescrollt hat */
+  .follow-chip {
+    position: absolute; right: calc(var(--zbar-r) + 14px); bottom: calc(var(--zbar-b) + 14px); z-index: 6;
+    display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 12px;
+    border: 0; border-radius: 999px; background: var(--sheet-bg); color: var(--ink); cursor: pointer;
+    box-shadow: inset 0 0 0 1px var(--key-line), 0 8px 24px rgb(0 0 0 / 0.5);
+    font: 600 10px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;
+  }
+  .follow-chip[hidden] { display: none; }
+  .follow-chip svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .follow-chip:hover, .follow-chip:focus-visible { box-shadow: inset 0 0 0 1px var(--amber), 0 0 14px rgb(255 255 255 / 0.25), 0 8px 24px rgb(0 0 0 / 0.5); }
+  .follow-chip:active { background: var(--amber); color: var(--accent-ink); }
+  @media (pointer: coarse) { .follow-chip { height: 44px; padding: 0 18px 0 16px; font-size: 11px; } }
   .ambient { position: fixed; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
   /* Fenster über dem Arranger (Schubladen, Menüs, Tipps) und die Seitenleisten: durchscheinend mit Weichzeichner,
      damit der Sternenstaub hinter Schrift und Reglern weich wird (ihre Menüs hängen am body, nicht in den Leisten).
@@ -1903,7 +1934,6 @@
   .pat-field select, .ed-name, #pat-name, .ed-beats {
     border: 0; border-radius: 6px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink);
   }
-  #pat-live[aria-pressed="true"] { background: var(--meter-hot); color: var(--display-ink); }
 
   /* Drumpads: Gummi, der beim Schlag orange aufleuchtet */
   .pat-pad {
@@ -2063,7 +2093,12 @@
     .deck .meter-wrap { grid-template-rows: auto 21px; }
   }
   @media (min-width: 1280px) and (max-width: 1439px) { .key.project-menu-btn { max-width: 170px; } }
-  @media (min-width: 1440px) { #meter { width: 112px; } }
+  /* 1440–1599 px: alle Felder bleiben, Loop und Klick nur als Zeichen, Pegel schmaler – sonst fällt „Exportieren“ hinten raus */
+  @media (min-width: 1440px) and (max-width: 1599px) {
+    #loop-btn, #metro-btn { font-size: 0; gap: 0; width: 36px; padding: 0; }
+    #meter { width: 80px; }
+  }
+  @media (min-width: 1600px) { #meter { width: 112px; } }
   /* Tablet: Bildmarke nur als Lichtstriche; wird es noch enger, bricht das Deck um statt die Seite zu verschieben */
   @media (min-width: 761px) and (max-width: 1099px) {
     .deck .brand-name { display: none; }
@@ -2102,8 +2137,8 @@
   /* Master hebt sich ab: breiter, heller Grund, weiße Kante mit Lichtstrich oben, Name in Großbuchstaben */
   .strip.strip-master {
     flex-basis: 112px; margin-left: 10px;
-    background: color-mix(in srgb, var(--ink) 9%, color-mix(in srgb, var(--sheet-bg) 90%, transparent));
-    box-shadow: -14px 0 24px -10px #000, inset 0 0 0 1px rgb(255 255 255 / 0.42);
+    background: color-mix(in srgb, var(--ink) 9%, var(--sheet-bg));
+    box-shadow: -10px 0 0 var(--sheet-bg), -24px 0 24px -10px #000, inset 0 0 0 1px rgb(255 255 255 / 0.42);
   }
   .strip.strip-master::before {
     content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 2px; border-radius: 1px;
@@ -2115,8 +2150,9 @@
   @media (min-width: 761px) {
     .strip.strip-bus {
       position: sticky; z-index: 2;
-      background: color-mix(in srgb, var(--sheet-bg) 88%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-      box-shadow: -10px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
+      background: var(--sheet-bg);
+      /* deckender Streifen links füllt die Lücke zum Nachbarn, dahinter der Schatten der durchscrollenden Spuren */
+      box-shadow: -10px 0 0 var(--sheet-bg), -20px 0 18px -8px rgb(0 0 0 / 0.6), inset 0 0 0 1px var(--line);
     }
     .strip.strip-bus[data-strip-id="__bus:echo"] { right: 118px; }
     .strip.strip-bus[data-strip-id="__bus:hall"] { right: 210px; }
@@ -2237,7 +2273,6 @@
   /* Schalter im Editor (Anhören im Loop, Autotune): an = Weißglut */
   .dbtn[aria-pressed="true"], .dbtn[aria-pressed="true"]:hover:not(:disabled) { background: var(--ink); color: var(--accent-ink); box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 35%, transparent); }
   .pat-field select, .ed-name, #pat-name, .ed-beats { border-radius: var(--radius); background: var(--well); box-shadow: inset 0 0 0 1px var(--key-line); }
-  #pat-live[aria-pressed="true"] { background: transparent; color: var(--meter-hot); box-shadow: inset 0 0 0 1px var(--meter-hot), 0 0 12px color-mix(in srgb, var(--meter-hot) 40%, transparent); }
 
   /* Drumpads: Haarlinie, beim Schlag Licht in der Farbe der Spur */
   .pat-pad { border-radius: 6px; background: rgb(255 255 255 / 0.015); box-shadow: inset 0 0 0 1px var(--key-line); font: 600 13px/1.1 var(--font-body); }
@@ -2578,6 +2613,50 @@
     .zbar-y .zbar-thumb.full { visibility: hidden; }
   }
 
+  /* Einheitliche Scrollleisten (Arranger-Zoomleisten und alle übrigen): feine Linie als Bahn, runder Griff in Tinte 40 %,
+     beim Überfahren/Ziehen Weißglut. Maus 6 px Griff, Finger 10 px; die Zoom-Greifer an den Enden 4 bzw. 5 px */
+  :root { --sb-thumb: 6px; --sb-grip: 4px; --sb-ink: color-mix(in srgb, var(--ink) 40%, transparent); }
+  @media (min-width: 761px) { :root { --zbar: 16px; --zbar-b: 16px; --zbar-r: 16px; } }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) { :root { --sb-thumb: 10px; --sb-grip: 5px; --zbar: 22px; --zbar-b: 22px; --zbar-r: 22px; } }
+  .zbar-thumb::before { border-radius: 999px; background: var(--sb-ink); }
+  .zbar-x .zbar-thumb::before, #app .zbar-x .zbar-thumb::before { height: var(--sb-thumb); margin-top: calc(var(--sb-thumb) / -2); }
+  .zbar-y .zbar-thumb::before, #app .zbar-y .zbar-thumb::before { width: var(--sb-thumb); margin-left: calc(var(--sb-thumb) / -2); }
+  .zbar-grip::after { border-radius: 2px; opacity: 0.8; }
+  .zbar-x .zbar-grip::after, #app .zbar-x .zbar-grip::after { top: 1px; bottom: 1px; width: var(--sb-grip); }
+  .zbar-y .zbar-grip::after, #app .zbar-y .zbar-grip::after { left: 1px; right: 1px; height: var(--sb-grip); }
+  .zbar-x .zbar-grip { width: 18px; }
+  .zbar-y .zbar-grip { height: 18px; }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    .zbar-x .zbar-grip { width: 44px; }
+    .zbar-y .zbar-grip { height: 44px; }
+  }
+  @media (max-width: 760px) {
+    #app .zbar-y .zbar-thumb::before { left: auto; right: 3px; margin: 0; width: 6px; }
+  }
+  ::-webkit-scrollbar { width: calc(var(--sb-thumb) + 6px); height: calc(var(--sb-thumb) + 6px); }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-track:vertical { background: linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat; }
+  ::-webkit-scrollbar-track:horizontal { background: linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat; }
+  ::-webkit-scrollbar-thumb { background: var(--sb-ink); background-clip: padding-box; border: 3px solid transparent; border-radius: 999px; min-height: 40px; min-width: 40px; }
+  ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background-color: var(--ink); }
+  ::-webkit-scrollbar-corner, ::-webkit-scrollbar-button { display: none; background: transparent; }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-color: var(--sb-ink) transparent; }
+  }
+
+  /* Handy-Spurkopf: Name und Knöpfe passen in die Zeile (vorher 78 px Inhalt in 70 px – der Name klebte oben).
+     Die Knopfzeile ist so hoch wie die sichtbaren Knöpfe; die Tippflächen ragen über ::after hinaus */
+  @media (max-width: 760px) {
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-head { align-content: center; gap: 6px; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-top { height: 22px; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-menu { width: 22px; height: 24px; align-self: center; margin: 0 -4px 0 0; flex: none; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-menu::after { inset: -4px -6px -2px -8px; } /* schmal gezeichnet, Tippfläche wie vorher */
+    /* Pfeil von knapp unter der Namenszeile bis zum Rand: 44 × 36, ohne die Fläche von ⋯ zu berühren */
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-chev { height: 36px; top: 0; padding-top: 6px; align-self: flex-end; }
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .tbtn.tbtn-chev::after { inset: -2px 0 -6px; } /* Tippfläche 44 × 44 bis zum Spurrand */
+    .arr-grid:not(.rh-one):not(.rh-tiny) .track-row .track-btns { height: 30px; }
+  }
+
   /* Gleiten am Handy: ein Knopf in der Kopfzeile, antippen wechselt Aus → Kurz → Lang (das Auswahlfeld liegt im Menü „Mehr“ des Editors) */
   .pat-glide-btn { display: none; }
   @media (max-width: 760px) {
@@ -2762,7 +2841,9 @@
     .mst-seg .seg, .fxpad-modes .chip, .fxpad-actions .dbtn { min-height: 44px; height: 44px; }
     .mst-head { min-height: 44px; }
     /* 44 px hoch zum Tippen, sichtbar ist nur die 26 px hohe Bahn (Hintergrund im Inhaltsbereich) */
-    .mst .fxl-switch { width: 44px; height: 44px; padding: 9px 0; background-clip: content-box; border-radius: 13px / 13px; }
+    /* Box 44 × 44 (Tippfläche), sichtbar eine Pille 44 × 26: Fläche auf den Inhalt beschnitten; senkrechter Radius 13 + 9 px
+       Abstand, sonst schrumpft die innere Rundung auf 4 px und die Pille wirkt angeschnitten */
+    .mst .fxl-switch { width: 44px; height: 44px; padding: 9px 0; background-clip: content-box; border-radius: 13px / 22px; }
     .mst .fxl-switch::after { width: 20px; height: 20px; top: 12px; left: 3px; }
     .mst .fxl-switch[aria-pressed="true"]::after { transform: translateX(18px); }
     .mst-body { padding-left: 0; }
@@ -2785,8 +2866,6 @@
   .ed-actions { flex: none; flex-wrap: nowrap; }
   .dbtn.ed-ico { width: 32px; min-width: 32px; padding: 0; display: inline-grid; place-items: center; }
   .dbtn.ed-ico svg { width: 14px; height: 14px; fill: currentColor; }
-  #ed-play .ico-stop, #ed-play[aria-pressed="true"] .ico-play { display: none; }
-  #ed-play[aria-pressed="true"] .ico-stop { display: block; }
   #editor .editor-body { padding-top: 8px; }
   .ed-sw { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
   .ed-sw > span { font-size: 12px; color: var(--muted); }
@@ -3424,6 +3503,164 @@
   #app[data-density="calm"] .shelf-sticky #shelf-new { grid-column: 2; grid-row: 1; }
   @media (prefers-reduced-motion: reduce) { .len-bar { transition: none; } }
   @media (max-width: 760px), (pointer: coarse) { .shelf-find .shelf-search { font-size: 16px; } }
+
+  /* ---------- Aufnahme (2.13): ▾ am ●, Feld „Aufnahme“ (Eingang, Latenz, Einmessen) ---------- */
+  .rec-wrap { display: inline-flex; margin-left: -3px; }
+  .deck .key.rec-more { min-width: 20px; width: 20px; padding: 0; }
+  .deck .key.rec-more svg { width: 11px; height: 11px; }
+  .rec-pop { left: 0; right: auto; width: 320px; }
+  .rec-setup { display: grid; gap: 6px; color: var(--ink); font: 500 12px/1.2 var(--font-body); }
+  .rs-row { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 36px; }
+  .rs-label { font: 600 10px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .rs-input { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rs-lat { display: flex; align-items: center; gap: 6px; }
+  #app .rec-setup .key { height: 36px; }
+  #app .rec-setup .key.rs-step { width: 36px; min-width: 36px; padding: 0; font-size: 16px; }
+  .rs-out { min-width: 56px; text-align: center; font: 500 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+  .rs-mark { font: 500 10px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); }
+  .rs-mark[data-measured="true"] { color: var(--ink); }
+  #app .rec-setup .key.rs-cal { width: 100%; }
+  .rs-cal[aria-busy="true"] { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+  .song-rec:empty { display: none; }
+  #app[data-density="calm"] .rec-wrap { display: none; }
+  /* Takes am Clip (2.13): aktiv = Weißglut, × löscht (Rot) */
+  .insp-takes { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+  .take-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+  .take-btns .key.take-n { min-width: 30px; height: 30px; padding: 0 8px; font: 500 12px/1 var(--font-mono); }
+  .take-btns .key.take-n[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); box-shadow: var(--glow-ink); }
+  .insp-takes .key.take-del, .lvl-takes .key.take-del { min-width: 30px; height: 30px; padding: 0 8px; color: var(--meter-hot); font-size: 15px; }
+  .lvl-takes { grid-template-columns: 108px minmax(0, 1fr) 44px; }
+  .lvl-takes .take-btns .key.take-n, .lvl-takes .key.take-del { min-width: 44px; height: 44px; }
+  .lvl-takes[hidden], .insp-takes[hidden] { display: none; }
+  .clipbar-btns.with-take { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .cb-short, .clipbar-btns.with-take .cb-long { display: none; }
+  .clipbar-btns.with-take .cb-short { display: inline; }
+  .clip-tag.clip-take { font-variant-numeric: tabular-nums; }
+  /* Finger (Tablet): volle 44 px Tippfläche */
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) { .deck .key.rec-more { width: 44px; min-width: 44px; } .rec-wrap { margin-left: 0; } }
+  @media (max-width: 760px) {
+    .rec-wrap { display: none; }
+    .song-rec { padding: 4px 0; border-top: 1px solid var(--line); }
+    .rs-row { min-height: 44px; }
+    #app .rec-setup .key { height: 44px; }
+    #app .rec-setup .key.rs-step { width: 44px; min-width: 44px; }
+  }
+  /* ================= Editor-Kopf: große Überschrift mit Name, deutlicher Umschalter, Deck-Tasten ================= */
+  #pattern .dock-head { align-items: center; flex-wrap: wrap; gap: 4px 16px; padding: 6px 14px 6px 16px; }
+  #pattern .pat-headline { flex: 1 1 0; min-width: 150px; display: grid; gap: 2px; }
+  #pattern .pat-headline h2 { margin: 0; font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  /* Der Name sieht aus wie Text; Linie nur beim Überfahren und im Fokus (Finger: leise Linie immer) */
+  #pattern .pat-name {
+    width: 100%; height: auto; min-height: 0; box-sizing: border-box; margin: 0; padding: 0 0 2px; border: 0; border-radius: 0;
+    background: transparent; box-shadow: none; color: var(--ink); cursor: text; text-overflow: ellipsis;
+    font: 300 26px/1.05 var(--font-display); letter-spacing: -0.03em;
+  }
+  #pattern .pat-name:hover { box-shadow: 0 1px 0 var(--key-line); }
+  #pattern .pat-name:focus, #pattern .pat-name:focus-visible { outline: none; box-shadow: 0 1px 0 var(--amber); }
+  @media (hover: none) { #pattern .pat-name { box-shadow: 0 1px 0 var(--key-line); } #pattern .pat-name:focus { box-shadow: 0 1px 0 var(--amber); } }
+  /* Zwei ruhige Zeilen: Überschrift links, Anhören/Live/Umschalter rechts; darunter die Felder (Takte, Kit, Klang …) und „Mehr“ */
+  #pattern .dock-actions { display: contents; }
+  #pattern .dock-actions > * { order: 3; }
+  #pattern .dock-actions > :is(#pat-play, #pat-live, .pat-view, .pat-more-wrap) { order: 1; }
+  #pattern .dock-actions > :is(#pat-continue, #pat-sing-btn) { order: 0; }
+  #pattern .dock-head::after { content: ""; order: 2; flex: 1 0 100%; height: 0; }
+  #pattern .dock-head { justify-content: flex-start; }
+  /* Anhören und Live wie Abspielen und Aufnahme im Deck (gleiche Bausteine); die Weißglut gehört nur diesem Fach */
+  #pattern #pat-play:not(.on) { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5); }
+  #pattern #pat-play.on { background: var(--beam); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+  #pattern #pat-live.recording { background: var(--meter-hot); color: var(--accent-ink); box-shadow: none; }
+  #pattern #pat-live.recording svg { fill: var(--accent-ink); }
+  /* Umschalter Schritte | Pads: aktive Seite voll in Weißglut, die andere nur Linie */
+  #pattern .pat-view { gap: 0; padding: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--key-line); border-radius: var(--radius-lg); }
+  #pattern .pat-view .seg {
+    height: 44px; min-height: 44px; padding: 0 20px; border: 0; border-radius: var(--radius-lg);
+    background: transparent; box-shadow: none; text-shadow: none; color: var(--muted); font: 600 11px/1 var(--font-mono); letter-spacing: 0.08em;
+  }
+  #pattern .pat-view .seg:hover { color: var(--ink); }
+  #pattern .pat-view .seg[aria-pressed="true"] { background: var(--amber); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+
+  /* Reihen und Pads teilen sich die Höhe des Fachs (Mindest- und Höchsthöhe); --sheet-cut: Überhang beim Verkleinern (sheets.js) */
+  #pattern .pat-drums { container-type: size; --pg: 3px; --rows: 8; --rmin: 28px; --rmax: 72px; gap: var(--pg); }
+  #pattern .pat-cell, #pattern .pat-row-label {
+    height: clamp(var(--rmin), round(down, calc((100cqh - var(--sheet-cut, 0px) - (var(--rows) - 1) * var(--pg)) / var(--rows)), 1px), var(--rmax));
+  }
+  #pattern .pat-pads {
+    container-type: size; overflow-y: auto; align-content: start; grid-auto-rows: auto;
+    --pg: 8px; --prows: 2; --pmin: 64px; --pmax: 220px; gap: var(--pg);
+  }
+  #pattern .pat-pad {
+    height: clamp(var(--pmin), round(down, calc((100cqh - var(--sheet-cut, 0px) - (var(--prows) - 1) * var(--pg)) / var(--prows)), 1px), var(--pmax));
+  }
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) { #pattern .pat-drums { --rmin: 40px; } }
+  @media (max-width: 760px) {
+    /* Handy: Zeile 1 Überschrift und „Mehr“, Zeile 2 Anhören, Live, Umschalter bzw. Klang */
+    #pattern > .dock-head { flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 4px 8px 6px 12px; }
+    #pattern .pat-headline { min-width: 0; }
+    #pattern .pat-name { font-size: 24px; }
+    #pattern .dock-actions > .pat-more-wrap { order: 1; margin-left: 0; }
+    #pattern .dock-actions > :is(#pat-play, #pat-live, .pat-view) { order: 3; }
+    #pattern .pat-view .seg { padding: 0 12px; }
+    #pattern #pat-live { width: 44px; min-width: 44px; padding: 0; border-radius: 50%; }
+    #pattern #pat-live svg { width: 22px; height: 22px; }
+    #pattern .pat-drums { --pg: 4px; --rmin: 44px; }
+    #pattern .pat-pads { --prows: 4; --pmin: 60px; --pmax: 160px; }
+  }
+  /* Gespielte Klaviertasten leuchten wie die Drumpads: Farbe der Melodie, Glow, weiches Ausklingen */
+  .pat-key, .vkey { transition: background-color 0.28s ease-out, box-shadow 0.28s ease-out, color 0.28s ease-out; }
+  .pat-key.down, .pat-key:active, .vkey.down {
+    background: var(--cat-own); color: var(--accent-ink); transition: none;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), 0 0 16px 1px color-mix(in srgb, var(--cat-own) 80%, transparent);
+  }
+  .pat-key.black.down, .pat-key.black:active, .vkey.black.down {
+    background: color-mix(in srgb, var(--cat-own) 62%, var(--key-black)); color: var(--ink);
+  }
+  .pat-key.down.off, .vkey.down.off { opacity: 0.85; }
+  @media (prefers-reduced-motion: reduce) { .pat-key, .vkey { transition: none; } }
+  /* ================= Clip-Editor: Kopf wie bei Beat und Melodie, Schnittwerkzeuge als Icon-Knöpfe, Wellenform füllt das Fach ================= */
+  #editor { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  #editor .ed-top { gap: 6px; padding: 6px 14px 8px 16px; }
+  #editor .ed-headrow { margin: 0; padding: 0; border: 0; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
+  #editor .ed-title { flex: 1 1 0; min-width: 150px; display: grid; gap: 2px; align-items: initial; }
+  #editor .ed-title h2 { margin: 0; font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  #editor .ed-name {
+    width: 100%; height: auto; min-height: 0; box-sizing: border-box; margin: 0; padding: 0 0 2px; border: 0; border-radius: 0;
+    background: transparent; box-shadow: none; color: var(--ink); cursor: text; text-overflow: ellipsis;
+    font: 300 26px/1.05 var(--font-display); letter-spacing: -0.03em;
+  }
+  #editor .ed-name:hover { box-shadow: 0 1px 0 var(--key-line); }
+  #editor .ed-name:focus, #editor .ed-name:focus-visible { outline: none; background: transparent; box-shadow: 0 1px 0 var(--amber); }
+  @media (hover: none) { #editor .ed-name { box-shadow: 0 1px 0 var(--key-line); } #editor .ed-name:focus { box-shadow: 0 1px 0 var(--amber); } }
+  #editor .ed-actions { gap: 6px; margin-left: 0; }
+  #editor #ed-play:not(.on) { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5); }
+  #editor #ed-play.on { background: var(--beam); color: var(--accent-ink); box-shadow: var(--beam-glow); }
+  /* Schnittwerkzeuge: eigene Linien-Icons (24er Raster) mit kurzem Text */
+  .ico-line { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #editor .ed-cuts { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  #editor .ed-cutgroup { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 4px; padding: 0; border: 0; border-radius: 0; }
+  #editor .ed-cutgroup .ed-group-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #editor .ed-tool { display: inline-flex; align-items: center; gap: 6px; height: 40px; min-height: 40px; padding: 0 12px; }
+  #editor .ed-tool span { font: 500 10px/1 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+  /* Wellenform: volle Höhe des Fachs; --sheet-cut hält sie beim Verkleinern der Schublade im Takt (sheets.js) */
+  #editor .ed-stage { container-type: size; min-height: 80px; padding: 8px 14px 0; }
+  #editor .ed-wave-wrap { height: max(80px, calc(100cqh - var(--sheet-cut, 0px))); }
+  #editor .editor-body { padding: 6px 14px 10px; gap: 6px; max-height: min(300px, 45vh); }
+  #editor .ed-more { justify-self: start; }
+  #editor .ed-tools[hidden] { display: none; }
+  @media (max-width: 760px) {
+    #editor .ed-top { padding: 4px 8px 6px 12px; }
+    #editor .ed-headrow { gap: 2px 8px; }
+    #editor .ed-title { flex: 1 1 100%; min-width: 0; }
+    #editor .ed-title h2 { display: block; }
+    #editor .ed-name { font-size: 24px; }
+    #editor .ed-actions { width: 100%; }
+    #editor #ed-apply { margin-left: auto; }
+    #editor .ed-cuts { gap: 4px 8px; }
+    #editor .ed-tool { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
+    #editor .ed-tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    #editor .ed-stage { padding: 6px 8px 0; }
+    #editor .editor-body { padding: 6px 8px 8px; }
+    #editor .ed-more { min-height: 44px; }
+  }
 </style>
 
 
@@ -3452,6 +3689,12 @@
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
         <span class="rec-label">Aufnahme</span>
       </button>
+      <span class="menu-wrap rec-wrap" id="rec-more-wrap">
+        <button class="key rec-more" id="rec-more" data-tier="3" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="rec-pop" aria-label="Aufnahme einstellen" title="Aufnahme: Latenz einmessen">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5z"/></svg>
+        </button>
+        <div class="pop rec-pop" id="rec-pop" role="dialog" aria-label="Aufnahme" hidden></div>
+      </span>
       <button class="key" id="metro-btn" data-tier="3" type="button" title="Metronom">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 1h4l3 14H3zm1.6 2L5.4 13h5.2L8.4 3zM8 6l4-3 .6.8-4 3z"/></svg>
         Klick
@@ -3640,7 +3883,7 @@
     </div>
   </section>
 
-  <section class="dock" id="editor" data-surface="editor" aria-label="Sample-Editor" hidden>
+  <section class="dock" id="editor" data-surface="editor" data-fit aria-label="Sample-Editor" hidden>
     <div class="ed-top">
       <div class="dock-head ed-headrow">
         <div class="ed-title">
@@ -3648,37 +3891,42 @@
           <input class="ed-name" id="ed-name" type="text" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Name des Sounds" title="Name ändern">
         </div>
         <div class="dock-actions ed-actions">
-          <button class="dbtn ed-ico" id="ed-play" type="button" aria-label="Anhören" title="Anhören (im Loop)" aria-pressed="false"><svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg><svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5h9v9h-9z"/></svg></button>
+          <button class="key play" id="ed-play" type="button" aria-label="Anhören" title="Anhören (im Loop)" aria-pressed="false"><svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg><svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg></button>
           <button class="dbtn ed-ico" id="ed-undo" type="button" aria-label="Rückgängig" title="Rückgängig"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3L1 7l5 4V8h4a3 3 0 010 6H8v2h2a5 5 0 000-10H6z"/></svg></button>
           <button class="dbtn ed-ico" id="ed-cancel" type="button" aria-label="Abbrechen" title="Abbrechen – nichts ändern"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 2L2 3.4 6.6 8 2 12.6 3.4 14 8 9.4l4.6 4.6 1.4-1.4L9.4 8 14 3.4 12.6 2 8 6.6z"/></svg></button>
           <button class="dbtn primary" id="ed-apply" type="button">Übernehmen</button>
         </div>
       </div>
+      <div class="ed-cuts">
+        <div class="ed-group ed-cutgroup" role="group" aria-label="Auswahl">
+          <span class="ed-group-label">Schneiden · Auswahl</span>
+          <button class="dbtn ed-tool" id="ed-crop" type="button" title="Nur die Auswahl behalten"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14"/></svg><span>Zuschneiden</span></button>
+          <button class="dbtn ed-tool" id="ed-cut" type="button" title="Auswahl entfernen"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg><span>Entfernen</span></button>
+          <button class="dbtn ed-tool" id="ed-silence" type="button" title="Auswahl stumm schalten"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg><span>Stille</span></button>
+        </div>
+        <div class="ed-group ed-cutgroup" role="group" aria-label="Bearbeiten">
+          <span class="ed-group-label">Klang · Auswahl oder alles</span>
+          <button class="dbtn ed-tool" id="ed-fadein" type="button" title="Einblenden"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20L21 4M3 20h18M21 4v16"/></svg><span>Einblenden</span></button>
+          <button class="dbtn ed-tool" id="ed-fadeout" type="button" title="Ausblenden"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20L3 4M21 20H3M3 4v16"/></svg><span>Ausblenden</span></button>
+          <button class="dbtn ed-tool" id="ed-reverse" type="button" title="Rückwärts"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12H5M11 6l-6 6 6 6"/></svg><span>Rückwärts</span></button>
+          <button class="dbtn ed-tool" id="ed-normalize" type="button" title="Auf −1 dB anheben"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20v-8M9 20V6M14 20v-6M19 20V6M2 3h20"/></svg><span>Normalisieren</span></button>
+          <button class="dbtn ed-tool" id="ed-louder" type="button" title="Lauter um 3 dB"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zM16 12h6M19 9v6"/></svg><span>+3 dB</span></button>
+          <button class="dbtn ed-tool" id="ed-quieter" type="button" title="Leiser um 3 dB"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zM16 12h6"/></svg><span>−3 dB</span></button>
+        </div>
+      </div>
+    </div>
+    <div class="ed-stage">
       <div class="ed-wave-wrap cat-own">
         <canvas id="ed-wave" aria-label="Wellenform – ziehen wählt einen Bereich aus"></canvas>
         <div class="ed-sel" hidden></div>
         <div class="ed-head" hidden></div>
       </div>
-      <p class="ed-info" id="ed-info"></p>
-      <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
     </div>
     <div class="editor-body">
-      <div class="ed-tools">
-        <div class="ed-group" role="group" aria-label="Auswahl">
-          <span class="ed-group-label">Schneiden · Auswahl</span>
-          <button class="dbtn" id="ed-crop" type="button" title="Nur die Auswahl behalten">Zuschneiden</button>
-          <button class="dbtn" id="ed-cut" type="button" title="Auswahl entfernen">Entfernen</button>
-          <button class="dbtn" id="ed-silence" type="button" title="Auswahl stumm schalten">Stille</button>
-        </div>
-        <div class="ed-group" role="group" aria-label="Bearbeiten">
-          <span class="ed-group-label">Klang · Auswahl oder alles</span>
-          <button class="dbtn" id="ed-fadein" type="button">Einblenden</button>
-          <button class="dbtn" id="ed-fadeout" type="button">Ausblenden</button>
-          <button class="dbtn" id="ed-reverse" type="button">Rückwärts</button>
-          <button class="dbtn" id="ed-normalize" type="button" title="Auf −1 dB anheben">Normalisieren</button>
-          <button class="dbtn" id="ed-louder" type="button">+3 dB</button>
-          <button class="dbtn" id="ed-quieter" type="button">−3 dB</button>
-        </div>
+      <p class="ed-info" id="ed-info"></p>
+      <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
+      <button class="dbtn ed-more" id="clip-more" type="button" aria-expanded="false" aria-controls="ed-tools">Mehr: Tonhöhe, Autotune, Trennen, Loop ▾</button>
+      <div class="ed-tools" id="ed-tools" hidden>
         <div class="ed-group" role="group" aria-label="Tonhöhe">
           <span class="ed-group-label">Tonhöhe (Halbtöne)</span>
           <button class="dbtn" id="ed-pitch-down" type="button" aria-label="Einen Halbton tiefer">−</button>
@@ -3746,18 +3994,27 @@
     </div>
   </section>
 
-  <section class="dock" id="pattern" aria-label="Pattern-Editor" hidden>
+  <section class="dock" id="pattern" data-fit aria-label="Pattern-Editor" hidden>
     <div class="dock-head">
-      <h2 id="pat-title">Beat-Editor</h2>
+      <div class="pat-headline">
+        <h2 id="pat-title">Beat-Editor</h2>
+        <input class="pat-name" id="pat-name" type="text" maxlength="30" spellcheck="false" autocomplete="off" aria-label="Name des Patterns" title="Name ändern: Enter speichert, Esc verwirft">
+      </div>
       <div class="dock-actions">
-        <input class="ed-name" id="pat-name" type="text" maxlength="30" aria-label="Name des Patterns">
-        <label class="pat-field" id="pat-bars-field">Takte
-          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
-        </label>
+        <button class="key play" id="pat-play" type="button" aria-label="Anhören" title="Pattern im Loop anhören" aria-pressed="false">
+          <svg class="ico-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg>
+          <svg class="ico-stop" viewBox="0 0 16 16" aria-hidden="true" hidden><path d="M4 3h3v10H4zm5 0h3v10H9z"/></svg>
+        </button>
+        <button class="key rec" id="pat-live" type="button" aria-label="Live" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>
+        </button>
         <div class="pat-view" id="pat-view" role="group" aria-label="Ansicht">
           <button type="button" class="seg" data-view="grid">Schritte</button>
           <button type="button" class="seg" data-view="pads">Pads</button>
         </div>
+        <label class="pat-field" id="pat-bars-field">Takte
+          <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
+        </label>
         <label class="pat-field" id="pat-kit-field">Kit <select id="pat-kit"></select></label>
         <label class="pat-field" id="pat-preset-field">Klang <select id="pat-preset"></select></label>
         <label class="pat-field" id="pat-swing-field" title="Jede zweite Sechzehntel kommt etwas später – der Groove wird lockerer">Swing <select id="pat-swing"></select></label>
@@ -3776,12 +4033,10 @@
         <button class="dbtn" id="pat-rec" type="button" aria-pressed="false" title="Mit der Tastatur (A–K) oder einem MIDI-Keyboard Noten Schritt für Schritt eingeben">● Schritt-Eingabe</button>
         <button class="dbtn" id="pat-continue" data-surface="ai" type="button" title="Die Melodie wird um dieselbe Länge weitergeführt (im Artifact von Claude, sonst nach Regeln). Nochmal klicken = andere Idee">✨ Weiterführen</button>
         <button class="dbtn" id="pat-sing-btn" type="button" aria-pressed="false" title="Melodie vorsingen oder aus einer Datei heraushören">🎤 Einsingen</button>
-        <button class="dbtn" id="pat-live" type="button" aria-pressed="false" title="Pattern läuft im Loop, was du spielst, wird im Raster festgehalten">● Live</button>
         <label class="pat-field" id="pat-quant-field">Einrasten
           <select id="pat-quant"><option value="1" selected>1/16</option><option value="2">1/8</option></select>
         </label>
         <button class="dbtn" id="pat-quantize" type="button" title="Rückt Noten bzw. Schläge auf das Raster aus „Einrasten“. Rückgängig macht es wieder">Quantisieren</button>
-        <button class="dbtn" id="pat-play" type="button">▶ Anhören</button>
         <div class="menu-wrap pat-more-wrap">
           <button class="dbtn" id="pat-more-btn" type="button" aria-haspopup="true" aria-expanded="false">Mehr ▾</button>
           <div class="pop pat-more" id="pat-more" hidden></div>
@@ -3870,8 +4125,8 @@
         </label>
       </div>
       <div class="song-mst" id="song-mst-slot"></div>
-      <div class="song-auto" id="song-auto-slot" role="group" aria-label="Verlauf der Summe"><span class="song-auto-label">Summe</span></div>
       <div class="song-main" id="song-main"></div>
+      <div class="song-rec" id="song-rec"></div>
       <div class="song-links" id="song-links" role="group" aria-label="Weitere Songbefehle"></div>
       <template id="harm-tpl"><button class="key" id="harm-btn" type="button" aria-pressed="false">Tonart und Akkorde</button></template>
       <div class="song-foot" id="song-foot"><p class="song-private">Private use only</p></div>
@@ -3906,13 +4161,13 @@
     </div>
     <div class="clipbar-btns">
       <button class="cbtn" id="cb-edit" type="button" title="Clip im Editor öffnen">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.3 1.3l3.4 3.4-9 9H2.3v-3.4zM10 4.6l1.4 1.4 1-1-1.4-1.4z"/></svg>Bearbeiten
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.3 1.3l3.4 3.4-9 9H2.3v-3.4zM10 4.6l1.4 1.4 1-1-1.4-1.4z"/></svg><span class="cb-long">Bearbeiten</span><span class="cb-short">Editor</span>
       </button>
       <button class="cbtn" id="cb-split" type="button" title="An der Abspielmarke teilen">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 1a2.5 2.5 0 012.3 3.5L8 5.7l5.3-5.3 1.4 1.4L9.4 7.1l5.3 5.3-1.4 1.4L8 8.5 6.8 9.7A2.5 2.5 0 114.5 8.3l.9-.9.2-.3-.2-.3-.9-.9A2.5 2.5 0 014.5 1zm0 1.6a.9.9 0 100 1.8.9.9 0 000-1.8zm0 7.8a.9.9 0 100 1.8.9.9 0 000-1.8z"/></svg>Teilen
       </button>
       <button class="cbtn" id="cb-dup" type="button" title="Kopie direkt dahinter legen">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1h10v10h-2V3H5zM1 5h10v10H1zm2 2v6h6V7z"/></svg>Duplizieren
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 1h10v10h-2V3H5zM1 5h10v10H1zm2 2v6h6V7z"/></svg><span class="cb-long">Duplizieren</span><span class="cb-short">Kopie</span>
       </button>
       <button class="cbtn cbtn-del" id="cb-del" type="button" title="Clip löschen (Rückgängig holt ihn zurück)">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 1h5v1.5H15V4H1V2.5h4.5zM2.5 5h11l-1 10h-9zm3 2v6h1.5V7zm3.5 0v6h1.5V7z"/></svg>Löschen
@@ -3961,25 +4216,25 @@
           <dt>Kurve</dt><dd>Spur-Menü ⋯ → Kurve: Antippen setzt einen Punkt, einen Punkt ziehen verschiebt ihn, Halten löscht ihn. Summe: Fach „Song“ → Einblenden/Ausblenden</dd>
         </dl>
         <dl class="keys-list for-mouse">
-          <dt>Leertaste</dt><dd>Abspielen / Pause</dd>
-          <dt>Pos1</dt><dd>Zum Anfang</dd>
-          <dt>Esc</dt><dd>Fach schließen, Auswahl aufheben</dd>
-          <dt>Strg+Z / Strg+Umschalt+Z</dt><dd>Rückgängig / Wiederholen</dd>
-          <dt>T</dt><dd>Clip an der Abspielmarke teilen</dd>
-          <dt>A</dt><dd>Kurve der gewählten Spur öffnen oder schließen, ohne Auswahl die Summen-Kurve (Klick setzt einen Punkt, Doppelklick löscht)</dd>
-          <dt>Rahmen ziehen</dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
-          <dt>Umschalt+Klick</dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>
-          <dt>Strg+A</dt><dd>Alle Clips auswählen</dd>
-          <dt>Strg+D</dt><dd>Clip(s) duplizieren</dd>
-          <dt>Entf</dt><dd>Clip löschen</dd>
-          <dt>Alt+Ziehen</dt><dd>Clip oder Spur kopieren</dd>
-          <dt>Umschalt+Ziehen</dt><dd>Ohne Raster ziehen</dd>
-          <dt>Alt+← / →</dt><dd>Clip um einen Rasterschritt schieben</dd>
-          <dt>Strg+Mausrad</dt><dd>Zeit zoomen</dd>
-          <dt>Alt+Mausrad</dt><dd>Spurhöhe ändern</dd>
-          <dt>Rollbalken-Enden</dt><dd>Ziehen zoomt (unten Zeit, rechts Spurhöhe), der Daumen scrollt</dd>
-          <dt>A S D F G H J K</dt><dd>Pads spielen (halten = Wirbel)</dd>
-          <dt>A W S E D … K</dt><dd>Klaviatur (halten = langer Ton), Pfeil ↑↓ Oktave</dd>
+          <dt><kbd class="key-wide">Leertaste</kbd></dt><dd>Abspielen / Pause</dd>
+          <dt><kbd>Pos1</kbd></dt><dd>Zum Anfang</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Fach schließen, Auswahl aufheben</dd>
+          <dt><kbd>Strg</kbd><kbd>Z</kbd><span class="key-or">/</span><kbd>Strg</kbd><kbd>⇧</kbd><kbd>Z</kbd></dt><dd>Rückgängig / Wiederholen</dd>
+          <dt><kbd>T</kbd></dt><dd>Clip an der Abspielmarke teilen</dd>
+          <dt><kbd>A</kbd></dt><dd>Kurve der gewählten Spur öffnen oder schließen, ohne Auswahl die Summen-Kurve (Klick setzt einen Punkt, Doppelklick löscht)</dd>
+          <dt><span class="key-act">Rahmen ziehen</span></dt><dd>Mehrere Clips auswählen (Umschalt: hinzufügen)</dd>
+          <dt><kbd>⇧</kbd><span class="key-act">Klick</span></dt><dd>Clip zur Auswahl hinzufügen oder herausnehmen</dd>
+          <dt><kbd>Strg</kbd><kbd>A</kbd></dt><dd>Alle Clips auswählen</dd>
+          <dt><kbd>Strg</kbd><kbd>D</kbd></dt><dd>Clip(s) duplizieren</dd>
+          <dt><kbd>Entf</kbd></dt><dd>Clip löschen</dd>
+          <dt><kbd>Alt</kbd><span class="key-act">Ziehen</span></dt><dd>Clip oder Spur kopieren</dd>
+          <dt><kbd>⇧</kbd><span class="key-act">Ziehen</span></dt><dd>Ohne Raster ziehen</dd>
+          <dt><kbd>Alt</kbd><kbd>←</kbd><span class="key-or">/</span><kbd>Alt</kbd><kbd>→</kbd></dt><dd>Clip um einen Rasterschritt schieben</dd>
+          <dt><kbd>Strg</kbd><span class="key-act">Mausrad</span></dt><dd>Zeit zoomen</dd>
+          <dt><kbd>Alt</kbd><span class="key-act">Mausrad</span></dt><dd>Spurhöhe ändern</dd>
+          <dt><span class="key-act">Rollbalken-Enden</span></dt><dd>Ziehen zoomt (unten Zeit, rechts Spurhöhe), der Daumen scrollt</dd>
+          <dt><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd></dt><dd>Pads spielen (halten = Wirbel)</dd>
+          <dt><kbd>A</kbd><kbd>W</kbd><kbd>S</kbd><kbd>E</kbd><kbd>D</kbd><span class="key-or">…</span><kbd>K</kbd></dt><dd>Klaviatur (halten = langer Ton), <kbd>↑</kbd><kbd>↓</kbd> Oktave</dd>
         </dl>
       </div>
     </div>

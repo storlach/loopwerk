@@ -10,7 +10,7 @@ import { lsKey } from '../edition.js';
 import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
 import { mountChordRow } from './chord-row.js';
-import { mountAutoLanes, templateControls, applyTemplate } from './auto-lane.js';
+import { mountAutoLanes } from './auto-lane.js';
 import { recipeKey } from '../recipe.js';
 
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
@@ -490,10 +490,6 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
       item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
-      // Ein-/Ausblenden direkt (zwei Tipps); Filter-Vorlagen und Länge unter „Verlauf ›“ – das Menü bleibt kurz
-      item('Einblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeIn' }); }),
-      item('Ausblenden', () => { closeMenu(); applyTemplate({ store, ui, engine, id: trackId, name: 'fadeOut' }); }),
-      item('Verlauf ›', () => openFadeMenu(trackId, btn)),
       // gilt für den zuletzt gewählten Parameter der Kurvenzeile
       ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
       ...groupItems(trackId, item),
@@ -511,17 +507,6 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
     menu.style.top = menuTop(r, mh) + 'px';
     menu.querySelector('button:not(:disabled)')?.focus();
-  }
-
-  // Unterseite des Spur-Menüs: Vorlagen mit Länge (am Handy statt Inspektor)
-  function openFadeMenu(trackId, btn) {
-    const back = el('button', 'track-menu-item auto-menu-back', '‹ Verlauf');
-    back.type = 'button';
-    back.setAttribute('role', 'menuitem');
-    back.addEventListener('click', () => { menuFor = null; openMenu(trackId, btn); });
-    const tpl = templateControls({ store, ui, engine, getTarget: () => trackId, onDone: () => closeMenu(), variant: 'menu' });
-    menu.replaceChildren(back, tpl.node);
-    showMenu(btn);
   }
 
   document.addEventListener('pointerdown', (e) => {
@@ -718,6 +703,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const label = el('span', 'clip-label', cutName ? (clip.lengthBeats * ppb() < 72 ? cutName[2] : `${cutName[2]} · ${cutName[1]}`) : sample?.name ?? 'Fehlendes Sample');
     if (cutName) label.title = sample.name;
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
+    // Take-Clip (2.13): aktiver Take / Anzahl, nur Anzeige
+    if (clip.takes?.length > 1) { const t = el('span', 'clip-tag clip-take', `${clip.take + 1}/${clip.takes.length}`); t.title = `Take ${clip.take + 1} von ${clip.takes.length} (Alt+↑/↓)`; label.append(t); }
     if (clipGain(clip) > 1.001) label.append(el('span', 'clip-tag', formatDb(clipGain(clip))));
     // Geschwindigkeit wie im Inspektor (100 % = Original); „wie Tonband“ mit Zusatz
     if (clip.stretch && Math.abs(clip.stretch - 1) > 1e-6) {
@@ -841,8 +828,10 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   let freeView = false;
   let wasPlaying = false;
   let appLeft = root.scrollLeft;
-  const followChip = el('button', 'follow-chip', 'Marke folgen');
+  const followChip = el('button', 'follow-chip');
   followChip.type = 'button';
+  // Zeichen: Abspielmarke mit Pfeil darauf zu
+  followChip.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 2.5v11"/><path d="M2.5 8h6"/><path d="M6 5l3 3-3 3"/></svg><span>Marke folgen</span>';
   followChip.id = 'follow-btn';
   followChip.hidden = true;
   followChip.title = 'Die Ansicht folgt wieder der Abspielmarke';

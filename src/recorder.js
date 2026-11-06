@@ -5,9 +5,56 @@ import { Emitter } from './util.js';
 import { channelsToBuffer } from './own-sounds.js';
 import { loadRecPrefs } from './rec-prefs.js';
 import { cleanTake, features, classify, describe, mixMono } from './dsp/clean.js';
+import { clickTemplate, findClicks, summarize, CLICK } from './dsp/loopback.js';
+import { effectiveLatency, deviceKey, saveLatency } from './rec-settings.js';
 
 // Modus „sound“ (Krachwerk): ohne Vorzähler und ohne Song-Mitlauf; endet von selbst nach 1,2 s Stille nach dem Klang
 const SOUND_SILENCE = 1.2, SOUND_MAX = 10, SOUND_WAIT = 8;
+// Takes im Loop: höchstens so viele bleiben (die letzten)
+const MAX_TAKES = 16;
+const MIC = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+
+export const CAL_MESSAGES = {
+  silent: 'Kein Klick gehört – Lautsprecher lauter, Kopfhörer ab (oder ans Mikrofon halten), nochmal.',
+  unsteady: 'Unruhig gemessen – leiser Raum, nochmal.',
+  denied: 'Kein Zugriff auf das Mikrofon.',
+  unavailable: 'Aufnahmen gehen in dieser Ansicht nicht.',
+};
+
+// Durchgänge einer Loop-Aufnahme (Spec 2.13 B): anchors = [Song-Start, …Loop-Sprünge] in Kontextzeit.
+// from_k = round((anchor_k.time + latency) · sr) − first, jede Länge genau `frames`; ein Rest unter minFrames entfällt,
+// ein längerer wird beim Ausschneiden mit Stille aufgefüllt (complete: false)
+export function splitPasses({ total, first, sr, anchors, latency, frames, minFrames }) {
+  const out = [];
+  for (const a of anchors) {
+    const from = Math.round((a.time + latency) * sr) - first;
+    const avail = total - from;
+    if (avail <= 0) break;
+    const complete = avail >= frames;
+    if (!complete && avail < minFrames) continue;
+    out.push({ from, to: from + frames, complete });
+  }
+  return out;
+}
+
+// Ausschnitt [from, to) eines Kanals, außerhalb der Aufnahme Stille
+export function cutPass(ch, { from, to }) {
+  const out = new Float32Array(to - from);
+  const a = Math.max(0, from);
+  const b = Math.min(ch.length, to);
+  if (b > a) out.set(ch.subarray(a, b), a - from);
+  return out;
+}
+
+// Mitschnitt-Blöcke des Worklets zu zwei Kanälen
+function joinChunks(chunks) {
+  const total = chunks.reduce((n, c) => n + c.l.length, 0);
+  const l = new Float32Array(total);
+  const r = new Float32Array(total);
+  let o = 0;
+  for (const c of chunks) { l.set(c.l, o); r.set(c.r, o); o += c.l.length; }
+  return { l, r, total, first: chunks[0]?.frame ?? 0 };
+}
 
 export class RecorderError extends Error {
   constructor(code, message) { super(message); this.code = code; }
@@ -21,7 +68,11 @@ export class Recorder extends Emitter {
     this.own = own;
     this.state = 'idle'; // idle | arming | recording | saving
     this.workletLoaded = false;
-    engine.on((what) => { if (what === 'state' && !engine.playing && this.state === 'recording' && this.mode === 'song') this.finish(); });
+    this.calibrating = false;
+    engine.on((what, payload) => {
+      if (what === 'wrap' && this.loopRec) this.loopRec.wraps.push(payload);
+      if (what === 'state' && !engine.playing && this.state === 'recording' && this.mode === 'song') this.finish();
+    });
   }
 
   get supported() {
@@ -29,9 +80,10 @@ export class Recorder extends Emitter {
   }
 
   // mode: 'song' (Loopwerk: Vorzähler, Song läuft mit, Clip an der Marke) oder 'sound' (Krachwerk, s. o.)
+  // Loop an (nur Modus „song“): die Aufnahme beginnt am Loop-Anfang, jeder Durchgang wird ein Take
   // silence / maxSeconds: Stille nach dem Klang bzw. längste Aufnahme (Klatsch dein Kit: 2 s / 10 s); tag: Kennung für die Ablage
   async start({ trackId, startBeat, mode = 'song', silence = null, maxSeconds = null, tag = null }) {
-    if (this.state !== 'idle') return;
+    if (this.state !== 'idle' || this.calibrating) return;
     this.mode = mode;
     this.tag = tag;
     // Vorlieben (Reiter „Aufnahme“): ohne Stopp nach Stille endet die Aufnahme erst mit ● (oder nach 30 s); Kit-Aufnahmen haben ihre eigenen Werte
@@ -44,20 +96,37 @@ export class Recorder extends Emitter {
     this.state = 'arming';
     this.emit('state');
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: MIC });
     } catch (err) {
       this.state = 'idle';
       this.emit('state');
       throw new RecorderError('denied', 'Kein Zugriff auf das Mikrofon.');
     }
     const engine = this.engine;
-    await engine._ensure();
+    try {
+      await engine._ensure();
+      if (!this.workletLoaded) {
+        await engine.ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
+        this.workletLoaded = true;
+      }
+    } catch (err) {
+      // Mikrofon sofort wieder zu, Ausgabe zurücksetzen
+      this.stream.getTracks().forEach((t) => t.stop());
+      releaseOutput(engine);
+      this.state = 'idle';
+      this.emit('state');
+      throw new RecorderError('unavailable', 'Aufnahmen gehen in dieser Ansicht nicht.');
+    }
     const ctx = engine.ctx;
-    if (!this.workletLoaded) {
-      await ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
-      this.workletLoaded = true;
+    const loop = this.store.project.loop;
+    this.loopRec = null;
+    if (mode === 'song' && loop.on && loop.endBeat > loop.startBeat) {
+      startBeat = loop.startBeat;
+      const beats = loop.endBeat - loop.startBeat;
+      const bar = this.store.project.beatsPerBar * engine.spb * ctx.sampleRate;
+      this.loopRec = { startBeat, beats, frames: Math.round(beats * engine.spb * ctx.sampleRate), bar: Math.round(bar), wraps: [] };
+      // Loop und Tempo bleiben während der Aufnahme fest
+      this.store.lock = () => this.emit('locked');
     }
     this.chunks = [];
     this.trackId = trackId;
@@ -84,9 +153,10 @@ export class Recorder extends Emitter {
       this.emit('level', p);
       if ((auto.heard && auto.quiet >= this.silenceSec) || auto.total >= this.maxSec || (!auto.heard && !this.manual && auto.total >= SOUND_WAIT)) this.finish();
     };
-    // Latenz: Ausgabe (bis der Klick zu hören ist) plus Eingabe (bis das Mikrofon-Signal ankommt)
-    const inputLatency = this.stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
-    this.latency = (ctx.outputLatency || 0) + (ctx.baseLatency || 0) + inputLatency;
+    // Latenz: gemessener (oder geschätzter) Rundweg + Handkorrektur; der Song kommt zusätzlich um die Summe verzögert an
+    const eff = await effectiveLatency(ctx, this.stream, { song: mode === 'song' ? engine.playbackDelay() : 0 });
+    this.latency = eff.seconds;
+    this.latencyInfo = eff;
     if (mode === 'song') {
       await engine.play(startBeat, { countIn: this.store.project.beatsPerBar });
       this.songStartTime = engine.anchors[0].time;
@@ -105,6 +175,10 @@ export class Recorder extends Emitter {
     this.state = 'saving';
     this.emit('state');
     const ctx = this.engine.ctx;
+    const stopTime = ctx.currentTime; // ab hier spielt der Song nicht mehr
+    const loopRec = this.loopRec;
+    this.loopRec = null;
+    this.store.lock = null;
     await new Promise((resolve) => { this._done = resolve; this.node.port.postMessage('stop'); setTimeout(resolve, 500); });
     this.source.disconnect();
     this.node.disconnect();
@@ -113,23 +187,19 @@ export class Recorder extends Emitter {
     try {
       if (!this.chunks.length) throw new RecorderError('empty', 'Die Aufnahme ist leer.');
       const sr = ctx.sampleRate;
-      const first = this.chunks[0].frame;
-      const total = this.chunks.reduce((n, c) => n + c.l.length, 0);
-      const l = new Float32Array(total);
-      const r = new Float32Array(total);
-      let o = 0;
-      for (const c of this.chunks) { l.set(c.l, o); r.set(c.r, o); o += c.l.length; }
+      const { l, r, total, first } = joinChunks(this.chunks);
       if (this.mode === 'sound') return this._finishSound([l, r], sr);
+      if (loopRec) return await this._finishLoop({ l, r, total, first, sr, stopTime, loopRec });
       // Ab dem Song-Start (nach dem Vorzähler) plus Latenz behalten
       const from = Math.max(0, Math.round((this.songStartTime + this.latency) * sr) - first);
       if (total - from < sr * 0.1) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
       const buffer = channelsToBuffer([l.subarray(from), r.subarray(from)], sr);
-      const n = 1 + this.store.project.tracks.reduce((k, t) => k + t.clips.filter((c) => c.sampleId.startsWith('own-')).length, 0);
+      const n = this._recNumber();
       const sample = await this.own.create({ name: `Aufnahme ${n}`, buffer, source: 'Aufnahme' });
       const clipId = this.store.addClip(this.trackId, sample.id, this.startBeat, sample.lengthBeats);
       this.state = 'idle';
       this.emit('state');
-      this.emit('recorded', { sample, clipId });
+      this.emit('recorded', { sample, samples: [sample], clipId, clipIds: [clipId], takes: 1 });
       return { sample, clipId };
     } catch (err) {
       this.state = 'idle';
@@ -137,6 +207,127 @@ export class Recorder extends Emitter {
       this.emit('error', err);
       return null;
     }
+  }
+
+  _recNumber() {
+    return 1 + this.store.project.tracks.reduce((k, t) => k + t.clips.filter((c) => c.sampleId.startsWith('own-')).length, 0);
+  }
+
+  // Loop-Aufnahme: je Durchgang ein Take (gleich viele Frames), ein Clip über den Loop, der letzte volle Take spielt
+  async _finishLoop({ l, r, total, first, sr, stopTime, loopRec }) {
+    const end = Math.min(total, Math.round((stopTime + this.latency) * sr) - first);
+    const anchors = [{ time: this.songStartTime }, ...loopRec.wraps.filter((w) => w.time > this.songStartTime + 1e-6 && w.time < stopTime)];
+    const passes = splitPasses({ total: end, first, sr, anchors, latency: this.latency, frames: loopRec.frames, minFrames: loopRec.bar }).slice(-MAX_TAKES);
+    if (!passes.length) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
+    const n = this._recNumber();
+    const samples = [];
+    for (const [i, p] of passes.entries()) {
+      const buffer = channelsToBuffer([cutPass(l, p), cutPass(r, p)], sr);
+      const name = passes.length > 1 ? `Aufnahme ${n} · Take ${i + 1}` : `Aufnahme ${n}`;
+      samples.push(await this.own.create({ name, buffer, source: 'Aufnahme', from: 'mic' }));
+    }
+    let take = passes.length - 1;
+    while (take > 0 && !passes[take].complete) take--;
+    const clipIds = this.store.addRecordings([{ trackId: this.trackId, startBeat: loopRec.startBeat, lengthBeats: loopRec.beats, sampleIds: samples.map((s) => s.id), take }]);
+    this.state = 'idle';
+    this.emit('state');
+    this.emit('recorded', { sample: samples[take], samples, clipId: clipIds[0], clipIds, takes: samples.length, take });
+    return { sample: samples[take], clipId: clipIds[0], samples };
+  }
+
+  // Latenz einmessen (Spec 2.13 A): Song stoppt, Mikrofon auf, 6 Klicks über engine.out (an Summe und Limiter vorbei),
+  // Mitschnitt über das Aufnahme-Worklet auf derselben Uhr. Ergebnis { ms } oder RecorderError. Das Mikrofon geht immer
+  // wieder zu (auch bei Abbruch und Fehler), danach wird die Ausgabe zurückgesetzt (releaseOutput).
+  async calibrate() {
+    if (this.state !== 'idle' || this.calibrating) return null;
+    if (!this.supported) throw new RecorderError('unavailable', CAL_MESSAGES.unavailable);
+    const engine = this.engine;
+    if (engine.playing) engine.stop();
+    this.calibrating = true;
+    this.emit('state');
+    let stream = null, source = null, node = null, watchdog = 0;
+    const clicks = [];
+    const cal = { abort: null, cancelled: false };
+    this._cal = cal;
+    try {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: MIC });
+      } catch {
+        throw new RecorderError('denied', CAL_MESSAGES.denied);
+      }
+      if (cal.cancelled) throw new RecorderError('cancelled', '');
+      await engine._ensure();
+      if (engine.playing) engine.stop();
+      const ctx = engine.ctx;
+      if (!this.workletLoaded) {
+        await ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
+        this.workletLoaded = true;
+      }
+      if (cal.cancelled) throw new RecorderError('cancelled', '');
+      const sr = ctx.sampleRate;
+      const chunks = [];
+      source = ctx.createMediaStreamSource(stream);
+      node = new AudioWorkletNode(ctx, 'loopwerk-recorder', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
+      const sink = ctx.createGain();
+      sink.gain.value = 0;
+      source.connect(node).connect(sink).connect(ctx.destination);
+      const tpl = clickTemplate(sr);
+      const buf = new AudioBuffer({ numberOfChannels: 1, length: tpl.length, sampleRate: sr });
+      buf.copyToChannel(tpl, 0);
+      // Nur über die Kontextuhr geplant: +0,3 s, dann alle 0,6 s
+      const t0 = ctx.currentTime + CLICK.first;
+      const times = Array.from({ length: CLICK.count }, (_, k) => t0 + k * CLICK.gap);
+      for (const t of times) {
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(engine.out ?? ctx.destination);
+        src.start(t);
+        clicks.push(src);
+      }
+      const endFrame = Math.round((times[times.length - 1] + 0.5) * sr);
+      await new Promise((resolve, reject) => {
+        cal.abort = () => reject(new RecorderError('cancelled', ''));
+        // Nur wenn keine Daten mehr kommen (Mikrofon hängt): nach 2 s aufgeben
+        const arm = () => { clearTimeout(watchdog); watchdog = setTimeout(() => reject(new RecorderError('silent', CAL_MESSAGES.silent)), 2000); };
+        arm();
+        node.port.onmessage = (e) => {
+          if (e.data.done) return;
+          chunks.push(e.data);
+          arm();
+          // Datengesteuert: fertig, sobald ein Block hinter dem letzten Klick + 0,5 s liegt
+          if (e.data.frame + e.data.l.length >= endFrame) resolve();
+        };
+      });
+      const { l, r, first } = joinChunks(chunks);
+      const mono = new Float32Array(l.length);
+      for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (l[i] + r[i]);
+      const offsets = findClicks(mono, sr, times.map((t) => t * sr - first), { maxLatency: 0.5 });
+      const res = summarize(offsets, sr);
+      this.lastCalibration = { offsets, ...res };
+      if (res.error) throw new RecorderError(res.error, CAL_MESSAGES[res.error]);
+      const key = await deviceKey(stream, ctx);
+      const entry = saveLatency(key, { ms: Math.round(res.ms * 10) / 10, nudge: 0 });
+      this.emit('latency', { key, entry });
+      return { ms: res.ms, key, entry, offsets };
+    } finally {
+      clearTimeout(watchdog);
+      for (const c of clicks) { try { c.stop(); } catch { /* schon aus */ } c.disconnect(); }
+      if (node) { node.port.onmessage = null; node.port.postMessage('stop'); node.disconnect(); }
+      source?.disconnect();
+      stream?.getTracks().forEach((t) => t.stop());
+      if (stream) releaseOutput(engine);
+      if (this._cal === cal) this._cal = null;
+      this.calibrating = false;
+      this.emit('state');
+    }
+  }
+
+  // Einmessen abbrechen (Feld zu, Fach zu): Mikrofon sofort aus
+  cancelCalibrate() {
+    const cal = this._cal;
+    if (!cal) return;
+    cal.cancelled = true;
+    cal.abort?.();
   }
 
   // Krachwerk: säubern (Stille weg, Start auf dem Anschlag, Pegel), einordnen, benennen. Platzieren macht die UI.
@@ -177,13 +368,19 @@ export async function startMicCapture(engine, { beatsPerBar = 4 } = {}) {
   } catch {
     throw new RecorderError('denied', 'Kein Zugriff auf das Mikrofon.');
   }
-  await engine._ensure();
-  engine.stop();
-  const ctx = engine.ctx;
-  if (!micWorklet.has(ctx)) {
-    await ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
-    micWorklet.add(ctx);
+  try {
+    await engine._ensure();
+    engine.stop();
+    if (!micWorklet.has(engine.ctx)) {
+      await engine.ctx.audioWorklet.addModule(new URL('./dsp/recorder-worklet.js', import.meta.url));
+      micWorklet.add(engine.ctx);
+    }
+  } catch {
+    stream.getTracks().forEach((t) => t.stop());
+    releaseOutput(engine);
+    throw new RecorderError('unavailable', 'Aufnahmen gehen in dieser Ansicht nicht.');
   }
+  const ctx = engine.ctx;
   const chunks = [];
   let doneFn = null;
   const source = ctx.createMediaStreamSource(stream);
@@ -208,8 +405,9 @@ export async function startMicCapture(engine, { beatsPerBar = 4 } = {}) {
   clickSrc.connect(engine.out ?? ctx.destination);
   const t0 = ctx.currentTime + 0.1 + bar;
   clickSrc.start(t0 - bar);
-  const inputLatency = stream.getAudioTracks()[0]?.getSettings?.().latency || 0;
-  const latency = (ctx.outputLatency || 0) + (ctx.baseLatency || 0) + inputLatency;
+  // Der Klick läuft an der Summe vorbei: Rundweg (gemessen oder geschätzt) + Handkorrektur, ohne Verzögerung der Summe
+  let latency = 0;
+  try { latency = (await effectiveLatency(ctx, stream)).seconds; } catch { latency = 0; }
   let closed = false;
   const close = () => {
     if (closed) return;

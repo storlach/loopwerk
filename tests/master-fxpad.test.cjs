@@ -162,18 +162,8 @@ function registerSignals() {
     // ---------- Bedienung Mastering (Desktop) ----------
     await page.evaluate(() => { const { ui } = window.loopwerk; ui.select(null); ui.selectTrack(null); });
     await page.waitForTimeout(200);
-    await page.click('#insp-mst-ab-a');
-    await page.waitForTimeout(250);
-    const abA = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, a: window.loopwerk.engine.mix.aGain.gain.value, b: window.loopwerk.engine.mix.bBus.gain.value, t: document.getElementById('insp-mst-ab-a').getAttribute('aria-pressed') }));
-    await page.click('#insp-mst-ab-b');
-    await page.waitForTimeout(250);
-    const abB = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, a: window.loopwerk.engine.mix.aGain.gain.value, b: window.loopwerk.engine.mix.bBus.gain.value, t: document.getElementById('insp-mst-ab-b').getAttribute('aria-pressed') }));
-    check('Vergleich „Vorher“: A hörbar, B stumm', abA.ab === 'A' && abA.a > 0.3 && abA.b < 0.01 && abA.t === 'true', JSON.stringify(abA));
-    check('Vergleich „Nachher“: B leiser gestellt, A stumm', abB.ab === 'B' && abB.a < 0.01 && abB.b > 0.05 && abB.b < 0.99 && abB.t === 'true', JSON.stringify(abB));
-    await page.click('#insp-mst-ab-end');
-    await page.waitForTimeout(250);
-    const abN = await page.evaluate(() => ({ ab: window.loopwerk.engine.monitor.ab, b: window.loopwerk.engine.mix.bBus.gain.value }));
-    check('Vergleich „Aus“: wieder volle Lautheit', abN.ab === null && abN.b > 0.99, JSON.stringify(abN));
+    // Kein Vergleich mehr in der Oberfläche (Martin, Nov. 2026): Aus- und Einschalten genügt
+    check('Mastering ohne Zeile „Vergleich“', await page.evaluate(() => !document.querySelector('#insp-mst-ab-a, #insp-mst-ab-b, #insp-mst-ab-end, .mst-cmp')));
 
     await page.click('#insp-mst-style-warm');
     await page.waitForTimeout(150);

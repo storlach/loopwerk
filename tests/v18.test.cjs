@@ -283,7 +283,7 @@ const { check, finish } = createChecker();
     const roll = await rect('#pat-roll-wrap');
     check('Einsingen steht links neben der Piano-Roll', sing.r <= roll.x + 1 && roll.h > 60, JSON.stringify({ sing, roll }));
     await page.click('#pat-more-btn');
-    check('„Mehr“ enthält Name, Notenlänge, Einrasten, Schritt-Eingabe, Leeren', await page.evaluate(() => ['pat-name', 'pat-len-field', 'pat-quant-field', 'pat-rec', 'pat-clear'].every((id) => document.getElementById(id).closest('#pat-more'))));
+    check('„Mehr“ enthält Notenlänge, Einrasten, Schritt-Eingabe, Leeren', await page.evaluate(() => ['pat-len-field', 'pat-quant-field', 'pat-rec', 'pat-clear'].every((id) => document.getElementById(id).closest('#pat-more'))));
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
 
@@ -360,6 +360,7 @@ const { check, finish } = createChecker();
     // ---------- Sample-Editor: alle Werkzeuge in einer Ansicht ----------
     await page.evaluate(() => { const { store, editor } = window.loopwerk; editor.open(store.track('t4').clips[0].id); });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
+    await page.click('#clip-more'); // Tonhöhe, Autotune, Trennen, Loop sind eingeklappt, damit die Wellenform das Fach füllt
     const edv = await page.evaluate(() => ({
       groups: [...document.querySelectorAll('#editor .ed-group')].filter((g) => g.offsetParent).map((g) => g.getAttribute('aria-label')),
       tabs: document.querySelectorAll('#editor .ed-tab, #editor [role="tab"]').length,

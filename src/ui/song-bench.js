@@ -4,7 +4,7 @@
 // (setBpm, setKey, setLength, setProjectName, setMaster, setTrack, setMastering); Speichern, Öffnen, Sichern liegen außerhalb des Undo.
 
 import { MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
-import { masterOf, masteringOf } from '../engine.js';
+import { masterOf } from '../engine.js';
 import { ingredients } from '../recipe.js';
 import { exportRange, EXPORT_TAIL } from '../export.js';
 import { el } from '../util.js';
@@ -284,8 +284,7 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
     const { grund, fine } = panels.fertig;
     const mst = el('div', 'sb-mst');
     grund.append(mst);
-    let cmpRow = null;
-    if (mastering) cmpRow = mountMasteringControls(mst, { store, engine, analysis: mastering, prefix: 'sb-mst', split: true }).cmpRow;
+    if (mastering) mountMasteringControls(mst, { store, engine, analysis: mastering, prefix: 'sb-mst' });
     const loopBtn = toggle(grund, 'Nur Loop-Bereich', 'sb-loop', () => exporter.setLoopOnly(!exporter.loopOnly));
     const shareBtn = el('button', 'wb-btn', 'Teilen');
     shareBtn.type = 'button';
@@ -299,7 +298,6 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
     const stems = toggle(fine, 'Einzelspuren (ZIP)', 'sb-stems', () => exporter.setPref('stems', !exporter.prefs.stems));
     const tail = toggle(fine, 'Ausklang am Ende', 'sb-tail', () => exporter.setPref('tail', !exporter.prefs.tail));
     const list = toggle(fine, 'Zutatenliste mitgeben', 'sb-list', () => exporter.setPref('list', !exporter.prefs.list));
-    if (cmpRow) { cmpRow.id = 'sb-mst-cmp'; fine.append(cmpRow); }
     updaters.push(() => {
       const p = store.project;
       const hasLoop = p.loop.endBeat > p.loop.startBeat;
@@ -307,7 +305,6 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
       loopBtn.setAttribute('aria-pressed', String(hasLoop && exporter.loopOnly));
       shareBtn.hidden = !(narrow.matches && exporter.canShare());
       for (const [b, k] of [[mp3, 'mp3'], [stems, 'stems'], [tail, 'tail'], [list, 'list']]) b.setAttribute('aria-pressed', String(!!exporter.prefs[k]));
-      if (cmpRow) cmpRow.hidden = !masteringOf(p).on;
       zut.textContent = ingredients(p, library, { app: appName }).summary;
     });
   }

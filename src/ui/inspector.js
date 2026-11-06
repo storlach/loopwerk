@@ -4,7 +4,7 @@
 // Nichts → Song: Tempo, Tonart, Länge, Master und Master-Effekte. Effekte haben damit genau einen Ort.
 
 import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busOf, sendOf, busParamDef } from '../effects.js';
-import { applyOrder, mountFxDrag, orderText, resetLink } from './fx-order.js';
+import { applyOrder, gripEl, mountFxDrag, orderText, resetLink } from './fx-order.js';
 import { clipGain, gainToSlider, sliderToGain, GAIN_SLIDER_MAX, MIN_BPM, MAX_BPM, keyChangesOf } from '../model.js';
 import { masterOf } from '../engine.js';
 import { clamp, el } from '../util.js';
@@ -17,8 +17,9 @@ import { hasOwnTempo, soundBpm, fmtBpm, setSoundBpm as setSoundBpmOf, useAsSongT
 import { mountSoundKey } from './sound-key.js';
 import { mountMasteringControls } from './mastering.js';
 import { mountClipSpeed } from './clip-speed.js';
-import { autoLock, lockedValue, templateControls, MASTER_TEMPLATES } from './auto-lane.js';
-import { AUTO_PARAMS, autoKeys, busUsed, isAutomated, laneOf, sendKey } from '../automation.js';
+import { mountTakeRow } from './take-row.js';
+import { autoLock, lockedValue } from './auto-lane.js';
+import { AUTO_PARAMS, busUsed, isAutomated, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
 
 // Laufzeit-Stufen für − und +
@@ -139,7 +140,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const skey = mountSoundKey({ store, prefix: 'insp', className: 'insp-row insp-skey' });
   // Mit clipPanel (Sound-Werkbank) entfällt der alte Clip-Abschnitt ganz; Teilen/Kopie/Löschen sind Werkzeug am Clip
   const panel = clipPanel ? clipPanel(clipSec, { store, ui, library, engine, tools }) : null;
-  if (!panel) clipSec.append(clipHead, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, skey.row, btns);
+  // Takes einer Loop-Aufnahme (2.13): 1 2 3 ×, nur bei Take-Clips
+  const takeRow = mountTakeRow({ store, library, ui });
+  if (!panel) clipSec.append(clipHead, takeRow.row, gain.row, fin.row, cin.row, fout.row, cout.row, speedSlot, stempo, skey.row, btns);
 
   const selClip = () => (ui.selectedClipId ? store.findClip(ui.selectedClipId)?.clip : null);
   gain.input.addEventListener('input', () => { const c = selClip(); if (c) store.setClip(c.id, { gain: sliderToGain(Number(gain.input.value)) }, 'insp-gain-' + c.id); });
@@ -176,23 +179,8 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const mixerLink = el('button', 'insp-link', 'Alle Spuren im Mixer vergleichen →');
   mixerLink.type = 'button';
   mixerLink.addEventListener('click', () => ui.setDock('mixer'));
-  // Verlauf: Ein-/Ausblenden der Spur als Kurve, ohne Zeichnen (Automation)
-  const autoBlock = el('div', 'insp-auto');
-  const tpl = templateControls({ store, ui, engine, getTarget: () => (trackId === MASTER ? null : trackId) });
-  const curveBtn = el('button', 'insp-link', 'Kurve zeigen');
-  curveBtn.type = 'button';
-  curveBtn.id = 'insp-auto-toggle';
-  curveBtn.addEventListener('click', () => { if (trackId && trackId !== MASTER) ui.autoLane?.toggle(trackId); });
-  autoBlock.append(el('span', 'insp-kind', 'Verlauf'), tpl.node, curveBtn);
-  // Kompakt: Verlauf und Kurven erst unter „Feinheiten“
-  let autoOpen = false;
-  const fineBtn = el('button', 'wb-fine-btn', 'Feinheiten');
-  fineBtn.type = 'button';
-  fineBtn.id = 'insp-fine';
-  fineBtn.setAttribute('aria-expanded', 'false');
-  fineBtn.hidden = !fxCompact;
-  fineBtn.addEventListener('click', () => { autoOpen = !autoOpen; render(); });
-  trackSec.append(trackHead, vol.row, panBox, fineBtn, autoBlock);
+  // Kein „Verlauf“ mehr im Inspektor: Kurven über Spur-Menü ⋯, Kurven-Knopf im Spurkopf, „Summe“ und Taste A
+  trackSec.append(trackHead, vol.row, panBox);
   // Stumm und Solo der Spur (in „calm“ am Handy nicht mehr im Spurkopf)
   let msBtns = null;
   if (calm) {
@@ -240,7 +228,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const name = el('span', 'fxl-name', e.label);
     name.addEventListener('click', () => sw.click());
     const sum = el('span', 'fxl-sum');
-    head.append(sw, name, sum);
+    head.append(sw, name, sum, gripEl());
     const params = el('div', 'fxl-params');
     const ctl = new Map();
     for (const [k, p] of Object.entries(e.params)) {
@@ -281,7 +269,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const fxDrag = mountFxDrag(fxl, {
     ids: EFFECT_IDS,
     itemOf: (id) => items.get(id).item,
-    handleOf: (id) => items.get(id).item.querySelector('.fxl-name'),
+    handleOf: (id) => items.get(id).item.querySelector('.fxl-head'),
     getOrder: () => fxOrderOf(fxOwner()),
     onMove: (id, to) => {
       if (!trackId) return;
@@ -388,23 +376,12 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   lenIn.addEventListener('input', () => { lenOut.textContent = `${lenIn.value} Takte`; });
   lenRow.append(el('span', null, 'Länge'), lenOut, lenIn);
   const masterSub = el('p', 'insp-sub', 'Master');
-  // Verlauf der Summe: Ein-/Ausblenden über alle Clips (Ausblenden endet am letzten Clip bzw. Songende), Summen-Zeile
-  const masterAuto = el('div', 'insp-auto');
-  masterAuto.id = 'insp-master-auto';
-  const masterTpl = templateControls({ store, ui, engine, getTarget: () => 'master', names: MASTER_TEMPLATES });
-  const masterCurve = el('button', 'insp-link', 'Summen-Kurve zeigen (A)');
-  masterCurve.type = 'button';
-  masterCurve.id = 'insp-master-curve';
-  masterCurve.addEventListener('click', () => ui.autoLane?.toggle('master'));
-  masterAuto.append(el('span', 'insp-kind', 'Verlauf der Summe'), masterTpl.node, masterCurve);
-  // Song-Leiste in Blöcken nach dem Signalweg: Song · Master (Lautstärke, Effekte) · Verlauf der Summe · Mastering
+  // Song-Leiste in Blöcken nach dem Signalweg: Song · Master (Lautstärke, Effekte) · Busse · Mastering
   const grp = (cls) => el('div', `insp-grp ${cls}`);
   const songGrp = grp('insp-grp-song');
   songGrp.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools);
   const masterGrp = grp('insp-grp-master');
   masterGrp.append(masterSub);
-  const autoGrp = grp('insp-grp-auto');
-  autoGrp.append(masterAuto);
   // Busse: Rückkanal-Lautstärke und Effekt-Einstellungen (der einzige Ort dafür am Desktop)
   const busGrp = grp('insp-grp-buses');
   busGrp.id = 'insp-buses';
@@ -444,7 +421,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     busGrp.append(box);
   }
   const mstSlot = grp('insp-mst');
-  songSec.append(songGrp, masterGrp, busGrp, autoGrp, mstSlot);
+  songSec.append(songGrp, masterGrp, busGrp, mstSlot);
   if (mastering && !songPanel) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
@@ -489,6 +466,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       const from = Math.floor(clip.startBeat / bpb) + 1;
       const to = Math.ceil((clip.startBeat + clip.lengthBeats) / bpb - 1e-9);
       const bars = clip.lengthBeats / bpb;
+      takeRow.update(clip);
       clipMeta.textContent = `Takt ${from}${to > from ? `–${to}` : ''} · ${Number.isInteger(bars) ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : fmtBeats(clip.lengthBeats)}`;
       const setR = (r, v, max, text) => { r.input.max = String(max); if (document.activeElement !== r.input) r.input.value = String(v); r.out.textContent = text; };
       setR(gain, gainToSlider(clipGain(clip)), GAIN_SLIDER_MAX, formatDb(clipGain(clip)));
@@ -523,9 +501,6 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       vol.out.textContent = formatDb(track.volume);
       for (const [k, b] of msBtns || []) b.setAttribute('aria-pressed', String(!!track[k]));
       pan.row.hidden = false;
-      autoBlock.hidden = false;
-      tpl.update();
-      curveBtn.textContent = ui.autoLane?.isOpen(trackId) ? 'Kurve schließen (A)' : 'Kurve zeigen (A)';
       if (panLock.update(track)) showPan(track);
       else {
         if (document.activeElement !== pan.input) pan.input.value = String(track.pan || 0);
@@ -540,14 +515,10 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         r.row.classList.toggle('on', v > 0);
       }
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
-      autoBlock.hidden = fxCompact && !autoOpen;
-      fineBtn.setAttribute('aria-expanded', String(autoOpen));
     } else if (mode === 'sound') {
       trackId = null;
-      autoBlock.hidden = true;
     } else {
       trackId = MASTER;
-      autoBlock.hidden = true;
       volLabel.textContent = 'Master-Lautstärke';
       songName.textContent = store.project.name || 'Song';
       renderKeyChanges();
@@ -557,11 +528,6 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       // Master-Lautstärke und Master-Effekte unter „Master“
       const m = masterOf(store.project);
       if (sb) { if (fxl.parentElement !== sb.slots.fx) sb.slots.fx.append(fxl, fxReset.node, addFx, fxPick); } else if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl, fxReset.node);
-      masterTpl.update();
-      const open = !!ui.autoLane?.isOpen('master');
-      const has = autoKeys('master').some((k) => laneOf(m, k).length);
-      masterCurve.textContent = open ? 'Summen-Kurve schließen (A)' : 'Summen-Kurve zeigen (A)';
-      masterCurve.classList.toggle('lit', has);
       if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
       vol.out.textContent = formatDb(m.volume);
       // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)

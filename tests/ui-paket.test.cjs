@@ -338,12 +338,13 @@ async function editorTest(vp, name, touch) {
     await page.evaluate(() => { const { store, editor } = window.loopwerk; editor.open(store.project.tracks.find((x) => x.clips.length).clips[0].id); });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
     await page.waitForTimeout(600);
+    await page.click('#clip-more'); // Tonhöhe, Autotune, Trennen, Loop sind eingeklappt; Schnittwerkzeuge stehen oben im Kopf
     const d = await page.evaluate(() => {
       const ed = document.getElementById('editor');
       const groups = [...ed.querySelectorAll('.ed-group')];
       const vis = (n) => n.offsetParent !== null && n.getBoundingClientRect().height > 0;
       const wave = ed.querySelector('.ed-wave-wrap').getBoundingClientRect();
-      const gr = groups.map((g) => g.getBoundingClientRect());
+      const gr = [...ed.querySelectorAll('#ed-tools .ed-group')].map((g) => g.getBoundingClientRect());
       return {
         tabs: ed.querySelectorAll('.ed-tab, [role="tab"], .ed-tabs').length,
         visible: groups.filter(vis).length, total: groups.length,
@@ -376,7 +377,25 @@ async function editorTest(vp, name, touch) {
   await app.close();
 }
 
+// ---------- Deck passt in jede Desktop-Breite (bei 1440 px fiel „Exportieren“ hinten raus) ----------
+async function deckFitTest() {
+  for (const w of [1100, 1280, 1366, 1440, 1520, 1600, 1920]) {
+    const app = await openApp({ viewport: { width: w, height: 900 } });
+    try {
+      const r = await app.page.evaluate(() => {
+        const d = document.querySelector('.deck');
+        const cut = [...d.querySelectorAll('button, input, select, .lcd-cell')].filter((n) => n.offsetParent).filter((n) => n.getBoundingClientRect().right > d.getBoundingClientRect().right + 0.5).map((n) => (n.textContent || n.id).trim().slice(0, 16));
+        return { over: d.scrollWidth - d.clientWidth, cut };
+      });
+      check(`Deck ${w} px: nichts abgeschnitten`, r.over <= 0 && !r.cut.length, JSON.stringify(r));
+    } finally {
+      await app.close();
+    }
+  }
+}
+
 (async () => {
+  await deckFitTest();
   await muteTest({ width: 1400, height: 900 }, 'Desktop');
   await muteTest({ width: 390, height: 844 }, 'Handy');
   await inspectorTest();

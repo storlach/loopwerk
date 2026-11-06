@@ -124,7 +124,7 @@ export function audibleMap(project) {
 // benutzter Varianten (ADR 010, kein eigenes Audio)
 export function usedSampleIds(project) {
   const ids = new Set();
-  for (const t of project.tracks || []) for (const c of t.clips || []) ids.add(c.sampleId);
+  for (const t of project.tracks || []) for (const c of t.clips || []) for (const id of clipSampleIds(c)) ids.add(id); // auch inaktive Takes
   for (const k of Object.values(project.kits || {})) for (const id of Object.values(k?.map || {})) if (typeof id === 'string') ids.add(id);
   for (const i of Object.values(project.instruments || {})) if (typeof i?.sampleId === 'string') ids.add(i.sampleId);
   for (const id of [...ids]) { const parent = project.recipes?.[id]?.parent; if (parent) ids.add(parent); }
@@ -205,7 +205,30 @@ export function normalizeClip(clip) {
   clip.fadeOutBeats = fo;
   for (const k of ['fadeInCurve', 'fadeOutCurve']) if (clip[k] != null) clip[k] = fadeCurveOf(clip[k]);
   if (clip.mute) clip.mute = true; else delete clip.mute;
+  normalizeTakes(clip);
   return clip;
+}
+
+// Takes (ADR 009): takes = sampleIds der Durchgänge (≥ 2, eindeutig), take = aktiver Index, immer takes[take] === sampleId.
+// Wer sampleId ersetzt (Editor „Übernehmen“), ersetzt damit den aktiven Take. Die Liste wird nie an Ort und Stelle geändert.
+function normalizeTakes(clip) {
+  if (clip.takes == null && clip.take == null) return;
+  const raw = Array.isArray(clip.takes) ? clip.takes : [];
+  let take = Number.isInteger(clip.take) ? clip.take : raw.indexOf(clip.sampleId);
+  take = Math.max(0, Math.min(raw.length - 1, take));
+  const list = raw.slice();
+  if (list.length) list[take] = clip.sampleId;
+  const out = [];
+  for (const id of list) if (typeof id === 'string' && id && !out.includes(id)) out.push(id);
+  if (out.length < 2 || !out.includes(clip.sampleId)) { delete clip.takes; delete clip.take; return; }
+  const same = raw.length === out.length && raw.every((id, i) => id === out[i]);
+  if (!same) clip.takes = out;
+  clip.take = out.indexOf(clip.sampleId);
+}
+
+// Alle Sounds, die ein Clip braucht (aktiver und inaktive Takes) – für Einbetten, Löschschutz, Laden, „Sound fehlt“
+export function clipSampleIds(clip) {
+  return clip.takes?.length ? [...new Set([clip.sampleId, ...clip.takes])] : [clip.sampleId];
 }
 
 // Krümmung eines Fades: −1 (langsam, exponentiell) … 0 (linear) … 1 (schnell, logarithmisch). Fehlt sie, ist er linear.
@@ -467,7 +490,8 @@ export class Store extends Emitter {
         if (t.autoName) t.name = t.baseName || 'Spur ' + (i + 1);
         return;
       }
-      const name = this.sampleName(first.sampleId);
+      // Take-Clip: die Spur heißt wie die Aufnahme, nicht wie der gerade aktive Take
+      const name = first.takes ? this.sampleName(first.sampleId)?.replace(/ · Take \d+$/, '') : this.sampleName(first.sampleId);
       if (!name) return;
       if (!t.autoName) t.baseName = t.name;
       t.name = name.slice(0, 32);
@@ -531,6 +555,62 @@ export class Store extends Emitter {
       this._raise(track, clip);
     });
     return id;
+  }
+
+  // Aufnahmen (2.13): items = [{ trackId, startBeat, lengthBeats, sampleIds, take }] → clipIds. Ein Rückgängig-Schritt,
+  // auch für mehrere Spuren. Mit mehreren sampleIds entsteht ein Take-Clip, der takes[take] spielt.
+  addRecordings(items) {
+    const ids = items.map(() => this.newId());
+    this.batch('Aufnahme', () => {
+      items.forEach((it, i) => {
+        const track = this.track(it.trackId);
+        const list = (it.sampleIds || []).filter(Boolean);
+        if (!track || !list.length) { ids[i] = null; return; }
+        const { start, length } = this._fit(it.startBeat, it.lengthBeats);
+        const take = Math.max(0, Math.min(list.length - 1, Number.isInteger(it.take) ? it.take : list.length - 1));
+        const clip = { id: ids[i], sampleId: list[take], startBeat: start, lengthBeats: length, offsetBeats: 0 };
+        if (list.length > 1) Object.assign(clip, { takes: [...list], take });
+        track.clips.push(normalizeClip(clip));
+        this._raise(track, clip);
+      });
+    });
+    return ids;
+  }
+
+  // Take wechseln: nur sampleId und take ändern sich (Engine, Signatur und Export bleiben, wie sie sind)
+  setClipTake(clipId, index) {
+    const c = this.findClip(clipId)?.clip;
+    if (!c?.takes || !Number.isInteger(index) || index < 0 || index >= c.takes.length || index === c.take) return false;
+    this.dispatch('take', () => {
+      const clip = this.findClip(clipId).clip;
+      clip.take = index;
+      clip.sampleId = clip.takes[index];
+      normalizeClip(clip);
+    });
+    return true;
+  }
+
+  stepClipTake(clipId, dir) {
+    const c = this.findClip(clipId)?.clip;
+    if (!c?.takes) return false;
+    const n = c.takes.length;
+    return this.setClipTake(clipId, (((c.take + dir) % n) + n) % n);
+  }
+
+  // Take aus der Liste nehmen (der Sound bleibt unter „Eigene“). War er aktiv, spielt der letzte verbleibende;
+  // bleibt nur einer, wird es ein normaler Clip.
+  removeTake(clipId, index) {
+    const c = this.findClip(clipId)?.clip;
+    if (!c?.takes || index < 0 || index >= c.takes.length) return false;
+    this.dispatch('take-remove', () => {
+      const clip = this.findClip(clipId).clip;
+      const next = clip.takes.filter((_, i) => i !== index);
+      const take = index === clip.take ? next.length - 1 : clip.take > index ? clip.take - 1 : clip.take;
+      clip.sampleId = next[take];
+      if (next.length < 2) { delete clip.takes; delete clip.take; } else { clip.takes = next; clip.take = take; }
+      normalizeClip(clip);
+    });
+    return true;
   }
 
   moveClip(clipId, trackId, startBeat, { copy = false } = {}) {
@@ -902,7 +982,7 @@ export class Store extends Emitter {
         ids.push(id);
         p.tracks.splice(at++, 0, {
           id, name: s.name.slice(0, 32), volume: track.volume, pan: track.pan || 0, mute: false, solo: false, autoName: false,
-          clips: [normalizeClip({ ...clip, id: this.newId(), sampleId: s.sampleId })],
+          clips: [normalizeClip({ ...clip, id: this.newId(), sampleId: s.sampleId, takes: undefined, take: undefined })],
           ...(track.automation ? { automation: JSON.parse(JSON.stringify(track.automation)) } : {}),
           // Getrennte Ebenen bleiben im selben Raum (Send-Busse)
           ...(track.sends ? { sends: { ...track.sends } } : {}),
@@ -1295,7 +1375,7 @@ export class Store extends Emitter {
       p.recipes = { ...(p.recipes || {}), [vr]: rec };
       const tempo = p.sampleTempo?.[sampleId];
       if (tempo != null) p.sampleTempo = { ...p.sampleTempo, [vr]: tempo };
-      if (clipId) for (const t of p.tracks) for (const c of t.clips) if (c.id === clipId) c.sampleId = vr;
+      if (clipId) for (const t of p.tracks) for (const c of t.clips) if (c.id === clipId) { c.sampleId = vr; normalizeClip(c); }
     });
     return vr;
   }
@@ -1501,13 +1581,16 @@ export class Store extends Emitter {
     });
   }
 
+  // lock (Funktion, z. B. während einer Loop-Aufnahme): Tempo und Loop bleiben fest, der Versuch wird gemeldet
   setBpm(bpm) {
     const v = Math.round(Math.min(MAX_BPM, Math.max(MIN_BPM, bpm)) * 10) / 10;
     if (v === this.project.bpm) return;
+    if (this.lock) { this.lock('tempo'); this.emit(this.project, 'locked'); return; }
     this.dispatch('tempo', (p) => { p.bpm = v; });
   }
 
   setLoop(patch) {
+    if (this.lock) { this.lock('loop'); this.emit(this.project, 'locked'); return; }
     this.dispatch('loop', (p) => Object.assign(p.loop, patch));
   }
 

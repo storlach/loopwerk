@@ -1,0 +1,14 @@
+{
+  "name": "loopwerk-figma-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Figma-Plugin: erzeugt das Loopwerk-Design-System „Phosphor“ (Variablen, Stile, Komponenten, Screens)",
+  "scripts": {
+    "check": "tsc -p jsconfig.json && node check-syntax.cjs && node mock-run.cjs"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "acorn": "^8.12.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -211,6 +211,8 @@ const { check, finish } = createChecker();
     await page.tap('#undo-btn');
     await page.tap('#tab-song');
     await page.waitForTimeout(400); // Mixer fährt hinaus
+    // Seit 2.13 ist das Song-Fach so hoch wie der Mixer: der Mixer bleibt liegen, bis er ganz bedeckt ist (sheets.js)
+    await page.waitForFunction(() => !document.getElementById('mixer').classList.contains('leaving'), null, { timeout: 3000 }).catch(() => {});
     check('„Song“ ersetzt den Mixer', (await lw()).dock === 'song' && !(await page.locator('#mixer').isVisible()) && await page.locator('#song').isVisible());
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mobil-song.png') });
     await page.tap('#export-btn');
@@ -344,7 +346,8 @@ const { check, finish } = createChecker();
     }));
     check('Desktop: Knöpfe zurück im Deck, dieselbe Fachleiste ohne Sounds/Song, Regal sichtbar', desk.back && desk.tabs === 'flex' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
     check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
-    check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,metro-btn', desk.order);
+    // 2.13: ▾ (Feld „Aufnahme“) sitzt direkt rechts am ●
+    check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,rec-more-wrap,metro-btn', desk.order);
     // Deck-Gruppen: Rückgängig/Wiederholen vor dem Projekt, Projekt-Menü und Export nebeneinander, Haarlinien dazwischen;
     // auf jeder Desktop-Breite eine Zeile ohne Querverschiebung
     const groups = await page.evaluate(() => {
