@@ -4,7 +4,7 @@
 import { Emitter } from './util.js';
 import { channelsToBuffer } from './own-sounds.js';
 import { loadRecPrefs } from './rec-prefs.js';
-import { cleanTake, features, classify, describe, mixMono } from './dsp/clean.js';
+import { cleanTake, features, classify, describe, mixMono, highpass, isDoubleMono, PEAK_TARGET } from './dsp/clean.js';
 import { clickTemplate, findClicks, summarize, CLICK } from './dsp/loopback.js';
 import { effectiveLatency, deviceKey, saveLatency } from './rec-settings.js';
 
@@ -12,6 +12,8 @@ import { effectiveLatency, deviceKey, saveLatency } from './rec-settings.js';
 const SOUND_SILENCE = 1.2, SOUND_MAX = 10, SOUND_WAIT = 8;
 // Takes im Loop: höchstens so viele bleiben (die letzten)
 const MAX_TAKES = 16;
+// startAt 'next-wrap': ein Loop-Sprung zählt nur, wenn er so weit in der Zukunft liegt, dass der Mitschnitt schon läuft
+const WRAP_MARGIN = 0.03;
 const MIC = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
 
 export const CAL_MESSAGES = {
@@ -70,7 +72,7 @@ export class Recorder extends Emitter {
     this.workletLoaded = false;
     this.calibrating = false;
     engine.on((what, payload) => {
-      if (what === 'wrap' && this.loopRec) this.loopRec.wraps.push(payload);
+      if (what === 'wrap' && this.loopRec) this._onWrap(payload);
       if (what === 'state' && !engine.playing && this.state === 'recording' && this.mode === 'song') this.finish();
     });
   }
@@ -82,10 +84,15 @@ export class Recorder extends Emitter {
   // mode: 'song' (Loopwerk: Vorzähler, Song läuft mit, Clip an der Marke) oder 'sound' (Krachwerk, s. o.)
   // Loop an (nur Modus „song“): die Aufnahme beginnt am Loop-Anfang, jeder Durchgang wird ein Take
   // silence / maxSeconds: Stille nach dem Klang bzw. längste Aufnahme (Klatsch dein Kit: 2 s / 10 s); tag: Kennung für die Ablage
-  async start({ trackId, startBeat, mode = 'song', silence = null, maxSeconds = null, tag = null }) {
+  // startAt 'next-wrap' (Krachwerk 3b): läuft der Song im Loop, beginnt die Aufnahme am nächsten Loop-Sprung – ohne Stopp,
+  // ohne Vorzähler; ● beendet nur die Aufnahme, der Song spielt weiter. Sonst wie ohne startAt.
+  // takeShape 'raw': Takes ohne Säubern, nur Hochpass 45 Hz und ein gemeinsamer Pegel (lautester Take: Spitze 0,89)
+  async start({ trackId, startBeat, mode = 'song', silence = null, maxSeconds = null, tag = null, startAt = null, takeShape = null }) {
     if (this.state !== 'idle' || this.calibrating) return;
     this.mode = mode;
     this.tag = tag;
+    this.takeShape = takeShape;
+    this.atWrap = false;
     // Vorlieben (Reiter „Aufnahme“): ohne Stopp nach Stille endet die Aufnahme erst mit ● (oder nach 30 s); Kit-Aufnahmen haben ihre eigenen Werte
     const prefs = loadRecPrefs();
     this.manual = silence == null && !prefs.autoStop;
@@ -124,7 +131,8 @@ export class Recorder extends Emitter {
       startBeat = loop.startBeat;
       const beats = loop.endBeat - loop.startBeat;
       const bar = this.store.project.beatsPerBar * engine.spb * ctx.sampleRate;
-      this.loopRec = { startBeat, beats, frames: Math.round(beats * engine.spb * ctx.sampleRate), bar: Math.round(bar), wraps: [] };
+      this.atWrap = startAt === 'next-wrap' && engine.playing;
+      this.loopRec = { startBeat, beats, frames: Math.round(beats * engine.spb * ctx.sampleRate), bar: Math.round(bar), wraps: [], atWrap: this.atWrap, armed: false };
       // Loop und Tempo bleiben während der Aufnahme fest
       this.store.lock = () => this.emit('locked');
     }
@@ -157,7 +165,16 @@ export class Recorder extends Emitter {
     const eff = await effectiveLatency(ctx, this.stream, { song: mode === 'song' ? engine.playbackDelay() : 0 });
     this.latency = eff.seconds;
     this.latencyInfo = eff;
-    if (mode === 'song') {
+    if (this.atWrap && this.loopRec && engine.playing) {
+      // Ab jetzt zählen Sprünge; schon geplante (Vorlauf), die noch bevorstehen, gehören dazu
+      const lr = this.loopRec;
+      lr.armed = true;
+      this.songStartTime = null;
+      const now = ctx.currentTime;
+      for (const a of engine.anchors) if (Math.abs(a.beat - lr.startBeat) < 1e-6 && a.time > now + WRAP_MARGIN) this._onWrap(a);
+    } else if (mode === 'song') {
+      this.atWrap = false;
+      if (this.loopRec) this.loopRec.atWrap = false;
       await engine.play(startBeat, { countIn: this.store.project.beatsPerBar });
       this.songStartTime = engine.anchors[0].time;
     }
@@ -165,9 +182,31 @@ export class Recorder extends Emitter {
     this.emit('state');
   }
 
+  // Loop-Sprung während der Aufnahme. Bei startAt 'next-wrap' ist der erste Sprung der Beginn (Ereignis 'pass' je Durchgang)
+  _onWrap(w) {
+    const lr = this.loopRec;
+    if (!lr) return;
+    if (!lr.atWrap) { lr.wraps.push(w); return; }
+    if (!lr.armed) return;
+    if (this.songStartTime == null) {
+      if (w.time <= this.engine.ctx.currentTime + WRAP_MARGIN) return;
+      this.songStartTime = w.time;
+      this.emit('pass', { index: 0, time: w.time });
+      return;
+    }
+    if (w.time <= this.songStartTime + 1e-6 || lr.wraps.some((x) => Math.abs(x.time - w.time) < 1e-6)) return;
+    lr.wraps.push(w);
+    this.emit('pass', { index: lr.wraps.length, time: w.time });
+  }
+
+  // Wartet die Aufnahme noch auf den ersten Loop-Sprung (startAt 'next-wrap')?
+  get waiting() {
+    return this.state === 'recording' && this.atWrap && this.songStartTime == null;
+  }
+
   stop() {
     if (this.state !== 'recording') return;
-    if (this.mode === 'sound') this.finish(); else this.engine.stop();
+    if (this.mode === 'sound' || this.atWrap) this.finish(); else this.engine.stop();
   }
 
   async finish() {
@@ -189,7 +228,10 @@ export class Recorder extends Emitter {
       const sr = ctx.sampleRate;
       const { l, r, total, first } = joinChunks(this.chunks);
       if (this.mode === 'sound') return this._finishSound([l, r], sr);
-      if (loopRec) return await this._finishLoop({ l, r, total, first, sr, stopTime, loopRec });
+      if (loopRec) {
+        if (loopRec.atWrap && this.songStartTime == null) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
+        return await this._finishLoop({ l, r, total, first, sr, stopTime, loopRec });
+      }
       // Ab dem Song-Start (nach dem Vorzähler) plus Latenz behalten
       const from = Math.max(0, Math.round((this.songStartTime + this.latency) * sr) - first);
       if (total - from < sr * 0.1) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
@@ -220,18 +262,21 @@ export class Recorder extends Emitter {
     const passes = splitPasses({ total: end, first, sr, anchors, latency: this.latency, frames: loopRec.frames, minFrames: loopRec.bar }).slice(-MAX_TAKES);
     if (!passes.length) throw new RecorderError('short', 'Die Aufnahme ist zu kurz.');
     const n = this._recNumber();
+    let cuts, meta = {};
+    if (this.takeShape === 'raw') ({ cuts, meta } = shapeRawTakes([l.subarray(0, end), r.subarray(0, end)], passes, sr));
+    else cuts = passes.map((p) => [cutPass(l, p), cutPass(r, p)]);
     const samples = [];
-    for (const [i, p] of passes.entries()) {
-      const buffer = channelsToBuffer([cutPass(l, p), cutPass(r, p)], sr);
+    for (const [i, chs] of cuts.entries()) {
+      const buffer = channelsToBuffer(chs, sr);
       const name = passes.length > 1 ? `Aufnahme ${n} · Take ${i + 1}` : `Aufnahme ${n}`;
-      samples.push(await this.own.create({ name, buffer, source: 'Aufnahme', from: 'mic' }));
+      samples.push(await this.own.create({ name, buffer, source: 'Aufnahme', from: 'mic', ...meta }));
     }
     let take = passes.length - 1;
     while (take > 0 && !passes[take].complete) take--;
     const clipIds = this.store.addRecordings([{ trackId: this.trackId, startBeat: loopRec.startBeat, lengthBeats: loopRec.beats, sampleIds: samples.map((s) => s.id), take }]);
     this.state = 'idle';
     this.emit('state');
-    this.emit('recorded', { sample: samples[take], samples, clipId: clipIds[0], clipIds, takes: samples.length, take });
+    this.emit('recorded', { sample: samples[take], samples, clipId: clipIds[0], clipIds, takes: samples.length, take, shape: this.takeShape ?? null });
     return { sample: samples[take], clipId: clipIds[0], samples };
   }
 
@@ -346,6 +391,34 @@ export class Recorder extends Emitter {
     this.emit('recorded', { sample, clipId: null, mode: 'sound', tag: this.tag ?? null });
     return { sample, clipId: null };
   }
+}
+
+// Takes roh (Krachwerk 3b): kein Säubern, alle gleich lang. Hochpass 45 Hz über den ganzen Mitschnitt (gegen Trittschall
+// und Gleichanteil, ohne Einschwingen an den Take-Kanten), dann ein gemeinsamer Faktor: Spitze des lautesten Takes = 0,89.
+// Doppel-Mono wird ein Kanal. Klasse und Etiketten aus dem lautesten Take (Herkunftsfarbe in der Kiste)
+export function shapeRawTakes(chs, passes, sr) {
+  const src = isDoubleMono(chs) ? [chs[0]] : chs;
+  const filtered = src.map((d) => highpass(d, sr, 45));
+  const cuts = passes.map((p) => filtered.map((d) => cutPass(d, p)));
+  let peak = 0, loudest = 0;
+  cuts.forEach((take, k) => { for (const d of take) for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) { peak = v; loudest = k; } } });
+  // Stille nicht ins Rauschen hochziehen: höchstens +40 dB
+  const gain = peak > 0 ? Math.min(100, PEAK_TARGET / peak) : 1;
+  for (const take of cuts) for (const d of take) for (let i = 0; i < d.length; i++) d[i] *= gain;
+  // Angefangener letzter Durchgang: am Stopp 5 ms ausblenden statt hart in die Stille
+  const fade = Math.round(0.005 * sr);
+  passes.forEach((p, k) => {
+    const cut = Math.min(p.to, src[0].length) - p.from;
+    if (p.complete || cut <= 0) return;
+    for (const d of cuts[k]) for (let i = Math.max(0, cut - fade); i < cut; i++) d[i] *= (cut - i) / fade;
+  });
+  let meta = {};
+  if (peak > 0.002) {
+    const f = features(mixMono(cuts[loudest]), sr);
+    const cls = classify(f);
+    meta = { cls, tags: describe(f, cls, []).tags };
+  }
+  return { cuts, meta, gain, loudest };
 }
 
 // Android schaltet die Tonausgabe bei offenem Mikrofon in den Gesprächsmodus (rauscht) und erst beim nächsten

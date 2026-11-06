@@ -379,7 +379,8 @@ function mountSoundKeys({ store, library }) {
 
 // Aufnahme-Knopf: Spur der Auswahl, sonst die erste freie Spur ab der Abspielmarke
 // mode 'sound' (Krachwerk): ohne Vorzähler; der gesäuberte Klang kommt als Clip ab dem Takt der Marke in den Loop
-function mountRecording({ store, engine, ui, arranger, recorder, library, mode = 'song', bench = () => null }) {
+// recTakes (Krachwerk 3b): ● bei laufendem Loop nimmt Takes ab dem nächsten Loop-Sprung, ohne Stopp (start(…, { takes }))
+function mountRecording({ store, engine, ui, arranger, recorder, library, mode = 'song', recTakes = false, bench = () => null }) {
   const btn = document.getElementById('rec-btn');
   const label = btn.querySelector('.rec-label');
   const freeTrack = (from, to) => store.project.tracks.find((t) => !t.clips.some((c) => c.startBeat < to && c.startBeat + c.lengthBeats > from));
@@ -404,28 +405,45 @@ function mountRecording({ store, engine, ui, arranger, recorder, library, mode =
     if (!engine.playing) engine.play(startBeat);
     return clipId;
   }
+  const loopOn = () => { const l = store.project.loop; return l.on && l.endBeat > l.startBeat; };
+  // Was ● jetzt aufnähme: 'takes' (Durchgänge im Loop) oder 'sound' (Krachwerk: Einzelgeräusch) bzw. 'song' (Loopwerk ohne Loop)
+  function context(opts = {}) {
+    if (mode === 'song') return loopOn() ? 'takes' : 'song';
+    if (!recTakes || opts.tag || opts.takes === false) return 'sound';
+    return opts.takes === true ? (loopOn() ? 'takes' : 'sound') : (engine.playing && loopOn() ? 'takes' : 'sound');
+  }
   // Ist die Kit- oder Instrument-Werkbank mit Clip offen, nimmt ● Pads bzw. Tasten ins Raster auf (kein Mikrofon)
+  // opts.takes (nur mit recTakes): true = Takes über den Loop, false = Geräusch; fehlt = nach context()
   async function start(target, opts = {}) {
     if (recorder.state === 'recording') { recorder.stop(); return; }
     const kb = !target && !opts.tag ? bench() : null;
     if (recorder.state === 'idle' && (kb?.recording || kb?.recContext())) { kb.toggleRec(); return; }
     if (recorder.state !== 'idle') return;
     const bpb = store.project.beatsPerBar;
+    const takes = mode === 'sound' && context(opts) === 'takes';
+    const recMode = takes ? 'song' : mode;
     // Loop an: die Aufnahme beginnt am Loop-Anfang (Takes, recorder.js), egal wo die Marke steht
     const loop = store.project.loop;
-    const inLoop = mode === 'song' && loop.on && loop.endBeat > loop.startBeat;
+    const inLoop = recMode === 'song' && loopOn();
+    // Takes in Krachwerk: der Song läuft weiter, die Aufnahme beginnt am nächsten Loop-Sprung
+    const atWrap = takes && engine.playing;
     const startBeat = inLoop ? loop.startBeat : target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
-    if (engine.playing && mode === 'song') engine.stop();
+    if (engine.playing && recMode === 'song' && !atWrap) engine.stop();
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
-    let trackId = target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, inLoop ? loop.endBeat : startBeat + (mode === 'sound' ? bpb : 16))?.id;
-    if (!trackId && mode === 'song') trackId = store.addTrack();
-    if (!trackId && mode === 'song') { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
+    // Takes legen sich auf eine freie Spur (nicht über den gewählten Clip), sonst eine neue
+    let trackId = takes ? target?.trackId ?? freeTrack(loop.startBeat, loop.endBeat)?.id
+      : target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, inLoop ? loop.endBeat : startBeat + (mode === 'sound' ? bpb : 16))?.id;
+    if (!trackId && recMode === 'song') trackId = store.addTrack();
+    if (!trackId && recMode === 'song') { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
     pending = { trackId, startBeat };
     try {
-      await recorder.start({ trackId, startBeat, mode, silence: opts.silence, maxSeconds: opts.maxSeconds, tag: opts.tag });
-      ui.flash(opts.say ?? (mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.'
-        : inLoop ? 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ●, R oder Leertaste beendet.'
-          : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.'));
+      await recorder.start({ trackId, startBeat, mode: recMode, silence: opts.silence, maxSeconds: opts.maxSeconds, tag: opts.tag,
+        ...(takes ? { startAt: 'next-wrap', takeShape: 'raw' } : {}) });
+      ui.flash(opts.say ?? (takes ? (recorder.atWrap ? 'Takes ab dem nächsten Durchgang – jeder Durchgang wird ein Take. ● beendet.'
+        : 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ● beendet.')
+        : mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.'
+          : inLoop ? 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ●, R oder Leertaste beendet.'
+            : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.'));
     } catch (err) {
       ui.flash(err.code === 'denied'
         ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
@@ -469,7 +487,7 @@ function mountRecording({ store, engine, ui, arranger, recorder, library, mode =
     else if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
     else if (what === 'recorded') {
       arranger.select(payload.clipId);
-      ui.flash(payload.takes > 1 ? `${payload.takes} Takes – der letzte spielt. Wechseln: Alt+↑/↓.` : `„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`);
+      ui.flash(payload.takes > 1 ? (payload.shape === 'raw' ? `${payload.takes} Takes – der letzte spielt.` : `${payload.takes} Takes – der letzte spielt. Wechseln: Alt+↑/↓.`) : `„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`);
       // Tipp „Einmessen“ (tips.js), solange auf diesem Gerät nicht gemessen wurde
       document.getElementById('app').classList.toggle('rec-unmeasured', !recorder.latencyInfo?.measured);
     }
@@ -477,7 +495,7 @@ function mountRecording({ store, engine, ui, arranger, recorder, library, mode =
     if (what === 'locked') ui.flash('Während der Aufnahme nicht änderbar.');
     if (what === 'error') ui.flash(payload.message);
   });
-  return { start, sync: syncBtn, clap: () => start(null, { tag: { kind: 'clap' }, silence: 2, maxSeconds: 10, say: 'Klatsch und klopf – ich höre zu.' }) };
+  return { start, context, sync: syncBtn, clap: () => start(null, { tag: { kind: 'clap' }, silence: 2, maxSeconds: 10, say: 'Klatsch und klopf – ich höre zu.' }) };
 }
 
 function mountImport({ store, ui, arranger, own, shelf }) {
@@ -697,7 +715,7 @@ async function boot() {
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
   const benchRef = { kb: null };
-  const recording = mountRecording({ store, engine, ui, arranger, recorder, library, mode: EDITION.record, bench: () => benchRef.kb });
+  const recording = mountRecording({ store, engine, ui, arranger, recorder, library, mode: EDITION.record, recTakes: !!EDITION.recTakes, bench: () => benchRef.kb });
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
@@ -924,7 +942,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, freezeUi, startCard, benchRef, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, record: recording, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, freezeUi, startCard, benchRef, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

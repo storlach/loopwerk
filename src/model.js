@@ -1341,18 +1341,25 @@ export class Store extends Emitter {
   // ---------- Klang-Rezept (ADR 010) ----------
   // Rezept eines Sounds ändern: null im Patch = Standard. Gilt für alle Clips dieses Sounds; ein leeres Rezept fällt weg.
   // coalesce: ein Rückgängig-Schritt je Ziehvorgang (Schlüssel aus recipeGesture in src/recipe.js).
-  setRecipe(sampleId, patch, { coalesce } = {}) {
-    const cur = this.project.recipes?.[sampleId] ?? null;
-    const merged = { ...(cur || {}) };
-    for (const [k, v] of Object.entries(patch || {})) { if (v == null) delete merged[k]; else merged[k] = v; }
-    // Eine Variante bleibt Variante (Eltern-Sound und Name sind Pflicht)
-    if (cur?.parent) { merged.parent = cur.parent; merged.name ??= cur.name; }
-    const next = normalizeRecipe(merged, { duration: this.soundDuration?.(sampleId) });
-    const before = normalizeRecipe(cur, { duration: this.soundDuration?.(sampleId) });
-    if (JSON.stringify(next) === JSON.stringify(before) && JSON.stringify(cur) === JSON.stringify(before)) return;
+  // also: weitere Sounds (z. B. alle Takes eines Clips) bekommen denselben Patch – zusammen ein Schritt
+  setRecipe(sampleId, patch, { coalesce, also } = {}) {
+    const ids = [...new Set([sampleId, ...(Array.isArray(also) ? also : [])].filter((id) => typeof id === 'string' && id))];
+    const changes = [];
+    for (const id of ids) {
+      const cur = this.project.recipes?.[id] ?? null;
+      const merged = { ...(cur || {}) };
+      for (const [k, v] of Object.entries(patch || {})) { if (v == null) delete merged[k]; else merged[k] = v; }
+      // Eine Variante bleibt Variante (Eltern-Sound und Name sind Pflicht)
+      if (cur?.parent) { merged.parent = cur.parent; merged.name ??= cur.name; }
+      const next = normalizeRecipe(merged, { duration: this.soundDuration?.(id) });
+      const before = normalizeRecipe(cur, { duration: this.soundDuration?.(id) });
+      if (JSON.stringify(next) === JSON.stringify(before) && JSON.stringify(cur) === JSON.stringify(before)) continue;
+      changes.push([id, next]);
+    }
+    if (!changes.length) return;
     this.dispatch('recipe', (p) => {
       p.recipes = { ...(p.recipes || {}) };
-      if (next) p.recipes[sampleId] = next; else delete p.recipes[sampleId];
+      for (const [id, next] of changes) { if (next) p.recipes[id] = next; else delete p.recipes[id]; }
       if (!Object.keys(p.recipes).length) delete p.recipes;
     }, { coalesce });
   }
