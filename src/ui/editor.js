@@ -392,6 +392,11 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     moreBtn.textContent = `Mehr: Tonhöhe, Autotune, Trennen, Loop ${open ? '▴' : '▾'}`;
     $('ed-tools').hidden = !open;
   });
+  // Werkzeugzeile am Handy wischbar: ausblendender Rand rechts, solange noch etwas dahinter liegt
+  const cuts = root.querySelector('.ed-cuts');
+  const cutsEnd = () => cuts.toggleAttribute('data-end', cuts.scrollLeft + cuts.clientWidth >= cuts.scrollWidth - 2);
+  cuts.addEventListener('scroll', cutsEnd, { passive: true });
+  new ResizeObserver(cutsEnd).observe(cuts);
   nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); nameIn.blur(); } });
 
   return { open, close, get state() { return st; } };

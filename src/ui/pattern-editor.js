@@ -20,7 +20,7 @@ import { patternScale, scaleKindOf, SCALE_ORDER, CHORD_MODES, chordPitches } fro
 
 // Linke Spalte der Piano-Roll: am Handy die (senkrechte, spielbare) Klaviatur, am Desktop nur Notennamen –
 // dort spielt man auf der waagerechten Klaviatur darunter
-const keyW = () => (narrow.matches ? 72 : 30);
+const keyW = () => (narrow.matches ? 88 : 30);
 const narrow = window.matchMedia('(max-width: 760px)');
 // Am Handy zeigt die Piano-Roll einen Tonbereich, der genau in die Höhe passt (▲/▼ wechselt ihn) – nichts scrollt
 const OCT_BTN = 44; // auch der Streifen für den Tonleiter-Schalter: fingergroß
@@ -65,6 +65,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   let viewLo = 60; // Handy: unterster sichtbarer Ton
   let drag = null; // Vorschau beim Ziehen in der Piano-Roll
   let midiTried = false;
+  let sheetCut = 0; // Handy: so viel hängt die Schublade beim Verkleinern noch über (aus sheets.js)
   let rollRow = 0; // Zeilenhöhe der zuletzt gezeichneten Piano-Roll
 
   for (const k of KITS.filter((x) => !kits || kits.includes(x.id))) { const o = el('option', null, k.label); o.value = k.id; kitSel.append(o); }
@@ -417,8 +418,10 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     // Am Tablet (Finger) höhere Zeilen, damit eine Note zu treffen ist
     // Desktop: Zeilen wachsen mit der Höhe des Fachs (mindestens 14 px, am Tablet 22 px; höchstens 28 px)
     if (!narrow.matches) return { lo: PITCH_LOW, hi: PITCH_HIGH, row: clamp(Math.floor(rollWrap.clientHeight / 24), touch.matches ? 22 : 14, 28), top: 0 };
-    const avail = Math.max(240, rollWrap.clientHeight - 2 * OCT_BTN);
-    const count = clamp(Math.floor(avail / MIN_ROW), 12, 25);
+    // Handy: ▲ ▼ liegen zusammen im Streifen oben; die Zeilen teilen sich, was von der sichtbaren Höhe übrig bleibt
+    // (Layouthöhe minus Überhang beim Verkleinern der Schublade, --sheet-cut)
+    const avail = Math.max(10 * 14, rollWrap.clientHeight - sheetCut - OCT_BTN);
+    const count = clamp(Math.floor(avail / MIN_ROW), 10, 25);
     const lo = clamp(viewLo, PITCH_LOW, PITCH_HIGH - count + 1);
     return { lo, hi: lo + count - 1, row: avail / count, top: OCT_BTN };
   }
@@ -430,7 +433,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const n = steps();
     const v = pitchView();
     const cellW = Math.max(narrow.matches ? 28 : touch.matches ? 20 : 12, Math.floor((rollWrap.clientWidth - keyW() - 2) / n));
-    const h = narrow.matches ? v.top * 2 + (v.hi - v.lo + 1) * v.row : (v.hi - v.lo + 1) * v.row;
+    const h = narrow.matches ? v.top + (v.hi - v.lo + 1) * v.row : (v.hi - v.lo + 1) * v.row;
     return { n, cellW, w: keyW() + n * cellW, h };
   }
 
@@ -1051,19 +1054,21 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     if (vkeys.dataset.key === key) return;
     vkeys.dataset.key = key;
     vkeys.innerHTML = '';
-    const h = v.top * 2 + (v.hi - v.lo + 1) * v.row;
+    const h = v.top + (v.hi - v.lo + 1) * v.row;
     vkeys.style.height = h + 'px';
     rollWrap.style.setProperty('--vk-h', h + 'px');
     const octBtn = (dir) => {
       const b = el('button', 'vkey-oct', dir > 0 ? '▲' : '▼');
       b.type = 'button';
-      b.style.height = v.top + 'px';
       b.setAttribute('aria-label', dir > 0 ? 'Oktave höher' : 'Oktave tiefer');
       b.disabled = dir > 0 ? v.hi >= PITCH_HIGH : v.lo <= PITCH_LOW;
       b.addEventListener('click', () => { viewLo = clamp(v.lo + 12 * dir, PITCH_LOW, PITCH_HIGH); octave = clamp(viewLo, PITCH_LOW, PITCH_HIGH - 12); render(); });
       return b;
     };
-    vkeys.append(octBtn(1));
+    const octs = el('div', 'vkey-octs');
+    octs.style.height = v.top + 'px';
+    octs.append(octBtn(1), octBtn(-1));
+    vkeys.append(octs);
     for (let m = v.hi; m >= v.lo; m--) {
       const k = el('div', `vkey${isBlack(m) ? ' black' : ''}${m % 12 === 0 ? ' c' : ''}`);
       k.dataset.pitch = String(m);
@@ -1071,7 +1076,6 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
       if (m % 12 === 0) k.textContent = noteName(m);
       vkeys.append(k);
     }
-    vkeys.append(octBtn(-1));
   }
   // Schublade größer oder kleiner: Tonbereich und Zeilen neu einpassen
   // Desktop: nur neu zeichnen, die Rollposition bleibt beim selben Ton
@@ -1091,6 +1095,19 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
       litKey = '';
     });
   }).observe(rollWrap);
+  // Handy: die Schublade schrumpft stufenlos (nur per transform) – Zeilen und Tonbereich gehen Bild für Bild mit
+  let cutRaf = 0;
+  root.addEventListener('sheetcut', () => {
+    const c = parseFloat(root.style.getPropertyValue('--sheet-cut')) || 0;
+    if (c === sheetCut) return;
+    sheetCut = c;
+    if (!narrow.matches || cutRaf) return;
+    cutRaf = requestAnimationFrame(() => {
+      cutRaf = 0;
+      if (rollWrap.hidden || pat()?.type !== 'synth') return;
+      render();
+    });
+  });
   vkeys.addEventListener('pointerdown', (e) => {
     const k = e.target.closest('.vkey');
     if (!k) return;
