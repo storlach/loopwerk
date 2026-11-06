@@ -5,7 +5,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, readSaved } = require('./harness.cjs');
 
 const { check, finish } = createChecker();
 
@@ -395,9 +395,9 @@ function helpers({ HITS, LEVELS }) {
     });
     check('8 Namen „Klopfen · 1“ … „· 8“', k8.names.length === 8 && k8.names.every((n, k) => n === `Klopfen · ${k + 1}`), k8.names.join(', '));
     const [download] = await Promise.all([kw.waitForEvent('download'), kw.evaluate(() => document.getElementById('save-btn').click())]);
-    const saved = path.join(os.tmpdir(), 'loopwerk-zerlegen.json');
+    const saved = path.join(os.tmpdir(), 'loopwerk-zerlegen.zip');
     await download.saveAs(saved);
-    const json = JSON.parse(fs.readFileSync(saved, 'utf8'));
+    const json = readSaved(saved); // Krachwerk: Song-ZIP (Scheibe 3a); ownSounds = Sounds aus werkstatt.json
     const t2 = json.recipes?.[k8.ids[2]];
     check('8 Datei: version 1, group und tune* bleiben, Wurzel eingebettet', json.version === 1 && t2?.group === k8.group && t2?.tune === 0.5 && t2?.robot === true && t2?.tuneKey === 'Em' && json.ownSounds?.some((e) => e.id === k8.id),
       JSON.stringify(t2));

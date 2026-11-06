@@ -524,7 +524,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     const other = sel && (sel.target === 'master' ? !!ui.selectedTrackId : ui.selectedTrackId !== sel.target);
     if (sel && (ui.selectedClipId || other)) { sel = null; paintSel(); hideBar(); }
   });
-  store.on((_, reason) => { if (sel && (reason === 'undo' || reason === 'redo' || reason === 'replace')) { sel = null; paintSel(); hideBar(); } });
+  store.on((_, reason) => { if (sel && (reason === 'undo' || reason === 'redo' || reason === 'replace' || reason === 'open')) { sel = null; paintSel(); hideBar(); } });
 
   // ---------- Mini-Leiste am gewählten Punkt: Linear · Stufe · Löschen ----------
   const bar = { node: el('div', 'auto-bar'), L: null, btns: {} };

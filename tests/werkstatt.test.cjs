@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 const { chromium } = require('playwright');
 const { start } = require('./serve.cjs');
-const { createChecker } = require('./harness.cjs');
+const { createChecker, readSaved } = require('./harness.cjs');
 const { countUi, scene } = require('./count.cjs');
 
 const SHOTS = process.argv.includes('--shots');
@@ -299,11 +299,11 @@ async function seedPadWall() {
     // ---------- 8: Datei hin und zurück ----------
     await page.evaluate(() => { const lw = window.loopwerk; lw.store.addClip('t2', 'mk-test3', 4, 8); });
     const [dl] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => document.getElementById('save-btn').click())]);
-    const kwFile = path.join(tmp, 'krachwerk.json');
+    const kwFile = path.join(tmp, 'krachwerk.zip');
     await dl.saveAs(kwFile);
-    const kw = JSON.parse(fs.readFileSync(kwFile, 'utf8'));
+    const kw = readSaved(kwFile); // Krachwerk speichert Songs als ZIP mit ihren Sounds (Scheibe 3a, ADR 012)
     const embedded = kw.ownSounds.map((o) => o.id);
-    check('Krachwerk speichert Loopwerk-Format mit eigenen Sounds (own- und mk-)', kw.version === 1 && embedded.some((i) => i.startsWith('own-')) && embedded.includes('mk-test3'), embedded.join(','));
+    check('Krachwerk speichert den Song als ZIP (Projekt Version 1) mit seinen Sounds (own- und mk-)', !!kw.zip && /\.zip$/.test(dl.suggestedFilename()) && kw.version === 1 && embedded.some((i) => i.startsWith('own-')) && embedded.includes('mk-test3'), embedded.join(','));
     const LW = await browser.newContext(DESK);
     const lp = await LW.newPage();
     const lErrors = [];
@@ -334,7 +334,7 @@ async function seedPadWall() {
     });
     check('Loopwerk-Datei in Krachwerk: alle Clips bleiben, stumm als „Sound fehlt“', inKw.n === demoClips.length && inKw.missing === demoClips.length, `${inKw.n}/${demoClips.length}, stumm ${inKw.missing}`);
     const [dl3] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => document.getElementById('save-btn').click())]);
-    const back = JSON.parse(fs.readFileSync(await dl3.path(), 'utf8'));
+    const back = readSaved(await dl3.path());
     check('Wieder gespeichert: alle Sound-Kennungen erhalten (klingen in Loopwerk wieder)', JSON.stringify(back.tracks.flatMap((t) => t.clips).map((c) => c.sampleId)) === JSON.stringify(demoClips));
 
     // ---------- 9: PWA ----------

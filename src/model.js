@@ -212,6 +212,28 @@ export function clipSampleIds(clip) {
   return clip.takes?.length ? [...new Set([clip.sampleId, ...clip.takes])] : [clip.sampleId];
 }
 
+// Sound-Kennungen im Projekt umschreiben (Zurückholen einer Sicherung, ADR 012): map alt → neu (Map oder Objekt).
+// Betrifft Clip sampleId/takes, recipes-Schlüssel und parent, sampleTempo, soundKeys. Gibt eine Kopie zurück.
+export function remapSampleIds(project, map) {
+  const m = map instanceof Map ? map : new Map(Object.entries(map || {}));
+  const p = JSON.parse(JSON.stringify(project));
+  if (!m.size) return p;
+  const to = (id) => (m.has(id) ? m.get(id) : id);
+  for (const t of p.tracks || []) for (const c of t.clips || []) {
+    c.sampleId = to(c.sampleId);
+    if (Array.isArray(c.takes)) c.takes = c.takes.map(to);
+  }
+  const keys = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [to(k), v]));
+  const isMap = (o) => o && typeof o === 'object' && !Array.isArray(o);
+  if (isMap(p.recipes)) {
+    p.recipes = keys(p.recipes);
+    for (const r of Object.values(p.recipes)) if (r && typeof r.parent === 'string') r.parent = to(r.parent);
+  }
+  if (isMap(p.sampleTempo)) p.sampleTempo = keys(p.sampleTempo);
+  if (isMap(p.soundKeys)) p.soundKeys = keys(p.soundKeys);
+  return p;
+}
+
 // Krümmung eines Fades: −1 (langsam, exponentiell) … 0 (linear) … 1 (schnell, logarithmisch). Fehlt sie, ist er linear.
 export const fadeCurveOf = (c) => {
   const v = Math.min(1, Math.max(-1, Number(c) || 0));
@@ -385,6 +407,18 @@ export class Store extends Emitter {
     this.lastKey = null;
     this.nextId = 1 + Math.max(0, ...project.tracks.flatMap((t) => t.clips.map((c) => parseInt(c.id.slice(1), 10) || 0)));
     this.emit(this.project, reason);
+  }
+
+  // Anderen Song öffnen (Datei, Sicherung): ersetzt das ganze Projekt als ein Rückgängig-Schritt – ↶ holt den vorigen
+  // Song zurück. nextId steigt nur, damit nach ↶ keine Clip-ID doppelt vergeben wird.
+  openSong(project) {
+    this.undoStack.push(JSON.stringify(this.project));
+    if (this.undoStack.length > 200) this.undoStack.shift();
+    this.redoStack.length = 0;
+    this.lastKey = null;
+    this.project = project;
+    this.nextId = Math.max(this.nextId, 1 + Math.max(0, ...project.tracks.flatMap((t) => t.clips.map((c) => parseInt(c.id.slice(1), 10) || 0))));
+    this.emit(this.project, 'open');
   }
 
   // Jede Änderung läuft hier durch und landet im Rückgängig-Verlauf.

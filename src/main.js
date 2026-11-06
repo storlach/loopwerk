@@ -44,6 +44,7 @@ import { mountPwa } from './pwa.js';
 import { mountClipFloat } from './ui/clip-float.js';
 import { mountRecSetup } from './ui/rec-setup.js';
 import { stepTake } from './ui/take-row.js';
+import { mountStoragePanel } from './ui/storage-panel.js';
 
 // iOS-Safari zoomt beim Antippen eines Felds mit Schrift unter 16 px in die Seite. maximum-scale=1 verhindert das;
 // Zoomen mit zwei Fingern bleibt erlaubt (Safari ignoriert die Grenze dafür). Für Gerüste, die wir nicht selbst schreiben.
@@ -336,7 +337,7 @@ function mountTempo({ store, engine, library, ui, arranger }) {
 function mountSoundState({ store, engine, library, ui, arranger }) {
   let last = '';
   let chain = Promise.resolve();
-  const run = (initial = false) => {
+  const run = () => {
     chain = chain.then(async () => {
       if (await library.applyRecipes(store.project)) {
         library.emit();
@@ -345,7 +346,7 @@ function mountSoundState({ store, engine, library, ui, arranger }) {
         ui.emit?.();
       }
     }).catch((err) => console.warn('Klang-Rezept:', err?.message || err));
-    if (initial === true) return; // Sound-Tempo wie bisher erst ab der ersten Änderung
+    // Sound-Tempo gleich beim Start (sonst spielte ein Sound mit eigenem Tempo nach dem Neuladen bis zur ersten Änderung als Einzelklang)
     const map = store.project.sampleTempo || {};
     const key = JSON.stringify(map);
     if (key === last) return;
@@ -359,7 +360,7 @@ function mountSoundState({ store, engine, library, ui, arranger }) {
     }).catch((err) => console.warn('Sound-Tempo:', err?.message || err));
   };
   store.on(() => run());
-  run(true);
+  run();
 }
 
 // Tonart eigener Sounds (Inspektor): Projekt-Einstellungen an die Bibliothek; folgende Sounds werden umgestimmt
@@ -456,7 +457,7 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song' }
   return { start };
 }
 
-function mountImport({ store, ui, arranger, own, shelf }) {
+function mountImport({ store, ui, arranger, own, shelf, io }) {
   const btn = document.getElementById('import-btn');
   const input = document.getElementById('import-input');
   const app = document.getElementById('app');
@@ -512,7 +513,11 @@ function mountImport({ store, ui, arranger, own, shelf }) {
     app.classList.remove('file-over');
     const target = arranger.dropTargetAt(e.clientX, e.clientY, probe);
     arranger.clearDropPreview();
-    importFiles([...e.dataTransfer.files].filter((f) => f.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name)), target);
+    const files = [...e.dataTransfer.files];
+    // Sicherung oder Song-ZIP auf die App fallen lassen: öffnen wie „Öffnen“ (ADR 012)
+    const zip = files.find((f) => /\.zip$/i.test(f.name) || /zip/.test(f.type));
+    if (zip) { io.openFile(zip); return; }
+    importFiles(files.filter((f) => f.type.startsWith('audio/') || /\.(wav|mp3|ogg|flac|m4a|aac)$/i.test(f.name)), target);
   });
   return { importFiles, pick(target) { pendingTarget = target; btn.click(); } };
 }
@@ -558,7 +563,7 @@ async function boot() {
   };
   // Beim Öffnen (und „Neu“) ist nichts scharf; gelöschte Spuren fallen heraus
   store.on((p, reason) => {
-    const keep = reason === 'replace' ? [] : ui.recTracks.filter((id) => store.track(id));
+    const keep = reason === 'replace' || reason === 'open' ? [] : ui.recTracks.filter((id) => store.track(id));
     if (keep.length !== ui.recTracks.length) { ui.recTracks = keep; ui.emit(); }
   });
 
@@ -588,7 +593,7 @@ async function boot() {
     },
   });
   mountTransport({ store, engine, ui, arranger, emptyProject: () => createEmptyProject(EDITION) });
-  mountProjectIO({ store, engine, ui, library, own, patterns, keepUnknown: EDITION.keepUnknownClips, appName: EDITION.title });
+  const io = mountProjectIO({ store, engine, ui, library, own, patterns, keepUnknown: EDITION.keepUnknownClips, appName: EDITION.title, songFile: EDITION.songFile, padsKey: EDITION.padsKey ?? null });
   const tools = mountClipTools({ store, engine, ui, arranger });
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
   const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
@@ -665,7 +670,7 @@ async function boot() {
   const recording = mountRecording({ store, engine, ui, arranger, recorder, mode: EDITION.record });
   if (recArm) recArm.busy = () => recorder.state !== 'idle';
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
-  const importer = mountImport({ store, ui, arranger, own, shelf });
+  const importer = mountImport({ store, ui, arranger, own, shelf, io });
   mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
   const glow = mountGlow({ engine, store, library, ui });
   doubleTapRanges();
@@ -753,6 +758,11 @@ async function boot() {
     if (on) set(true);
   }
   const tips = EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
+  // Block „Werkstatt“ (Krachwerk 3a): Sichern und Zurückholen am Ende der Song-Werkbank bzw. im Song-Fach
+  const backup = EDITION.storagePanel ? mountStoragePanel({
+    own, store, ui, library, io, appName: EDITION.title, lastKey: lsKey('loopwerk.lastBackup'), padsKey: EDITION.padsKey ?? null,
+    places: { wide: document.getElementById('insp-song-end'), narrow: document.getElementById('song-wk') },
+  }) : null;
 
   let saveTimer = null;
   const saveNow = () => {
@@ -837,7 +847,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {
