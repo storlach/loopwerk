@@ -1,17 +1,15 @@
-// 2.13 Aufnahme (Spec docs/specs/v2.13-aufnahme.md): A Latenz einmessen, B Takes im Loop.
+// 2.13 Aufnahme (Spec docs/specs/v2.13-aufnahme.md): A Latenz einmessen, B Takes im Loop, C Mehrspur.
 // node tests/v213-aufnahme.test.cjs [--shots]   (SHOT_DIR=… für Bilder)
 // Mikrofon: Loopback-Attrappe – getUserMedia liefert engine.out → DelayNode(0,12 s) (+ Testtöne) → MediaStreamDestination.
 const fs = require('fs');
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, clickR } = require('./harness.cjs');
 const { countUi, scene } = require('./count.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || path.join(__dirname, '..', 'docs', 'ux', 'v2.13');
 const { check, finish } = createChecker();
 const SR = 44100;
-// Zählung vor 2.13 (Basis bis 2.14): genau +1 Bedienelement am Desktop (▾ am ●), Handy unverändert
-const OLD_COUNT = { 'desktop-start': 84, 'desktop-clip': 88, 'handy-start': 48, 'handy-clip': 52 };
 
 // Läuft im Browser vor dem Laden: Loopback-Attrappe. window.__tones = [{ at: Kontextzeit, f, amp }] mischt Töne dazu
 // (je Eintrag gilt der Ton ab `at`), window.__markers = [Kontextzeit, …] setzt Impulse in den Mitschnitt.
@@ -47,9 +45,9 @@ const shot = async (page, name) => {
 };
 
 (async () => {
-  const ONLY = process.env.ONLY || ''; // „B“: nur Scheibe B (schneller beim Entwickeln)
+  const ONLY = process.env.ONLY || ''; // „A“, „B“ oder „C“: nur diese Scheibe (schneller beim Entwickeln)
   let app, page;
-  if (ONLY !== 'B') {
+  if (!ONLY || ONLY === 'A') {
   // ================= A1: Suche und Auswertung, offline =================
   app = await openApp({ init: loopback, viewport: { width: 1440, height: 900 } });
   page = app.page;
@@ -306,7 +304,7 @@ const shot = async (page, name) => {
   // ================= A4: Zählung (count.cjs) =================
   try {
     const base = JSON.parse(fs.readFileSync(path.join(__dirname, 'count-baseline.json'), 'utf8'));
-    const now = {};
+    const now = {}, without = {};
     // Wie tests/count.cjs: frischer Browser, ohne Test-Sounds
     const { chromium } = require('playwright');
     const { start } = require('./serve.cjs');
@@ -318,12 +316,19 @@ const shot = async (page, name) => {
       await pg.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 45000 });
       await pg.evaluate(() => window.loopwerk.library.catalogReady);
       await pg.waitForTimeout(800);
-      for (const s of ['start', 'clip']) { await scene(pg, s); now[`${dev}-${s}`] = await countUi(pg); }
+      for (const s of ['start', 'clip']) {
+        await scene(pg, s);
+        now[`${dev}-${s}`] = await countUi(pg);
+        // Gegenprobe ohne ▾: genau dieses eine Bedienelement kam dazu (die Basis selbst wandert mit anderen Änderungen)
+        await pg.evaluate(() => { document.getElementById('rec-more').style.display = 'none'; });
+        without[`${dev}-${s}`] = await countUi(pg);
+        await pg.evaluate(() => { document.getElementById('rec-more').style.display = ''; });
+      }
       await pg.close();
     }
     await browser.close();
     server.close();
-    const deltas = Object.fromEntries(Object.keys(OLD_COUNT).map((k) => [k, now[k].controls - OLD_COUNT[k]]));
+    const deltas = Object.fromEntries(Object.keys(now).map((k) => [k, now[k].controls - without[k].controls]));
     check('A4 Zählung: genau +1 Bedienelement in desktop-start und desktop-clip (▾), Handy unverändert', deltas['desktop-start'] === 1 && deltas['desktop-clip'] === 1 && deltas['handy-start'] === 0 && deltas['handy-clip'] === 0, JSON.stringify(deltas));
     check('A4 Zählung trifft die neue Basis exakt', Object.keys(base).every((k) => JSON.stringify(base[k]) === JSON.stringify(now[k])), JSON.stringify(now));
   } catch (err) {
@@ -332,6 +337,7 @@ const shot = async (page, name) => {
 
   } // Ende Teil A
 
+  if (!ONLY || ONLY === 'B') {
   // ================= B5: splitPasses, rein =================
   app = await openApp({ init: loopback, viewport: { width: 1440, height: 900 } });
   page = app.page;
@@ -627,6 +633,373 @@ const shot = async (page, name) => {
   } finally {
     await app.close();
   }
+  } // Ende Teil B
+
+  if (!ONLY || ONLY === 'C') await partC();
 
   finish();
 })();
+
+// ================= C: Mehrspur – echtes getUserMedia mit Chromiums Fake-Gerät =================
+// Stereo-Testdatei: links 440 Hz, rechts 660 Hz (läuft in Schleife). Die Spione merken sich jeden Strom und jede
+// Anfrage; window.__oneChannel = true lässt getSettings().channelCount = 1 melden (1-Kanal-Gerät, Test 11).
+function stereoWav(file, seconds = 30) {
+  const n = Math.round(seconds * SR);
+  const buf = Buffer.alloc(44 + n * 4);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 4, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22); buf.writeUInt32LE(SR, 24);
+  buf.writeUInt32LE(SR * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 4, 40);
+  for (let i = 0; i < n; i++) {
+    buf.writeInt16LE(Math.round(0.3 * 32767 * Math.sin(2 * Math.PI * 440 * i / SR)), 44 + i * 4);
+    buf.writeInt16LE(Math.round(0.3 * 32767 * Math.sin(2 * Math.PI * 660 * i / SR)), 46 + i * 4);
+  }
+  fs.writeFileSync(file, buf);
+}
+function micSpy() {
+  const md = navigator.mediaDevices;
+  if (md.__spied) return;
+  md.__spied = true;
+  const orig = md.getUserMedia.bind(md);
+  window.__streams = [];
+  window.__asked = [];
+  md.getUserMedia = async (c) => { window.__asked.push(JSON.parse(JSON.stringify(c))); const s = await orig(c); window.__streams.push(s); return s; };
+  // Wie ein Browser vor der Freigabe: Geräte ohne Namen und ohne ID (die Fake-Oberfläche gibt sie sonst sofort heraus)
+  const en = md.enumerateDevices.bind(md);
+  md.enumerateDevices = async () => { const l = await en(); return window.__streams.length ? l : l.map((d) => ({ kind: d.kind, label: '', deviceId: '', groupId: '' })); };
+  const gs = MediaStreamTrack.prototype.getSettings;
+  MediaStreamTrack.prototype.getSettings = function () { const v = gs.call(this); return window.__oneChannel && this.kind === 'audio' ? { ...v, channelCount: 1 } : v; };
+}
+// Läuft im Browser: Kanäle, Länge und Tonanteile (Goertzel, dB von 440 über 660 Hz je Kanal) eines Sounds
+const soundInfo = () => `async (id) => {
+  const s = await window.loopwerk.library.ensure(id);
+  const sr = s.orig.sampleRate;
+  const g = (d, f) => { const w = 2 * Math.PI * f / sr; const k = 2 * Math.cos(w); let s1 = 0, s2 = 0; for (let i = 0; i < d.length; i++) { const v = d[i] + k * s1 - s2; s2 = s1; s1 = v; } return s1 * s1 + s2 * s2 - k * s1 * s2; };
+  const chs = Array.from({ length: s.orig.numberOfChannels }, (_, c) => s.orig.getChannelData(c));
+  return { id, name: s.name, ch: chs.length, n: s.orig.length, db: chs.map((d) => +(10 * Math.log10(g(d, 440) / g(d, 660))).toFixed(1)) };
+}`;
+
+async function partC() {
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'lw213c-'));
+  const file = path.join(tmp, 'stereo.wav');
+  stereoWav(file);
+  const args = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${file}`];
+  let app = await openApp({ init: micSpy, args, viewport: { width: 1440, height: 900 } });
+  let page = app.page;
+  const info = (id) => page.evaluate(`(${soundInfo()})(${JSON.stringify(id)})`);
+  const micClosed = () => page.evaluate(() => window.__streams.length > 0 && window.__streams.every((s) => s.getAudioTracks().every((t) => t.readyState === 'ended')));
+  const record = async (beats) => {
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 10000 });
+    await page.waitForFunction((b) => window.loopwerk.engine.currentBeat() >= b, beats, { timeout: 30000 });
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'idle', null, { timeout: 15000 });
+    await page.waitForTimeout(200);
+  };
+  const ownClips = () => page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips.filter((c) => c.sampleId.startsWith('own-')).map((c) => ({ track: t.id, id: c.id, sampleId: c.sampleId, takes: c.takes, take: c.take, start: c.startBeat, len: c.lengthBeats }))));
+  try {
+    await page.evaluate(async () => {
+      const lw = window.loopwerk;
+      const m = await import('./src/model.js');
+      lw.store.replace(m.createEmptyProject());
+      lw.engine.setPosition(0);
+      lw.ui.select(null);
+      localStorage.removeItem('loopwerk.recDevice.v1');
+    });
+    // ---------- Gerät wählen: vor der Freigabe nur „Standard-Mikrofon“ und „Geräte suchen …“ ----------
+    await page.click('#rec-more');
+    await page.waitForTimeout(300);
+    const pre = await page.evaluate(() => [...document.querySelectorAll('#rs-device option')].map((o) => o.textContent));
+    await page.selectOption('#rs-device', '#suchen');
+    await page.waitForFunction(() => [...document.querySelectorAll('#rs-device option')].some((o) => o.textContent === 'Fake Audio Input 1'), null, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(200);
+    const found = await page.evaluate(() => ({ opts: [...document.querySelectorAll('#rs-device option')].map((o) => o.textContent), ch: document.getElementById('rs-ch').textContent, chShown: !document.getElementById('rs-ch').hidden }));
+    check('C Gerät: vor der Freigabe „Standard-Mikrofon“ (+ „Geräte suchen …“), danach die Geräte mit Namen und „2 Kanäle“',
+      pre[0] === 'Standard-Mikrofon' && pre.includes('Geräte suchen …') && found.opts.includes('Fake Audio Input 1') && !found.opts.includes('Geräte suchen …') && found.chShown && found.ch === '2 Kanäle', JSON.stringify({ pre, found }));
+    const fakeId = await page.evaluate(() => [...document.querySelectorAll('#rs-device option')].find((o) => o.textContent === 'Fake Audio Input 1').value);
+    await page.selectOption('#rs-device', fakeId);
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'idle' && window.__streams.length >= 2, null, { timeout: 8000 });
+    await page.waitForTimeout(300);
+    const chosen = await page.evaluate(() => ({ ls: JSON.parse(localStorage.getItem('loopwerk.recDevice.v1')), asked: window.__asked.at(-1), key: document.getElementById('rec-setup').dataset.key }));
+    check('C Gerät gemerkt unter lsKey „loopwerk.recDevice.v1“ (Name, 2 Kanäle), geöffnet mit deviceId exact und channelCount ideal 2; Latenz-Schlüssel folgt dem Gerät',
+      chosen.ls?.id === fakeId && chosen.ls.devices[fakeId]?.label === 'Fake Audio Input 1' && chosen.ls.devices[fakeId]?.channels === 2
+        && chosen.asked?.audio?.deviceId?.exact === fakeId && chosen.asked.audio.channelCount?.ideal === 2 && /^Fake Audio Input 1\|/.test(chosen.key), JSON.stringify(chosen));
+    check('C Kurz geöffnet zum Kennenlernen: danach Mikrofon zu', await micClosed());
+    await page.keyboard.press('Escape');
+
+    // ---------- 10: Spur 1 über das Menü, Spur 2 im Inspektor scharf, Spur 2 auf „Rechts“ ----------
+    const undo0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
+    await page.click('.track-row:has(.lane[data-track-id="t1"]) .tbtn-menu');
+    const item = await page.evaluate(() => { const b = document.getElementById('tm-rec-arm'); return { text: b?.textContent, role: b?.getAttribute('role'), checked: b?.getAttribute('aria-checked') }; });
+    await page.click('#tm-rec-arm');
+    await page.evaluate(() => window.loopwerk.ui.selectTrack('t2'));
+    await page.waitForTimeout(200);
+    const insp0 = await page.evaluate(() => ({ arm: !document.getElementById('insp-arm-row').hidden, pressed: document.getElementById('insp-rec-arm').getAttribute('aria-pressed'), inRow: document.getElementById('insp-recin-row').hidden }));
+    await page.click('#insp-rec-arm');
+    await page.waitForTimeout(150);
+    const insp1 = await page.evaluate(() => ({ inRow: !document.getElementById('insp-recin-row').hidden, btns: [...document.querySelectorAll('#insp-recin-row .key')].map((b) => [b.textContent, b.getAttribute('aria-pressed'), b.disabled]), auto: document.getElementById('insp-recin-auto').title }));
+    await page.click('#insp-recin-R');
+    await page.waitForTimeout(150);
+    const armed = await page.evaluate(() => {
+      const { ui, store } = window.loopwerk;
+      const red = getComputedStyle(document.getElementById('rec-btn').querySelector('svg')).fill;
+      const dot = (id) => getComputedStyle(document.querySelector(`.track-row:has(.lane[data-track-id="${id}"]) .track-dot`)).backgroundColor === red;
+      return { rec: ui.recTracks.slice(), input: store.track('t2').recInput, dots: ['t1', 't2', 't3'].map(dot), undo: store.undoStack.length, inProject: JSON.stringify(store.project).includes('recTracks') };
+    });
+    check('C10 Spur-Menü ⋯: „Für Aufnahme scharf“ als Schalter (menuitemcheckbox)', item.text === 'Für Aufnahme scharf' && item.role === 'menuitemcheckbox' && item.checked === 'false', JSON.stringify(item));
+    check('C10 Inspektor „Spur“: Schalter ● Scharf, Zeile Eingang erst wenn scharf (Auto · Links · Rechts · Stereo, Auto aktiv)',
+      insp0.arm && insp0.pressed === 'false' && insp0.inRow && insp1.inRow && insp1.btns.map((b) => b[0]).join() === 'Auto,Links,Rechts,Stereo' && insp1.btns[0][1] === 'true' && /Rechts/.test(insp1.auto), JSON.stringify({ insp0, insp1 }));
+    check('C10 Scharf: ui.recTracks in Reihenfolge, roter Punkt nur an scharfen Spuren, Eingang „R“ an der Spur (ein Rückgängig-Schritt), Scharf nicht im Projekt/Verlauf',
+      JSON.stringify(armed.rec) === '["t1","t2"]' && armed.input === 'R' && armed.dots[0] && armed.dots[1] && !armed.dots[2] && armed.undo === undo0 + 1 && !armed.inProject, JSON.stringify(armed));
+    await shot(page, 'mehrspur-desktop-spur.png');
+    await page.click('#rec-more');
+    await page.waitForTimeout(250);
+    const list = await page.evaluate(() => [...document.querySelectorAll('#rs-armed .rs-armed-row')].map((r) => [r.querySelector('.rs-track').textContent, [...r.querySelectorAll('.recin-btns .key')].find((b) => b.getAttribute('aria-pressed') === 'true')?.textContent]));
+    check('C10 Feld „Aufnahme“ zeigt die scharfen Spuren mit ihrem Eingang', JSON.stringify(list) === JSON.stringify([['Spur 1', 'Auto'], ['Spur 2', 'Rechts']]), JSON.stringify(list));
+    await shot(page, 'mehrspur-desktop-feld.png');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.loopwerk.ui.select(null));
+
+    await record(8.5);
+    const c10 = await ownClips();
+    const i10 = [];
+    for (const c of c10) i10.push({ track: c.track, ...(await info(c.sampleId)) });
+    const hint10 = await page.evaluate(() => document.getElementById('hint-text').textContent);
+    const by = (t) => i10.find((x) => x.track === t);
+    check('C10 ● nimmt auf beide scharfen Spuren auf: 2 Clips, 2 Sounds mit je 1 Kanal, gleiche Länge, Einblender „2 Spuren aufgenommen.“',
+      c10.length === 2 && by('t1') && by('t2') && by('t1').ch === 1 && by('t2').ch === 1 && by('t1').n === by('t2').n && c10.every((c) => c.start === 0) && hint10.startsWith('2 Spuren aufgenommen.'),
+      JSON.stringify({ i10: i10.map(({ track, name, ch, n }) => ({ track, name, ch, n })), hint10 }));
+    // Kanaltrennung: Spur 1 (Auto bei 2 scharfen → Links) trägt 440 Hz, Spur 2 (Rechts) 660 Hz
+    check('C10 Kanalzuordnung: Spur 1 = links (440 Hz ≥ 20 dB über 660), Spur 2 = rechts (660 Hz ≥ 20 dB über 440)', by('t1')?.db[0] >= 20 && by('t2')?.db[0] <= -20,
+      `Spur 1: ${by('t1')?.db[0]} dB, Spur 2: ${by('t2')?.db[0]} dB (440 über 660)`);
+    check('C10 Nach der Aufnahme: Mikrofon zu', await micClosed());
+    // IndexedDB und Projektdatei speichern 1 Kanal (WAV-Kopf, Byte 22)
+    const store1 = await page.evaluate(async (ids) => {
+      const { own, store } = window.loopwerk;
+      const rec = await Promise.all(ids.map((id) => own.tx('readonly', (s) => s.get(id))));
+      const emb = await own.embed(store.project);
+      const ch = (b64) => { const bin = atob(b64.slice(0, 64)); return bin.charCodeAt(22) | (bin.charCodeAt(23) << 8); };
+      return { idb: rec.map((r) => new DataView(r.wav).getUint16(22, true)), file: emb.map((e) => ch(e.wav)) };
+    }, c10.map((c) => c.sampleId));
+    check('C10 Mono-Aufnahme als 1-Kanal-Sound gespeichert: IndexedDB und Projektdatei (WAV-Kopf 1 Kanal)', store1.idb.every((x) => x === 1) && store1.file.length === 2 && store1.file.every((x) => x === 1), JSON.stringify(store1));
+    const undo10 = await page.evaluate(() => { window.loopwerk.store.undo(); return window.loopwerk.store.project.tracks.flatMap((t) => t.clips).filter((c) => c.sampleId.startsWith('own-')).length; });
+    check('C10 Ein Rückgängig entfernt beide Clips', undo10 === 0, String(undo10));
+    await page.evaluate(() => window.loopwerk.store.redo());
+
+    // ---------- 10 mit Loop: je Spur ein Take-Clip mit denselben Durchgängen ----------
+    await page.evaluate(() => { const { store, engine } = window.loopwerk; store.setLoop({ on: true, startBeat: 16, endBeat: 24 }); engine.setPosition(0); });
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 10000 });
+    const t0 = await page.evaluate(() => window.loopwerk.engine.anchors[0].time);
+    await page.waitForFunction((t) => window.loopwerk.engine.ctx.currentTime >= t, t0 + 8.6, { timeout: 30000, polling: 20 });
+    await page.keyboard.press('r');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'idle', null, { timeout: 15000 });
+    await page.waitForTimeout(200);
+    const loopClips = (await ownClips()).filter((c) => c.start === 16);
+    const li = [];
+    for (const c of loopClips) for (const id of c.takes || []) li.push({ track: c.track, ...(await info(id)) });
+    const lhint = await page.evaluate(() => document.getElementById('hint-text').textContent);
+    const N = Math.round(4 * SR);
+    check('C10 Loop: 2 Take-Clips (Spur 1 und 2) am Loop-Anfang mit gleich vielen Takes (2), jeder Take N Frames, 1 Kanal',
+      loopClips.length === 2 && loopClips.every((c) => c.takes?.length === 2 && c.take === 1 && c.len === 8) && new Set(loopClips.map((c) => c.track)).size === 2 && li.length === 4 && li.every((x) => x.ch === 1 && x.n === N),
+      JSON.stringify({ clips: loopClips.map((c) => [c.track, c.takes?.length, c.take, c.len]), takes: li.map((x) => [x.track, x.name, x.ch, x.n]), lhint }));
+    check('C10 Loop: Kanaltrennung je Take (Spur 1 links ≥ 20 dB, Spur 2 rechts ≥ 20 dB), Namen „Aufnahme n · Links/Rechts · Take k“',
+      li.length === 4 && li.filter((x) => x.track === 't1').every((x) => x.db[0] >= 20 && / · Links · Take \d$/.test(x.name)) && li.filter((x) => x.track === 't2').every((x) => x.db[0] <= -20 && / · Rechts · Take \d$/.test(x.name)),
+      li.map((x) => `${x.track} ${x.name}: ${x.db[0]} dB`).join('; '));
+    check('C10 Loop: Einblender „2 Spuren aufgenommen. Je 2 Takes …“', /^2 Spuren aufgenommen\. Je 2 Takes/.test(lhint), lhint);
+    const undoLoop = await page.evaluate(() => { window.loopwerk.store.undo(); return window.loopwerk.store.project.tracks.flatMap((t) => t.clips).filter((c) => c.startBeat === 16).length; });
+    check('C10 Loop: ein Rückgängig entfernt beide Take-Clips', undoLoop === 0, String(undoLoop));
+
+    // ---------- Eine scharfe Spur auf Auto: Stereo bei 2 Kanälen (beide Kanäle getrennt erhalten) ----------
+    await page.evaluate(async () => {
+      const { store, engine } = window.loopwerk;
+      const m = await import('./src/model.js');
+      store.replace(m.createEmptyProject());
+      engine.setPosition(0);
+    });
+    await page.waitForTimeout(100);
+    const cleared = await page.evaluate(() => window.loopwerk.ui.recTracks.length);
+    await page.evaluate(() => window.loopwerk.ui.selectTrack('t3'));
+    await page.keyboard.press('Shift+R');
+    const shiftR = await page.evaluate(() => ({ rec: window.loopwerk.ui.recTracks.slice(), undo: window.loopwerk.store.undoStack.length, dot: document.querySelectorAll('.track-row.rec-armed').length }));
+    check('C12 Neues Projekt leert den Scharf-Zustand; Umschalt+R schaltet die gewählte Spur, ohne Rückgängig-Schritt', cleared === 0 && JSON.stringify(shiftR.rec) === '["t3"]' && shiftR.undo === 0 && shiftR.dot === 1, JSON.stringify({ cleared, shiftR }));
+    await page.evaluate(() => window.loopwerk.ui.select(null));
+    await record(4.5);
+    const one = await ownClips();
+    const oi = one[0] && await info(one[0].sampleId);
+    check('C Eine scharfe Spur (Auto, 2 Kanäle): Stereo-Sound, links 440 Hz, rechts 660 Hz (je ≥ 20 dB)', one.length === 1 && one[0].track === 't3' && oi?.ch === 2 && oi.db[0] >= 20 && oi.db[1] <= -20, JSON.stringify({ one, oi }));
+
+    // ---------- 12: gemerktes Gerät fehlt → Einblender, Aufnahme mit dem Standardgerät ----------
+    await page.evaluate(() => { localStorage.setItem('loopwerk.recDevice.v1', JSON.stringify({ id: 'weg-123', devices: { 'weg-123': { label: 'Interface X', channels: 2, at: 1 } } })); window.loopwerk.engine.setPosition(0); window.loopwerk.ui.select(null); });
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 10000 });
+    const miss = await page.evaluate(() => ({ hint: document.getElementById('hint-text').textContent, asked: window.__asked.slice(-2).map((a) => a.audio.deviceId?.exact ?? null), label: window.__streams.at(-1).getAudioTracks()[0].label }));
+    await page.waitForFunction(() => window.loopwerk.engine.currentBeat() >= 2.5, null, { timeout: 15000 });
+    await page.click('#rec-btn');
+    await page.waitForFunction(() => window.loopwerk.recorder.state === 'idle', null, { timeout: 15000 });
+    const missN = (await ownClips()).length;
+    check('C12 Gemerktes Gerät fehlt (OverconstrainedError): Einblender „„Interface X“ fehlt – Aufnahme mit dem Standard-Mikrofon.“, Aufnahme läuft',
+      miss.hint === '„Interface X“ fehlt – Aufnahme mit dem Standard-Mikrofon.' && miss.asked[0] === 'weg-123' && miss.asked[1] === null && missN === 2, JSON.stringify({ ...miss, missN }));
+    check('C12 Auch nach dem Ersatzweg: Mikrofon zu', await micClosed());
+    await page.evaluate(() => localStorage.removeItem('loopwerk.recDevice.v1'));
+
+    // ---------- 12: „Projekt öffnen“ leert den Scharf-Zustand ----------
+    const [download] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => { window.loopwerk.store.setProjectName('Mehrspur-Datei'); document.getElementById('save-btn').click(); })]);
+    const saved = path.join(tmp, 'mehrspur.json');
+    await download.saveAs(saved);
+    await page.evaluate(() => { window.loopwerk.ui.setRecArm('t1', true); });
+    await page.setInputFiles('#open-input', saved);
+    await page.waitForFunction(() => !window.loopwerk.store.canUndo && window.loopwerk.ui.recTracks.length === 0, null, { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(200);
+    const opened = await page.evaluate(() => ({ name: window.loopwerk.store.project.name, rec: window.loopwerk.ui.recTracks.length, dots: document.querySelectorAll('.track-row.rec-armed').length }));
+    check('C12 Nach „Projekt öffnen“ ist keine Spur scharf', opened.name === 'Mehrspur-Datei' && opened.rec === 0 && opened.dots === 0, JSON.stringify(opened));
+    check('C Keine Fehler in der Konsole (Desktop, Fake-Gerät)', app.errors.length === 0, app.errors.join(' | '));
+    await app.close();
+
+    // ---------- 11: 1-Kanal-Gerät – Sperren, Auto → Mono, Editor/Stretch/Tonhöhe/Export mit 1 Kanal ----------
+    app = await openApp({ init: () => { window.__oneChannel = true; }, args, viewport: { width: 1440, height: 900 } });
+    page = app.page;
+    await page.evaluate(micSpy);
+    await page.evaluate(async () => {
+      const lw = window.loopwerk;
+      localStorage.removeItem('loopwerk.recDevice.v1');
+      const m = await import('./src/model.js');
+      lw.store.replace(m.createEmptyProject());
+      lw.engine.setPosition(0);
+      lw.ui.setRecArm('t1', true);
+    });
+    await page.click('#rec-more');
+    await page.selectOption('#rs-device', '#suchen');
+    await page.waitForFunction(() => document.getElementById('rs-ch').textContent === '1 Kanal' && !document.getElementById('rs-ch').hidden, null, { timeout: 8000 }).catch(() => {});
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => window.loopwerk.ui.selectTrack('t1'));
+    await page.waitForTimeout(200);
+    const lock = await page.evaluate(() => ({ ch: document.getElementById('rs-ch').textContent, btns: [...document.querySelectorAll('#insp-recin-row .key')].map((b) => [b.textContent, b.disabled, b.title]) }));
+    check('C11 1-Kanal-Gerät: „1 Kanal“, Rechts und Stereo gesperrt („Eingang hat nur einen Kanal“), Auto und Links frei',
+      lock.ch === '1 Kanal' && lock.btns.length === 4 && !lock.btns[0][1] && !lock.btns[1][1] && lock.btns[2][1] && lock.btns[3][1] && lock.btns[2][2] === 'Eingang hat nur einen Kanal' && /Mono/.test(lock.btns[0][2]), JSON.stringify(lock));
+    await page.evaluate(() => window.loopwerk.ui.select(null));
+    await record(8.5);
+    const mono = (await ownClips())[0];
+    const mi = mono && await info(mono.sampleId);
+    check('C11 Auto mit 1 Kanal → 1-Kanal-Sound', mi?.ch === 1 && mi.db[0] >= 20, JSON.stringify(mi));
+    // Pegel: der 1-Kanal-Sound klingt links und rechts gleich laut wie seine Stereo-Kopie (startVoice mischt hoch)
+    const lvl = await page.evaluate(async (id) => {
+      const { store, library, renderProject } = window.loopwerk;
+      const s = await library.ensure(id);
+      const d = s.orig.getChannelData(0);
+      const st = new AudioBuffer({ numberOfChannels: 2, length: d.length, sampleRate: s.orig.sampleRate });
+      st.copyToChannel(d, 0); st.copyToChannel(d, 1);
+      library.register({ id: 'test-mono-copy', name: 'Stereo-Kopie', category: 'fx', lengthBeats: s.lengthBeats, bpm: 120, buffer: st });
+      const p = JSON.parse(JSON.stringify(store.project));
+      const only = (sid) => ({ ...p, tracks: p.tracks.map((t, i) => ({ ...t, clips: i === 0 ? [{ ...t.clips[0], sampleId: sid }] : [] })) });
+      const rms = (b, c) => { const x = b.getChannelData(c); let a = 0; for (let i = 0; i < x.length; i++) a += x[i] * x[i]; return Math.sqrt(a / x.length); };
+      const m = await renderProject(only(id), library, { limiter: false, fromBeat: 0, toBeat: 8 });
+      const sc = await renderProject(only('test-mono-copy'), library, { limiter: false, fromBeat: 0, toBeat: 8 });
+      const db = (a, b) => 20 * Math.log10(a / b);
+      return { l: db(rms(m, 0), rms(sc, 0)), r: db(rms(m, 1), rms(sc, 1)), lr: db(rms(m, 0), rms(m, 1)) };
+    }, mono.sampleId);
+    check('C11 1-Kanal-Sound im Mix: links und rechts so laut wie die Stereo-Kopie (±0,1 dB, kein −3-dB-Panner-Abfall)', Math.abs(lvl.l) <= 0.1 && Math.abs(lvl.r) <= 0.1 && Math.abs(lvl.lr) <= 0.1,
+      `links ${lvl.l.toFixed(2)} dB, rechts ${lvl.r.toFixed(2)} dB, L−R ${lvl.lr.toFixed(2)} dB`);
+    // Tempo-Strecken (Sound-Tempo: 8 Schläge → 6, Song 120 BPM) mit 1 Kanal
+    const str = await page.evaluate(async (id) => {
+      const { store, library } = window.loopwerk;
+      const s = await library.ensure(id);
+      store.setSampleTempo(id, 6);
+      await library.ensureProject(store.project);
+      // Die ganze Aufnahme zählt jetzt 6 Schläge = 3 s bei 120 BPM
+      const want = Math.round(6 * 0.5 * s.orig.sampleRate);
+      for (let i = 0; i < 100 && library.get(id).buffer?.length !== want; i++) await new Promise((r) => setTimeout(r, 100));
+      const b = library.get(id).buffer;
+      let peak = 0; for (const v of b.getChannelData(0)) peak = Math.max(peak, Math.abs(v));
+      return { ch: b.numberOfChannels, n: b.length, want, orig: s.orig.length, peak };
+    }, mono.sampleId);
+    check('C11 Tempo-Strecken mit 1 Kanal (Sound-Tempo 6 Schläge): gedehnte Fassung genau 3 s, 1 Kanal, klingt', str.n === str.want && str.n < str.orig && str.ch === 1 && str.peak > 0.1, JSON.stringify(str));
+    await page.evaluate((id) => window.loopwerk.store.setSampleTempo(id, null), mono.sampleId);
+    // Editor: Normalisieren, Tonhöhe +1, Übernehmen
+    await page.evaluate((cid) => { window.loopwerk.ui.select(cid); window.loopwerk.editor.open(cid); }, mono.id);
+    await page.waitForFunction(() => !document.getElementById('editor').hidden, null, { timeout: 5000 });
+    await page.waitForTimeout(400);
+    await clickR(page, '#ed-normalize');
+    await clickR(page, '#ed-pitch-up');
+    await page.waitForTimeout(300);
+    await clickR(page, '#ed-apply');
+    await page.waitForFunction((args) => window.loopwerk.store.findClip(args.id).clip.sampleId !== args.old, { id: mono.id, old: mono.sampleId }, { timeout: 15000 }).catch(() => {});
+    const ed = await page.evaluate(async (cid) => { const c = window.loopwerk.store.findClip(cid).clip; return { s: c.sampleId }; }, mono.id);
+    const edi = ed.s !== mono.sampleId ? await info(ed.s) : null;
+    check('C11 Editor (Normalisieren, Tonhöhe +1, Übernehmen) mit 1-Kanal-Sound: neuer Sound, 1 Kanal', !!edi && edi.ch === 1 && edi.n > 0, JSON.stringify(edi));
+    await page.evaluate(() => window.loopwerk.ui.setDock(null));
+    // WAV-Export
+    const ex = await page.evaluate(async () => {
+      const { store, library } = window.loopwerk;
+      const { exportSong } = await import('./src/export.js');
+      const r = await exportSong(store.project, library, { format: 'wav', range: 'song', tail: false, mastering: false });
+      const v = new DataView(await r.blob.arrayBuffer());
+      const a = r.audio;
+      const rms = (c) => { const x = a.getChannelData(c); let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * x[i]; return Math.sqrt(s / x.length); };
+      return { ch: v.getUint16(22, true), bytes: r.blob.size, peak: r.peak, lr: 20 * Math.log10(rms(0) / rms(1)) };
+    });
+    check('C11 WAV-Export mit 1-Kanal-Sound: Stereo-Datei, klingt, links = rechts', ex.ch === 2 && ex.peak > 0.1 && Math.abs(ex.lr) < 0.1, JSON.stringify(ex));
+    const ownId = mono.sampleId;
+    check('C11 Keine Fehler in der Konsole (1 Kanal)', app.errors.length === 0, app.errors.join(' | '));
+    // Neu laden: der Sound kommt aus IndexedDB mit 1 Kanal zurück
+    await page.reload();
+    await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    const back = await page.evaluate(async (id) => { const s = await window.loopwerk.library.ensure(id); return { ch: s.orig.numberOfChannels, n: s.orig.length, rec: window.loopwerk.ui.recTracks.length }; }, ownId);
+    check('C11 Nach dem Neuladen: Sound aus IndexedDB mit 1 Kanal, nichts scharf', back.ch === 1 && back.n === mi.n && back.rec === 0, JSON.stringify(back));
+    await app.close();
+
+    // ---------- Handy 390 px: Menü „Für Aufnahme scharf“, Feld im Fach „Song“ mit Gerät und Eingang ----------
+    app = await openApp({ init: micSpy, args, viewport: { width: 390, height: 844 }, hasTouch: true, deviceScaleFactor: 2 });
+    page = app.page;
+    await page.tap('.track-row:has(.lane[data-track-id="t1"]) .tbtn-menu');
+    await page.waitForTimeout(200);
+    const pm = await page.evaluate(() => { const r = document.getElementById('tm-rec-arm').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    await page.tap('#tm-rec-arm');
+    await page.tap('.track-row:has(.lane[data-track-id="t2"]) .tbtn-menu');
+    await page.waitForTimeout(200);
+    await page.tap('#tm-rec-arm');
+    await page.waitForTimeout(200);
+    await shot(page, 'mehrspur-handy-spuren.png');
+    await page.tap('#tab-song');
+    await page.waitForTimeout(900);
+    await page.evaluate(() => document.getElementById('rec-setup').scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(200);
+    await page.tap('#rs-recin-t2-R');
+    await page.waitForTimeout(200);
+    const ph = await page.evaluate(() => {
+      const box = (n) => { const r = n.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+      const rows = [...document.querySelectorAll('#rs-armed .rs-armed-row')];
+      return {
+        inSong: !!document.getElementById('rec-setup').closest('#song-rec'), sel: box(document.getElementById('rs-device')),
+        rows: rows.map((r) => r.querySelector('.rs-track').textContent), keys: rows.flatMap((r) => [...r.querySelectorAll('button')].map(box)),
+        input: window.loopwerk.store.track('t2').recInput, fits: rows.every((r) => r.scrollWidth <= r.clientWidth + 1 && r.getBoundingClientRect().right <= innerWidth),
+      };
+    });
+    await shot(page, 'mehrspur-handy-feld.png');
+    check('C Handy: Menüpunkt „Für Aufnahme scharf“ ≥ 44 px, Fach „Song“ zeigt Gerät und beide scharfen Spuren mit Eingang (≥ 44 px, passt in die Breite), Tipp auf „Rechts“ setzt ihn',
+      pm[1] >= 44 && ph.inSong && ph.sel[1] >= 44 && ph.rows.length === 2 && ph.keys.length === 10 && ph.keys.every(([w, h]) => w >= 44 && h >= 44) && ph.fits && ph.input === 'R', JSON.stringify({ pm, ph }));
+    check('C Keine Fehler in der Konsole (Handy)', app.errors.length === 0, app.errors.join(' | '));
+    await app.close();
+
+    // ---------- Krachwerk: recArm aus (Menüpunkt, Schalter, Liste), die Geräteauswahl bleibt ----------
+    app = await openApp({ viewport: { width: 1440, height: 900 }, fresh: true });
+    page = app.page;
+    await page.goto(app.url + '?edition=make');
+    await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    const kw = await page.evaluate(async () => {
+      const { ui, store } = window.loopwerk;
+      document.querySelector('.track-row .tbtn-menu')?.click();
+      await new Promise((r) => setTimeout(r, 150));
+      const menu = !!document.getElementById('tm-rec-arm');
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      ui.selectTrack(store.project.tracks[0].id);
+      await new Promise((r) => setTimeout(r, 150));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'R', shiftKey: true, bubbles: true }));
+      return { edition: window.loopwerk.edition.id, menu, insp: !!document.getElementById('insp-arm-row'), list: !!document.getElementById('rs-armed'), device: !!document.getElementById('rs-device'), rec: ui.recTracks.length };
+    });
+    check('C Krachwerk: kein „Für Aufnahme scharf“, kein Schalter, keine Liste, Umschalt+R wirkungslos; Geräteauswahl da', kw.edition === 'make' && !kw.menu && !kw.insp && !kw.list && kw.device && kw.rec === 0, JSON.stringify(kw));
+    await app.close();
+  } catch (err) {
+    check('C lief ohne Ausnahme', false, err.stack || err.message);
+    await app.close().catch(() => {});
+  }
+}

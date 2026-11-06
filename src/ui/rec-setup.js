@@ -1,14 +1,16 @@
-// Feld „Aufnahme“ (Spec 2.13 A): Eingang, Latenz [−] 142 ms [+] · eingemessen/geschätzt, Einmessen.
+// Feld „Aufnahme“ (Spec 2.13 A, C): Eingangsgerät mit Kanälen, Latenz [−] 142 ms [+] · eingemessen/geschätzt, Einmessen.
 // Desktop im Klappfeld am ● (#rec-pop), Handy im Fach „Song“ (#song-rec), Krachwerk: Song-Werkbank bzw. Song-Fach.
 // Werte je Gerät in rec-settings.js (kein Projektfeld, kein Rückgängig).
 
 import { el } from '../util.js';
 import { place, narrow } from './place.js';
-import { deviceKey, loadLatency, saveLatency, estimateLatency, DEFAULT_INPUT } from '../rec-settings.js';
+import { mountArmedList } from './rec-arm.js';
+import { deviceKey, loadLatency, saveLatency, estimateLatency, loadDevice, chooseDevice } from '../rec-settings.js';
 
 const NUDGE_MAX = 500;
 
-export function mountRecSetup({ ui, engine, recorder }) {
+// store, recArm (2.13 C): scharfe Spuren mit ihrem Eingang im Feld; ohne recArm (Krachwerk) nur das Gerät
+export function mountRecSetup({ ui, engine, recorder, store = null, recArm = null }) {
   const $ = (id) => document.getElementById(id);
   const pop = $('rec-pop');
   const more = $('rec-more');
@@ -17,10 +19,20 @@ export function mountRecSetup({ ui, engine, recorder }) {
   box.setAttribute('role', 'group');
   box.setAttribute('aria-label', 'Aufnahme');
 
+  // Eingang (2.13 C): Gerät wählen (vor der Freigabe nur „Standard-Mikrofon“), dahinter seine Kanäle; gemerkt je Gerät
   const inRow = el('div', 'rs-row');
-  const inVal = el('span', 'rs-input', 'Standard-Mikrofon');
-  inVal.id = 'rs-input';
-  inRow.append(el('span', 'rs-label', 'Eingang'), inVal);
+  const dev = el('div', 'rs-dev');
+  const sel = document.createElement('select');
+  sel.className = 'rs-device';
+  sel.id = 'rs-device';
+  sel.setAttribute('aria-label', 'Eingangsgerät');
+  const chOut = el('output', 'rs-ch');
+  chOut.id = 'rs-ch';
+  chOut.hidden = true;
+  dev.append(sel, chOut);
+  inRow.append(el('span', 'rs-label', 'Eingang'), dev);
+  const SEARCH = '#suchen';
+  const labels = new Map(); // deviceId → Name (ohne „(fehlt)“)
 
   const latRow = el('div', 'rs-row');
   const lat = el('div', 'rs-lat');
@@ -41,7 +53,8 @@ export function mountRecSetup({ ui, engine, recorder }) {
   const cal = btn('rs-cal', 'Einmessen', 'Latenz einmessen: 6 Klicks aus dem Lautsprecher');
   cal.id = 'rs-cal';
   cal.title = 'Spielt 6 Klicks aus dem Lautsprecher und misst, wann das Mikrofon sie hört';
-  box.append(inRow, latRow, cal);
+  const armed = recArm && store ? mountArmedList({ store, ui, recArm, recorder }) : null;
+  box.append(inRow, ...(armed ? [armed.el] : []), latRow, cal);
   pop.append(box);
 
   // Handy: Fach „Song“; Krachwerk am Desktop in der Song-Werkbank
@@ -60,11 +73,45 @@ export function mountRecSetup({ ui, engine, recorder }) {
     out.textContent = base == null ? (nudge ? `${nudge > 0 ? '+' : ''}${nudge} ms` : '– ms') : `${Math.round(base + nudge)} ms`;
     mark.textContent = measured ? 'eingemessen' : 'geschätzt';
     mark.dataset.measured = String(measured);
-    const input = k.slice(0, k.indexOf('|'));
-    inVal.textContent = input && input !== DEFAULT_INPUT ? input : 'Standard-Mikrofon';
-    inVal.title = inVal.textContent;
     box.dataset.key = k;
+    await renderDevices();
   }
+
+  // Geräteliste: Namen gibt es erst nach der Freigabe; davor „Geräte suchen …“ (öffnet das Mikrofon kurz)
+  async function renderDevices() {
+    const d = loadDevice();
+    let list = [];
+    try { list = (await navigator.mediaDevices?.enumerateDevices?.() ?? []).filter((x) => x.kind === 'audioinput'); } catch { /* keine Liste */ }
+    const named = list.filter((x) => x.label && x.deviceId && x.deviceId !== 'default' && x.deviceId !== 'communications');
+    for (const x of named) labels.set(x.deviceId, x.label);
+    const opts = [['', 'Standard-Mikrofon'], ...named.map((x) => [x.deviceId, x.label])];
+    if (d.id && !opts.some(([id]) => id === d.id)) opts.push([d.id, `${d.label || 'Gewähltes Gerät'}${named.length ? ' (fehlt)' : ''}`]);
+    if (!named.length && navigator.mediaDevices?.getUserMedia) opts.push([SEARCH, 'Geräte suchen …']);
+    const key = JSON.stringify(opts);
+    if (sel.dataset.opts !== key) {
+      sel.replaceChildren(...opts.map(([id, label]) => { const o = document.createElement('option'); o.value = id; o.textContent = label; return o; }));
+      sel.dataset.opts = key;
+    }
+    sel.value = d.id;
+    sel.title = sel.selectedOptions[0]?.textContent ?? '';
+    chOut.hidden = !d.channels;
+    chOut.textContent = d.channels === 1 ? '1 Kanal' : '2 Kanäle';
+    box.dataset.channels = String(d.channels ?? '');
+  }
+
+  sel.addEventListener('change', async () => {
+    const id = sel.value;
+    if (id !== SEARCH) chooseDevice(id, labels.get(id) ?? '');
+    // Kurz öffnen: Freigabe, Name und Kanäle (danach sofort wieder zu)
+    try {
+      const mic = await recorder.probe();
+      if (mic?.missing) ui.flash(`„${mic.missing}“ fehlt – Aufnahme mit dem Standard-Mikrofon.`);
+    } catch (err) {
+      ui.flash(err?.message || 'Kein Zugriff auf das Mikrofon.');
+    }
+    render();
+  });
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => renderDevices());
 
   async function nudge(d) {
     const k = key ?? await keyNow();
@@ -124,7 +171,10 @@ export function mountRecSetup({ ui, engine, recorder }) {
   // Beim Öffnen frische Werte (Ausgang kann gewechselt haben); Klick auf ▾ ist eine Geste: Ton-Kontext darf starten
   more?.addEventListener('click', () => { if (!pop.hidden) engine._ensure().then(render).catch(render); });
   ui.on(() => { if (ui.dock === 'song') render(); });
-  recorder.on((what) => { if (what === 'latency') render(); if (what === 'state') { cal.disabled = recorder.state !== 'idle' && !recorder.calibrating; } });
+  recorder.on((what) => {
+    if (what === 'latency' || what === 'device') render();
+    if (what === 'state') { cal.disabled = recorder.state !== 'idle' && !recorder.calibrating; sel.disabled = recorder.state !== 'idle' || recorder.calibrating; }
+  });
   narrow.addEventListener('change', render);
   render();
   return { render, el: box };

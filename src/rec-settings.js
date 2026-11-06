@@ -54,6 +54,9 @@ const inputLabel = (stream) => {
 export async function deviceKey(stream, ctx) {
   const out = await outputLabel(ctx);
   if (stream) return `${inputLabel(stream)}|${out}`;
+  // Gewähltes Gerät mit bekanntem Namen (2.13 C): dessen Latenz zeigen
+  const dev = loadDevice();
+  if (dev.id && dev.label) return `${dev.label}|${out}`;
   const all = readAll();
   const last = Object.keys(all).filter((k) => k.endsWith(`|${out}`)).sort((a, b) => (all[b].at || 0) - (all[a].at || 0))[0];
   return last ?? `${DEFAULT_INPUT}|${out}`;
@@ -83,3 +86,62 @@ export async function effectiveLatency(ctx, stream, { song = 0 } = {}) {
   const nudge = (e?.nudge || 0) / 1000;
   return { seconds: round + nudge + (song || 0), round, nudge, measured, key };
 }
+
+// ---------- Eingangsgerät (Spec 2.13 C) ----------
+// lsKey('loopwerk.recDevice.v1') = { id: deviceId | '' (Standard), devices: { "<deviceId>": { label, channels, at } } }
+const DEV_KEY = () => lsKey('loopwerk.recDevice.v1');
+
+function readDev() {
+  try {
+    const v = JSON.parse(localStorage.getItem(DEV_KEY()));
+    if (v && typeof v === 'object' && !Array.isArray(v)) return { id: typeof v.id === 'string' ? v.id : '', devices: v.devices && typeof v.devices === 'object' ? v.devices : {} };
+  } catch { /* leer */ }
+  return { id: '', devices: {} };
+}
+
+function writeDev(v) {
+  const keys = Object.keys(v.devices).sort((a, b) => (v.devices[b]?.at || 0) - (v.devices[a]?.at || 0));
+  const devices = {};
+  for (const k of keys.slice(0, MAX)) devices[k] = v.devices[k];
+  try { localStorage.setItem(DEV_KEY(), JSON.stringify({ id: v.id, devices })); } catch { /* egal */ }
+}
+
+// Gewähltes Gerät: { id ('' = Standard), label, channels (1 | 2 | null = unbekannt) }
+export function loadDevice() {
+  const v = readDev();
+  const d = v.devices[v.id || 'default'] || {};
+  return { id: v.id, label: d.label || '', channels: d.channels === 1 || d.channels === 2 ? d.channels : null };
+}
+
+export function chooseDevice(id, label = '') {
+  const v = readDev();
+  v.id = id || '';
+  const k = v.id || 'default';
+  v.devices[k] = { ...v.devices[k], ...(label ? { label } : {}), at: Date.now() };
+  writeDev(v);
+  return loadDevice();
+}
+
+// Nach dem Öffnen: Name und Kanäle des gewählten Geräts merken (chosen = '' für Standard)
+export function rememberDevice(chosen, { label, channels }) {
+  const v = readDev();
+  const k = chosen || 'default';
+  const ch = channels === 1 ? 1 : channels >= 2 ? 2 : null;
+  v.devices[k] = { ...v.devices[k], ...(label ? { label } : {}), ...(ch ? { channels: ch } : {}), at: Date.now() };
+  writeDev(v);
+  return loadDevice();
+}
+
+// Eingang je Ziel (Spec 2.13 C): 'L' | 'R' | 'LR' (Stereo). input fehlt = Auto: ein Ziel → Stereo bei 2 Kanälen,
+// mehrere → abwechselnd Links, Rechts in der Reihenfolge des Scharfschaltens. Ein 1-Kanal-Gerät liefert immer 'L' (Mono).
+export function resolveInputs(targets, channels) {
+  const stereo = channels !== 1;
+  return targets.map((t, i) => {
+    let input = t.input === 'L' || t.input === 'R' || t.input === 'LR' ? t.input : null;
+    if (!input) input = targets.length === 1 ? 'LR' : i % 2 ? 'R' : 'L';
+    if (!stereo) input = 'L';
+    return { ...t, input };
+  });
+}
+
+export const INPUT_LABELS = { L: 'Links', R: 'Rechts', LR: 'Stereo' };

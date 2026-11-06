@@ -16,7 +16,8 @@ export const EDITIONS = {
     keepUnknownClips: true, pwa: true, density: 'calm',
     // „selbst gemacht“ mittel (Martin, 02.11.2026): ohne Loops, Begleitautomatik, KI-Erzeugung, Link/Tab
     // 2b: der Sample-Editor fällt weg, jede ed-…-Funktion hat unten einen Zwilling in der Werkbank
-    surfaces: { starter: false, accomp: false, ai: false, link: false, catalog: false, demo: false, tips: false, editor: false },
+    // recArm (2.13 C): Spuren scharf schalten und Eingang je Spur aus – eine Aufnahme, ein Klang; die Geräteauswahl bleibt
+    surfaces: { starter: false, accomp: false, ai: false, link: false, catalog: false, demo: false, tips: false, editor: false, recArm: false },
     // Stufe 3 (data-tier="3") ist in „calm“ nicht sichtbar; hier steht, wo man es stattdessen findet (Schlüssel: ID oder .Klasse)
     twins: {
       'home-btn': 'Pos1, Lineal antippen', 'metro-btn': 'Song-Fach (Klick)', 'rec-more': 'Song-Fach (Aufnahme)',
