@@ -16,3 +16,9 @@ Ein Take-Clip ist **ein** Clip mit `takes: string[]` (sampleIds der Durchgänge)
 - Beim Teilen behalten beide Hälften die Liste. Das ergibt einfaches Comping ohne neue Funktion.
 - Jede Stelle, die „benutzte Sounds“ sammelt, muss `clipSampleIds(clip)` statt `clip.sampleId` nehmen: Einbetten, Löschschutz, Laden, „Sound fehlt“. Vergisst man eine, fehlen inaktive Takes in der Projektdatei. Test 9 der Spec prüft das.
 - Optionales Feld, `PROJECT_VERSION` bleibt 1. Ältere Stände spielen den aktiven Take und verlieren beim Speichern die Liste.
+
+## Nachtrag (Krachwerk Scheibe 3, 06.11.2026, vorgeschlagen)
+Krachwerk übernimmt das Modell unverändert (`docs/specs/krachwerk-3-takes-festhalten.md` §2). Neu sind nur:
+- Recorder-Modus `loop`: Läuft der Song mit Loop, beginnt die Aufnahme ohne Stopp und Vorzähler am nächsten Loop-Anfang. `splitPasses`, `addRecordings` und die Latenz sind dieselben. Gesäubert wird ohne Zeitverschiebung (`cleanPasses`: Mono, Hochpass, gemeinsamer Pegel).
+- Ein Klang-Rezept (ADR 010) an einem Take-Clip gilt für alle Takes des Clips (`setRecipe` mit einer Liste von IDs, ein Undo-Schritt).
+- Neu am eigenen Sound ist `takeGroup`, damit die Kiste die Takes einer Aufnahme faltet. Aufräumen und Sicherung zählen inaktive Takes über `clipSampleIds` als benutzt.

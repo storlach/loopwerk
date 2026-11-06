@@ -72,12 +72,12 @@ Martin lässt seinen Klopf-Loop laufen, tippt ●, singt viermal darüber und w�
 | Aktion | Verhalten |
 |---|---|
 | `setClipMute(ids, on)` | ein Undo-Schritt |
-| `bounce({ sampleId, fromBeat, toBeat, sources, mode, gain, belowTrackId, trackId })` → `{ trackId, clipId }` | `batch('Festhalten')`. `mode:'replace'`: Quell-Clips an `fromBeat`/`toBeat` teilen (`splitAt`), die Teile innen `mute`. `addTrack` direkt unter `belowTrackId` (`moveTrack`) mit Lautstärke 1, Mitte, ohne Effekte und Sends. Clip mit `gain`. `mode:'top'` (ohne Effekte): Clip oben auf `trackId`. `mode:'kiste'` wird nicht aufgerufen. Ein Undo-Schritt |
+| `bounce({ sampleId, fromBeat, toBeat, sources, mode, gain, belowTrackId, trackId })` → `{ trackId, clipId }` | `batch('Festhalten')`. `mode:'replace'`: Quell-Clips an `fromBeat`/`toBeat` teilen (`splitAt`), die Teile innen `mute`. `addTrack` direkt unter `belowTrackId` (`moveTrack`) mit Lautstärke 1, Mitte, ohne Effekte und Sends. Clip mit `gain`. `mode:'top'` (ohne Effekte): Clip oben auf `trackId`. Ein Undo-Schritt. „Nur in die Kiste“ ruft keine Store-Aktion auf (nur `own.create`) |
 
 ### Engine
 - **Keine neue Kette:** `renderProject(view, library, { fromBeat, toBeat, tailSeconds, master:false, sampleRate: engine.ctx.sampleRate })`. `master:false` heißt ohne Master-Kette, Limiter und Mastering, denn die neue Spur läuft live wieder durch den Master. Busse (Hall, Echo) sind dabei, die neue Spur sendet nicht, und die Quellen sind stumm. So wird nichts doppelt.
 - `renderView` lernt `onlyClips: ids` (Auswahl, Spur-Stumm und Solo zählen nicht) und `dry: true` (Spur ohne Effekte, Lautstärke 1, Mitte, ohne Sends und Kurven). `onlyTrack` gibt es schon (Spur).
-- Ausklang wie im Export (`tailSeconds` aus den beteiligten Ketten). **Im Loop-Bereich wird gefaltet:** `out[i] += out[N + i]` für i < Ausklang, dann auf genau N = round(Schläge · spb · sr) Frames gekürzt. Das ist der Klang, den man im Loop hört, denn dort klingt der Ausklang des vorigen Durchgangs in den Anfang. Bei einer Auswahl ohne Loop wird nicht gefaltet, sondern am Ende abgeschnitten mit 10 ms Ausblende.
+- Ausklang wie im Export (`tailSeconds` aus den beteiligten Ketten). **Im Loop-Bereich wird gefaltet:** `out[i] += out[N + i]` für i < Ausklang, dann auf genau N = round(Schläge · spb · sr) Frames gekürzt. Das ist der Klang, den man im Loop hört, denn dort klingt der Ausklang des vorigen Durchgangs in den Anfang. Ohne Loop (Auswahl, Spur ohne Loop) wird nicht gefaltet, sondern am Ende abgeschnitten mit 10 ms Ausblende.
 - **Kopfraum:** Liegt die Spitze über 0,98, wird der Sound auf 0,98 gesenkt (16-Bit-WAV clippt sonst). Der ersetzende Clip bekommt `gain = 1/Faktor` (bis +12 dB, `MAX_CLIP_GAIN`). Im Song klingt es dadurch gleich laut, in der Kiste ist der Sound leiser.
 - Reine Teile ohne Audio in **neu `src/bounce.js`** (in Node testbar): `planBounce(project, { scope, fromBeat, toBeat, clipIds, trackId, withFx })` → `{ view, opts, sources, fold, belowTrackId }`, `foldTail(chs, N)`, `headroom(chs)`. Abbruch mit Einblender: Bereich über 480 s, nichts klingt („Im Bereich klingt nichts.“), Aufnahme läuft. Clips mit fehlendem Sound bleiben still, Einblender „2 Clips ohne Sound bleiben still.“
 - Das Effekt-Pad wirkt nur live und kommt nicht mit. Wer es festhalten will, nimmt es erst als Kurve auf (2.12 Scheibe 6).
@@ -152,7 +152,7 @@ Krachwerk-Sicherung 2026-11-06.zip          (Song: „Küchensong.zip“)
 | Pads | nur übernehmen, wenn hier keine stehen |
 | Song (`current`) | wird geöffnet über **neu `store.openSong(project)`**: ein Undo-Schritt, der das ganze Projekt ersetzt. ↶ holt den vorigen Song zurück, die Sounds bleiben. `nextId` steigt nur (max aus beiden), damit nach ↶ keine Clip-ID doppelt vergeben wird |
 
-Einblender: „Zurückgeholt: 42 Sounds neu, 8 schon da – „Küchensong“ geöffnet. ↶ holt deinen vorigen Song zurück.“ Danach `lastBackup` nur beim **Sichern** setzen, nicht beim Zurückholen.
+Einblender: „Zurückgeholt: 42 Sounds neu, 8 schon da – „Küchensong“ geöffnet. ↶ holt deinen vorigen Song zurück.“ `lastBackup` wird nur beim **Sichern** gesetzt, nicht beim Zurückholen.
 
 ### Bedienung (Tipps)
 Sichern: Deck antippen → Song-Fach → „Sichern“ = **2** (Desktop: Werkbank-Streifen → Sichern = 2). Song teilen: Song-Fach → „Speichern“ = **2**. Zurückholen: Song-Fach → „Zurückholen“ → Datei = 2 + Auswahl. Während des Sicherns zeigt der Knopf eine Weißglut-Linie mit Fortschritt, abbrechbar durch erneutes Tippen.
