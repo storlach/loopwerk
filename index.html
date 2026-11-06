@@ -1630,7 +1630,7 @@
     .pat-keys { display: none !important; }
     .pat-vkeys + #pat-roll { margin-top: calc(-1 * var(--vk-h, 0px)); }
     .pat-vkeys {
-      display: block; position: sticky; left: 0; z-index: 2; width: 72px;
+      display: block; position: sticky; left: 0; z-index: 2; width: 88px;
       touch-action: none; -webkit-user-select: none; user-select: none;
       box-shadow: 2px 0 6px rgb(0 0 0 / 0.18);
     }
@@ -1644,14 +1644,15 @@
     .vkey.down { background: var(--cat-own); color: #fff; }
     /* Kein Scrollen nach oben/unten: der Tonbereich passt in die Höhe, ▲/▼ wechselt die Oktave */
     .pat-roll-wrap { overflow-y: hidden; }
+    .vkey-octs { display: flex; }
     .vkey-oct {
-      display: block; width: 100%; box-sizing: border-box; padding: 0; border: 0;
+      display: block; flex: 1 1 0; min-width: 0; height: 100%; box-sizing: border-box; padding: 0; border: 0;
       background: var(--deck-2); color: var(--ink); font: 500 13px/1 var(--font-mono); cursor: pointer;
     }
     .vkey-oct:disabled { color: var(--muted); opacity: 0.4; }
     /* Tonleiter-Schalter im freien Streifen über der Piano-Roll: bleibt beim Wischen links stehen */
     .pat-scale-bar {
-      display: flex; align-items: flex-start; gap: 6px; position: sticky; left: 72px; top: 0; z-index: 3;
+      display: flex; align-items: flex-start; gap: 6px; position: sticky; left: 88px; top: 0; z-index: 3;
       width: 0; height: 0; padding-left: 6px; pointer-events: none;
     }
     .pat-scale-bar > * { flex: none; pointer-events: auto; }
@@ -3474,9 +3475,12 @@
   @media (min-width: 761px) and (hover: none) and (pointer: coarse) { #pattern .pat-drums { --rmin: 40px; } }
   @media (max-width: 760px) {
     /* Handy: Zeile 1 Überschrift und „Mehr“, Zeile 2 Anhören, Live, Umschalter bzw. Klang */
-    #pattern > .dock-head { flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 4px 8px 6px 12px; }
+    #pattern > .dock-head { flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 2px 8px 2px 12px; }
+    #pattern .pat-body { padding: 2px 8px; gap: 4px; }
+    #pattern #pat-play { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; }
     #pattern .pat-headline { min-width: 0; }
-    #pattern .pat-name { font-size: 24px; }
+    #pattern .pat-headline h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    #pattern .pat-name { font-size: 24px; min-height: 44px; padding: 0; }
     #pattern .dock-actions > .pat-more-wrap { order: 1; margin-left: 0; }
     #pattern .dock-actions > :is(#pat-play, #pat-live, .pat-view) { order: 3; }
     #pattern .pat-view .seg { padding: 0 12px; }
@@ -3527,18 +3531,29 @@
   #editor .ed-more { justify-self: start; }
   #editor .ed-tools[hidden] { display: none; }
   @media (max-width: 760px) {
-    #editor .ed-top { padding: 4px 8px 6px 12px; }
-    #editor .ed-headrow { gap: 2px 8px; }
-    #editor .ed-title { flex: 1 1 100%; min-width: 0; }
-    #editor .ed-title h2 { display: block; }
-    #editor .ed-name { font-size: 24px; }
-    #editor .ed-actions { width: 100%; }
-    #editor #ed-apply { margin-left: auto; }
-    #editor .ed-cuts { gap: 4px 8px; }
-    #editor .ed-tool { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
+    /* Handy: Zeile 1 Name + Übernehmen, Zeile 2 Anhören, Rückgängig, Abbrechen und die Schnittwerkzeuge in einer wischbaren Zeile */
+    #editor .ed-top { display: grid; grid-template-columns: 44px 44px 44px minmax(0, 1fr); align-items: center; gap: 2px 6px; padding: 2px 8px 2px 12px; }
+    #editor .ed-headrow, #editor .ed-actions { display: contents; }
+    #editor .ed-title { grid-column: 1 / -1; grid-row: 1; min-width: 0; padding-right: 112px; }
+    #editor .ed-title h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    #editor .ed-name { font-size: 24px; min-height: 44px; padding: 0; }
+    #editor #ed-apply { grid-column: 4; grid-row: 1; justify-self: end; z-index: 1; margin: 0; }
+    #editor #ed-play { grid-column: 1; grid-row: 2; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; }
+    #editor #ed-undo { grid-column: 2; grid-row: 2; }
+    #editor #ed-cancel { grid-column: 3; grid-row: 2; }
+    #editor .ed-cuts {
+      grid-column: 4; grid-row: 2; flex-wrap: nowrap; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+      -webkit-mask-image: linear-gradient(90deg, var(--ink) calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, var(--ink) calc(100% - 28px), transparent);
+    }
+    #editor .ed-cuts::-webkit-scrollbar { display: none; }
+    #editor .ed-cuts[data-end] { -webkit-mask-image: none; mask-image: none; }
+    #editor .ed-cutgroup { flex: none; flex-wrap: nowrap; }
+    #editor .ed-tool { flex: none; width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; justify-content: center; }
     #editor .ed-tool span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-    #editor .ed-stage { padding: 6px 8px 0; }
-    #editor .editor-body { padding: 6px 8px 8px; }
+    #editor .ed-stage { padding: 4px 8px 0; }
+    #editor .editor-body { padding: 2px 8px 4px; gap: 0; }
+    #editor .ed-info { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
+    #editor .ed-info:empty { display: none; }
     #editor .ed-more { min-height: 44px; }
   }
 </style>
