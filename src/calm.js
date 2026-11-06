@@ -9,7 +9,7 @@ export const CALM_TWINS = {
   'clipbar': 'Werkzeug am Clip', 'split-btn': 'Werkzeug am Clip', 'dup-btn': 'Werkzeug am Clip', 'del-btn': 'Werkzeug am Clip',
   'editor-tab': 'Werkbank am Clip', '.tbtn-chev': 'Werkbank Spur (Feinheiten, Kurve)',
   // Song-Dinge: in Loopwerk calm weiter im Fach „Song“ bzw. im Inspektor, in Krachwerk in der Song-Werkbank
-  'metro-btn': 'Song (Klick)', '.lcd-more': 'Song', '.meter-wrap': 'Song', '.key-row': 'Song (Tonart und Akkorde)', '.chord-row': 'Song (Tonart und Akkorde)',
+  'metro-btn': 'Song (Klick)', 'rec-more': 'Song (Aufnahme)', '.lcd-more': 'Song', '.meter-wrap': 'Song', '.key-row': 'Song (Tonart und Akkorde)', '.chord-row': 'Song (Tonart und Akkorde)',
   'mixer-btn': 'Song (Mischen)', 'fxpad-btn': 'Song (FX-Pad)', 'tab-song': 'Tipp auf das Deck', '.tabbar-end': 'Song (Tastenkürzel)',
 };
 
