@@ -1,6 +1,6 @@
 # Krachwerk Scheibe 3: Takes, Festhalten, Speicher v2, Sicherung
 
-**Stand:** 06.11.2026 · **Grundlage:** `docs/ux/krachwerk-brainstorm/synthese.md` §3.7 und §5, `ux.md` b) und e), `architektur.md` §4, `ableger-selbermachen.md` §4, Spec `v2.13-aufnahme.md` B, ADR 007, 009, 010, **ADR 011 (Festhalten), ADR 012 (Speicher v2 und Sicherung)** · **Branch:** `werkstatt`
+**Stand:** 06.11.2026, angenommen · **Grundlage:** `docs/ux/krachwerk-brainstorm/synthese.md` §3.7 und §5, `ux.md` b) und e), `architektur.md` §4, `ableger-selbermachen.md` §4, Spec `v2.13-aufnahme.md` B, ADR 007, 009, 010, **ADR 011 (Festhalten), ADR 012 (Speicher v2 und Sicherung)** · **Branch:** `werkstatt`
 **Rahmen:** Loopwerk sieht unverändert aus (`count-baseline.json` exakt). Unterschiede nur über Optionen aus `src/edition.js`, die `main.js` weitergibt. `PROJECT_VERSION` bleibt 1. Grund ≤ 5 Griffe je Reiter. Rot nur für Aufnahme und Löschen.
 
 ## 0. Ziel aus Nutzersicht
@@ -244,6 +244,8 @@ Sichern: Deck antippen → Song-Fach → „Sichern“ = **2** (Desktop: Werkban
 - **Faltung bei nichtlinearen Effekten** (Kompressor, Pumpen): Die Naht ist nur fast nahtlos. Test 3 nimmt lineare Ketten, der Rest ist Ohr-Test 3.
 
 ## 10. Offene Fragen (Voreinstellung = meine Empfehlung)
+
+**Entschieden (Martin, 06.11.2026): alle Fragen wie empfohlen.** Spec angenommen.
 1. **● bei laufendem Loop = Takes?** Heute legt ● in Krachwerk auch beim Spielen einen Einzelklang an. *(Ja, Takes. Einzelklang: anhalten, dann ●. Eine sichtbare Regel statt eines Umschalters.)*
 2. **Rezept am Take-Clip für alle Takes?** *(Ja, sonst klingt der Wechsel roh.)*
 3. **Festhalten ersetzt an Ort und Stelle** (neue Spur, Quellen stumm) **als Voreinstellung**, „nur Kiste“ mit Umschalt/lange drücken? *(Ja. Es klingt sofort gleich und ist ein Undo-Schritt.)*
