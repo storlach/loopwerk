@@ -426,10 +426,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
   const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
 
-  // Song-Werkbank (Krachwerk): Master-Effekte und Verlauf der Summe wohnen im Reiter „Mischen“, Mastering im Reiter „Fertig“
+  // Song-Werkbank (Krachwerk): Master-Effekte wohnen im Reiter „Mischen“, Mastering im Reiter „Fertig“
   const songBox = el('section', 'insp-sec insp-song');
   const sb = songPanel ? songPanel(songBox, { store, ui, library, engine, mastering }) : null;
-  if (sb) sb.slots.auto.append(masterAuto);
 
   root.append(clipSec, trackSec, songSec, songBox, hintSec);
 

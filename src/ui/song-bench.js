@@ -263,7 +263,6 @@ export function mountSongBench(box, { store, ui, library, engine, mastering, exp
     fxBtn.addEventListener('click', () => { fxHost.hidden = !fxHost.hidden; fxBtn.setAttribute('aria-expanded', String(!fxHost.hidden)); });
     grund.append(fxBtn, fxHost);
     slots.fx = fxHost;
-    slots.auto = fine; // Verlauf der Summe (Inspektor hängt es hier ein)
     updaters.push(() => {
       build();
       const p = store.project;
