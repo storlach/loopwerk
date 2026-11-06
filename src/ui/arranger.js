@@ -6,6 +6,7 @@ import { clamp, el, trackPointer } from '../util.js';
 import { AUTO_PARAMS, laneOf } from '../automation.js';
 import { makeKnob } from './knob.js';
 import { touch } from './place.js';
+import { stepTake } from './take-row.js';
 import { lsKey } from '../edition.js';
 import { holdArea, pressHold } from './touch.js';
 import { mountKeyRow } from './key-row.js';
@@ -704,7 +705,13 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     if (cutName) label.title = sample.name;
     if (sample?.patternId) label.append(el('span', 'clip-tag', 'Pattern'));
     // Take-Clip (2.13): aktiver Take / Anzahl, nur Anzeige
-    if (clip.takes?.length > 1) { const t = el('span', 'clip-tag clip-take', `${clip.take + 1}/${clip.takes.length}`); t.title = `Take ${clip.take + 1} von ${clip.takes.length} (Alt+↑/↓)`; label.append(t); }
+    // Das Kennzeichen sitzt am Clip, nicht im Namen (Handy: Schalter mit 44-px-Tippfläche, siehe CSS)
+    let takeTag = null;
+    if (clip.takes?.length > 1) {
+      takeTag = el('span', 'clip-take');
+      takeTag.append(el('span', 'clip-tag', `${clip.take + 1}/${clip.takes.length}`));
+      takeTag.title = `Take ${clip.take + 1} von ${clip.takes.length} (Alt+↑/↓)`;
+    }
     if (clipGain(clip) > 1.001) label.append(el('span', 'clip-tag', formatDb(clipGain(clip))));
     // Geschwindigkeit wie im Inspektor (100 % = Original); „wie Tonband“ mit Zusatz
     if (clip.stretch && Math.abs(clip.stretch - 1) > 1e-6) {
@@ -730,6 +737,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const curveOut = el('div', 'clip-grip clip-curve clip-curve-out');
     curveOut.title = 'Kurve des Fade-Outs: hoch = lange laut, runter = früh leise; Doppelklick = linear';
     node.append(canvas, label, trim, handle, curveIn, curveOut, fadeIn, fadeOut, vol);
+    if (takeTag) node.append(takeTag);
     return { node, canvas, sample };
   }
 
@@ -1167,6 +1175,19 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
         if (created.length) select(created[0]);
         done.onDone?.(created.length > 0);
       } else done.onDone?.(false);
+      return;
+    }
+    // Handy: das Kennzeichen „3/3“ am Take-Clip ist der Schalter für den nächsten Take (Tippfläche 44 px, siehe CSS)
+    if (clip && narrow.matches && t.closest('.clip-take')) {
+      e.preventDefault();
+      e.stopPropagation();
+      const cid = clip.dataset.clipId;
+      const x0 = e.clientX, y0 = e.clientY;
+      trackPointer(e, () => {}, (m) => {
+        if (Math.hypot(m.clientX - x0, m.clientY - y0) > 10) return;
+        if (!ui.selectedIds().includes(cid)) select(cid);
+        stepTake(store, library, cid, 1);
+      });
       return;
     }
     if (clip) {

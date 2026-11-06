@@ -176,12 +176,22 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     }
   }
 
-  function makeItem(s, cat = s.category) {
+  // Takes eines Clips (Krachwerk 3b): sampleId → { clip, index }; nur in Editionen mit Herkunftsgruppen
+  const takeShut = new Set(); // zugeklappte Take-Gruppen (Standard: offen)
+  function takeMap() {
+    const m = new Map();
+    if (!groupBy) return m;
+    for (const t of store.project.tracks) for (const c of t.clips) if (c.takes?.length > 1) c.takes.forEach((id, index) => { if (!m.has(id)) m.set(id, { clip: c, index }); });
+    return m;
+  }
+  const takeSig = () => JSON.stringify([...takeMap()].map(([id, v]) => [id, v.clip.id, v.index]));
+
+  function makeItem(s, cat = s.category, label = null) {
     const row = el('div', `loop-row cat-${cat}`);
     const item = el('button', 'loop-item');
     item.type = 'button';
     item.dataset.sampleId = s.id;
-    item.append(el('span', 'loop-play'), el('span', 'loop-name', s.name), el('span', 'loop-len', lengthLabel(s, !!groupBy)));
+    item.append(el('span', 'loop-play'), el('span', 'loop-name', label ?? s.name), el('span', 'loop-len', lengthLabel(s, !!groupBy)));
     item.title = describe(s);
     bindItem(item, s);
     const star = el('button', 'loop-fav', '★');
@@ -309,7 +319,42 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (split) samples.sort((a, b) => order[section(a)] - order[section(b)]);
       let lastSection = null;
       const doneGroups = new Set();
+      const takesOf = takeMap();
       for (const s of samples) {
+        const tk = takesOf.get(s.id);
+        if (tk) {
+          const key = `take:${tk.clip.id}`;
+          if (doneGroups.has(key)) continue;
+          doneGroups.add(key);
+          const kids = tk.clip.takes.map((id) => samples.find((x) => x.id === id)).filter(Boolean);
+          const isOpen = !takeShut.has(key) || forced;
+          const bars = tk.clip.lengthBeats / 4;
+          const len = Number.isInteger(bars) && bars >= 1 ? `${bars} ${bars === 1 ? 'Takt' : 'Takte'}` : `${tk.clip.lengthBeats} Schläge`;
+          const gr = el('div', `loop-row cat-${cat.cat} variant loop-group take-group`);
+          const gb = el('button', 'loop-group-btn');
+          gb.type = 'button';
+          gb.dataset.group = key;
+          gb.setAttribute('aria-expanded', String(isOpen));
+          gb.append(el('span', 'loop-name', `${s.name.replace(/ · Take \d+$/, '')} · ${kids.length} Takes`), el('span', 'loop-len', len), el('span', 'shelf-chevron'));
+          gb.addEventListener('click', () => { if (takeShut.has(key)) takeShut.delete(key); else takeShut.add(key); render(); });
+          gr.append(gb);
+          list.append(gr);
+          if (!isOpen) continue;
+          for (const k of kids) {
+            const made = makeItem(k, cat.cat, `Take ${tk.clip.takes.indexOf(k.id) + 1}`);
+            made.row.classList.add('variant', 'group-kid');
+            made.row.dataset.takeClip = tk.clip.id;
+            made.row.dataset.takeIndex = String(tk.clip.takes.indexOf(k.id));
+            if (!items.has(k.id)) items.set(k.id, []);
+            items.get(k.id).push(made.row);
+            const fav = favs.has(k.id);
+            made.star.classList.toggle('on', fav);
+            made.star.setAttribute('aria-pressed', String(fav));
+            made.star.setAttribute('aria-label', `${k.name} als Favorit ${fav ? 'entfernen' : 'markieren'}`);
+            list.append(made.row);
+          }
+          continue;
+        }
         if (groupBy && s.group && s.parentId) {
           if (doneGroups.has(s.group)) continue;
           doneGroups.add(s.group);
@@ -512,11 +557,16 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         item.classList.toggle('armed', ui.armedSampleId === id);
         item.classList.toggle('previewing', engine.preview?.sampleId === id);
         item.setAttribute('aria-pressed', String(ui.armedSampleId === id));
+        if (row.dataset.takeClip) item.classList.toggle('take-on', store.findClip(row.dataset.takeClip)?.clip.take === Number(row.dataset.takeIndex));
       }
     }
   }
   ui.on(sync);
   engine.on(sync);
+  if (groupBy) {
+    let lastTakes = takeSig();
+    store.on(() => { const t = takeSig(); if (t !== lastTakes) { lastTakes = t; render(); } else sync(); });
+  }
   // Kits, Instrumente und die Vorlage ändern sich im Store, nicht in der Bibliothek: nur bei geänderter Liste neu aufbauen
   if (objects) {
     const patClips = () => store.project.tracks.reduce((n, t) => n + t.clips.filter((c) => /^pat-/.test(c.sampleId)).length, 0);

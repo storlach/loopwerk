@@ -12,7 +12,7 @@ function kitOpen(store, ui) {
   return !ui.selectedTrackId && !!kitOf(store.project, ui.benchSoundId);
 }
 
-export function makeTips({ store, ui, library, engine }) {
+export function makeTips({ store, ui, library, engine, recorder }) {
   const clips = () => store.project.tracks.flatMap((t) => t.clips);
   // Durchgänge des Loops: Sprünge der hörbaren Position zurück zählen (nur zum Zählen, nichts wird geplant)
   let passes = 0;
@@ -32,6 +32,7 @@ export function makeTips({ store, ui, library, engine }) {
       return !!s && !/^pat-/.test(s.id) && (s.orig?.duration ?? s.duration ?? 0) >= 2;
     } },
     { id: 'm-kit', text: 'Leeres Pad antippen und ins Mikro machen.', when: () => kitOpen(store, ui) },
+    { id: 'm-rec-long', text: 'Lang drücken: Geräusch statt Takes.', when: () => !!recorder && recorder.state === 'recording' && recorder.atWrap },
     { id: 'm-loop', text: '● im Loop nimmt Takes auf, lang drücken für ein einzelnes Geräusch.', when: () => passes >= 3 },
     { id: 'm-clips', text: 'Festhalten am Loop-Bereich macht aus allem eine Schleife.', when: () => clips().length >= 4 },
     { id: 'm-backup', text: 'Song → Projekt → Alle Sounds sichern.', when: () => own(library).length >= 10 },

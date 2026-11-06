@@ -3167,6 +3167,17 @@
   #app[data-density="calm"] .loop-group-btn .loop-name { flex: 1 1 0; min-width: 0; }
   #app[data-density="calm"] .loop-group-btn[aria-expanded="false"] .shelf-chevron { transform: rotate(-45deg); margin-bottom: 0; }
   #app[data-density="calm"] .loop-row.group-kid { padding-left: 24px; }
+  /* „3/3“ am Take-Clip: rechts oben am Clip; Handy: Schalter für den nächsten Take mit Tippfläche 44 × 44 px */
+  .clip-take { position: absolute; z-index: 2; top: 0; right: 6px; height: 17px; display: flex; align-items: center; pointer-events: none; }
+  .clip-take .clip-tag { margin: 0; font-variant-numeric: tabular-nums; }
+  .clip:has(> .clip-take) .clip-label { padding-right: 40px; }
+  .arr-grid.ch-low .clip-take, .arr-grid.ch-tiny .clip-take { display: none; }
+  @media (max-width: 760px) {
+    #app[data-density="calm"] .clip-take { top: 0; right: 22px; width: 44px; height: 44px; align-items: flex-start; justify-content: flex-end; padding: 1px 4px 0 0; box-sizing: border-box; pointer-events: auto; cursor: pointer; }
+    #app[data-density="calm"] .clip:has(> .clip-take) .clip-label { padding-right: 70px; }
+  }
+  #app[data-density="calm"] .take-group .loop-len { margin-left: auto; }
+  #app[data-density="calm"] .loop-item.take-on { color: var(--amber); box-shadow: inset 2px 0 0 var(--amber); }
   #app[data-density="calm"] .loop-row.group-kid .loop-len { display: none; } /* alle Schnitte sind Einzelklang */
   #app[data-density="calm"] .wb-panel { display: grid; gap: 10px; }
   #app[data-density="calm"] .wb-grund, #app[data-density="calm"] .wb-fine { display: grid; gap: 10px; }
@@ -3339,6 +3350,9 @@
   #app[data-density="calm"] #rec-btn.rec-wait .rec-ctx { color: var(--meter-hot); }
   .rec-ctxrow { position: fixed; z-index: 90; display: flex; gap: 4px; padding: 4px; border-radius: var(--radius-lg); background: var(--sheet-bg); box-shadow: var(--sheet-shadow); }
   .rec-ctxrow[hidden] { display: none; }
+  #app[data-density="calm"] .rec-ctx[data-count] { font-size: var(--fs-15); font-weight: 600; bottom: 4px; letter-spacing: 0; }
+  .rec-ctx-open .hint { display: none; }
+  .rec-ctxrow .rec-ctx-opt.rec-ctx-def { box-shadow: inset 0 -2px 0 var(--amber); }
   .rec-ctxrow .rec-ctx-opt { min-width: 96px; height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: transparent; color: var(--ink); box-shadow: none; cursor: pointer; }
   .rec-ctxrow .rec-ctx-opt:hover:not(:disabled) { background: var(--deck-2); }
   .rec-ctxrow .rec-ctx-opt:disabled { color: var(--muted); opacity: 0.5; cursor: default; }
@@ -3552,7 +3566,6 @@
   .clipbar-btns.with-take { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .cb-short, .clipbar-btns.with-take .cb-long { display: none; }
   .clipbar-btns.with-take .cb-short { display: inline; }
-  .clip-tag.clip-take { font-variant-numeric: tabular-nums; }
   /* Finger (Tablet): volle 44 px Tippfläche */
   @media (min-width: 761px) and (hover: none) and (pointer: coarse) { .deck .key.rec-more { width: 44px; min-width: 44px; } .rec-wrap { margin-left: 0; } }
   @media (max-width: 760px) {

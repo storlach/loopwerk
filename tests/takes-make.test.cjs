@@ -230,12 +230,48 @@ const loopback = () => {
     await page.click('#cf-take');
     await page.click('#cf-take');
     await page.waitForFunction(() => document.getElementById('cf-take').textContent === 'Take 3/3', null, { timeout: 5000 });
-    // Handy: dasselbe Werkzeug (Bild)
-    await page.setViewportSize({ width: 400, height: 800 });
+    // Kiste (Desktop): die Takes eines Clips sind eine Gruppe „Aufnahme N · 3 Takes“ mit Zeilen „Take 1…3“, der spielende in Weißglut
+    await page.evaluate(() => { const b = document.getElementById('tab-sounds'); if (b.getAttribute('aria-pressed') !== 'true') b.click(); });
+    const kiste = await page.evaluate(() => {
+      const g = [...document.querySelectorAll('.take-group')];
+      const kids = [...document.querySelectorAll('.group-kid[data-take-clip]')];
+      const { store } = window.loopwerk;
+      const c = store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes);
+      const on = kids.filter((k) => k.firstChild.classList.contains('take-on')).map((k) => k.dataset.takeIndex);
+      const wb = kids.length ? getComputedStyle(kids[c.take].firstChild).boxShadow : '';
+      return { groups: g.length, head: g[0]?.textContent, kids: kids.map((k) => k.querySelector('.loop-name').textContent), on, take: c.take, len: g[0]?.querySelector('.loop-len')?.textContent, shadow: wb, einzel: /Einzelklang/.test(g[0]?.textContent || '') };
+    });
+    check('Kiste: eine Gruppe „Aufnahme N · 3 Takes“, Länge „2 Takte“ (nicht Einzelklang)', kiste.groups === 1 && /^Aufnahme \d+ · 3 Takes/.test(kiste.head) && kiste.len === '2 Takte' && !kiste.einzel, JSON.stringify(kiste));
+    check('Kiste: darunter „Take 1“ bis „Take 3“, nur der spielende (clip.take) in Weißglut', kiste.kids.join('|') === 'Take 1|Take 2|Take 3' && kiste.on.length === 1 && Number(kiste.on[0]) === kiste.take && kiste.shadow !== 'none', JSON.stringify(kiste));
+    // Handy: ohne „Take 3/3“ in der Leiste; das Kennzeichen am Clip schaltet
+    await page.setViewportSize({ width: 390, height: 800 });
     await page.waitForTimeout(500);
+    await page.evaluate(() => { const b = document.getElementById('tab-sounds'); if (b.getAttribute('aria-pressed') === 'true') b.click(); });
     await page.evaluate((id) => window.loopwerk.ui.select(id), ctxTxt.clipId);
-    await page.waitForFunction(() => { const b = document.getElementById('cf-take'); return b && !b.hidden && b.getBoundingClientRect().height >= 44; }, null, { timeout: 5000 });
+    await page.waitForFunction(() => { const b = document.getElementById('clip-float'); return b && !b.hidden; }, null, { timeout: 5000 });
+    const hf = await page.evaluate(() => {
+      const bar = document.getElementById('clip-float').getBoundingClientRect();
+      const heads = [...document.querySelectorAll('.track-head')].map((h) => h.getBoundingClientRect()).filter((r) => r.width > 0);
+      const hit = heads.some((r) => bar.left < r.right && bar.right > r.left && bar.top < r.bottom && bar.bottom > r.top);
+      const tag = document.querySelector('.clip.selected .clip-take');
+      const r = tag.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      // Tippfläche: Punkte nahe den vier Rändern der 44-px-Fläche treffen das Kennzeichen
+      const pts = [[-20, 0], [20, 0], [0, -20], [0, 20]].map(([dx, dy]) => { const e = document.elementFromPoint(cx + dx, cy + dy); if (!e?.closest('.clip-take')) window.__miss = (e?.className || e?.tagName) + '@' + dx + ',' + dy; return !!e?.closest('.clip-take'); });
+      return { miss: window.__miss, take: document.getElementById('cf-take').hidden, hit, txt: tag.textContent, w: r.width, h: r.height, pts, bar: [Math.round(bar.left), Math.round(bar.right)], noScroll: document.documentElement.scrollWidth <= innerWidth };
+    });
+    check('Handy: „Take 3/3“ fehlt in der Leiste, Leiste und .track-head schneiden sich nicht, kein waagerechtes Scrollen', hf.take && !hf.hit && hf.noScroll, JSON.stringify(hf));
+    check('Handy: Kennzeichen „3/3“ am Clip, Tippfläche 44 × 44 px', hf.txt === '3/3' && hf.w >= 44 && hf.h >= 44 && hf.pts.every(Boolean), JSON.stringify(hf));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-takes-handy.png') });
+    const tagPos = await page.evaluate(() => { const r = document.querySelector('.clip.selected .clip-take').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.mouse.click(tagPos.x, tagPos.y);
+    await page.waitForFunction(() => document.querySelector('.clip.selected .clip-take')?.textContent === '1/3', null, { timeout: 5000 });
+    check('Handy: ein Tipp auf „3/3“ schaltet den nächsten Take (3 → 1), Clip bleibt gewählt', await page.evaluate(() => { const c = window.loopwerk.store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes); return c.take === 0 && c.sampleId === c.takes[0] && window.loopwerk.ui.selectedClipId === c.id; }));
+    await page.setViewportSize({ width: 400, height: 800 });
+    await page.evaluate(() => { const { store, ui } = window.loopwerk; const c = store.project.tracks.flatMap((x) => x.clips).find((x) => x.takes); store.setClipTake(c.id, 2); ui.select(null); const b = document.getElementById('tab-sounds'); if (b.getAttribute('aria-pressed') !== 'true') b.click(); });
+    await page.waitForTimeout(600);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-kiste-takes-handy.png') });
+    await page.evaluate(() => { const b = document.getElementById('tab-sounds'); if (b.getAttribute('aria-pressed') === 'true') b.click(); });
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(500);
     await page.evaluate((id) => window.loopwerk.ui.select(id), ctxTxt.clipId);
@@ -278,6 +314,7 @@ const loopback = () => {
     await page.evaluate(() => { const { engine, store, ui } = window.loopwerk; ui.select(null); store.setLoop({ on: true, startBeat: 0, endBeat: 8 }); engine.play(0); });
     const rb = await page.evaluate(() => { const r = document.getElementById('rec-btn').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; });
     check('● am Handy ≥ 44 px', rb.w >= 44 && rb.h >= 44, JSON.stringify(rb));
+    await page.evaluate(() => window.loopwerk.ui.flash('Probe-Einblender'));
     await page.mouse.move(rb.x, rb.y);
     await page.mouse.down();
     await page.waitForTimeout(150);
@@ -292,6 +329,16 @@ const loopback = () => {
     });
     check('Lang drücken (Maus, ~600 ms) öffnet „Geräusch · Takes“; Ziele ≥ 44 px, im Bild; es startet noch keine Aufnahme', !row.hidden && row.b.map((x) => x.t).join('|') === 'Geräusch|Takes' && row.b.every((x) => x.w >= 44 && x.h >= 44) && row.inView && row.state === 'idle', JSON.stringify(row));
     check('Handy: kein waagerechtes Scrollen', row.noScroll);
+    const def = await page.evaluate(() => {
+      const r = document.getElementById('rec-ctxrow').getBoundingClientRect();
+      const h = document.getElementById('hint');
+      const hr = h.getBoundingClientRect();
+      const hidden = getComputedStyle(h).display === 'none';
+      const sh = (id) => getComputedStyle(document.getElementById(id)).boxShadow;
+      return { takes: sh('rec-ctx-takes'), sound: sh('rec-ctx-sound'), cls: document.getElementById('rec-ctx-takes').classList.contains('rec-ctx-def'), hidden, overlap: !hidden && hr.width > 0 && r.left < hr.right && r.right > hr.left && r.top < hr.bottom && r.bottom > hr.top };
+    });
+    check('Voreinstellung (Takes, Loop läuft) trägt die Weißglut-Linie, „Geräusch“ nicht', def.cls && def.takes !== 'none' && def.sound === 'none', JSON.stringify(def));
+    check('Die Zeile liegt nicht auf dem Einblender (#hint)', !def.overlap, JSON.stringify(def));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'kw-rec-lang-handy.png') });
     await page.keyboard.press('Escape');
     check('Esc schließt die Zeile', await page.evaluate(() => document.getElementById('rec-ctxrow').hidden));
@@ -333,11 +380,22 @@ const loopback = () => {
     // Kurzer Tipp unverändert: im laufenden Loop beginnt ● mit Takes (wartet auf den Sprung, Ring, dann gefüllt)
     await page.evaluate(() => { const { engine, store, ui } = window.loopwerk; ui.select(null); store.setLoop({ on: true, startBeat: 0, endBeat: 8 }); engine.play(0); });
     await page.waitForFunction(() => document.getElementById('rec-ctx')?.textContent === 'Takes', null, { timeout: 5000 });
+    await page.evaluate(() => {
+      window.__count = [];
+      const e = document.getElementById('rec-ctx');
+      const note = () => { const t = e.textContent; const b = window.loopwerk.engine.heardBeat(); if (window.__count[window.__count.length - 1]?.t !== t) window.__count.push({ t, b }); };
+      new MutationObserver(note).observe(e, { childList: true, characterData: true, subtree: true });
+    });
     await page.click('#rec-btn');
     await page.waitForFunction(() => window.loopwerk.recorder.state === 'recording', null, { timeout: 10000 });
     const wait = await page.evaluate(() => { const b = document.getElementById('rec-btn'); const r = window.loopwerk.recorder; return { waiting: r.waiting, cls: b.classList.contains('rec-wait'), txt: document.getElementById('rec-ctx').textContent, bg: getComputedStyle(b).backgroundColor }; });
     check('Kurzer Tipp im Loop: Takes, wartet auf den Sprung (Ring am ●, Text „wartet …“)', wait.waiting && wait.cls && wait.txt === 'wartet …' && /rgba\(0, 0, 0, 0\)|transparent/.test(wait.bg), JSON.stringify(wait));
+    if (SHOTS) { await page.waitForFunction(() => document.getElementById('rec-ctx').textContent === '3', null, { timeout: 15000, polling: 10 }).catch(() => null); await page.screenshot({ path: path.join(SHOT_DIR, 'kw-zaehlen-handy.png') }); }
     await page.waitForFunction(() => window.loopwerk.recorder.songStartTime != null, null, { timeout: 15000, polling: 20 });
+    const cnt = await page.evaluate(() => window.__count.map((x) => `${x.t}@${x.b.toFixed(1)}`));
+    const seq = cnt.map((x) => x.split('@')[0]);
+    const nums = seq.filter((x) => /^\d$/.test(x)).join('');
+    check('Ring zählt im letzten Takt vor dem Sprung „4 · 3 · 2 · 1“, vorher „wartet …“', nums === '4321' && seq.indexOf('4') > seq.indexOf('wartet …') && cnt.filter((x) => /^[1-4]@/.test(x)).every((x) => parseFloat(x.split('@')[1]) >= 3.9), cnt.join(' '));
     const run = await page.evaluate(() => ({ cls: document.getElementById('rec-btn').classList.contains('rec-wait'), txt: document.getElementById('rec-ctx').textContent }));
     check('Nach dem ersten Sprung gefüllt, Text wieder „Takes“', !run.cls && run.txt === 'Takes', JSON.stringify(run));
     await page.click('#rec-btn');

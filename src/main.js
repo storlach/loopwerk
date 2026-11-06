@@ -844,7 +844,7 @@ async function boot() {
     try { on = localStorage.getItem(lsKey('loopwerk.harmony')) === '1'; } catch { /* Standard */ }
     if (on) set(true);
   }
-  const tips = EDITION.tips ? mountTips({ ui, store, list: makeTips({ store, ui, library, engine }), poll: 1000 })
+  const tips = EDITION.tips ? mountTips({ ui, store, list: makeTips({ store, ui, library, engine, recorder }), poll: 1000 })
     : EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
   // Startkarte im leeren Song (Krachwerk): ● Geräusch, Klatsch dein Kit, Strom ohne Mikrofon
   async function stromBeat() {

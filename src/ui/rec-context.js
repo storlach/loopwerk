@@ -34,21 +34,41 @@ export function mountRecContext({ btn, recorder, engine, store, ui, record }) {
 
   const loopOn = () => { const l = store.project.loop; return l.on && l.endBeat > l.startBeat; };
 
+  // Zählen im letzten Takt vor dem ersten Loop-Sprung: „4 · 3 · 2 · 1“ aus der hörbaren Position (kein Ton, nichts geplant)
+  let raf = 0;
+  function countdown() {
+    const l = store.project.loop;
+    if (!engine.playing || !l.on) return null;
+    const left = l.endBeat - engine.heardBeat();
+    return left > 0 && left <= 4 ? String(Math.ceil(left - 1e-9)) : null;
+  }
+  const tick = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (recorder.waiting) sync(); }); };
+
   function sync() {
     const waiting = recorder.waiting;
     const busy = recorder.state !== 'idle';
     const ctx = record.context();
     const t = waiting ? 'wartet …' : ctx === 'takes' ? 'Takes' : 'Geräusch';
-    if (text.textContent !== t) {
-      text.textContent = t;
+    const shown = waiting ? countdown() ?? t : t;
+    if (text.textContent !== shown) text.textContent = shown;
+    text.toggleAttribute('data-count', waiting && shown !== t);
+    if (btn.dataset.recLabel !== t) {
+      btn.dataset.recLabel = t;
       btn.setAttribute('aria-label', `Aufnahme – ${t}`);
     }
+    if (waiting) tick(); // die Zahl wechselt zwischen den Ereignissen: je Bild nachsehen
     text.dataset.ctx = ctx;
     btn.classList.toggle('rec-wait', waiting);
     btn.setAttribute('aria-haspopup', 'true');
     const lo = loopOn();
     bTakes.disabled = !lo;
     bTakes.title = lo ? 'Jeder Durchgang im Loop wird ein Take' : 'Dafür den Loop-Bereich einschalten';
+    // Voreinstellung: was ● ohne Wahl nähme, trägt die Linie
+    const preset = ctx === 'takes' && lo ? bTakes : bSound;
+    bTakes.classList.toggle('rec-ctx-def', preset === bTakes);
+    bSound.classList.toggle('rec-ctx-def', preset === bSound);
+    bTakes.setAttribute('aria-description', preset === bTakes ? 'Das nimmt ● ohne Wahl' : '');
+    bSound.setAttribute('aria-description', preset === bSound ? 'Das nimmt ● ohne Wahl' : '');
     if (busy && !row.hidden) close(false);
   }
 
@@ -68,12 +88,14 @@ export function mountRecContext({ btn, recorder, engine, store, ui, record }) {
     if (recorder.state !== 'idle') return;
     sync();
     row.hidden = false;
+    app.classList.add('rec-ctx-open'); // der Einblender weicht, solange die Zeile offen ist
     place();
     (byKey ? (bTakes.disabled ? bSound : bTakes) : null)?.focus();
   }
   function close(refocus = true) {
     if (row.hidden) return;
     row.hidden = true;
+    app.classList.remove('rec-ctx-open');
     if (refocus && row.contains(document.activeElement)) btn.focus();
   }
 
