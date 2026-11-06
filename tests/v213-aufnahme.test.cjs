@@ -775,10 +775,10 @@ async function partC() {
     // IndexedDB und Projektdatei speichern 1 Kanal (WAV-Kopf, Byte 22)
     const store1 = await page.evaluate(async (ids) => {
       const { own, store } = window.loopwerk;
-      const rec = await Promise.all(ids.map((id) => own.tx('readonly', (s) => s.get(id))));
+      const rec = await Promise.all(ids.map((id) => own.readWav(id))); // Speicher v2 (ADR 011): Audio im eigenen Store
       const emb = await own.embed(store.project);
       const ch = (b64) => { const bin = atob(b64.slice(0, 64)); return bin.charCodeAt(22) | (bin.charCodeAt(23) << 8); };
-      return { idb: rec.map((r) => new DataView(r.wav).getUint16(22, true)), file: emb.map((e) => ch(e.wav)) };
+      return { idb: rec.map((w) => new DataView(w).getUint16(22, true)), file: emb.map((e) => ch(e.wav)) };
     }, c10.map((c) => c.sampleId));
     check('C10 Mono-Aufnahme als 1-Kanal-Sound gespeichert: IndexedDB und Projektdatei (WAV-Kopf 1 Kanal)', store1.idb.every((x) => x === 1) && store1.file.length === 2 && store1.file.every((x) => x === 1), JSON.stringify(store1));
     const undo10 = await page.evaluate(() => { window.loopwerk.store.undo(); return window.loopwerk.store.project.tracks.flatMap((t) => t.clips).filter((c) => c.sampleId.startsWith('own-')).length; });
