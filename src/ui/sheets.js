@@ -142,7 +142,7 @@ export function mountSheets({ ui, arranger }) {
     // Inhalt, der mit der sichtbaren Höhe mitwächst (data-fit): wie viel die Schublade beim Verkleinern noch überhängt
     if (s.hasAttribute('data-fit')) {
       const cut = `${Math.round(ty * 10) / 10}px`;
-      if (m.cut !== cut) { m.cut = cut; s.style.setProperty('--sheet-cut', cut); }
+      if (m.cut !== cut) { m.cut = cut; s.style.setProperty('--sheet-cut', cut); s.dispatchEvent(new Event('sheetcut')); }
     }
     // Desktop: was unter den Arranger-Rand rutscht, blitzt sonst unter der Fachleiste hervor (Schatten bleibt).
     // Am Handy deckt die Leiste bis zum Rand ab, dort spart das Malen.
@@ -162,7 +162,7 @@ export function mountSheets({ ui, arranger }) {
     }
     s.style.transform = '';
     s.style.clipPath = '';
-    if (m.cut) { m.cut = ''; s.style.removeProperty('--sheet-cut'); }
+    if (m.cut) { m.cut = ''; s.style.removeProperty('--sheet-cut'); s.dispatchEvent(new Event('sheetcut')); }
     syncHead(s);
     lastAb = arr.getBoundingClientRect().bottom;
     follow(lastAb);
@@ -180,7 +180,7 @@ export function mountSheets({ ui, arranger }) {
     s.style.maxHeight = '';
     s.style.zIndex = '';
     s.style.removeProperty('--sheet-h');
-    if (m.cut) { m.cut = ''; s.style.removeProperty('--sheet-cut'); }
+    if (m.cut) { m.cut = ''; s.style.removeProperty('--sheet-cut'); s.dispatchEvent(new Event('sheetcut')); }
     follow();
     if (!busy()) syncPad();
     endFollow();

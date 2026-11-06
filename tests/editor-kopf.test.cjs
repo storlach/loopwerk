@@ -133,6 +133,10 @@ async function run({ name, vp, touch }) {
     const mid = await cellH();
     const sheetTop = () => page.evaluate(() => Math.round(document.getElementById('pattern').getBoundingClientRect().top));
     const midTop = await sheetTop();
+    if (handy) {
+      const vis = await page.evaluate(() => { const d = document.getElementById('pat-drums').getBoundingClientRect(); return [...document.querySelectorAll('#pat-drums .pat-row-label')].filter((l) => l.getBoundingClientRect().bottom <= d.bottom + 1).length; });
+      check(`${tag}: Beat bei „Mitte“: mindestens 4 Schritt-Reihen ganz sichtbar`, vis >= 4, String(vis));
+    }
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-beat-schritte-mitte.png`) });
     const log = [];
     log.fn = cellH;
@@ -190,11 +194,30 @@ async function run({ name, vp, touch }) {
     });
     const mrMid = await rowNow();
     const mtop = await sheetTop();
+    if (handy) {
+      const vis = await page.evaluate(() => { const w = document.getElementById('pat-roll-wrap').getBoundingClientRect(); return [...document.querySelectorAll('#pat-vkeys .vkey')].filter((k) => { const r = k.getBoundingClientRect(); return r.top >= w.top - 1 && r.bottom <= w.bottom + 1; }).length; });
+      check(`${tag}: Melodie bei „Mitte“: mindestens 10 Notenzeilen ganz sichtbar`, vis >= 10, String(vis));
+    }
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-melodie-mitte.png`) });
     await dragSheet(page, -(mtop - 60));
     const mrTop = await rowNow();
     check(`${tag}: Melodie: Zeilen der Piano-Roll werden höher, wenn die Schublade von Mitte auf oben geht`, mrTop > mrMid + 1, `${mrMid} → ${mrTop}`);
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-melodie-oben.png`) });
+    if (handy) {
+      // Verkleinern: die Piano-Roll geht stufenlos mit (kein Sprung am Ende), der Tonbereich bleibt am selben Ton
+      const geo = () => page.evaluate(() => { const ks = [...document.querySelectorAll('#pat-vkeys .vkey')]; const w = document.getElementById('pat-roll-wrap').getBoundingClientRect(); return { row: ks[0].getBoundingClientRect().height, lo: Number(ks[ks.length - 1].dataset.pitch), n: ks.length, visible: Math.max(0, Math.min(w.bottom, innerHeight) - w.top) }; });
+      const lo0 = (await geo()).lo;
+      const glog = [];
+      glog.fn = geo;
+      await dragSheet(page, 400, glog);
+      const end = await geo();
+      const seq = [...glog.map((g) => g.row), end.row];
+      const rowJump = Math.max(...seq.slice(1).map((v, i) => Math.abs(v - seq[i])));
+      const hs = glog.map((g) => g.n * g.row);
+      check(`${tag}: Melodie: beim Verkleinern geht die Piano-Roll ohne Sprung mit (≤ 6 px Zeilenhöhe je Schritt, auch am Ende)`, rowJump <= 6 && glog.some((g) => g.row !== glog[0].row), `Sprung ${rowJump.toFixed(1)}: ${seq.map((v) => v.toFixed(1)).join(', ')}`);
+      check(`${tag}: Melodie: Tonbereich bleibt erhalten (tiefster Ton gleich)`, glog.every((g) => g.lo === lo0) && end.lo === lo0, `${lo0} → ${glog.map((g) => g.lo).join(',')} → ${end.lo}`);
+      check(`${tag}: Melodie: Gesamthöhe der Tasten wächst nie über die sichtbare Höhe hinaus (+ 6 px)`, glog.every((g) => g.n * g.row <= g.visible + 6 + 44), hs.map((v) => v.toFixed(0)).join(','));
+    }
 
     // ---------- Klaviertasten leuchten beim Spielen ----------
     const keySel = handy ? '#pat-vkeys .vkey[data-pitch="64"]' : '#pat-keybed .pat-key[data-pitch="64"]';
@@ -251,6 +274,12 @@ async function run({ name, vp, touch }) {
     check(`${tag}: Clip-Editor: neun Schnittwerkzeuge mit Icon und Titel${handy ? ', ≥ 44 px' : ''}`, ce.tools === 9 && ce.icons && ce.labels && JSON.stringify(ce.groups) === '["Auswahl","Bearbeiten"]' && (!handy || ce.minTool >= 43.5), JSON.stringify(ce));
     const waveH = () => page.evaluate(() => Math.round(document.getElementById('ed-wave').getBoundingClientRect().height));
     const wMid = await waveH();
+    if (handy) check(`${tag}: Clip-Editor bei „Mitte“: Wellenform mindestens 160 px hoch`, wMid >= 160, `${wMid} px`);
+    if (handy) {
+      const strip = await page.evaluate(() => { const c = document.querySelector('#editor .ed-cuts'); const t = [...c.querySelectorAll('.ed-tool')]; return { oneRow: new Set(t.map((x) => Math.round(x.getBoundingClientRect().top))).size === 1, scrolls: c.scrollWidth > c.clientWidth + 4, masked: getComputedStyle(c).maskImage !== 'none', over: document.documentElement.scrollWidth - innerWidth }; });
+      check(`${tag}: Clip-Editor: Werkzeuge in einer wischbaren Zeile mit ausblendendem Rand`, strip.oneRow && strip.scrolls && strip.masked && strip.over <= 0, JSON.stringify(strip));
+      if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-clip-mitte.png`) });
+    }
     const eTop = await page.evaluate(() => Math.round(document.getElementById('editor').getBoundingClientRect().top));
     const wlog = [];
     wlog.fn = waveH;

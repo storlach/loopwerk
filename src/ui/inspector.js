@@ -21,6 +21,7 @@ import { mountTakeRow } from './take-row.js';
 import { autoLock, lockedValue } from './auto-lane.js';
 import { AUTO_PARAMS, busUsed, isAutomated, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
+import { mountRecArmRows } from './rec-arm.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -44,8 +45,9 @@ function fxSummary(e, f) {
 
 // Optionen (Krachwerk, Spec Scheibe 2a §6): clipPanel(container, deps) ersetzt den Clip-Abschnitt (Sound-Werkbank);
 // trackOnClip: false = die Spur zeigt sich nur bei eigener Spurwahl; fxCompact = nur eingeschaltete Effekte und „+ Effekt“
+// recArm (2.13 C): Schalter ● Scharf und Eingang je Spur, nur bei gewählter Spur; null = aus (Krachwerk)
 // songPanel(box, deps) ersetzt den Song-Abschnitt (Song-Werkbank, Scheibe 5): { render, slots: { fx, auto } }
-export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, songPanel = null }) {
+export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, songPanel = null, recArm = null, recorder = null }) {
   const app = document.getElementById('app');
   root.innerHTML = '';
 
@@ -181,6 +183,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   mixerLink.addEventListener('click', () => ui.setDock('mixer'));
   // Kein „Verlauf“ mehr im Inspektor: Kurven über Spur-Menü ⋯, Kurven-Knopf im Spurkopf, „Summe“ und Taste A
   trackSec.append(trackHead, vol.row, panBox);
+  // Aufnahme: nur wenn die Spur selbst gewählt ist (ein Clip zeigt die Spur ohne diese Zeilen)
+  const recRows = recArm ? mountRecArmRows({ store, ui, recArm, recorder }) : null;
+  for (const r of recRows?.rows ?? []) trackSec.insertBefore(r, vol.row);
   // Stumm und Solo der Spur (in „calm“ am Handy nicht mehr im Spurkopf)
   let msBtns = null;
   if (calm) {
@@ -514,6 +519,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         r.row.classList.toggle('on', v > 0);
       }
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
+      recRows?.update(mode === 'track' ? track : null);
     } else if (mode === 'sound') {
       trackId = null;
     } else {

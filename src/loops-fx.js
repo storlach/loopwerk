@@ -1,7 +1,8 @@
 // FX-One-Shots (eigene Klänge, CC0): Riser, Downlifter, Einschläge, Rückwärts-Klänge, Tape-Effekte, Geräusche.
 // Gleiches Format wie LOOP_DEFS in samples.js. Die meisten Klänge werden sampleweise gerechnet (kit.pcm): Zeiten in
 // Schlägen folgen dem Tempo, Ausklänge passen sich der verfügbaren Länge an, am Ende blendet jeder Klang aus.
-// FX folgen der Tonart nicht; tonale Anteile liegen auf A (Grundton der Bibliothek). Rauschen mit festem Startwert.
+// Geräusch-FX folgen der Tonart nicht; tonale FX (tonal: true) liegen auf A und werden in die Song-Tonart gerechnet
+// (c.k = Frequenzfaktor, höchstens ± eine halbe Oktave, Länge bleibt). Rauschen mit festem Startwert.
 
 import { mulberry32 } from './util.js';
 
@@ -218,7 +219,7 @@ function toneRiser(c) {
   let lfo = 0;
   for (let i = 0; i < n; i++) {
     const x = i / n;
-    const f0 = expAt(110, 880, x);
+    const f0 = expAt(110, 880, x) * c.k;
     lfo += (3 + 7 * x) / sr;
     const vib = 1 + 0.007 * x * Math.sin(TAU * lfo);
     if ((i & 31) === 0) { const fc = Math.min(15000, f0 * (3 + 5 * x)); lpL.set('lp', fc, 1.1); lpR.set('lp', fc, 1.1); }
@@ -242,7 +243,7 @@ function filterRiser(c) {
   const { n, sr } = c;
   const out = chans(n);
   out.forEach((d, ch) => {
-    const saws = [55, 110, 164.81, 220].map((f, j) => ({ s: new Saw((j * 0.29 + ch * 0.5) % 1), f: f * (1 + (ch ? 0.003 : -0.003) * (j + 1)) }));
+    const saws = [55, 110, 164.81, 220].map((f, j) => ({ s: new Saw((j * 0.29 + ch * 0.5) % 1), f: f * c.k * (1 + (ch ? 0.003 : -0.003) * (j + 1)) }));
     const lp = new Biq(sr);
     const w = noiseGen(c.seed + ch);
     for (let i = 0; i < n; i++) {
@@ -494,7 +495,7 @@ function flyby(c) {
 function powerUp(c) {
   const { n, sr, spb } = c;
   const out = chans(n);
-  const NOTES = [440, 523.25, 587.33, 659.26, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760];
+  const NOTES = [440, 523.25, 587.33, 659.26, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760].map((f) => f * c.k);
   const step = 0.125 * spb * sr;
   const arpEnd = NOTES.length * step;
   const p = new Pulse(0.25);
@@ -502,7 +503,7 @@ function powerUp(c) {
   for (let i = 0; i < n; i++) {
     const idx = Math.floor(i / step);
     const t = (i - arpEnd) / sr;
-    const f = idx < NOTES.length ? NOTES[idx] : 1760 * (1 + 0.012 * Math.sin(TAU * 6 * t));
+    const f = idx < NOTES.length ? NOTES[idx] : NOTES[NOTES.length - 1] * (1 + 0.012 * Math.sin(TAU * 6 * t));
     const env = idx < NOTES.length ? 0.8 : 0.8 * Math.exp(-t / 0.25);
     d[i] = p.run(f / sr) * env * clamp01(i / (0.002 * sr));
   }
@@ -582,7 +583,7 @@ function tape(c, rateAt, { start = 0, kicks = true } = {}) {
     ph += (48 + 110 * Math.exp(-t / 0.035)) / sr;
     kick[i] = Math.sin(TAU * ph) * Math.exp(-t / 0.12) * (1 - Math.exp(-t / 0.0008));
   }
-  const FREQ = [55, 110, 164.81, 220];
+  const FREQ = [55, 110, 164.81, 220].map((f) => f * c.k);
   out.forEach((d, ch) => {
     const saws = FREQ.map((f, j) => ({ s: new Saw((j * 0.23 + ch * 0.5) % 1), f: f * (1 + (ch ? 0.004 : -0.004)) }));
     const lp = new Biq(sr);
@@ -719,7 +720,7 @@ function jet(c) {
 function sparkle(c) {
   const { n, sr, B } = c;
   const out = chans(n);
-  const PENTA = [1760, 2093, 2349.3, 2637, 3136, 3520, 4186];
+  const PENTA = [1760, 2093, 2349.3, 2637, 3136, 3520, 4186].map((f) => f * c.k);
   const r = mulberry32(c.seed);
   const N = 24;
   for (let k = 0; k < N; k++) {
@@ -808,7 +809,7 @@ function glass(c) {
 function swellPad(c) {
   const { n, sr } = c;
   const out = chans(n);
-  const FREQ = [110, 164.81, 220, 246.94, 329.63];
+  const FREQ = [110, 164.81, 220, 246.94, 329.63].map((f) => f * c.k);
   out.forEach((d, ch) => {
     const saws = [];
     FREQ.forEach((f, j) => { for (const det of [-0.0046, 0.0046]) saws.push({ s: new Saw((j * 0.31 + det * 50 + ch * 0.5) % 1), f: f * (1 + det * (ch ? 1.3 : 1)) }); });
@@ -925,12 +926,14 @@ function gong(c) {
 // ---------- Definitionen ----------
 
 // pcm-Klang: synth(c) liefert Stereo-Kanäle genau in Loop-Länge
-const shot = (id, name, bars, genres, tags, synth, peak = 0.45) => ({
-  id, name, genres, tags, category: 'fx', bars, peak, oneShot: true,
+// tonal: folgt der Song-Tonart (semis aus dem Kit, auf ± 6 Halbtöne gefaltet, damit nichts weit nach oben oder unten rutscht)
+const shot = (id, name, bars, genres, tags, synth, peak = 0.45, { tonal = false } = {}) => ({
+  id, name, genres, tags, category: 'fx', bars, peak, oneShot: true, ...(tonal ? { tonal: true } : {}),
   render(k) {
-    k.pcm(0, (sr, spb) => {
+    k.pcm(0, (sr, spb, semis = 0) => {
       const n = Math.round(bars * 4 * spb * sr);
-      const c = { sr, spb, n, T: n / sr, B: (b) => Math.round(b * spb * sr), S: (s) => Math.round(s * sr), seed: seedOf(id) };
+      const st = tonal ? ((((Math.round(semis) + 6) % 12) + 12) % 12) - 6 : 0;
+      const c = { sr, spb, n, T: n / sr, B: (b) => Math.round(b * spb * sr), S: (s) => Math.round(s * sr), seed: seedOf(id), k: 2 ** (st / 12) };
       const out = synth(c);
       dcBlock(out, sr);
       const a = c.S(0.001);
@@ -945,8 +948,8 @@ const DEFS = [
   // ---------- Riser ----------
   shot('fxs-riser-noise', 'Rausch-Riser kurz', 1, ['house', 'techno', 'pop', 'trap', 'reggaeton'], ['riser', 'aufbau', 'build-up', 'rauschen'], (c) => noiseRiser(c)),
   shot('fxs-riser-gate', 'Gate-Riser', 4, ['techno', 'house', 'pop', 'synthwave'], ['riser', 'aufbau', 'build-up', 'rauschen', 'gate'], (c) => noiseRiser(c, { gate: true, tone: 0.12 })),
-  shot('fxs-riser-tone', 'Ton-Riser', 2, ['synthwave', 'pop', 'house', 'trap'], ['riser', 'aufbau', 'build-up', 'synth'], toneRiser, 0.55),
-  shot('fxs-riser-filter', 'Filter-Riser', 2, ['techno', 'house', 'breaks', 'synthwave'], ['riser', 'aufbau', 'build-up', 'filter'], filterRiser, 0.6),
+  shot('fxs-riser-tone', 'Ton-Riser', 2, ['synthwave', 'pop', 'house', 'trap'], ['riser', 'aufbau', 'build-up', 'synth'], toneRiser, 0.55, { tonal: true }),
+  shot('fxs-riser-filter', 'Filter-Riser', 2, ['techno', 'house', 'breaks', 'synthwave'], ['riser', 'aufbau', 'build-up', 'filter'], filterRiser, 0.6, { tonal: true }),
   shot('fxs-riser-shepard', 'Endlos-Riser', 2, ['ambient', 'techno', 'synthwave'], ['riser', 'aufbau', 'shepard', 'spannung'], shepard, 0.37),
   shot('fxs-snare-build', 'Snare-Build lang', 4, ['pop', 'house', 'trap', 'breaks', 'reggaeton'], ['riser', 'aufbau', 'build-up', 'snare', 'wirbel'], snareBuild, 0.5),
   // ---------- Downlifter ----------
@@ -980,20 +983,20 @@ const DEFS = [
       k.zap(2, 1.2, 2600, 50, { cutoff: 3000, vel: 1 });
     },
   },
-  shot('fxs-powerup', 'Power-Up', 1, ['synthwave', 'pop', 'house'], ['8-bit', 'chiptune', 'spiel', 'arcade'], powerUp, 0.28),
+  shot('fxs-powerup', 'Power-Up', 1, ['synthwave', 'pop', 'house'], ['8-bit', 'chiptune', 'spiel', 'arcade'], powerUp, 0.28, { tonal: true }),
   shot('fxs-glitch', 'Glitch-Stotterer', 1, ['techno', 'breaks', 'trap', 'hiphop'], ['glitch', 'stutter', 'stotter', 'bitcrush'], glitch),
   shot('fxs-siren', 'Dub-Sirene', 2, ['breaks', 'reggaeton', 'techno', 'hiphop', 'afro'], ['sirene', 'alarm', 'dub', 'reggae'], siren, 0.25),
   // ---------- Band und Platte ----------
-  shot('fxs-tape-stop', 'Tape-Stopp', 1, ['hiphop', 'lofi', 'trap', 'funk', 'pop'], ['tape', 'band', 'stopp', 'bremse'], tapeStop),
-  shot('fxs-tape-start', 'Tape-Anlauf', 1, ['hiphop', 'lofi', 'house', 'funk'], ['tape', 'band', 'anlauf', 'start'], tapeStart),
-  shot('fxs-rewind', 'Rückspulen', 1, ['breaks', 'reggaeton', 'hiphop', 'afro'], ['rewind', 'rückspulen', 'tape', 'pull-up'], rewind),
+  shot('fxs-tape-stop', 'Tape-Stopp', 1, ['hiphop', 'lofi', 'trap', 'funk', 'pop'], ['tape', 'band', 'stopp', 'bremse'], tapeStop, 0.45, { tonal: true }),
+  shot('fxs-tape-start', 'Tape-Anlauf', 1, ['hiphop', 'lofi', 'house', 'funk'], ['tape', 'band', 'anlauf', 'start'], tapeStart, 0.45, { tonal: true }),
+  shot('fxs-rewind', 'Rückspulen', 1, ['breaks', 'reggaeton', 'hiphop', 'afro'], ['rewind', 'rückspulen', 'tape', 'pull-up'], rewind, 0.45, { tonal: true }),
   shot('fxs-scratch', 'Scratch', 1, ['hiphop', 'breaks', 'funk', 'lofi'], ['scratch', 'dj', 'platte', 'vinyl'], scratch, 0.37),
   // ---------- Geräusche ----------
   shot('fxs-noise-burst', 'Rausch-Stoß', 1, ['pop', 'house', 'techno', 'trap'], ['rauschen', 'noise', 'stoß', 'hit'], noiseBurst, 0.5),
-  shot('fxs-sparkle', 'Funkeln', 1, ['pop', 'ambient', 'lofi', 'synthwave'], ['funkeln', 'sparkle', 'glitzer', 'magie'], sparkle, 0.38),
+  shot('fxs-sparkle', 'Funkeln', 1, ['pop', 'ambient', 'lofi', 'synthwave'], ['funkeln', 'sparkle', 'glitzer', 'magie'], sparkle, 0.38, { tonal: true }),
   shot('fxs-drops', 'Wassertropfen', 1, ['ambient', 'lofi', 'hiphop'], ['wasser', 'tropfen', 'natur', 'blubb'], drops),
   shot('fxs-glass', 'Glas-Ping', 1, ['ambient', 'pop', 'lofi'], ['glas', 'klirren', 'ping', 'anstoßen'], glass),
-  shot('fxs-swell', 'Flächen-Anschwellen', 4, ['ambient', 'synthwave', 'pop', 'lofi'], ['swell', 'anschwellen', 'fläche', 'pad'], swellPad),
+  shot('fxs-swell', 'Flächen-Anschwellen', 4, ['ambient', 'synthwave', 'pop', 'lofi'], ['swell', 'anschwellen', 'fläche', 'pad'], swellPad, 0.45, { tonal: true }),
   shot('fxs-radio', 'Radio-Rauschen', 2, ['lofi', 'ambient', 'hiphop'], ['radio', 'rauschen', 'sender', 'störung'], radio, 0.4),
   shot('fxs-heartbeat', 'Herzschlag', 1, ['ambient', 'trap', 'hiphop'], ['herz', 'puls', 'spannung', 'film'], heartbeat, 0.44),
   shot('fxs-gong', 'Gong', 4, ['ambient', 'techno', 'rock'], ['gong', 'metall', 'schlag', 'asien'], gong, 0.55),

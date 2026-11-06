@@ -59,6 +59,17 @@ const CATALOG_ENTRIES = [
   entry('ambi_glass_hum', 'Glas-Summen', 'fx', { source: fs('kaligari/sounds/35391/') }),
   entry('misc_cineboom', 'Kino-Boom', 'fx', { source: 'http://freesound.org/people/Northern_Monkey/sounds/177242/' }),
   entry('ambi_swoosh', 'Swoosh', 'fx', { source: fs('Halgrimm/sounds/169867/') }),
+  entry('vinyl_backspin', 'Platte rückwärts', 'fx', { source: fs('il112/sounds/182316/'), tags: ['backspin', 'platte', 'vinyl', 'dj', 'rückwärts'] }),
+  entry('vinyl_rewind', 'Rückspulen (Platte)', 'fx', { source: fs('TasmanianPower/sounds/162493/'), tags: ['rewind', 'rückspulen', 'platte', 'vinyl', 'tape'] }),
+  entry('vinyl_scratch', 'Scratch (Platte)', 'fx', { source: fs('hello_flowers/sounds/28681/'), tags: ['scratch', 'dj', 'platte', 'vinyl'] }),
+  entry('ambi_dark_woosh', 'Dunkler Woosh', 'fx', { source: fs('EcoDTR/sounds/27281/'), tags: ['woosh', 'dunkel', 'dark', 'film', 'bewegung'] }),
+  entry('ambi_lunar_land', 'Mondlandung', 'fx', { source: fs('maqsim/sounds/172157/'), tags: ['mond', 'weltraum', 'landung', 'space', 'film'] }),
+  entry('perc_impact1', 'Einschlag 1', 'fx', { source: fs('hullum/sounds/415578/'), tags: ['impact', 'einschlag', 'boom', 'schlag'] }),
+  entry('perc_impact2', 'Einschlag 2', 'fx', { source: fs('hullum/sounds/415581/'), tags: ['impact', 'einschlag', 'boom', 'schlag'] }),
+  entry('perc_swoosh', 'Swoosh kurz', 'fx', { source: fs('hullum/sounds/415580/'), tags: ['swoosh', 'schwung', 'whoosh', 'luft'] }),
+  entry('perc_swash', 'Swash', 'fx', { source: fs('qubodup/sounds/60009/'), tags: ['swash', 'schwung', 'whoosh', 'luft'] }),
+  entry('glitch_robot1', 'Roboter-Glitch 1', 'fx', { source: fs('hullum/sounds/415557/'), tags: ['glitch', 'roboter', 'robot', 'digital'] }),
+  entry('glitch_robot2', 'Roboter-Glitch 2', 'fx', { source: fs('hullum/sounds/415556/'), tags: ['glitch', 'roboter', 'robot', 'digital'] }),
 ];
 
 // Genre-Vorschläge zum Stöbern (Einschätzung nach Klang, keine Herkunftsangabe)
@@ -76,6 +87,12 @@ const GENRES_OF = {
   'sp-elec-chime': ['ambient', 'pop'], 'sp-elec-blip': ['techno', 'house'], 'sp-perc-bell': ['ambient'],
   'sp-ambi-drone': ['ambient', 'techno'], 'sp-ambi-glass-hum': ['ambient'], 'sp-misc-cineboom': ['ambient', 'hiphop'],
   'sp-ambi-swoosh': ['ambient', 'pop', 'house'],
+  'sp-vinyl-backspin': ['hiphop', 'breaks', 'house'], 'sp-vinyl-rewind': ['breaks', 'hiphop', 'reggaeton'],
+  'sp-vinyl-scratch': ['hiphop', 'breaks', 'funk'], 'sp-ambi-dark-woosh': ['ambient', 'techno', 'trap'],
+  'sp-ambi-lunar-land': ['ambient', 'pop'], 'sp-perc-impact1': ['trap', 'techno', 'ambient'],
+  'sp-perc-impact2': ['trap', 'hiphop', 'techno'], 'sp-perc-swoosh': ['pop', 'house', 'techno'],
+  'sp-perc-swash': ['pop', 'house'], 'sp-glitch-robot1': ['techno', 'breaks', 'synthwave'],
+  'sp-glitch-robot2': ['techno', 'house', 'synthwave'],
 };
 
 export const CATALOG = CATALOG_ENTRIES.map((e) => ({ ...e, genres: GENRES_OF[e.id] || [] }));

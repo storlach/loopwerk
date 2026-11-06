@@ -159,6 +159,16 @@ function createUi() {
       if (on) ui.armedSampleId = null;
       ui.emit();
     },
+    // Scharf für die Aufnahme (2.13 C): Spur-IDs in der Reihenfolge des Scharfschaltens. UI-Zustand, nicht im Projekt
+    recTracks: [],
+    setRecArm(id, on) {
+      const has = ui.recTracks.includes(id);
+      if (!id || has === !!on) return;
+      ui.recTracks = on ? [...ui.recTracks, id] : ui.recTracks.filter((x) => x !== id);
+      ui.emit();
+    },
+    toggleRecArm(id) { ui.setRecArm(id, !ui.recTracks.includes(id)); },
+    isRecArmed(id) { return ui.recTracks.includes(id); },
     // Laufende Anzeige beim Ziehen (z. B. „Fade-In: 1,5 Schläge“)
     status(text) { if (ui.statusText !== text) { ui.statusText = text; ui.emit(); } },
     // Kurze Rückmeldung nach einer Aktion
@@ -430,21 +440,26 @@ function mountRecording({ store, engine, ui, arranger, recorder, library, mode =
     const atWrap = takes && engine.playing;
     const startBeat = inLoop ? loop.startBeat : target ? Math.floor(target.startBeat / bpb) * bpb : Math.floor(engine.heardBeat() / bpb) * bpb;
     if (engine.playing && recMode === 'song' && !atWrap) engine.stop();
+    // Scharfe Spuren (Mehrspur, 2.13 C): alle bekommen die Aufnahme, jede mit ihrem Eingang; sonst die alte Regel
+    const armed = recMode === 'song' && !target && !takes ? (ui.recTracks ?? []).map((id) => store.track(id)).filter(Boolean) : [];
     const sel = ui.selectedClipId && store.findClip(ui.selectedClipId);
-    // Takes legen sich auf eine freie Spur (nicht über den gewählten Clip), sonst eine neue
+    // Takes (Krachwerk) legen sich auf eine freie Spur (nicht über den gewählten Clip), sonst eine neue
     let trackId = takes ? target?.trackId ?? freeTrack(loop.startBeat, loop.endBeat)?.id
-      : target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, inLoop ? loop.endBeat : startBeat + (mode === 'sound' ? bpb : 16))?.id;
+      : armed[0]?.id ?? target?.trackId ?? sel?.track.id ?? freeTrack(startBeat, inLoop ? loop.endBeat : startBeat + (mode === 'sound' ? bpb : 16))?.id;
     if (!trackId && recMode === 'song') trackId = store.addTrack();
     if (!trackId && recMode === 'song') { ui.flash('Keine freie Spur für die Aufnahme.'); return; }
+    const targets = armed.length ? armed.map((t) => ({ trackId: t.id, input: t.recInput ?? null })) : [{ trackId, input: store.track(trackId)?.recInput ?? null }];
     pending = { trackId, startBeat };
     try {
-      await recorder.start({ trackId, startBeat, mode: recMode, silence: opts.silence, maxSeconds: opts.maxSeconds, tag: opts.tag,
+      await recorder.start({ targets, startBeat, mode: recMode, silence: opts.silence, maxSeconds: opts.maxSeconds, tag: opts.tag,
         ...(takes ? { startAt: 'next-wrap', takeShape: 'raw' } : {}) });
-      ui.flash(opts.say ?? (takes ? (recorder.atWrap ? 'Takes ab dem nächsten Durchgang – jeder Durchgang wird ein Take. ● beendet.'
-        : 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ● beendet.')
-        : mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.'
-          : inLoop ? 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ●, R oder Leertaste beendet.'
-            : 'Aufnahme läuft – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.'));
+      const many = targets.length > 1 ? ` auf ${targets.length} Spuren` : '';
+      ui.flash(opts.say ?? (recorder.missingDevice ? `„${recorder.missingDevice}“ fehlt – Aufnahme mit dem Standard-Mikrofon.`
+        : takes ? (recorder.atWrap ? 'Takes ab dem nächsten Durchgang – jeder Durchgang wird ein Take. ● beendet.'
+          : 'Aufnahme im Loop – ein Takt Vorzähler, jeder Durchgang wird ein Take. ● beendet.')
+          : mode === 'sound' ? 'Aufnahme läuft – mach ein Geräusch.'
+            : inLoop ? `Aufnahme im Loop${many} – ein Takt Vorzähler, jeder Durchgang wird ein Take. ●, R oder Leertaste beendet.`
+              : `Aufnahme läuft${many} – ein Takt Vorzähler. Nochmal klicken oder Leertaste beendet.`));
     } catch (err) {
       ui.flash(err.code === 'denied'
         ? 'Kein Zugriff auf das Mikrofon. Erlaube den Zugriff im Browser oder importiere eine Aufnahme als Datei.'
@@ -488,7 +503,10 @@ function mountRecording({ store, engine, ui, arranger, recorder, library, mode =
     else if (what === 'recorded' && payload.mode === 'sound') { if (place(payload.sample)) ui.flash(`„${payload.sample.name}“ – läuft im Loop.`); }
     else if (what === 'recorded') {
       arranger.select(payload.clipId);
-      ui.flash(payload.takes > 1 ? (payload.shape === 'raw' ? `${payload.takes} Takes – der letzte spielt.` : `${payload.takes} Takes – der letzte spielt. Wechseln: Alt+↑/↓.`) : `„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`);
+      const n = payload.tracks || 1;
+      const alt = payload.shape === 'raw' ? '' : ' Wechseln: Alt+↑/↓.';
+      ui.flash(n > 1 ? `${n} Spuren aufgenommen.${payload.takes > 1 ? ` Je ${payload.takes} Takes – der letzte spielt.${alt}` : ''}`
+        : payload.takes > 1 ? `${payload.takes} Takes – der letzte spielt.${alt}` : `„${payload.sample.name}“ aufgenommen und auf die Spur gelegt.`);
       // Tipp „Einmessen“ (tips.js), solange auf diesem Gerät nicht gemessen wurde
       document.getElementById('app').classList.toggle('rec-unmeasured', !recorder.latencyInfo?.measured);
     }
@@ -594,8 +612,23 @@ async function boot() {
   own.onBlocked = blocked;
   if (own.blocked) blocked();
 
+  // Spuren scharf schalten (2.13 C; Krachwerk ohne: surfaces.recArm). busy setzt die Aufnahme weiter unten
+  const recArm = EDITION.surfaces.recArm === false ? null : {
+    busy: () => false,
+    toggle(id) {
+      if (recArm.busy()) { ui.flash('Während der Aufnahme nicht änderbar.'); return false; }
+      ui.toggleRecArm(id);
+      return true;
+    },
+  };
+  // Beim Öffnen (und „Neu“) ist nichts scharf; gelöschte Spuren fallen heraus
+  store.on((p, reason) => {
+    const keep = reason === 'replace' ? [] : ui.recTracks.filter((id) => store.track(id));
+    if (keep.length !== ui.recTracks.length) { ui.recTracks = keep; ui.emit(); }
+  });
+
   // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: DENSITY !== 'calm' });
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: DENSITY !== 'calm', recArm });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
@@ -719,6 +752,7 @@ async function boot() {
   const recording = mountRecording({ store, engine, ui, arranger, recorder, library, mode: EDITION.record, recTakes: !!EDITION.recTakes, bench: () => benchRef.kb });
   // ● mit Kontext (Text unter ●, lang drücken → „Geräusch · Takes“): nur mit Takes-Anbindung der Edition
   if (EDITION.recTakes) recording.chooser = mountRecContext({ btn: document.getElementById('rec-btn'), recorder, engine, store, ui, record: recording });
+  if (recArm) recArm.busy = () => recorder.state !== 'idle';
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
   const importer = mountImport({ store, ui, arranger, own, shelf });
   mountBrandMeter(engine, undefined, { mark: EDITION.brandMark });
@@ -738,7 +772,7 @@ async function boot() {
   mountMasteringControls(document.getElementById('song-mst-slot'), { store, engine, analysis: mastering, prefix: 'song-mst' });
   // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
   const inspector = mountInspector({
-    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering,
+    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering, recArm, recorder,
     ...(songExport ? { songPanel: (box, deps) => mountSongBench(box, { ...deps, exporter: songExport, own, appName: EDITION.title }) } : {}),
     // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
     ...(EDITION.workbench === 'sound' ? {
@@ -766,7 +800,7 @@ async function boot() {
     };
     ui.emptyClick = () => { if (!narrow.matches && !ui.dock) ui.openSong(); };
   }
-  const recSetup = mountRecSetup({ ui, engine, recorder });
+  const recSetup = mountRecSetup({ ui, engine, recorder, store, recArm });
   layout.onEditorTab(() => {
     if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
     else tools.edit();
@@ -921,6 +955,12 @@ async function boot() {
     } else if (!mod && !e.altKey && key === 't') {
       e.preventDefault();
       tools.split();
+    } else if (!mod && !e.altKey && e.shiftKey && key === 'r' && ui.dock !== 'pattern' && recArm) {
+      // Gewählte Spur (oder die Spur des gewählten Clips) für die Aufnahme scharf schalten
+      e.preventDefault();
+      const id = ui.selectedTrackId ?? (ui.selectedClipId && store.findClip(ui.selectedClipId)?.track.id);
+      if (!id || e.repeat || !recArm.toggle(id)) return;
+      ui.flash(ui.isRecArmed(id) ? `„${store.track(id).name}“ ist scharf für die Aufnahme.` : `„${store.track(id).name}“ nicht mehr scharf.`);
     } else if (!mod && !e.altKey && !e.shiftKey && key === 'r' && ui.dock !== 'pattern') {
       // Aufnahme starten bzw. beenden (wie ●)
       e.preventDefault();

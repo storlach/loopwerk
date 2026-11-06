@@ -46,7 +46,8 @@ const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
 const MAX_CANVAS = TOUCH ? 8000 : 16000;
 const canvasDpr = () => Math.min(TOUCH ? 2 : 4, window.devicePixelRatio || 1);
 
-export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true }) {
+// recArm (2.13 C): { toggle(trackId) } – Spur-Menü „Für Aufnahme scharf“ und roter Punkt im Spurkopf; null = aus
+export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true, recArm = null }) {
   root.innerHTML = '';
   // Roh → geformt (Krachwerk): ein Sound ohne Klang-Rezept zeichnet seine Welle als Korn (Punkte), mit Rezept als Linie
   const shaped = (id) => !grainWave || !!recipeKey(store.project.recipes?.[id]);
@@ -395,6 +396,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       r.silent = st.mute || (anySolo && !st.solo);
       r.row.classList.toggle('silent', r.silent);
       r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === t.id);
+      r.row.classList.toggle('rec-armed', !!recArm && !!ui.recTracks?.includes(t.id));
     });
     addBtn.hidden = tracks.length >= MAX_TRACKS;
     const sumOpen = autoLanes.isOpen('master');
@@ -491,6 +493,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
       item(autoLanes.isOpen(trackId) ? 'Kurve schließen' : 'Kurve', () => { closeMenu(); autoLanes.toggle(trackId); }),
+      ...(recArm ? [armItem(trackId)] : []),
       // gilt für den zuletzt gewählten Parameter der Kurvenzeile
       ...((k) => (laneOf(tracks[i], k).length ? [item(`${AUTO_PARAMS[k].label}-Kurve löschen`, () => { closeMenu(); autoLanes.clear(trackId, k); })] : []))(autoLanes.lastKeyOf(trackId)),
       ...groupItems(trackId, item),
@@ -508,6 +511,19 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     menu.style.left = clamp(r.left, 8, innerWidth - mw - 8) + 'px';
     menu.style.top = menuTop(r, mh) + 'px';
     menu.querySelector('button:not(:disabled)')?.focus();
+  }
+
+  // Schalter im Menü: an = roter Punkt davor (aria-checked)
+  function armItem(trackId) {
+    const on = !!ui.recTracks?.includes(trackId);
+    const b = el('button', 'track-menu-item track-menu-arm', 'Für Aufnahme scharf');
+    b.type = 'button';
+    b.id = 'tm-rec-arm';
+    b.setAttribute('role', 'menuitemcheckbox');
+    b.setAttribute('aria-checked', String(on));
+    b.title = 'Die nächste Aufnahme (●) landet auch auf dieser Spur (Umschalt+R)';
+    b.addEventListener('click', () => { closeMenu(); recArm.toggle(trackId); });
+    return b;
   }
 
   document.addEventListener('pointerdown', (e) => {
@@ -1495,8 +1511,11 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   narrow.addEventListener('change', () => render(true));
   touch.addEventListener('change', () => render(true));
   render(true);
+  // Scharf für die Aufnahme: roter Punkt im Spurkopf (nur Anzeige)
+  const markArmed = () => { for (const [tid, r] of rows) r.row.classList.toggle('rec-armed', !!recArm && !!ui.recTracks?.includes(tid)); };
   ui.on(() => {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
+    markArmed();
     markSelection();
   });
   return { render, autoLanes, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
