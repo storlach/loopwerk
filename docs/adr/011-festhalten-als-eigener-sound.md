@@ -24,3 +24,6 @@
 - Der festgehaltene Sound bleibt nach ↶ in der Kiste wie jede Aufnahme. Weggeräumt wird er über „Aufräumen“ (ADR 012).
 - Bei nichtlinearen Effekten (Kompressor, Pumpen) ist die Faltung nur fast nahtlos. Das prüft der Ohr-Test.
 - Das Effekt-Pad wirkt nur live und wird nicht festgehalten, außer man hat es als Kurve aufgenommen.
+
+## Nachtrag (Umsetzung 3d)
+- „Klanglich neutral“ gilt im Loop und für Clips, die an den Bereichsgrenzen beginnen oder enden (Null-Test −340 dB, mit Hall gefaltet −112 dB). Läuft eine Quelle über eine Grenze, wird sie dort geteilt. Spielt man den Song danach ohne Loop durch die Grenze, weicht er in ±2 ms um die Naht ab: Die Überblendung von 96 Samples am Schnitt kommt zur Loop-Überblendung im festgehaltenen Sound hinzu. Ein Fade, der über die Grenze läuft, geht beim Teilen verloren, wie schon bei `splitAt`. Beides ist hingenommen und Teil von Ohr-Test 3.
