@@ -271,7 +271,7 @@ async function run({ name, vp, touch }) {
     });
     check(`${tag}: Clip-Editor: kleine Zeile „Clip-Editor“, Name groß (≥ 20 px)`, ce.kind === 'Clip-Editor' && ce.size >= 20 && ce.nameW > 40, JSON.stringify({ k: ce.kind, s: ce.size, w: ce.nameW }));
     check(`${tag}: Clip-Editor: Anhören wie Abspielen im Deck`, Math.abs(ce.play.w - ce.dplay.w) <= 2 && Math.abs(ce.play.h - ce.dplay.h) <= 2 && ce.br[0] === ce.br[1], JSON.stringify([ce.play, ce.dplay, ce.br]));
-    check(`${tag}: Clip-Editor: neun Schnittwerkzeuge mit Icon und Titel${handy ? ', ≥ 44 px' : ''}`, ce.tools === 9 && ce.icons && ce.labels && JSON.stringify(ce.groups) === '["Auswahl","Bearbeiten"]' && (!handy || ce.minTool >= 43.5), JSON.stringify(ce));
+    check(`${tag}: Clip-Editor: zehn Werkzeuge (mit Entrauschen) mit Icon und Titel${handy ? ', ≥ 44 px' : ''}`, ce.tools === 10 && ce.icons && ce.labels && JSON.stringify(ce.groups) === '["Auswahl","Säubern","Bearbeiten"]' && (!handy || ce.minTool >= 43.5), JSON.stringify(ce));
     const waveH = () => page.evaluate(() => Math.round(document.getElementById('ed-wave').getBoundingClientRect().height));
     const wMid = await waveH();
     if (handy) check(`${tag}: Clip-Editor bei „Mitte“: Wellenform mindestens 160 px hoch`, wMid >= 160, `${wMid} px`);
@@ -297,7 +297,7 @@ async function run({ name, vp, touch }) {
     check(`${tag}: Clip-Editor: Zeichenfläche passt zur Größe (kein verzerrtes Bild)`, Math.abs(ed.ch - Math.round(ed.h * ed.dpr)) <= 1 && Math.abs(ed.cw - Math.round(ed.w * ed.dpr)) <= 1, JSON.stringify(ed));
     await page.click('#clip-more');
     const more = await page.evaluate(() => [...document.querySelectorAll('#editor .ed-group')].filter((g) => g.offsetParent).map((g) => g.getAttribute('aria-label')));
-    check(`${tag}: Clip-Editor: „Mehr“ klappt Tonhöhe, Autotune, Trennen, Loop auf`, JSON.stringify(more.slice(2)) === '["Tonhöhe","Autotune","Trennen","Loop"]', JSON.stringify(more));
+    check(`${tag}: Clip-Editor: „Mehr“ klappt Tonhöhe, Autotune, Rauschen, Trennen, Loop auf`, JSON.stringify(more.slice(3)) === '["Tonhöhe","Autotune","Rauschen","Trennen","Loop"]', JSON.stringify(more));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-clip-oben-mehr.png`) });
     await page.click('#clip-more');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-clip-oben.png`) });

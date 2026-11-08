@@ -1,6 +1,6 @@
 // Klang-Rezept backen (ADR 010): aus dem Original und dem Rezept einen neuen Puffer rechnen. Reines JS auf
 // Float32Array-Kanälen, Eingabe bleibt unverändert – läuft im Hauptthread (kurze Klänge) und im Rechen-Worker.
-// Feste Reihenfolge: Ausschnitt · rückwärts · Dehnen · Tonhöhe · Autotune · Hochpass/Tiefpass · Wärme · Körnung · Gain ·
+// Feste Reihenfolge: Ausschnitt · Rauschminderung · rückwärts · Dehnen · Tonhöhe · Autotune · Hochpass/Tiefpass · Wärme · Körnung · Gain ·
 // Hüllkurve.
 
 import { timeStretch } from './stretch.js';
@@ -8,6 +8,7 @@ import { pitch } from './edit.js';
 import { autotune } from './autotune.js';
 import { pitchGrid } from '../cuts.js';
 import { TUNE_KEYS } from '../recipe.js';
+import { denoise } from './denoise.js';
 
 const EDGE_SEC = 0.002; // Mindestblende an jeder geschnittenen Kante
 
@@ -63,7 +64,10 @@ export function cookRecipe(chs, sampleRate, r = {}) {
   // 1. Ausschnitt
   const a = Math.min(len - 1, Math.max(0, Math.round((r.start ?? 0) * sr)));
   const b = Math.max(a + 1, Math.min(len, r.end != null ? Math.round(r.end * sr) : len));
-  let out = chs.map((d) => d.slice(a, b));
+  // 1b. Rauschminderung: Profil aus dem ganzen Original, Rahmen auf dessen Raster – ein Schnitt klingt wie die Stelle
+  // in seiner Quelle
+  const dn = r.denoise ?? 0;
+  let out = dn > 0 ? denoise(chs, sr, { amount: dn, from: a, to: b }) : chs.map((d) => d.slice(a, b));
   const cutStart = a > 0 || !!r.reverse;
   const cutEnd = b < len || !!r.reverse;
   // 2. rückwärts

@@ -8,6 +8,7 @@ import { searchMaster } from './master-search.js';
 import { cookRecipe } from './recipe.js';
 import { detectOnsets } from './slice.js';
 import { mixMono } from './clean.js';
+import { denoise } from './denoise.js';
 
 let worker = null;
 let nextId = 1;
@@ -61,6 +62,7 @@ const LOCAL = {
   onsets: ({ chs, sampleRate, sensitivity }) => detectOnsets(mixMono(chs), sampleRate, { sensitivity }),
   key: ({ chs, sampleRate }) => detectKey(chs, sampleRate),
   pitchshift: ({ chs, sampleRate, semis, loop }) => pitchShift(chs, semis, sampleRate, { loop }),
+  denoise: ({ chs, sampleRate, opts }) => denoise(chs, sampleRate, opts),
 };
 
 export function runJob(job, args, { onProgress } = {}) {

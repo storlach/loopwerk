@@ -3,6 +3,8 @@
 
 // Klangfelder: Bereich, Standard (= nicht gespeichert), Raster beim Speichern, Raster der Bedienung (ui)
 export const RECIPE = {
+  // Rauschminderung (0 = aus); wirkt als erster Schritt nach dem Ausschnitt, Profil aus dem ganzen Original
+  denoise: { min: 0, max: 1, def: 0, step: 0.01 },
   start: { min: 0, max: 480, def: 0, step: 1e-5, unit: 's' },
   end: { min: 0.01, max: 480, def: null, step: 1e-5, unit: 's' }, // null = Dauer
   attack: { min: 0, max: 2000, def: 0, step: 1, unit: 'ms' },
@@ -115,6 +117,7 @@ export function recipeSteps(r) {
   if (!r) return [];
   const out = [];
   if ((r.start ?? 0) > 0 || r.end != null) out.push('gekürzt');
+  if ((r.denoise ?? 0) > 0) out.push('entrauscht');
   if (r.reverse) out.push('rückwärts');
   if (r.stretch != null && r.stretch !== 1) out.push(`gedehnt ${Math.round(r.stretch * 100)} %`);
   const st = (r.semis ?? 0) + (r.cents ?? 0) / 100;

@@ -41,6 +41,7 @@ export const EDITIONS = {
       'ed-at-strength': 'Ton, Feinheiten: Stärke', 'ed-at-robot': 'Ton, Feinheiten: Roboter',
       'ed-novocal': 'Zerlegen, Feinheiten: Stimme weg', 'ed-vocal': 'Zerlegen, Feinheiten: Nur Stimme', 'ed-stems': 'Zerlegen, Feinheiten: In 4 Ebenen',
       'ed-loop': 'Zeit', 'ed-beats': 'Zeit', 'ed-bpm': 'Zeit', 'ed-play': 'Tipp auf die Welle',
+      'ed-denoise': 'Farbe: Rauschen weg', 'ed-dn-strength': 'Farbe: Rauschen weg', 'ed-dn-value': 'Farbe: Rauschen weg',
       'ed-undo': 'Rückgängig (↶)', 'ed-name': 'Name im Kopf der Werkbank', 'ed-apply': 'Als Variante',
     },
     // Klang-Rezept (Scheibe 2a, ADR 010): Sound-Werkbank im Clip-Abschnitt, Herkunftsfarben in Kiste und Song, Roh = Korn

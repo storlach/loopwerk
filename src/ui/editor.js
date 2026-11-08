@@ -3,6 +3,7 @@
 
 import * as E from '../dsp/edit.js';
 import { runJob } from '../dsp/run.js';
+import { MIN_PROFILE_SEC } from '../dsp/denoise.js';
 import { STEMS, mixStems } from '../dsp/separate.js';
 import { channelsToBuffer, bufferToChannels } from '../own-sounds.js';
 import { clamp, el, trackPointer } from '../util.js';
@@ -20,6 +21,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   const beatsIn = $('ed-beats');
   const bpmOut = $('ed-bpm');
   const pitchOut = $('ed-pitch-value');
+  const dnBtn = $('ed-denoise');
   let peaks = null;
   let st = null; // { clipId, src, chs, sr, history, sel, kind, beats, pitch }
 
@@ -48,6 +50,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     };
     live = null;
     $('ed-autotune').setAttribute('aria-pressed', 'false');
+    dnBtn.setAttribute('aria-pressed', 'false');
     nameIn.value = sample.category === 'own' ? sample.name : `${sample.name} (bearbeitet)`;
     ui.setDock('editor');
     requestAnimationFrame(render);
@@ -63,15 +66,15 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     replay();
   }
 
-  // ---------- Sofort hören: Tonhöhe und Autotune wirken beim Einstellen ----------
+  // ---------- Sofort hören: Entrauschen, Tonhöhe und Autotune wirken beim Einstellen ----------
   // Eine Live-Sitzung rechnet immer vom Stand vor der Sitzung aus (ein Rückgängig-Schritt);
-  // ein anderes Werkzeug oder „Übernehmen“ macht das Ergebnis fest.
-  let live = null; // { base, pitch, autotune }
+  // ein anderes Werkzeug oder „Übernehmen“ macht das Ergebnis fest. Reihenfolge: Entrauschen · Tonhöhe · Autotune.
+  let live = null; // { base, denoise, dsel, dn, pitch, autotune }
   function startLive() {
     if (live) return live;
     st.history.push(st.chs);
     if (st.history.length > 30) st.history.shift();
-    live = { base: st.chs, pitch: 0, autotune: false, token: 0 };
+    live = { base: st.chs, denoise: 0, dsel: null, dn: null, pitch: 0, autotune: false, token: 0 };
     return live;
   }
   function endLive() {
@@ -79,6 +82,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     live = null;
     st && (st.pitch = 0);
     $('ed-autotune').setAttribute('aria-pressed', 'false');
+    dnBtn.setAttribute('aria-pressed', 'false');
   }
   let liveTimer = null;
   function relive() {
@@ -89,6 +93,17 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     if (!st || !live) return;
     const token = ++live.token;
     let chs = live.base;
+    if (live.denoise > 0) {
+      // Ergebnis gemerkt, solange Stärke und Bereich gleich bleiben (Tonhöhe ändern rechnet nicht neu)
+      const [a, b] = live.dsel ?? [0, chs[0].length];
+      const key = `${live.denoise}|${a}|${b}`;
+      if (live.dn?.key !== key) {
+        const part = await work('Rauschen wird entfernt …', 'denoise', { chs, sampleRate: st.sr, opts: { amount: live.denoise, from: a, to: b, edges: true } }, { quiet: true });
+        if (!part || !live || token !== live.token) return;
+        live.dn = { key, chs: chs.map((d, c) => { const r = d.slice(); r.set(part[c], a); return r; }) };
+      }
+      chs = live.dn.chs;
+    }
     if (live.pitch) chs = E.pitch(chs, live.pitch);
     if (live.autotune) {
       const [a, b] = live.sel ?? [0, chs[0].length];
@@ -100,7 +115,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     if (!st || !live || token !== live.token) return;
     st.chs = chs;
     st.rev = (st.rev || 0) + 1;
-    if (!live.pitch && !live.autotune) { st.history.pop(); live = null; }
+    if (!live.pitch && !live.autotune && !(live.denoise > 0)) { st.history.pop(); live = null; }
     render();
     replay();
   }
@@ -204,6 +219,32 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   $('ed-pitch-down').addEventListener('click', () => setPitch((live?.pitch ?? 0) - 1));
   $('ed-pitch-up').addEventListener('click', () => setPitch((live?.pitch ?? 0) + 1));
   $('ed-pitch-apply').hidden = true;
+
+  // Entrauschen: ein Klick = an mit der Stärke aus „Mehr“ (Voreinstellung mittel), noch ein Klick = aus.
+  // Wirkt auf die Auswahl (10 ms Überblendung an den Rändern) oder den ganzen Sound; das Profil kommt immer vom Ganzen.
+  const dnStrength = $('ed-dn-strength');
+  const dnOut = $('ed-dn-value');
+  const showStrength = () => { dnOut.textContent = `${Math.round(Number(dnStrength.value) * 100)} %`; };
+  const setDenoise = (on) => {
+    if (!st) return;
+    const l = startLive();
+    // Auswahl gilt im Stand vor der Sitzung; ist schon verstimmt, wirkt es aufs Ganze
+    if (on && !(l.denoise > 0)) l.dsel = hasSel() && !l.pitch ? [...st.sel] : null;
+    l.denoise = on ? Number(dnStrength.value) : 0;
+    dnBtn.setAttribute('aria-pressed', String(l.denoise > 0));
+    relive();
+  };
+  dnBtn.addEventListener('click', () => {
+    if (!st) return;
+    const on = !(live?.denoise > 0);
+    if (on && len() < MIN_PROFILE_SEC * st.sr) { ui.flash('Zu kurz zum Entrauschen.'); return; }
+    if (on && Number(dnStrength.value) <= 0) dnStrength.value = '0.5';
+    showStrength();
+    setDenoise(on);
+    if (on) ui.flash(`Rauschen entfernt (${dnOut.textContent}) – Stärke unter „Mehr“.`);
+  });
+  dnStrength.addEventListener('input', () => { showStrength(); if (st) setDenoise(Number(dnStrength.value) > 0); });
+  showStrength();
   loopIn.addEventListener('click', () => { if (!st) return; st.kind = st.kind === 'loop' ? 'oneshot' : 'loop'; render(); });
   beatsIn.addEventListener('change', () => { st.beats = clamp(Math.round(Number(beatsIn.value) || 1), 1, 64); render(); });
 
@@ -212,6 +253,7 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     live = null;
     st.pitch = 0;
     $('ed-autotune').setAttribute('aria-pressed', 'false');
+    dnBtn.setAttribute('aria-pressed', 'false');
     st.chs = st.history.pop();
     st.sel = null;
     render();
@@ -384,12 +426,12 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
   // Die Wellenform füllt die Schublade: wächst oder schrumpft sie (auch beim Ziehen), zeichnet sie im nächsten Bild neu
   let raf = 0;
   new ResizeObserver(() => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; render(); }); }).observe(canvas);
-  // Tonhöhe, Autotune, Trennen, Loop: eingeklappt, damit die Wellenform den Platz bekommt
+  // Tonhöhe, Autotune, Rauschen, Trennen, Loop: eingeklappt, damit die Wellenform den Platz bekommt
   const moreBtn = $('clip-more');
   moreBtn.addEventListener('click', () => {
     const open = moreBtn.getAttribute('aria-expanded') !== 'true';
     moreBtn.setAttribute('aria-expanded', String(open));
-    moreBtn.textContent = `Mehr: Tonhöhe, Autotune, Trennen, Loop ${open ? '▴' : '▾'}`;
+    moreBtn.textContent = `Mehr: Tonhöhe, Autotune, Rauschen, Trennen, Loop ${open ? '▴' : '▾'}`;
     $('ed-tools').hidden = !open;
   });
   // Werkzeugzeile am Handy wischbar: ausblendender Rand rechts, solange noch etwas dahinter liegt

@@ -1,5 +1,6 @@
 // Sound-Werkbank (Krachwerk 2a, Spec docs/specs/krachwerk-2-werkbank.md §6): ersetzt im Inspektor den Clip-Abschnitt.
 // Kopf (Herkunft, Name, „in N Clips“, Als Variante) · Stammbaum · Welle mit Griffen · Reiter Form, Ton, Farbe, Zeit, Clip.
+// Farbe beginnt mit „Rauschen weg“ (Rezeptfeld denoise, src/dsp/denoise.js).
 // Zerlegen (2b): Marken auf der Welle, „In die Kiste“ / „Auf die Spur“, Trennen in den Feinheiten (docs/specs/krachwerk-2b-zerlegen.md).
 // Je Reiter höchstens 5 Griffe im Grund, der Rest steht unter „Feinheiten“. Eine Änderung gilt für alle Clips des Sounds;
 // geschrieben wird nur über store.setRecipe / addVariant / setSampleTempo / setClip (Ziehen = ein Rückgängig-Schritt).
@@ -414,14 +415,17 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   // ---------- Farbe ----------
   {
     const { grund, fine } = panels.farbe;
+    // Rauschminderung zuerst: erst sauber machen, dann färben
+    rslider(grund, 'denoise', 'Rauschen weg', { min: 0, max: 1, step: 0.01, def: 0, fmt: (v) => (v <= 0 ? 'aus' : fmtPct(v)) });
     rslider(grund, 'lp', 'Dunkler', { min: 0, max: 1000, step: 1, def: 20000, toUi: (v) => 1000 - Math.round((Math.log(v / 200) / Math.log(100)) * 1000), fromUi: (x) => Math.round(200 * 100 ** ((1000 - x) / 1000)), fmt: (v) => (v >= 20000 ? 'aus' : fmtHz(v)) });
     rslider(grund, 'hp', 'Dünner', { min: 0, max: 1000, step: 1, def: 20, ...logTo(20, 2000), fmt: (v) => (v <= 20 ? 'aus' : fmtHz(v)) });
-    rslider(grund, 'res', 'Resonanz', { min: 0, max: 1, step: 0.01, def: 0, fmt: fmtPct });
+    // Resonanz gehört zum Tiefpass und steht unter den Feinheiten (Grund: höchstens 5 Griffe, am Handy alle im Bild)
+    rslider(fine, 'res', 'Resonanz', { min: 0, max: 1, step: 0.01, def: 0, fmt: fmtPct });
     rslider(grund, 'warm', 'Wärme', { min: 0, max: 1, step: 0.01, def: 0, fmt: fmtPct });
     rslider(fine, 'grain', 'Körnung', { min: 0, max: 1, step: 0.01, def: 0, fmt: fmtPct });
     const acts = el('div', 'wb-acts');
     fine.append(acts);
-    btn(acts, 'Zurücksetzen', 'wb-farbe-reset', () => patch({ lp: null, hp: null, res: null, warm: null, grain: null }));
+    btn(acts, 'Zurücksetzen', 'wb-farbe-reset', () => patch({ denoise: null, lp: null, hp: null, res: null, warm: null, grain: null }));
   }
 
   // ---------- Zeit ----------

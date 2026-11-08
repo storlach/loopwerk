@@ -308,6 +308,13 @@
 
 - ✅ Editor-Kopf (Beat und Melodie): große Überschrift mit editierbarem Namen (Enter/Blur speichert, Esc verwirft), Umschalter Schritte | Pads in Weißglut, Anhören und Live als Deck-Tasten, Reihen/Pads/Piano-Roll wachsen mit der Schubladenhöhe (`data-fit`, `--sheet-cut`), Klaviertasten leuchten beim Spielen. Test `tests/editor-kopf.test.cjs`, Bilder `docs/ux/editor-kopf/`
 
+## ✅ Rauschen entfernen
+- `src/dsp/denoise.js`: spektrale Rauschminderung (STFT 2048, 75 % Überlappung, Hann, WOLA). Rauschprofil automatisch je Band aus den leisesten 10 % der Rahmen (auf den Mittelwert korrigiert), über die Frequenz median-geglättet ohne stehende Bänder – gehaltene Töne bleiben; Netzbrummen 50/60 Hz mit Obertönen frequenzgenau (langes Fenster, ±0,2 Hz) erkannt und mit entfernt. Spektral-Subtraktion mit Überschätzung, Leistung über 3 × 7 und Gewinn über 3 × 3 Zellen geglättet gegen „musical noise“, Untergrenze −30 dB; Stärke 0 … 1 (0 bitgleich, 0,5 ≈ −15 dB). Ein Gewinn für alle Kanäle (Stereobild bleibt), gleiche Länge, keine Verschiebung; Ausschnitte sind samplegleich mit derselben Stelle des Ganzen. Job `denoise` im Worker, Hauptthread als Rückfall
+- Clip-Editor (Loopwerk): Werkzeug „Entrauschen“ in eigener Gruppe „Säubern“ neben den Schnittwerkzeugen – ein Klick = an mit „mittel“ (50 %), noch ein Klick = aus, Stärke unter „Mehr“ → „Rauschen entfernen“, sofort im laufenden Vorhör-Loop, ein Rückgängig-Schritt; wirkt auf die Auswahl (10 ms Überblendung) oder den ganzen Sound; Handy 44-px-Icon in der wischbaren Zeile
+- Krachwerk: Rezeptfeld `denoise`, Regler „Rauschen weg“ zuerst im Reiter Farbe (Resonanz → Feinheiten), gebacken als erster Schritt nach dem Ausschnitt, Stammbaum „entrauscht“, Varianten und Schnitte erben es, Song-ZIP trägt es
+- Test `tests/denoise.test.cjs` (Pausen −30 dB, Töne ±0,03 dB, Formanten ±1,2 dB, Brummen −30 dB, Ausreißer 0,05 % statt 7,8 % ohne Glättung, Stereo-Abweichung 0,03 dB statt 30 dB getrennt); Bilder `docs/ux/denoise/`
+- Vorschlag: nach einer Krachwerk-Aufnahme bei deutlichem Grundrauschen `denoise` 0,3 als Rezept vorschlagen (nicht-destruktiv)
+
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
 
