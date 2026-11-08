@@ -5,7 +5,8 @@ const { openApp, createChecker, clickR, selectR } = require('./harness.cjs');
 const { check, finish } = createChecker();
 
 (async () => {
-  const app = await openApp({ viewport: { width: 1440, height: 900 } });
+  // Schublade in der Mitte (dort lief „Mehr“ früher über die Wellenform)
+  const app = await openApp({ viewport: { width: 1440, height: 900 }, init: () => { const m = { editor: 0.5 }; localStorage.setItem('loopwerk.sheetH', JSON.stringify({ wide: m, narrow: m })); } });
   const { page } = app;
   try {
     await page.evaluate(() => {
@@ -62,6 +63,13 @@ const { check, finish } = createChecker();
     await page.evaluate(() => { document.getElementById('editor').hidden = true; window.loopwerk.ui.setDock(null); });
     await page.waitForTimeout(200);
     check('Schublade zu stoppt den laufenden Clip', await page.evaluate(() => !window.loopwerk.engine.preview));
+    // „Mehr“ aufklappen: die Welle behält ihre Zeile (≥ 80 px), die Zeilen darunter laufen nicht darüber
+    await page.evaluate(() => window.loopwerk.ui.setDock('editor'));
+    await page.waitForTimeout(600);
+    await page.evaluate(() => document.getElementById('clip-more').click());
+    await page.waitForTimeout(400);
+    const lay = await page.evaluate(() => { const w = document.querySelector('#editor .ed-wave-wrap').getBoundingClientRect(); const b = document.querySelector('#editor .editor-body').getBoundingClientRect(); return { waveH: Math.round(w.height), waveBottom: Math.round(w.bottom), bodyTop: Math.round(b.top) }; });
+    check('„Mehr“ offen: Wellenform ≥ 80 px und nicht überdeckt', lay.waveH >= 80 && lay.waveBottom <= lay.bodyTop, JSON.stringify(lay));
     check('Keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) {
     check('Ablauf ohne Ausnahme', false, e.stack);

@@ -3558,7 +3558,8 @@
   .pat-key.down.off, .vkey.down.off { opacity: 0.85; }
   @media (prefers-reduced-motion: reduce) { .pat-key, .vkey { transition: none; } }
   /* ================= Clip-Editor: Kopf wie bei Beat und Melodie, Schnittwerkzeuge als Icon-Knöpfe, Wellenform füllt das Fach ================= */
-  #editor { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  /* Welle behält mindestens 80 px (+ Rand), „Mehr“ scrollt im Rest statt über die Welle zu laufen */
+  #editor { grid-template-rows: auto auto minmax(96px, 1fr) minmax(0, auto); }
   #editor .ed-top { gap: 6px; padding: 6px 14px 8px 16px; }
   #editor .ed-headrow { margin: 0; padding: 0; border: 0; flex-wrap: wrap; align-items: center; gap: 4px 16px; }
   #editor .ed-title { flex: 1 1 0; min-width: 150px; display: grid; gap: 2px; align-items: initial; }
@@ -3582,8 +3583,10 @@
   #editor .ed-tool { display: inline-flex; align-items: center; gap: 6px; height: 40px; min-height: 40px; padding: 0 12px; }
   #editor .ed-tool span { font: 500 10px/1 var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
   /* Wellenform: volle Höhe des Fachs; --sheet-cut hält sie beim Verkleinern der Schublade im Takt (sheets.js) */
-  #editor .ed-stage { container-type: size; min-height: 80px; padding: 8px 14px 0; }
-  #editor .ed-wave-wrap { height: max(80px, calc(100cqh - var(--sheet-cut, 0px))); }
+  #editor .ed-stage { container-type: size; min-height: 0; padding: 8px 14px 0; }
+  #editor .ed-wave-wrap { box-sizing: border-box; height: max(80px, calc(100cqh - var(--sheet-cut, 0px))); }
+  /* Niedrige Fenster: in der Mitte-Höhe bleibt Platz für die Zeile „Mehr“ */
+  @media (max-height: 760px) and (min-width: 761px) { #editor { grid-template-rows: auto auto minmax(72px, 1fr) minmax(0, auto); } #editor .ed-wave-wrap { height: max(56px, calc(100cqh - var(--sheet-cut, 0px))); } }
   #editor .editor-body { padding: 6px 14px 10px; gap: 6px; max-height: min(300px, 45vh); }
   #editor .ed-more { justify-self: start; }
   #editor .ed-tools[hidden] { display: none; }
