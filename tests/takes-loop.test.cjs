@@ -370,6 +370,8 @@ async function analyse(page, clipId) {
     // ---------- 5: Song steht (oder Loop aus) → ● nimmt einen Klang auf ----------
     const m5 = [];
     let silent = null;
+    // Testtöne aus Schritt 7 trennen (der zweite ist bis zum Ende seines Durchgangs geplant und klänge sonst hinein)
+    await page.evaluate(() => window.__into?.disconnect());
     for (const how of ['steht', 'loop-aus']) {
       await page.evaluate((h) => {
         const { engine, store } = window.loopwerk;
