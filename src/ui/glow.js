@@ -92,7 +92,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   function clipAt(track, beat) {
     let top = null;
     for (const c of track.clips) {
-      if (c.startBeat > beat + EPS || c.startBeat + c.lengthBeats <= beat + EPS) continue;
+      if (c.mute || c.startBeat > beat + EPS || c.startBeat + c.lengthBeats <= beat + EPS) continue;
       if (!top || isAbove(c, top, track.clips)) top = c;
     }
     return top;

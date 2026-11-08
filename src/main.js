@@ -1,7 +1,7 @@
 // Einstieg: Bibliothek erzeugen, Projekt laden, Oberfläche verdrahten.
 
 import { buildLibrary } from './samples.js';
-import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, soundKeysOf, clipSampleIds } from './model.js';
+import { Store, createDemoProject, createEmptyProject, isValidProject, keyOf, keySemis, DEFAULT_TRACK_NAME, chordsOf, soundKeysOf, clipSampleIds, MAX_TRACKS } from './model.js';
 import { accompanimentPlan, applyPlan } from './starter.js';
 import { mountStarter } from './ui/starter.js';
 import { Engine, renderProject } from './engine.js';
@@ -32,7 +32,8 @@ import { mountPatternEditor } from './ui/pattern-editor.js';
 import { mountMobile, narrow } from './ui/mobile.js';
 import { Patterns, patternSampleId } from './patterns.js';
 import { newDrumPattern, newSynthPattern } from './instruments.js';
-import { OwnSounds } from './own-sounds.js';
+import { OwnSounds, channelsToBuffer } from './own-sounds.js';
+import { planBounce, foldTail, cutTail, headroom, peakOf, bounceFrames, bounceName, bounceSource, LEAD_FRAMES } from './bounce.js';
 import { Recorder } from './recorder.js';
 import { mountLinkImport } from './ui/link-import.js';
 import { touch, place } from './ui/place.js';
@@ -492,6 +493,71 @@ function mountRecording({ store, engine, ui, arranger, recorder, mode = 'song', 
   return { start };
 }
 
+// Festhalten (Krachwerk 3d, ADR 011): rendern (dieselbe Kette, ohne Master) → eigener Sound → store.bounce, ein
+// Rückgängig-Schritt. Der Song spielt weiter; Fortschritt bekommen Etikett und Knöpfe über on(). kiste: nur in die Kiste.
+function mountBounce({ store, engine, library, own, ui }) {
+  const FX_KEY = lsKey('loopwerk.bounceFx');
+  const bounce = new Emitter();
+  const deps = { shelf: null, arranger: null, recorder: null, sheets: null };
+  bounce.progress = null;
+  bounce.attach = (d) => Object.assign(deps, d);
+  const set = (p) => { bounce.progress = p; bounce.emit(p); };
+  Object.defineProperty(bounce, 'withFx', {
+    get() { try { return localStorage.getItem(FX_KEY) !== '0'; } catch { return true; } },
+    set(on) { try { localStorage.setItem(FX_KEY, on ? '1' : '0'); } catch { /* egal */ } bounce.emit(bounce.progress); },
+  });
+  const missing = (id) => { const s = library.get(id); return !s || !!s.missing; };
+  const still = (n) => (n ? ` ${n} ${n === 1 ? 'Clip ohne Sound bleibt' : 'Clips ohne Sound bleiben'} still.` : '');
+  bounce.run = async ({ scope = 'loop', kiste = false, trackId = null, clipIds = null, withFx = bounce.withFx } = {}) => {
+    if (bounce.progress != null) return null;
+    if (deps.recorder && deps.recorder.state !== 'idle') { ui.flash('Während der Aufnahme nicht änderbar.'); return null; }
+    const before = JSON.stringify(store.project);
+    const project = JSON.parse(before);
+    const plan = planBounce(project, { scope, trackId, clipIds: clipIds ?? ui.selectedIds(), withFx: scope === 'loop' || withFx, missing });
+    if (plan.error) { ui.flash(plan.error + still(plan.missing)); return null; }
+    if (!kiste && plan.mode === 'replace' && project.tracks.length >= MAX_TRACKS) { ui.flash(`Alle ${MAX_TRACKS} Spuren belegt – Umschalt+F legt den Sound nur in die Kiste.`); return null; }
+    set(0);
+    try {
+      await library.ensureProject(project);
+      const sr = engine.ctx?.sampleRate ?? 44100;
+      const lead = plan.fold ? LEAD_FRAMES : 0;
+      const audio = await renderProject(project, library, { ...plan.opts, sampleRate: sr, leadSeconds: lead / sr, onProgress: (p) => set(0.9 * p) });
+      const chs = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
+      const N = bounceFrames(project, plan.fromBeat, plan.toBeat, sr);
+      const core = plan.fold ? foldTail(chs, N, { lead }) : cutTail(chs, N, sr, { lead });
+      if (peakOf(core) < 1e-4) { ui.flash('Im Bereich klingt nichts.' + still(plan.missing)); return null; }
+      const room = headroom(core);
+      const name = bounceName(library.list().map((s) => s.name));
+      const sample = await own.create({
+        name, buffer: channelsToBuffer(room.chs, sr), kind: 'loop', beats: plan.toBeat - plan.fromBeat,
+        source: bounceSource(project, plan.fromBeat, plan.toBeat), from: 'bounce', bounceOf: plan.bounceOf,
+      });
+      set(1);
+      const changed = JSON.stringify(store.project) !== before;
+      const res = kiste || changed ? null : store.bounce({
+        sampleId: sample.id, fromBeat: plan.fromBeat, toBeat: plan.toBeat, sources: plan.sources, mode: plan.mode,
+        gain: room.gain, belowTrackId: plan.belowTrackId, trackId: plan.trackId,
+      });
+      if (!res) {
+        deps.shelf?.reveal(sample.id);
+        ui.flash(kiste ? `„${name}“ liegt in der Kiste.${still(plan.missing)}` : `Der Song hat sich beim Festhalten geändert – „${name}“ liegt in der Kiste.`);
+        return { sampleId: sample.id, plan };
+      }
+      deps.arranger?.select(res.clipId);
+      deps.sheets?.openHead('werkbank'); // Handy: Werkbank als Kopfzeile (56 px), der Song bleibt im Bild
+      ui.flash((plan.mode === 'top' ? 'Zusammengefasst – oben auf der Spur. ↶ nimmt es zurück.' : 'Festgehalten – die Quellen sind stumm. ↶ nimmt alles zurück.') + still(plan.missing));
+      return { sampleId: sample.id, plan, ...res };
+    } catch (err) {
+      console.warn('Festhalten:', err?.message || err);
+      ui.flash(`Festhalten ging nicht: ${err?.message || err}`);
+      return null;
+    } finally {
+      set(null);
+    }
+  };
+  return bounce;
+}
+
 function mountImport({ store, ui, arranger, own, shelf, io }) {
   const btn = document.getElementById('import-btn');
   const input = document.getElementById('import-input');
@@ -603,7 +669,9 @@ async function boot() {
   });
 
   // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm', recArm });
+  // Festhalten (Krachwerk 3d): Etikett im Loop-Band, Werkzeug ab 2 Clips, Spur-Werkbank, Taste F; null = aus (Loopwerk)
+  const bounce = EDITION.bounce ? mountBounce({ store, engine, library, own, ui }) : null;
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm', recArm, bounce });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
@@ -630,6 +698,9 @@ async function boot() {
   mountTransport({ store, engine, ui, arranger, emptyProject: () => createEmptyProject(EDITION) });
   const io = mountProjectIO({ store, engine, ui, library, own, patterns, keepUnknown: EDITION.keepUnknownClips, appName: EDITION.title, songFile: EDITION.songFile, padsKey: EDITION.padsKey ?? null });
   const tools = mountClipTools({ store, engine, ui, arranger });
+  // Werkzeug am Clip: „Festhalten“ ab 2 Clips (nur mit Festhalten), „Stumm aus“ bei stummen Clips (ein Rückgängig-Schritt)
+  if (bounce) tools.bounce = (opts = {}) => bounce.run({ scope: 'selection', clipIds: ui.selectedIds(), withFx: true, ...opts });
+  tools.unmute = () => store.setClipMute(ui.selectedIds(), false);
   const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
   const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
   const patternEditor = mountPatternEditor({ root: document.getElementById('pattern'), store, engine, library, ui, kits: EDITION.synthKits ?? null });
@@ -702,6 +773,7 @@ async function boot() {
   ensureStretch(); // einmal beim Start: eigene Sounds im Projekt (auf Abruf) gleich bereitstellen
   ui.on(() => document.getElementById('app').classList.toggle('dock-open', !!ui.dock));
   const recorder = new Recorder({ engine, store, own });
+  bounce?.attach({ shelf, arranger, recorder });
   const recording = mountRecording({ store, engine, ui, arranger, recorder, mode: EDITION.record, whilePlaying: EDITION.recordWhilePlaying });
   if (recArm) recArm.busy = () => recorder.state !== 'idle';
   const pwa = EDITION.pwa ? mountPwa({ ui, recorder, own }) : null;
@@ -721,7 +793,7 @@ async function boot() {
   mountMasteringControls(document.getElementById('song-mst-slot'), { store, engine, analysis: mastering, prefix: 'song-mst' });
   // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
   const inspector = mountInspector({
-    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering, recArm, recorder,
+    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering, recArm, recorder, bounce,
     // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
     ...(EDITION.workbench === 'sound' ? { clipPanel: (box, deps) => mountSoundBench(box, { ...deps, own }), trackOnClip: false, fxCompact: true } : {}),
   });
@@ -734,9 +806,19 @@ async function boot() {
     if (ui.dock === 'editor' || ui.dock === 'pattern') ui.setDock(null);
     else tools.edit();
   });
+  // Zwilling von „nur in die Kiste“ (Umschalt+F, lange drücken): „+ Neu“ → „Loop festhalten“
+  if (bounce) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'ccard cat-chords';
+    card.dataset.create = 'bounce';
+    card.innerHTML = '<span class="ccard-ico" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M7 1h2v7l2.6-2.6 1.4 1.4L8 11.8 3 6.8l1.4-1.4L7 8zM2 11h2v2h8v-2h2v4H2z"/></svg></span><span class="ccard-title">Loop festhalten</span><span class="ccard-sub">Was im Loop klingt, als neuer Sound in die Kiste</span>';
+    document.querySelector('#create-panel .ccard[data-create="record"]')?.after(card);
+  }
   mountCreate({
     root: document.getElementById('create-panel'), arranger,
     actions: {
+      bounce: () => bounce?.run({ scope: 'loop', kiste: true }),
       beat: (t) => createPattern(newDrumPattern, t),
       melody: (t) => createPattern(newSynthPattern, t),
       sing: async (t) => { await createPattern(newSynthPattern, t); patternEditor.openSing(); },
@@ -759,6 +841,7 @@ async function boot() {
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
   if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools, library });
   const sheets = mountSheets({ ui, arranger });
+  bounce?.attach({ sheets });
   // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
   if (EDITION.density === 'calm') {
     const app0 = document.getElementById('app');
@@ -862,6 +945,15 @@ async function boot() {
       // Aufnahme starten bzw. beenden (wie ●)
       e.preventDefault();
       if (!e.repeat) recording.start(null);
+    } else if (!mod && !e.altKey && key === 'f' && bounce && ui.dock !== 'pattern') {
+      // Festhalten: Auswahl (ab 2 Clips), sonst der Loop, sonst die gewählte Spur; Umschalt = nur in die Kiste
+      e.preventDefault();
+      if (e.repeat) return;
+      const ids = ui.selectedIds();
+      if (ids.length > 1) bounce.run({ scope: 'selection', clipIds: ids, withFx: true, kiste: e.shiftKey });
+      else if (store.project.loop.on) bounce.run({ scope: 'loop', kiste: e.shiftKey });
+      else if (ui.selectedTrackId) bounce.run({ scope: 'track', trackId: ui.selectedTrackId, kiste: e.shiftKey });
+      else ui.flash('Erst einen Loop ziehen oder Clips wählen.');
     } else if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && ui.selectedClipId && !e.target.closest?.('.fxl')) {
       // Take-Clip: vorigen bzw. nächsten Take wählen
       if (stepTake(store, library, ui.selectedClipId, e.key === 'ArrowUp' ? -1 : 1)) e.preventDefault();
@@ -882,7 +974,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

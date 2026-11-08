@@ -46,7 +46,8 @@ const MAX_CANVAS = TOUCH ? 8000 : 16000;
 const canvasDpr = () => Math.min(TOUCH ? 2 : 4, window.devicePixelRatio || 1);
 
 // recArm (2.13 C): { toggle(trackId) } – Spur-Menü „Für Aufnahme scharf“ und roter Punkt im Spurkopf; null = aus
-export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true, recArm = null }) {
+// bounce (Krachwerk 3d): { run, progress, on } – Etikett „Festhalten“ im Loop-Band; null = aus
+export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true, recArm = null, bounce = null }) {
   root.innerHTML = '';
   // Roh → geformt (Krachwerk): ein Sound ohne Klang-Rezept zeichnet seine Welle als Korn (Punkte), mit Rezept als Linie
   const shaped = (id) => !grainWave || !!recipeKey(store.project.recipes?.[id]);
@@ -85,6 +86,35 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   const marks = el('div', 'ruler-marks');
   const loopBand = el('div', 'loop-band');
   ruler.append(loopBand, marks);
+  // Festhalten (ADR 011): Linien-Etikett am Ende des Loop-Bands, solange der Loop an ist und kein Clip gewählt.
+  // Unter 96 px Bandbreite nur das Zeichen; Tippziel 44 px (ragt unter das Lineal). Lange drücken/Umschalt: nur Kiste.
+  const bounceBtn = bounce ? el('button', 'bounce-tag') : null;
+  if (bounceBtn) {
+    bounceBtn.type = 'button';
+    bounceBtn.id = 'bounce-btn';
+    bounceBtn.title = 'Loop festhalten (F) – lange drücken oder Umschalt: nur in die Kiste';
+    bounceBtn.setAttribute('aria-label', 'Festhalten');
+    bounceBtn.innerHTML = '<span class="bounce-face"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v7M5 6.5 8 9.5l3-3M3 10.5v3h10v-3"/></svg><span class="bounce-txt">Festhalten</span><span class="bounce-line"></span></span>';
+    ruler.append(bounceBtn);
+    const go = (kiste) => bounce.run({ scope: 'loop', kiste });
+    bounceBtn.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      pressHold(e, { onTap: (ev) => go(ev.shiftKey || e.shiftKey), onHold: () => go(true) });
+    });
+    bounceBtn.addEventListener('click', (e) => { if (e.detail === 0) go(e.shiftKey); });
+    bounce.on(() => syncBounce());
+  }
+  function syncBounce(start = store.project.loop.startBeat, end = store.project.loop.endBeat, on = store.project.loop.on) {
+    if (!bounceBtn) return;
+    const p = bounce.progress;
+    bounceBtn.hidden = !(on && end > start) || (p == null && (!!ui.selectedClipId || ui.multi.length > 0));
+    bounceBtn.style.left = end * ppb() + 'px';
+    bounceBtn.classList.toggle('compact', (end - start) * ppb() < 96);
+    bounceBtn.classList.toggle('busy', p != null);
+    bounceBtn.style.setProperty('--p', String(p ?? 0));
+    bounceBtn.querySelector('.bounce-txt').textContent = p != null ? 'hält fest …' : 'Festhalten';
+  }
   rulerRow.append(corner, ruler);
   const rowsEl = el('div', 'rows');
   const addRow = el('div', 'add-row');
@@ -714,6 +744,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     node.style.left = clip.startBeat * ppb() + 'px';
     node.style.width = clip.lengthBeats * ppb() + 'px';
     node.classList.toggle('selected', ui.selectedIds().includes(clip.id));
+    // Stummer Clip (Quelle eines Festhaltens): schraffiert wie eine stumme Spur
+    node.classList.toggle('muted', !!clip.mute);
     // Schnitte eines Zerlegens („Klopfen · 4“): Nummer vorn, bei schmalen Clips nur die Nummer
     const cutName = sample?.group && /^(.*) · (\d+)$/.exec(sample.name);
     const label = el('span', 'clip-label', cutName ? (clip.lengthBeats * ppb() < 72 ? cutName[2] : `${cutName[2]} · ${cutName[1]}`) : sample?.name ?? 'Fehlendes Sample');
@@ -798,6 +830,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       n.style.width = (endBeat - startBeat) * ppb() + 'px';
       n.classList.toggle('off', !on);
     }
+    syncBounce(startBeat, endBeat, on);
   }
 
   function render(force = false) {
@@ -1210,6 +1243,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       return;
     }
     if (t.closest('.ph-grip')) { startGrip(e); return; }
+    if (t.closest('.bounce-tag')) return;
     if (t.closest('.ruler')) { startRuler(e); return; }
     const lane = t.closest('.lane');
     if (!lane) return;
@@ -1495,6 +1529,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
     markArmed();
     markSelection();
+    syncBounce();
   });
   return { render, autoLanes, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
 }

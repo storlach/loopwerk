@@ -131,6 +131,13 @@ export function recipeSteps(r) {
   return out;
 }
 
+// Herkunft eines festgehaltenen Sounds (ADR 011) für den Stammbaum: „Festgehalten aus Bumm 1, Gesang 2 …“
+export function bounceWords(names = []) {
+  const list = names.filter(Boolean);
+  if (!list.length) return 'Festgehalten';
+  return `Festgehalten aus ${list.slice(0, 3).join(', ')}${list.length > 3 ? ' …' : ''}`;
+}
+
 // Ziehen an einem Griff: rasche Folgeänderungen desselben Felds = ein Rückgängig-Schritt (Muster aus clip-speed.js).
 // const key = gesture(id, 'lp'); store.setRecipe(id, { lp }, { coalesce: key }); end() nach dem Loslassen.
 export function recipeGesture(gap = 600) {

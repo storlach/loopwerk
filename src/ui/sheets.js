@@ -480,7 +480,18 @@ export function mountSheets({ ui, arranger }) {
   attach(document.querySelector('.shelf'));
   settleAll();
 
+  // Werkbank als Kopfzeile öffnen (Handy, z. B. nach dem Festhalten): der Song bleibt im Bild, ein Tipp holt sie hoch
+  function openHead(id) {
+    const s = sheets.find((x) => x.id === id);
+    if (!s || !headable(s)) return false;
+    if (ui.dock === id) return true;
+    stored()[keyOf(s)] = 'head';
+    try { localStorage.setItem(KEY, JSON.stringify(snaps)); } catch { /* egal */ }
+    ui.setDock(id);
+    return true;
+  }
+
   ui.on(() => queueMicrotask(watch));
   narrow.addEventListener('change', settleAll);
-  return { syncPad, reveal, snapTarget };
+  return { syncPad, reveal, snapTarget, openHead };
 }

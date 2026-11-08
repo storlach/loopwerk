@@ -121,6 +121,7 @@
 <link rel="modulepreload" href="src/zip.js">
 <link rel="modulepreload" href="src/archive.js">
 <link rel="modulepreload" href="src/ui/storage-panel.js">
+<link rel="modulepreload" href="src/bounce.js">
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
@@ -2189,12 +2190,13 @@
   .clip-tag { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); font: 500 9px/1 var(--font-mono); }
   .clip-wave { opacity: 0.6; }
   .clip.selected .clip-wave { opacity: 0.85; }
-  .track-row.silent .clip { background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 6px), var(--clip-body); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); }
-  .track-row.silent .clip-label { color: var(--muted); }
+  .track-row.silent .clip, .clip.muted { background: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 6px), var(--clip-body); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08); }
+  .track-row.silent .clip-label, .clip.muted .clip-label { color: var(--muted); }
   .track-row.silent .lane { opacity: 1; }
-  .track-row.silent .clip-wave { --wave: var(--muted); opacity: 0.35; }
+  .track-row.silent .clip-wave, .clip.muted .clip-wave { --wave: var(--muted); opacity: 0.35; }
   /* Auswahl ist Zeichnung: weiße Kante und Schnittmarken an den Ecken */
   .clip.selected, .clip.selected.on-top { background: rgb(22 22 26 / 0.92); box-shadow: inset 0 0 0 1px var(--ink); }
+  .clip.selected.muted { background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 6px); }
   .clip.selected::after {
     content: ""; position: absolute; inset: -4px; pointer-events: none; z-index: 3;
     --t: 1.5px; --l: 7px;
@@ -3422,6 +3424,20 @@
   #app[data-remind] .deck-name { position: relative; padding-right: 14px; }
   #app[data-remind] .deck-name::after { content: ""; position: absolute; right: 2px; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--amber); box-shadow: var(--glow-ink); pointer-events: none; }
   #app[data-density="calm"] .rec-wrap { display: none; }
+  /* Festhalten (Krachwerk 3d, ADR 011): Linien-Etikett am Ende des Loop-Bands, Tippziel 44 px (ragt unter das Lineal, der Griff der Marke bleibt darüber);
+     beim Rechnen wächst eine Weißglut-Linie. Spur-Werkbank: Knopf neben dem Namen */
+  .bounce-tag { position: absolute; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: flex-end; min-width: 44px; height: 44px; margin: 0; padding: 0 3px 0 0; border: 0; background: transparent; transform: translateX(-100%); cursor: pointer; }
+  .bounce-tag[hidden] { display: none; }
+  .bounce-face { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 20px; margin-top: 5px; padding: 0 6px; overflow: hidden; border-radius: var(--radius); background: var(--panel); box-shadow: inset 0 0 0 1px var(--muted); color: var(--ink); font-size: var(--fs-11); white-space: nowrap; }
+  .bounce-face svg { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .bounce-tag.compact .bounce-txt { display: none; }
+  .bounce-tag:is(:hover, :focus-visible) .bounce-face { box-shadow: inset 0 0 0 1px var(--ink); }
+  .bounce-line { position: absolute; left: 0; bottom: 0; width: calc(var(--p, 0) * 100%); height: 2px; background: var(--amber); box-shadow: var(--glow-ink); }
+  .bounce-tag.busy .bounce-face { color: var(--amber); box-shadow: inset 0 0 0 1px var(--amber); }
+  .insp-head.with-act { grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; }
+  .insp-head.with-act > * { grid-column: 1; }
+  .insp-head.with-act > .insp-bounce { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .insp-bounce[hidden] { display: none; }
   /* Takes am Clip (2.13): aktiv = Weißglut, × löscht (Rot) */
   .insp-takes { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
   .take-btns { display: flex; flex-wrap: wrap; gap: 4px; }

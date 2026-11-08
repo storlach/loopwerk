@@ -489,12 +489,17 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, 
 // monitor: A/B-Abhörzustand wie in der Wiedergabe (Tests). pad(ctx, mix): Effekt-Pad einplanen (Tests).
 // onlyTrack: nur diese Spur (Einzelspur-Export), Solo zählt dann nicht. master: false = Summe ohne Master-Kette
 // (keine Master-Effekte, Fader 1, keine Summen-Kurve, kein Mastering, kein Limiter) – so addieren sich Einzelspuren zum Mix.
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true } = {}) {
-  if (onlyTrack != null || master === false) project = renderView(project, { onlyTrack, master });
+// Festhalten (ADR 011): onlyClips = nur diese Clips (Spur-Stumm und Solo zählen nicht, andere Clips verdecken weiter),
+// dry = Spuren ohne Effekte, Fader 1, Mitte, ohne Sends und Kurven. leadSeconds: Vorlauf vor fromBeat, in dem
+// Stimmen, die in fromBeat schon laufen, wie bei einem Loop-Sprung einblenden (gefaltet ergibt das den Loop-Klang).
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true, onlyClips = null, dry = false, leadSeconds = 0 } = {}) {
+  if (onlyTrack != null || master === false || onlyClips || dry) project = renderView(project, { onlyTrack, master, onlyClips, dry });
   if (master === false) limiter = false;
+  const only = onlyClips ? new Set(onlyClips) : null;
+  const lead = Math.max(0, leadSeconds);
   const spb = 60 / project.bpm;
   const end = toBeat ?? totalBeats(project);
-  const duration = (end - fromBeat) * spb + tailSeconds;
+  const duration = (end - fromBeat) * spb + tailSeconds + lead;
   const frames = Math.max(1, Math.ceil(duration * sampleRate));
   const wantMaster = !analysis && mastering !== false && masteringOf(project).on;
   // Klang-Rezepte übernehmen (gleicher Stand → sofort fertig), damit Export und Tests nach dem aktuellen Rezept klingen
@@ -513,7 +518,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     dest = ctx.createGain();
     taps = merger;
   }
-  const mix = buildMix(ctx, project, { limiter, grid: -fromBeat * spb, dest, worklets, mastering: wantMaster ? mastering : false, monitor });
+  const mix = buildMix(ctx, project, { limiter, grid: lead - fromBeat * spb, dest, worklets, mastering: wantMaster ? mastering : false, monitor });
   if (analysis) {
     const sx = ctx.createChannelSplitter(2);
     const sa = ctx.createChannelSplitter(2);
@@ -530,17 +535,18 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   // Mastering und Limiter, die Mastering-Analyse rendert sie also mit)
   for (const [id, owner, strip] of autoStrips(project, mix)) {
     for (const l of stripLanes(strip, owner, id)) {
-      if (l.points.length) planLane(l.param, l.map, l.points, fromBeat, end, 0, spb, 'set');
+      if (l.points.length) planLane(l.param, l.map, l.points, fromBeat, end, lead, spb, 'set');
     }
   }
   const audible = audibleMap(project);
   for (const track of project.tracks) {
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
+      if (only && !only.has(clip.id)) continue;
       for (const { seg, from, to, sample, rate } of clipPieces(project, library, clip, audible.get(clip.id))) {
         if (from >= end - EPS || to <= fromBeat + EPS) continue;
         const f = Math.max(from, fromBeat);
-        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), (f - fromBeat) * spb, spb, rate);
+        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), lead + (f - fromBeat) * spb, spb, rate);
       }
     }
   }
@@ -560,13 +566,20 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   return out;
 }
 
-// Projekt-Ansicht fürs Rendern einer Einzelspur bzw. ohne Master-Kette (das Projekt selbst bleibt unverändert)
-function renderView(project, { onlyTrack, master }) {
+// Projekt-Ansicht fürs Rendern einer Einzelspur, einer Auswahl, ohne Effekte bzw. ohne Master-Kette (das Projekt selbst
+// bleibt unverändert). onlyClips behält alle Clips der Spur (Verdecken wie im Song), gespielt werden nur die gewählten.
+export function renderView(project, { onlyTrack = null, master = true, onlyClips = null, dry = false } = {}) {
   const view = { ...project };
   if (onlyTrack != null) {
     view.tracks = project.tracks.filter((t) => t.id === onlyTrack).map((t) => ({ ...t, solo: false }));
     view.groups = (project.groups || []).map((g) => ({ ...g, solo: false }));
   }
+  if (onlyClips) {
+    const set = new Set(onlyClips);
+    view.tracks = view.tracks.filter((t) => t.clips.some((c) => set.has(c.id))).map((t) => ({ ...t, mute: false, solo: false }));
+    view.groups = (project.groups || []).map((g) => ({ ...g, mute: false, solo: false }));
+  }
+  if (dry) view.tracks = view.tracks.map((t) => ({ ...t, volume: 1, pan: 0, fx: null, fxOrder: undefined, sends: undefined, automation: undefined }));
   if (master === false) view.master = { ...masterOf(project), volume: 1, fx: null, automation: null, mastering: { ...masteringOf(project), on: false } };
   return view;
 }

@@ -12,6 +12,8 @@ export const EDITIONS = {
     songFile: 'json', storagePanel: false,
     // ● bei laufendem Song: Loopwerk hält an und zählt vor (Takes über recorder.js „song“)
     recordWhilePlaying: null,
+    // Festhalten (ADR 011) nur in Krachwerk sichtbar; stumme Clips (clip.mute) versteht Loopwerk trotzdem
+    bounce: false,
   },
   make: {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
@@ -54,6 +56,8 @@ export const EDITIONS = {
     songFile: 'zip', storagePanel: true,
     // Scheibe 3c: ● bei laufendem Loop nimmt Takes auf, ohne den Song anzuhalten (Recorder-Modus „loop“)
     recordWhilePlaying: 'loop',
+    // Scheibe 3d (ADR 011): Festhalten am Loop-Band, am Werkzeug (ab 2 Clips), in der Spur-Werkbank, Taste F
+    bounce: true,
     // Kiste: Gruppen nach Material (Reihenfolge = Anzeige, Farbe = Herkunftsfarbe, siehe src/recipe.js MATERIALS)
     shelfGroups: [
       { id: 'koerper', label: 'Körper', cat: 'drums' },
