@@ -57,7 +57,7 @@ const materialIn = (s, store, library) => store.project.recipes?.[s.id]?.materia
   ?? (s.parentId ? library.get(s.parentId)?.material : null) ?? s.material ?? suggestMaterial(s);
 
 // onBench(id): Werkbank für einen Sound (Doppelklick, lange drücken); Schnitte eines Zerlegens (s.group) stehen als eine
-// eingerückte Zeile „Name · 8 Schnitte“ unter dem Eltern-Sound und klappen auf
+// eingerückte Zeile „Name · 8 Schnitte“ unter dem Eltern-Sound und klappen auf; Takes einer Aufnahme ebenso („Klang 2 · 3 Takes“)
 export function mountLibrary({ root, library, store, engine, ui, arranger, onDeleteOwn, groupBy = null, onBench = null }) {
   const search = document.getElementById('shelf-search');
   const favBtn = document.getElementById('shelf-fav');
@@ -71,7 +71,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   const accordion = () => narrow.matches && !groupBy;
   let filter = 'all';
   const items = new Map();
-  const cutOpen = new Set(); // aufgeklappte Schnitt-Gruppen
+  const cutOpen = new Set(); // aufgeklappte Schnitt- und Take-Gruppen
 
   // Gruppen im Regal: nach Kategorie oder nach Genre (ein Sound kann in mehreren Genres stehen)
   let sort = 'cat';
@@ -295,20 +295,26 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
       if (split) samples.sort((a, b) => order[section(a)] - order[section(b)]);
       let lastSection = null;
       const doneGroups = new Set();
+      // Gefaltet: Schnitte eines Zerlegens (Varianten mit group) und Takes einer Aufnahme (made.group, ab zwei)
+      const foldOf = (x) => (!groupBy ? null : x.group && x.parentId ? x.group : !x.parentId ? x.made?.group ?? null : null);
+      const takeKids = (g) => samples.filter((x) => !x.parentId && x.made?.group === g);
       for (const s of samples) {
-        if (groupBy && s.group && s.parentId) {
-          if (doneGroups.has(s.group)) continue;
-          doneGroups.add(s.group);
-          const kids = samples.filter((x) => x.group === s.group);
-          const isOpen = cutOpen.has(s.group) || forced;
-          const gr = el('div', `loop-row cat-${groupBy ? cat.cat : s.category} variant loop-group`);
+        const fold = foldOf(s);
+        const isTakes = !!fold && !s.parentId;
+        if (fold && (!isTakes || takeKids(fold).length > 1)) {
+          if (doneGroups.has(fold)) continue;
+          doneGroups.add(fold);
+          const kids = isTakes ? takeKids(fold) : samples.filter((x) => x.group === fold);
+          const isOpen = cutOpen.has(fold) || forced;
+          const gr = el('div', `loop-row cat-${groupBy ? cat.cat : s.category} ${isTakes ? '' : 'variant '}loop-group${isTakes ? ' take-group' : ''}`);
           const gb = el('button', 'loop-group-btn');
           gb.type = 'button';
-          gb.dataset.group = s.group;
+          gb.dataset.group = fold;
           gb.setAttribute('aria-expanded', String(isOpen));
-          const base = library.get(s.parentId)?.name ?? s.name.replace(/ · \d+$/, '');
-          gb.append(el('span', 'loop-name', `${base} · ${kids.length} ${kids.length === 1 ? 'Schnitt' : 'Schnitte'}`), el('span', 'shelf-chevron'));
-          gb.addEventListener('click', () => { if (cutOpen.has(s.group)) cutOpen.delete(s.group); else cutOpen.add(s.group); render(); });
+          const label = isTakes ? `${s.name.replace(/ · Take \d+$/, '')} · ${kids.length} Takes`
+            : `${library.get(s.parentId)?.name ?? s.name.replace(/ · \d+$/, '')} · ${kids.length} ${kids.length === 1 ? 'Schnitt' : 'Schnitte'}`;
+          gb.append(el('span', 'loop-name', label), el('span', 'shelf-chevron'));
+          gb.addEventListener('click', () => { if (cutOpen.has(fold)) cutOpen.delete(fold); else cutOpen.add(fold); render(); });
           gr.append(gb);
           list.append(gr);
           if (!isOpen) continue;
@@ -442,6 +448,8 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     if (len !== 'all' && lenBucket(s) !== len) len = 'all';
     if (accordion()) open.clear();
     open.add(group.id);
+    const fold = s.parentId ? s.group : s.made?.group;
+    if (groupBy && fold) cutOpen.add(fold);
     saveOpen(open, groupBy);
     render();
     const row = items.get(sampleId)?.[0];

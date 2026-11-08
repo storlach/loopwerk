@@ -12,6 +12,7 @@ import { clamp, el } from '../util.js';
 import { lsKey } from '../edition.js';
 import { formatCurve, formatDb } from './arranger.js';
 import { mountClipSpeed } from './clip-speed.js';
+import { mountTakeRow } from './take-row.js';
 import { mountWaveHandles, cookedSeconds } from './wave-handles.js';
 import { fmtBpm, hasOwnTempo, soundBpm, setSoundBpm, useAsSongTempo } from './sound-tempo.js';
 import { soundBounds, mixMono } from '../dsp/clean.js';
@@ -76,7 +77,9 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   const sound = () => library.get(cur.id);
   const clipNow = () => (cur.clipId ? store.findClip(cur.clipId)?.clip : null);
   const durOf = () => sound()?.orig?.duration ?? sound()?.duration ?? 0;
-  const patch = (p, field) => store.setRecipe(cur.id, p, field ? { coalesce: gesture(cur.id, field) } : undefined);
+  // Take-Clip (Krachwerk 3c): ein Rezept formt alle Takes des Clips, sonst klänge der Wechsel roh. Der Name bleibt je Take.
+  const takeIds = () => { const c = clipNow(); return c?.takes && c.sampleId === cur.id ? c.takes : [cur.id]; };
+  const patch = (p, field) => store.setRecipe('name' in p ? cur.id : takeIds(), p, field ? { coalesce: gesture(cur.id, field) } : undefined);
 
   // ---------- Kopf ----------
   const head = el('header', 'wb-head');
@@ -102,6 +105,8 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   head.append(dot, nameBtn, nameIn, count, varBtn);
   const tree = el('p', 'wb-tree');
   tree.id = 'wb-tree';
+  // Take-Zeile „1 2 3 ×“ unter dem Stammbaum, nur bei Take-Clips
+  const takeRow = mountTakeRow({ store, library, ui, idPrefix: 'wb' });
   const matRow = el('div', 'wb-mat');
   matRow.hidden = true;
   matRow.setAttribute('role', 'group');
@@ -180,7 +185,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   });
 
   // ---------- Welle ----------
-  const wave = mountWaveHandles(root, { store, library, engine, ui });
+  const wave = mountWaveHandles(root, { store, library, engine, ui, targets: (id) => (id === cur.id ? takeIds() : id) });
 
   // ---------- Reiter und Flächen ----------
   const tabs = el('div', 'wb-tabs');
@@ -229,7 +234,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
   patLink.type = 'button';
   patLink.id = 'wb-pattern';
   patLink.addEventListener('click', () => tools.edit());
-  root.append(head, tree, matRow, wave.el, tabs, ...TABS.map(([i]) => panels[i].p), patLink);
+  root.append(head, tree, takeRow.row, matRow, wave.el, tabs, ...TABS.map(([i]) => panels[i].p), patLink);
 
   let tab = 'form';
   function choose(id) {
@@ -681,6 +686,7 @@ export function mountSoundBench(box, { store, ui, library, engine, tools, own = 
     dot.hidden = kind === 'missing';
     tree.textContent = treeText(s, r, library);
     tree.title = tree.textContent;
+    takeRow.update(clip);
     const mat = (materialOf(r.material ?? library.get(s?.parentId)?.material ?? s?.material) ?? materialOf(suggestMaterial(s))).id;
     for (const [id, b] of matBtns) b.setAttribute('aria-pressed', String(id === mat));
     // Reiter je Objektart; Zerlegen nur bei Sounds ab 1 s (Länge des Ausschnitts), Clip nur mit Clip
