@@ -19,8 +19,9 @@ export function isDoubleMono(chs) {
   return diff <= sum * 0.01 + 1e-9;
 }
 
-// Hochpass 2. Ordnung (Butterworth), nimmt auch Gleichanteil mit
-export function highpass(d, sampleRate, freq = 45) {
+// Hochpass 2. Ordnung (Butterworth), nimmt auch Gleichanteil mit.
+// prime: Zustand so vorbelegen, als stünde der erste Wert schon immer an (kein Sprung am Anfang)
+export function highpass(d, sampleRate, freq = 45, { prime = false } = {}) {
   const w = (2 * Math.PI * freq) / sampleRate;
   const cos = Math.cos(w), alpha = Math.sin(w) / Math.SQRT2;
   const a0 = 1 + alpha;
@@ -28,6 +29,7 @@ export function highpass(d, sampleRate, freq = 45) {
   const a1 = (-2 * cos) / a0, a2 = (1 - alpha) / a0;
   const out = new Float32Array(d.length);
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  if (prime && d.length) x1 = x2 = d[0];
   for (let i = 0; i < d.length; i++) {
     const x = d[i];
     const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
@@ -108,6 +110,20 @@ export function cleanTake(chs, sampleRate, { maxSeconds = 4 } = {}) {
   const g = peak > 0 ? PEAK_TARGET / peak : 1;
   for (const d of out) { for (let i = 0; i < d.length; i++) d[i] *= g; fadeEdges(d, sampleRate); }
   return { chs: out, sampleRate, start: bounds.start, end };
+}
+
+// Takes im Loop (Krachwerk 3c): säubern ohne Zeitverschiebung. list = [[Kanal, …] je Take], alle gleich lang.
+// Doppel-Mono (alle Takes) → 1 Kanal, Hochpass 45 Hz, ein gemeinsamer Pegel (Spitze des lautesten Takes auf 0,89,
+// höchstens +12 dB). Kein Zuschnitt, keine Blenden: Frame k bleibt Frame k. Rückgabe: neue Kanäle je Take.
+export const PASS_MAX_GAIN = 10 ** (12 / 20);
+export function cleanPasses(list, sampleRate) {
+  const mono = list.every((chs) => isDoubleMono(chs));
+  const out = list.map((chs) => (mono ? [chs[0]] : chs).map((d) => highpass(d, sampleRate, 45, { prime: true })));
+  let peak = 0;
+  for (const chs of out) for (const d of chs) for (let i = 0; i < d.length; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; }
+  const g = peak > 0 ? Math.min(PASS_MAX_GAIN, PEAK_TARGET / peak) : 1;
+  if (g !== 1) for (const chs of out) for (const d of chs) for (let i = 0; i < d.length; i++) d[i] *= g;
+  return { list: out, gain: g, mono };
 }
 
 // Merkmale: Länge, Helligkeit (spektraler Schwerpunkt im Anschlag), Tiefenanteil, Rauschanteil, Tonhöhe
