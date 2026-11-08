@@ -29,6 +29,9 @@ export function mountClipFloat({ store, ui, tools, library }) {
   const wbBtn = add('cf-werkbank', 'Werkbank', 'Werkbank für diesen Clip öffnen', () => ui.setDock('werkbank'));
   // Take-Clip (2.13): schaltet zum nächsten Take
   const takeBtn = add('cf-take', 'Take', 'Nächster Take (Alt+↓)', () => { const id = ui.selectedClipId; if (id && library) stepTake(store, library, id, 1); });
+  // Festhalten (Krachwerk 3d): erst ab 2 Clips; „Stumm aus“ nur bei stummen Clips (Quellen eines Festhaltens)
+  const bounceBtn = add('cf-bounce', 'Festhalten', 'Auswahl festhalten (F) – Umschalt: nur in die Kiste', (e) => tools.bounce?.({ kiste: e.shiftKey }));
+  const unmuteBtn = add('cf-unmute', 'Stumm aus', 'Clip wieder hörbar machen', () => tools.unmute?.());
   const splitBtn = add('cf-split', 'Teilen', 'Clip an der Abspielmarke teilen (T)', () => tools.split());
   add('cf-dup', 'Kopie', 'Kopie direkt dahinter legen (Strg+D)', () => tools.duplicate());
   add('cf-del', 'Löschen', 'Clip löschen (Entf) – Rückgängig holt ihn zurück', () => tools.remove(), 'cf-del');
@@ -51,6 +54,8 @@ export function mountClipFloat({ store, ui, tools, library }) {
     const tc = store.findClip(id)?.clip;
     takeBtn.hidden = many || !tc?.takes || !library;
     if (!takeBtn.hidden) takeBtn.textContent = `Take ${tc.take + 1}/${tc.takes.length}`;
+    bounceBtn.hidden = !many || !tools.bounce;
+    unmuteBtn.hidden = !tools.unmute || !ui.selectedIds().some((x) => store.findClip(x)?.clip.mute);
     const w = wrap.getBoundingClientRect();
     const c = node.getBoundingClientRect();
     const bw = bar.offsetWidth;

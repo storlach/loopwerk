@@ -70,7 +70,7 @@ export function clipSegments(clip, sampleBeats) {
 }
 
 export function clipSignature(trackId, clip) {
-  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}|${clip.varispeed ? 1 : 0}|${clip.take ?? ''}`;
+  return `${trackId}|${clip.sampleId}|${clip.startBeat}|${clip.lengthBeats}|${clip.offsetBeats || 0}|${clipGain(clip)}|${clip.fadeInBeats || 0}|${clip.fadeOutBeats || 0}|${clip.fadeInCurve || 0}|${clip.fadeOutCurve || 0}|${clip.z ?? 0}|${clip.stretch ?? 1}|${clip.varispeed ? 1 : 0}|${clip.take ?? ''}|${clip.mute ? 1 : 0}`;
 }
 
 // Stapel: Liegen Clips einer Spur übereinander, klingt der obere. Der untere bleibt unverändert erhalten
@@ -85,13 +85,15 @@ export function isAbove(a, b, clips) {
 }
 
 // Hörbare Bereiche je Clip einer Spur: Clip-Bereich ohne alles, was ein höher liegender Clip verdeckt.
+// Ein stummer Clip (clip.mute, ADR 011) klingt nicht und verdeckt nichts – Engine und Offline lesen beide nur hier.
 export function audibleRanges(track) {
   const map = new Map();
   const clips = track.clips;
   for (const c of clips) {
+    if (c.mute) { map.set(c.id, []); continue; }
     let parts = [[c.startBeat, c.startBeat + c.lengthBeats]];
     for (const o of clips) {
-      if (o === c || !parts.length || !isAbove(o, c, clips)) continue;
+      if (o === c || o.mute || !parts.length || !isAbove(o, c, clips)) continue;
       const os = o.startBeat;
       const oe = os + o.lengthBeats;
       parts = parts.flatMap(([s, e]) => {
@@ -186,6 +188,7 @@ export function normalizeClip(clip) {
   clip.fadeInBeats = fi;
   clip.fadeOutBeats = fo;
   for (const k of ['fadeInCurve', 'fadeOutCurve']) if (clip[k] != null) clip[k] = fadeCurveOf(clip[k]);
+  if (clip.mute) clip.mute = true; else delete clip.mute;
   normalizeTakes(clip);
   return clip;
 }
@@ -934,6 +937,60 @@ export class Store extends Emitter {
       const [t] = p.tracks.splice(from, 1);
       p.tracks.splice(to, 0, t);
     });
+  }
+
+  // ---------- Festhalten (ADR 011) ----------
+
+  // Clips stumm bzw. wieder hörbar schalten: ein Rückgängig-Schritt
+  setClipMute(ids, on) {
+    const list = (Array.isArray(ids) ? ids : [ids]).filter((id) => this.findClip(id) && !!this.findClip(id).clip.mute !== !!on);
+    if (!list.length) return;
+    this.dispatch('Stumm', () => {
+      for (const id of list) normalizeClip(Object.assign(this.findClip(id).clip, { mute: !!on }));
+    });
+  }
+
+  // Festgehaltenen Sound einsetzen, ein Rückgängig-Schritt. mode 'replace': Quellen an ihren Grenzen teilen (klanglich
+  // neutral), die Teile innen stumm; neue Spur ohne Effekte direkt unter belowTrackId mit dem Clip über dem Bereich.
+  // mode 'top' (ohne Effekte): Clip oben auf trackId, die Quellen bleiben darunter. sources: Clip-IDs oder
+  // { id, fromBeat, toBeat } (eigenes Fenster, z. B. Clips unter einer Auswahl). gain gleicht den Kopfraum aus.
+  bounce({ sampleId, fromBeat, toBeat, sources = [], mode = 'replace', gain = 1, belowTrackId = null, trackId = null }) {
+    const len = toBeat - fromBeat;
+    if (!(len > EPS) || !sampleId) return null;
+    if (mode === 'top' ? !this.track(trackId) : this.project.tracks.length >= MAX_TRACKS) return null;
+    let out = null;
+    this.batch('Festhalten', () => {
+      const clipId = this.newId();
+      const clip = normalizeClip({ id: clipId, sampleId, startBeat: fromBeat, lengthBeats: len, offsetBeats: 0, gain });
+      if (mode === 'top') {
+        const track = this.track(trackId);
+        track.clips.push(clip);
+        this._raise(track, clip);
+        out = { trackId, clipId };
+        return;
+      }
+      const wins = sources.map((s) => (typeof s === 'string' ? { id: s, fromBeat, toBeat } : s)).filter((w) => this.findClip(w.id));
+      // Teile je Quelle: ein zweites Fenster derselben Quelle trifft die Teile des ersten Teilens
+      const parts = new Map();
+      for (const w of wins) {
+        const fam = parts.get(w.id) ?? [w.id];
+        parts.set(w.id, fam);
+        for (const b of [w.fromBeat, w.toBeat]) fam.push(...this.splitAt(b, fam.slice()));
+        for (const id of fam) {
+          const c = this.findClip(id).clip;
+          if (c.startBeat >= w.fromBeat - EPS && c.startBeat + c.lengthBeats <= w.toBeat + EPS) c.mute = true;
+        }
+      }
+      const p = this.project;
+      const id = this._newTrackId();
+      const below = p.tracks.findIndex((t) => t.id === belowTrackId);
+      // Läuft Solo, hört man die neue Spur nur mit Solo (sie trägt nur, was solo klang)
+      p.tracks.splice(below < 0 ? p.tracks.length : below + 1, 0, {
+        id, name: 'Spur ' + (p.tracks.length + 1), volume: 1, pan: 0, mute: false, solo: anySoloOf(p), clips: [clip],
+      });
+      out = { trackId: id, clipId };
+    });
+    return out;
   }
 
   // ---------- Patterns (Beats, Melodien) ----------

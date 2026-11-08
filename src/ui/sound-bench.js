@@ -6,7 +6,7 @@
 // geschrieben wird nur über store.setRecipe / addVariant / setSampleTempo / setClip (Ziehen = ein Rückgängig-Schritt).
 
 import { clipGain, keyOf, tonicOf } from '../model.js';
-import { MATERIALS, RECIPE, TUNE_KEYS, materialOf, recipeGesture, recipeSteps, suggestMaterial } from '../recipe.js';
+import { MATERIALS, RECIPE, TUNE_KEYS, bounceWords, materialOf, recipeGesture, recipeSteps, suggestMaterial } from '../recipe.js';
 import { layoutCuts } from '../cuts.js';
 import { clamp, el } from '../util.js';
 import { lsKey } from '../edition.js';
@@ -52,7 +52,7 @@ export function treeText(s, r, lib) {
   const root = s.parentId ? lib.get(s.parentId) : s;
   const mat = materialOf(r?.material ?? root?.material ?? s.material) ?? materialOf(suggestMaterial(root ?? s));
   const strom = /^pat-/.test(s.id) || s.patternId;
-  const src = strom ? 'Strom' : SOURCE[root?.made?.from ?? 'mic'] ?? 'Aufnahme';
+  const src = strom ? 'Strom' : root?.made?.from === 'bounce' ? bounceWords((root.made.bounceOf ?? []).map((id) => lib.get(id)?.name)) : SOURCE[root?.made?.from ?? 'mic'] ?? 'Aufnahme';
   let when = '';
   if (root?.created && root.created > 1e11) { const d = new Date(root.created); when = ` ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}. ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
   const steps = recipeSteps(r);

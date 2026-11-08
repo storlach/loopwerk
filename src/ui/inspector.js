@@ -22,6 +22,7 @@ import { autoLock, lockedValue } from './auto-lane.js';
 import { AUTO_PARAMS, busUsed, isAutomated, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
 import { mountRecArmRows } from './rec-arm.js';
+import { pressHold } from './touch.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -46,7 +47,8 @@ function fxSummary(e, f) {
 // Optionen (Krachwerk, Spec Scheibe 2a §6): clipPanel(container, deps) ersetzt den Clip-Abschnitt (Sound-Werkbank);
 // trackOnClip: false = die Spur zeigt sich nur bei eigener Spurwahl; fxCompact = nur eingeschaltete Effekte und „+ Effekt“
 // recArm (2.13 C): Schalter ● Scharf und Eingang je Spur, nur bei gewählter Spur; null = aus (Krachwerk)
-export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, recArm = null, recorder = null }) {
+// bounce (Krachwerk 3d): „Festhalten“ neben dem Spurnamen, „mit Effekten“ in den Feinheiten; null = aus
+export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, recArm = null, recorder = null, bounce = null }) {
   const app = document.getElementById('app');
   root.innerHTML = '';
 
@@ -169,6 +171,34 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   trackTitle.append(el('span', 'insp-kind', 'Spur'), el('span', 'insp-sep', '·'), trackName);
   const trackSub = el('p', 'insp-meta');
   trackHead.append(trackTitle, trackSub);
+  // Spur festhalten: Loop-Bereich, ohne Loop die belegte Strecke. Ohne Effekte = Zusammenfassen oben auf der Spur
+  let bounceBtn = null, bounceFine = null, bounceFx = null;
+  if (bounce) {
+    bounceBtn = el('button', 'wb-btn insp-bounce', 'Festhalten');
+    bounceBtn.type = 'button';
+    bounceBtn.id = 'insp-bounce';
+    bounceBtn.title = 'Spur festhalten (F) – lange drücken oder Umschalt: nur in die Kiste';
+    const go = (kiste) => { if (trackId && trackId !== MASTER) bounce.run({ scope: 'track', trackId, withFx: bounce.withFx, kiste }); };
+    bounceBtn.addEventListener('pointerdown', (e) => { if (e.button === 0) pressHold(e, { onTap: (ev) => go(ev.shiftKey || e.shiftKey), onHold: () => go(true) }); });
+    bounceBtn.addEventListener('click', (e) => { if (e.detail === 0) go(e.shiftKey); });
+    trackHead.classList.add('with-act');
+    trackHead.append(bounceBtn);
+    const fineBtn = el('button', 'wb-fine-btn', 'Feinheiten');
+    fineBtn.type = 'button';
+    fineBtn.id = 'insp-track-fine';
+    fineBtn.setAttribute('aria-expanded', 'false');
+    const fine = el('div', 'wb-fine');
+    fine.hidden = true;
+    bounceFx = el('button', 'wb-btn wb-toggle', 'mit Effekten');
+    bounceFx.type = 'button';
+    bounceFx.id = 'insp-bounce-fx';
+    bounceFx.title = 'Festhalten mit Effekten, Lautstärke und Sends – aus: nur die Clips, oben auf derselben Spur';
+    bounceFx.addEventListener('click', () => { bounce.withFx = !bounce.withFx; });
+    fine.append(bounceFx);
+    fineBtn.addEventListener('click', () => { fine.hidden = !fine.hidden; fineBtn.setAttribute('aria-expanded', String(!fine.hidden)); });
+    bounceFine = [fineBtn, fine];
+    bounce.on(() => render());
+  }
   const vol = slider('Spur-Lautstärke', 'insp-vol', 0, 1, 0.01);
   const volLabel = vol.row.firstChild;
   const pan = slider('Panorama', 'insp-pan', -1, 1, 0.05);
@@ -514,6 +544,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       }
       mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
       recRows?.update(mode === 'track' ? track : null);
+      if (bounceBtn) {
+        const p = bounce.progress;
+        bounceBtn.hidden = mode !== 'track';
+        bounceBtn.disabled = p != null;
+        bounceBtn.textContent = p != null ? 'hält fest …' : 'Festhalten';
+        bounceFx.setAttribute('aria-pressed', String(bounce.withFx));
+        if (trackSec.lastElementChild !== bounceFine[1]) trackSec.append(...bounceFine);
+        bounceFine[0].hidden = mode !== 'track';
+        if (mode !== 'track') { bounceFine[1].hidden = true; bounceFine[0].setAttribute('aria-expanded', 'false'); }
+      }
     } else if (mode === 'sound') {
       trackId = null;
     } else {

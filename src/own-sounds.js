@@ -68,7 +68,10 @@ export function wavDuration(buf) {
 // Herkunft für die Kiste (Krachwerk): Mikrofon, Datei oder Schleife; Felder aus der Pad-Wand (cls, tags, bars) verstanden
 function makeMeta(rec) {
   const from = rec.from || (rec.cls === 'loop' ? 'loop' : /^Import/.test(rec.source || '') ? 'file' : 'mic');
-  return { cls: rec.cls ?? null, tags: rec.tags ?? [], from };
+  const m = { cls: rec.cls ?? null, tags: rec.tags ?? [], from };
+  // Festgehalten (ADR 011): Wurzeln der Quellen, nur für den Stammbaum
+  if (Array.isArray(rec.bounceOf) && rec.bounceOf.length) m.bounceOf = rec.bounceOf.slice(0, 16);
+  return m;
 }
 
 function toSample(rec, orig, duration = orig?.duration) {
@@ -181,13 +184,14 @@ export class OwnSounds {
   // Neuen eigenen Sound anlegen (aus Puffer) und dauerhaft speichern
   // cls/tags/from: optionale Herkunft und Einordnung (Krachwerk); landen auch in der Projektdatei
   // key/keyConf/keyDone: schon erkannte Tonart (Projektdatei); sonst wird sie im Hintergrund erkannt
-  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from, key, keyConf, keyDone }) {
+  async create({ name, buffer, kind = 'oneshot', beats = null, source = '', id = newId(), cls, tags, from, key, keyConf, keyDone, bounceOf }) {
     if (buffer.duration > MAX_SECONDS) throw new Error(`„${name}“ ist länger als ${MAX_SECONDS / 60} Minuten – bitte vorher kürzen.`);
     const wav = await encodeWav(buffer).arrayBuffer();
     const rec = { id, name, kind, beats, source, wav, created: Date.now() };
     if (cls != null) rec.cls = cls;
     if (tags) rec.tags = tags;
     if (from) rec.from = from;
+    if (Array.isArray(bounceOf) && bounceOf.length) rec.bounceOf = bounceOf.slice(0, 16);
     if (keyDone) Object.assign(rec, { key: key ?? null, keyConf: keyConf ?? null, keyDone: true });
     const sample = await this.library.add(toSample(rec, buffer));
     sample.bytes = wav.byteLength;
@@ -253,6 +257,7 @@ export class OwnSounds {
       if (s.made?.cls != null) e.cls = s.made.cls;
       if (s.made?.tags?.length) e.tags = s.made.tags;
       if (s.made?.from) e.from = s.made.from;
+      if (s.made?.bounceOf?.length) e.bounceOf = s.made.bounceOf;
       if (s.keyDone) Object.assign(e, { key: s.keyAuto ?? null, keyConf: s.keyConf ?? null, keyDone: true });
       out.push(e);
     }
@@ -270,7 +275,7 @@ export class OwnSounds {
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const buffer = await decodeAudio(bytes.buffer, { keepMono: true });
-      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from, key: e.key, keyConf: e.keyConf, keyDone: e.keyDone });
+      await this.create({ id: e.id, name: e.name, buffer, kind: e.kind, beats: e.beats, source: e.source, cls: e.cls, tags: e.tags, from: e.from, key: e.key, keyConf: e.keyConf, keyDone: e.keyDone, bounceOf: e.bounceOf });
       n++;
     }
     return n;
@@ -300,6 +305,7 @@ export class OwnSounds {
     if (s.made?.cls != null) meta.cls = s.made.cls;
     if (s.made?.tags?.length) meta.tags = s.made.tags;
     if (s.made?.from) meta.from = s.made.from;
+    if (s.made?.bounceOf?.length) meta.bounceOf = s.made.bounceOf;
     if (s.material) meta.material = s.material;
     if (s.keyDone) Object.assign(meta, { key: s.keyAuto ?? null, keyConf: s.keyConf ?? null, keyDone: true });
     return { meta, wav: await encodeWav(s.orig).arrayBuffer() };
