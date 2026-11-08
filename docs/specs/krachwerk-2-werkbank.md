@@ -25,6 +25,7 @@ Neues optionales Feld `project.recipes`. Schlüssel ist die Sound-ID. Fehlende F
 | `name` | Text ≤ 40 | – | Anzeigename (Pflicht bei `parent`, sonst Umbenennen ohne IndexedDB) |
 | `material` | `koerper·dinge·stimme·strom·schleife` | – (Vorschlag §5) | Herkunft, vom Nutzer gesetzt |
 | `start`, `end` | 0 … Dauer, `end − start ≥ 0,01` | 0, Dauer | Ausschnitt |
+| `denoise` | 0 … 1 | 0 = aus | Rauschminderung (`src/dsp/denoise.js`), Profil aus dem ganzen Original; Reiter Farbe „Rauschen weg“ (Nachtrag) |
 | `attack` | 0 … 2000 ms | 0 | Anschlag, linear |
 | `release` | 0 … 5000 ms | 0 | Ausklang am Ende des Ausschnitts, Kurve (1−x)² |
 | `gain` | −24 … +12 dB, Raster 0,5 | 0 | Lautstärke des Sounds |
@@ -64,7 +65,7 @@ Material und Name laufen über `setRecipe(id, { material })` bzw. `{ name }`. `O
 - `renderProject` beginnt mit `await library.applyRecipes?.(project)` (gleicher Schlüssel → sofort fertig). Export und Tests klingen damit garantiert nach dem aktuellen Rezept.
 
 **Backen (`src/dsp/recipe.js`, neu, reines JS):** `cookRecipe(chs, sampleRate, r) → chs`, feste Reihenfolge:
-1. Ausschnitt `start…end` · 2. rückwärts · 3. Dehnen (`timeStretch`, `loop:false`) · 4. Tonhöhe `2^((semis + cents/100)/12)`, kubisch (`edit.js pitch`), beim Hochstimmen vorher Tiefpass bei 0,45·sr/Faktor (2 Biquads in Reihe) · 5. Hochpass, Tiefpass (RBJ-Biquad) · 6. Wärme `tanh(k·x)` mit k = 1 + 7·warm, danach auf das RMS vor der Stufe ausgeglichen und auf Spitze ≤ 1 gekappt · 7. Körnung · 8. Gain · 9. Hüllkurve. **Klickschutz:** An jeder geschnittenen Kante (`start > 0`, `end < Dauer`, bei `reverse` beide) gilt eine Mindestblende von 2 ms, auch bei Anschlag oder Ausklang 0.
+1. Ausschnitt `start…end` · 1b. Rauschminderung (Nachtrag: Profil aus dem ganzen Original, Rahmen auf dessen Raster – ein Schnitt ist samplegleich mit seiner Stelle in der Quelle) · 2. rückwärts · 3. Dehnen (`timeStretch`, `loop:false`) · 4. Tonhöhe `2^((semis + cents/100)/12)`, kubisch (`edit.js pitch`), beim Hochstimmen vorher Tiefpass bei 0,45·sr/Faktor (2 Biquads in Reihe) · 5. Hochpass, Tiefpass (RBJ-Biquad) · 6. Wärme `tanh(k·x)` mit k = 1 + 7·warm, danach auf das RMS vor der Stufe ausgeglichen und auf Spitze ≤ 1 gekappt · 7. Körnung · 8. Gain · 9. Hüllkurve. **Klickschutz:** An jeder geschnittenen Kante (`start > 0`, `end < Dauer`, bei `reverse` beide) gilt eine Mindestblende von 2 ms, auch bei Anschlag oder Ausklang 0.
 - Kosten: Ohne Dehnen und unter 20 s Stereo rechnet der Hauptthread (Ziel < 15 ms für 10 s, gemessen). Sonst Job `recipe` im Worker (`src/dsp/worker.js`, `runJob`).
 
 **Zusammenspiel:**
@@ -91,7 +92,7 @@ Material und Name laufen über `setRecipe(id, { material })` bzw. `{ name }`. `O
 - Reihenfolge: `recipes[id].material` → `rec.material` (letzte Wahl) → Vorschlag. Mit der Option `materialColors` (nur `make`, aus `main.js`) setzt die Library `s.colorCat` danach. Arranger, Glühen, Werkbank und Kiste lesen dieselbe `colorCat`. **Damit sind Kiste und Song gleich gefärbt (CD #7)**, und Pink `--cat-own` bleibt nur Marke und Mikrofonlicht. In Loopwerk bleibt `colorCat` leer.
 - **Kiste:** Gruppen sind jetzt **Körper · Dinge · Stimme · Strom · Schleife** (`EDITION.shelfGroups` neu, `library.js` nimmt `suggestMaterial` statt `FROM`/`originCat`). Die Quelle (Aufnahme/Datei) steht im Stammbaum. Varianten stehen direkt unter ihrem Eltern-Sound, eingerückt.
 - **Material setzen:** Tipp auf den Herkunftspunkt im Kopf der Werkbank öffnet eine Zeile mit 5 Punkten samt Wort. Ein Tipp setzt das Material (ein Undo-Schritt). Das sind 2 Tipps.
-- **Stammbaum-Zeile** (13 px, `--muted`, eine Zeile mit Auslassung, voller Text im `title`): `{Material} · {Aufnahme|Datei|Schleife|Strom} {TT.MM. HH:MM} → {Schritte} · {Dauer} s`. Schritte aus `recipeSteps` in fester Reihenfolge: gekürzt, rückwärts, gedehnt 150 %, gestimmt −3, gefiltert, wärmer, körnig, lauter/leiser. Varianten bekommen vorn „Variante von Bumm 1 →“. `toSample` übernimmt dafür `rec.created`. Beispiel: „Dinge · Aufnahme 02.11. 21:14 → gekürzt · gestimmt −3 · gefiltert · 0,41 s“.
+- **Stammbaum-Zeile** (13 px, `--muted`, eine Zeile mit Auslassung, voller Text im `title`): `{Material} · {Aufnahme|Datei|Schleife|Strom} {TT.MM. HH:MM} → {Schritte} · {Dauer} s`. Schritte aus `recipeSteps` in fester Reihenfolge: gekürzt, entrauscht, rückwärts, gedehnt 150 %, gestimmt −3, gefiltert, wärmer, körnig, lauter/leiser. Varianten bekommen vorn „Variante von Bumm 1 →“. `toSample` übernimmt dafür `rec.created`. Beispiel: „Dinge · Aufnahme 02.11. 21:14 → gekürzt · gestimmt −3 · gefiltert · 0,41 s“.
 - **Roh → geformt:** Im Song zeichnet ein Clip, dessen Sound ein Rezept hat, die Welle als Linie, ohne Rezept als Punkte (Korn). Option `grainWave` am Arranger aus `main.js`, Prüfung durch den ui-designer.
 
 ## 6. Werkbank-Oberfläche
@@ -117,7 +118,7 @@ Material und Name laufen über `setRecipe(id, { material })` bzw. `{ name }`. `O
 |---|---|---|
 | **Form** | Lautstärke (dB) · Anschlag (ms) · Ausklang (ms) · Rückwärts | Anfang/Ende als Zahl · Auf Spitze (setzt `gain` auf −1 dBFS Spitze) · Stille abschneiden (setzt `start`/`end` aus `soundBounds`) · Zurücksetzen |
 | **Ton** | Halbtöne (− Wert +) · Feinstimmung (Cent) · Auf Tonart (rundet den erkannten Grundton per `snapToScale` auf die Song-Tonart, setzt `semis`) | erkannter Grundton (Anzeige, YIN im Worker) · Zurücksetzen · 2a: „Im Editor (Autotune, Trennen)“ |
-| **Farbe** | Tiefpass („dunkler“) · Hochpass („dünner“) · Resonanz · Wärme | Körnung · Zurücksetzen |
+| **Farbe** | Rauschen weg · Tiefpass („dunkler“) · Hochpass („dünner“) · Wärme | Resonanz · Körnung · Zurücksetzen (Nachtrag Rauschminderung: Resonanz rückt in die Feinheiten, damit am Handy alle Griffe bei „Mitte“ im Bild bleiben) |
 | **Zeit** | Einzelklang \| Loop (2 Knöpfe) · bei Loop: Länge in Schlägen mit ÷2 · ×2, bei Einzelklang: Dehnen (50–200 %) | Als Song-Tempo · Wie geliefert (bisheriger Sound-Tempo-Block aus `sound-tempo.js`) |
 | **Clip** | Lautstärke · Einblenden · Ausblenden · Geschwindigkeit · wie Tonband | Kurve ein/aus · ½× 1× 2× |
 

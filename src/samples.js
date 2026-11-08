@@ -2110,10 +2110,10 @@ export class Library extends Emitter {
     return s._baking;
   }
 
-  // Kurze Klänge ohne Dehnen und Autotune im Hauptthread, sonst im Rechen-Worker
+  // Kurze Klänge ohne Dehnen und Autotune im Hauptthread (mit Rauschminderung nur sehr kurze), sonst im Rechen-Worker
   async _cook(orig, r) {
     const chs = Array.from({ length: orig.numberOfChannels }, (_, c) => orig.getChannelData(c));
-    const long = (r.stretch ?? 1) !== 1 || (r.tune ?? 0) > 0 || orig.duration * orig.numberOfChannels > 40;
+    const long = (r.stretch ?? 1) !== 1 || (r.tune ?? 0) > 0 || orig.duration * orig.numberOfChannels > ((r.denoise ?? 0) > 0 ? 8 : 40);
     let out;
     if (long) {
       const { runJob } = await import('./dsp/run.js');

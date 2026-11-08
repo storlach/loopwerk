@@ -365,7 +365,7 @@ const { check, finish } = createChecker();
       groups: [...document.querySelectorAll('#editor .ed-group')].filter((g) => g.offsetParent).map((g) => g.getAttribute('aria-label')),
       tabs: document.querySelectorAll('#editor .ed-tab, #editor [role="tab"]').length,
     }));
-    check('Sample-Editor: keine Reiter, alle Werkzeug-Gruppen sichtbar', edv.tabs === 0 && JSON.stringify(edv.groups) === '["Auswahl","Bearbeiten","Tonhöhe","Autotune","Trennen","Loop"]', JSON.stringify(edv));
+    check('Sample-Editor: keine Reiter, alle Werkzeug-Gruppen sichtbar', edv.tabs === 0 && JSON.stringify(edv.groups) === '["Auswahl","Säubern","Bearbeiten","Tonhöhe","Autotune","Rauschen","Trennen","Loop"]', JSON.stringify(edv));
     await page.keyboard.press('Escape');
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v18-desktop.png') });
 

@@ -166,6 +166,7 @@
 <link rel="modulepreload" href="src/ui/wave-handles.js">
 <link rel="modulepreload" href="src/recipe.js">
 <link rel="modulepreload" href="src/dsp/recipe.js">
+<link rel="modulepreload" href="src/dsp/denoise.js">
 <link rel="modulepreload" href="src/cuts.js">
 <link rel="modulepreload" href="src/dsp/slice.js">
 <link rel="modulepreload" href="src/dsp/loopback.js">
@@ -3855,6 +3856,10 @@
           <button class="dbtn ed-tool" id="ed-cut" type="button" title="Auswahl entfernen"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg><span>Entfernen</span></button>
           <button class="dbtn ed-tool" id="ed-silence" type="button" title="Auswahl stumm schalten"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg><span>Stille</span></button>
         </div>
+        <div class="ed-group ed-cutgroup" role="group" aria-label="Säubern">
+          <span class="ed-group-label">Säubern · Auswahl oder alles</span>
+          <button class="dbtn ed-tool" id="ed-denoise" type="button" aria-pressed="false" title="Rauschen entfernen – Stärke unter „Mehr“"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12c1.6-5 3.4-5 5 0s3.4 5 5 0M15.5 7.5h.01M18.5 10h.01M21.5 6.5h.01M16 15.5h.01M19.5 17.5h.01M22 12.5h.01"/></svg><span>Entrauschen</span></button>
+        </div>
         <div class="ed-group ed-cutgroup" role="group" aria-label="Bearbeiten">
           <span class="ed-group-label">Klang · Auswahl oder alles</span>
           <button class="dbtn ed-tool" id="ed-fadein" type="button" title="Einblenden"><svg class="ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20L21 4M3 20h18M21 4v16"/></svg><span>Einblenden</span></button>
@@ -3876,7 +3881,7 @@
     <div class="editor-body">
       <p class="ed-info" id="ed-info"></p>
       <p class="ed-busy" id="ed-busy" hidden><progress id="ed-busy-bar" max="1" value="0"></progress> <span id="ed-busy-text"></span></p>
-      <button class="dbtn ed-more" id="clip-more" type="button" aria-expanded="false" aria-controls="ed-tools">Mehr: Tonhöhe, Autotune, Trennen, Loop ▾</button>
+      <button class="dbtn ed-more" id="clip-more" type="button" aria-expanded="false" aria-controls="ed-tools">Mehr: Tonhöhe, Autotune, Rauschen, Trennen, Loop ▾</button>
       <div class="ed-tools" id="ed-tools" hidden>
         <div class="ed-group" role="group" aria-label="Tonhöhe">
           <span class="ed-group-label">Tonhöhe (Halbtöne)</span>
@@ -3891,6 +3896,11 @@
           <select class="ed-sel-small" id="ed-at-scale" aria-label="Tonleiter"><option value="minor" selected>Moll</option><option value="major">Dur</option><option value="chromatic">Chromatisch</option></select>
           <label class="ed-inline">Stärke <input type="range" id="ed-at-strength" min="0" max="1" step="0.05" value="1"></label>
           <span class="ed-sw"><button class="fxl-switch" id="ed-at-robot" type="button" aria-pressed="false" aria-labelledby="ed-at-robot-l"></button><span id="ed-at-robot-l">Roboter</span></span>
+        </div>
+        <div class="ed-group" role="group" aria-label="Rauschen">
+          <span class="ed-group-label">Rauschen entfernen</span>
+          <label class="ed-inline">Stärke <input type="range" id="ed-dn-strength" min="0" max="1" step="0.05" value="0.5"></label>
+          <output class="ed-pitch ed-dn-value" id="ed-dn-value">50 %</output>
         </div>
         <div class="ed-group" role="group" aria-label="Trennen">
           <span class="ed-group-label">Trennen (Näherung)</span>

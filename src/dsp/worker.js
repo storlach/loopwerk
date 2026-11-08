@@ -1,4 +1,4 @@
-// Rechen-Worker für lange DSP-Aufgaben (Trennung, Autotune, Tonhöhe), damit die Oberfläche flüssig bleibt.
+// Rechen-Worker für lange DSP-Aufgaben (Trennung, Autotune, Tonhöhe, Rauschminderung), damit die Oberfläche flüssig bleibt.
 import { separate } from './separate.js';
 import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
@@ -8,6 +8,7 @@ import { searchMaster } from './master-search.js';
 import { cookRecipe } from './recipe.js';
 import { detectOnsets } from './slice.js';
 import { mixMono } from './clean.js';
+import { denoise } from './denoise.js';
 
 const JOBS = {
   separate: ({ chs, sampleRate }, progress) => separate(chs, sampleRate, { onProgress: progress }),
@@ -19,6 +20,7 @@ const JOBS = {
   onsets: ({ chs, sampleRate, sensitivity }) => detectOnsets(mixMono(chs), sampleRate, { sensitivity }),
   key: ({ chs, sampleRate }) => detectKey(chs, sampleRate),
   pitchshift: ({ chs, sampleRate, semis, loop }) => pitchShift(chs, semis, sampleRate, { loop }),
+  denoise: ({ chs, sampleRate, opts }) => denoise(chs, sampleRate, opts),
 };
 
 self.onmessage = (e) => {
