@@ -2756,8 +2756,9 @@
   .mst-label { font: 500 10px/1.2 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   .mst-seg { display: flex; border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--key-line); }
   .mst-seg .seg { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-  /* vier Stile als 2 × 2, damit „Ausgewogen“ ganz lesbar bleibt */
+  /* Stile in zwei Spalten, damit „Ausgewogen“ ganz lesbar bleibt; ein übriger letzter Stil (Club) nimmt die ganze Zeile */
   .mst-styles { display: grid; grid-template-columns: 1fr 1fr; }
+  .mst-styles .seg:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .insp-mst { margin: 0; }
   /* Song-Leiste: Blöcke mit Luft und feiner Trennlinie dazwischen */
   .insp-grp { display: grid; gap: 10px; align-content: start; }
