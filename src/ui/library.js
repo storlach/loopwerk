@@ -71,6 +71,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
   const accordion = () => narrow.matches && !groupBy;
   let filter = 'all';
   const items = new Map();
+  let fresh = { id: null, until: 0 };
   const cutOpen = new Set(); // aufgeklappte Schnitt- und Take-Gruppen
 
   // Gruppen im Regal: nach Kategorie oder nach Genre (ein Sound kann in mehreren Genres stehen)
@@ -321,6 +322,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
           for (const k of kids) {
             const made = makeItem(k, groupBy ? cat.cat : k.category);
             made.row.classList.add('variant', 'group-kid');
+            if (fresh.id === k.id && performance.now() < fresh.until) made.row.classList.add('fresh');
             if (!items.has(k.id)) items.set(k.id, []);
             items.get(k.id).push(made.row);
             const fav = favs.has(k.id);
@@ -337,6 +339,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         }
         const { row, star } = makeItem(s, groupBy ? cat.cat : s.category);
         if (s.parentId) row.classList.add('variant');
+        if (fresh.id === s.id && performance.now() < fresh.until) row.classList.add('fresh');
         if (!items.has(s.id)) items.set(s.id, []);
         items.get(s.id).push(row);
         const fav = favs.has(s.id);
@@ -455,8 +458,10 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     const row = items.get(sampleId)?.[0];
     if (!row) return;
     row.scrollIntoView({ block: 'nearest' });
+    // Markierung übersteht ein Neuzeichnen kurz danach (z. B. wenn die Tonart des neuen Sounds erkannt ist)
+    fresh = { id: sampleId, until: performance.now() + 1600 };
     row.classList.add('fresh');
-    setTimeout(() => row.classList.remove('fresh'), 1600);
+    setTimeout(() => { for (const r of items.get(sampleId) ?? []) r.classList.remove('fresh'); }, 1600);
   }
 
   return { render, reveal };
