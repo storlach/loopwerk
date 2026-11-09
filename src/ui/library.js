@@ -406,7 +406,11 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
         ghost.remove();
         document.body.classList.remove('is-dragging');
         arranger.clearDropPreview();
-        if (target) arranger.select(store.addClip(target.trackId, sample.id, target.startBeat, sample.lengthBeats));
+        if (target) {
+          arranger.select(store.addClip(target.trackId, sample.id, target.startBeat, sample.lengthBeats));
+          // Abgelegt: nicht weiter „bereit zum Einsetzen“ – sonst legt der nächste Klick ins Leere einen zweiten Clip
+          if (ui.armedSampleId) { ui.arm(null); engine.stopPreview(); }
+        }
       }, () => {
         clearTimeout(timer);
         ghost?.remove();

@@ -4,3 +4,4 @@ _site/
 !assets/icons/*.png
 !docs/ux/**/*.png
 .claude/worktrees/
+!docs/analyse/**/*.png
