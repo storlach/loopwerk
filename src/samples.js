@@ -162,6 +162,11 @@ function lifeOf(name, args, T) {
     case 'impact': return 1.65;
     case 'kick909': return (args[2] ?? 0.5) + 0.06;
     case 'kickDeep': return (o(2).decay ?? 0.45) + 0.06;
+    case 'kickPro': return (o(2).length ?? 0.9) + 0.06;
+    case 'kickClick': return 0.03;
+    case 'hatDruck': return 0.25;
+    case 'clapDruck': return 0.36;
+    case 'rollBass': return len(2) + 0.05;
     case 'snare2': return Math.max(0.15, (o(2).decay ?? 0.17) + 0.06);
     case 'shaker': return (o(2).len ?? 0.06) + 0.06;
     case 'conga': return (o(3).decay ?? 0.22) + 0.06;
@@ -187,6 +192,60 @@ function lifeOf(name, args, T) {
     case 'wind': return len(1) + 0.61;
     default: return Infinity;
   }
+}
+
+// ---------- Druck: Hüllkurve der langen Kick und „Biss“ (Sättigung mit Pegelausgleich) ----------
+// Hüllkurve über die Länge (u = 0…1): Anstieg im ersten Punkt (< 2 ms), kurzer Schlag in den ersten ~20 ms, dann ein
+// Sub, der lange trägt und weich ausläuft ((1 − u)^1,6 statt exponentiell)
+const KICK_CURVE_N = 512;
+export function kickHoldCurve(peak) {
+  const c = new Float32Array(KICK_CURVE_N);
+  for (let i = 1; i < KICK_CURVE_N; i++) {
+    const u = i / (KICK_CURVE_N - 1);
+    c[i] = peak * Math.pow(1 - u, 1.6) * (1 + 0.3 * Math.exp(-u * 40)) / 1.3;
+  }
+  return c;
+}
+export const biteDrive = (bite) => 1 + Math.max(0, Math.min(1, bite)) * 4;
+// tanh-Kennlinie, normiert (±1 bleibt ±1); Ausgleich so, dass ein voller Sinus nach dem Sättigen denselben Effektivwert
+// hat wie vorher. Weil tanh(k·x)/tanh(k) ≥ x, ist der Ausgleich ≤ 1: die Spitze wird nie größer.
+const biteCurves = new Map();
+function biteCurve(drive) {
+  const key = Math.round(drive * 100);
+  let e = biteCurves.get(key);
+  if (!e) {
+    const curve = new Float32Array(2048);
+    for (let i = 0; i < curve.length; i++) {
+      const x = (i / (curve.length - 1)) * 2 - 1;
+      curve[i] = Math.tanh(drive * x) / Math.tanh(drive);
+    }
+    let s = 0;
+    const n = 4096;
+    for (let i = 0; i < n; i++) { const y = Math.tanh(drive * Math.sin((2 * Math.PI * i) / n)) / Math.tanh(drive); s += y * y; }
+    e = { curve, makeup: Math.min(1, Math.SQRT1_2 / Math.sqrt(s / n)) };
+    biteCurves.set(key, e);
+  }
+  return e;
+}
+// Abwürgen wie am Drumcomputer: schlägt die nächste Kick an, endet die vorige in 6 ms (lange Ausklänge löschen sich
+// sonst gegenseitig aus und summieren sich über die Spitze). → { input, choke(t) }
+export function chokeVoice(ctx, out) {
+  const g = ctx.createGain();
+  g.connect(out);
+  return {
+    input: g,
+    choke(t) { g.gain.setValueAtTime(1, t); g.gain.linearRampToValueAtTime(0, t + 0.006); },
+  };
+}
+export function biteStage(ctx, bite) {
+  const { curve, makeup } = biteCurve(biteDrive(bite));
+  const w = ctx.createWaveShaper();
+  w.curve = curve;
+  w.oversample = '2x';
+  const g = ctx.createGain();
+  g.gain.value = makeup;
+  w.connect(g);
+  return { input: w, output: g, makeup };
 }
 
 // Klangbausteine. Alle Zeiten werden in Schlägen übergeben.
@@ -664,6 +723,103 @@ export function createKit(ctx, out, spb, semis = 0) {
       o.start(t);
       o.stop(t + 1.6);
       noiseSource(t, 0.5).connect(biquad('lowpass', 700)).connect(decayGain(t, 0.6, 0.35));
+    },
+
+    // ---------- Druck (Melodic Techno): Kick mit Reglern, Klick-Schicht, Hats, Clap, Rollbass ----------
+    // pitch: Grundton des Subs nach dem Abwärtsschlag (Hz); length: bis der Ausklang verstummt (s); click 0–1: heller
+    // Anschlag; bite 0–1: Sättigung mit Pegelausgleich (die Spitze steigt nie). ratio/sweep: Startton und Dauer des
+    // Abwärtsschlags; hold: Hüllkurve mit langem Sub (Druck) statt exponentiell (Elektro, 909)
+    kickPro(beat, vel = 1, { pitch = 49, length = 0.9, click = 0.6, bite = 0.35, ratio = 7, sweep = 0.08, hold = true } = {}) {
+      const t = T(beat);
+      const L = Math.max(0.05, length);
+      const f0 = pitch * ratio;
+      const o = osc('sine', f0);
+      o.frequency.setValueAtTime(f0, t);
+      if (hold) {
+        // zweistufig: schneller Schlag, dann setzt sich der Sub auf seinen Ton
+        o.frequency.exponentialRampToValueAtTime(pitch * 1.6, t + sweep * 0.3);
+        o.frequency.exponentialRampToValueAtTime(pitch, t + sweep);
+      } else o.frequency.exponentialRampToValueAtTime(pitch, t + sweep);
+      // Platz für den Klick: der Körper wird etwas leiser, die Summe bleibt unter der Spitze ohne Klick
+      const peak = 0.95 * vel * (1 - 0.3 * click);
+      const env = ctx.createGain();
+      const voice = chokeVoice(ctx, out);
+      env.connect(voice.input);
+      if (hold) {
+        env.gain.value = 0;
+        env.gain.setValueCurveAtTime(kickHoldCurve(peak), t, L);
+      } else {
+        env.gain.setValueAtTime(0, t);
+        env.gain.linearRampToValueAtTime(peak, t + 0.001);
+        env.gain.exponentialRampToValueAtTime(0.0001, t + 0.001 + L);
+      }
+      let node = o;
+      if (bite > 0) { const b = biteStage(ctx, bite); o.connect(b.input); node = b.output; }
+      node.connect(env);
+      o.start(t);
+      o.stop(t + L + 0.05);
+      if (click > 0) kit.kickClick(beat, vel * click);
+      return voice;
+    },
+    // Kurzer heller Anschlag: Rauschstoß über 2 kHz und ein fallender Ton (3,2 → 0,9 kHz) in wenigen Millisekunden
+    kickClick(beat, level = 1) {
+      const t = T(beat);
+      noiseSource(t, 0.02).connect(biquad('highpass', 2000)).connect(decayGain(t, 0.32 * level, 0.012));
+      const o = osc('triangle', 3200);
+      o.frequency.setValueAtTime(3200, t);
+      o.frequency.exponentialRampToValueAtTime(900, t + 0.008);
+      o.connect(decayGain(t, 0.3 * level, 0.01));
+      o.start(t);
+      o.stop(t + 0.02);
+    },
+    // Hi-Hat für Offbeats: metallisch und knapp, offen mit kurzem Ausklang (kein Zischen über den nächsten Schlag)
+    hatDruck(beat, vel = 1, open = false) {
+      const t = T(beat);
+      metal(t, open ? 0.17 : 0.035, 1.2 * vel, 7600, 10500);
+      noiseSource(t, open ? 0.22 : 0.05).connect(biquad('highpass', 9000)).connect(decayGain(t, 0.22 * vel, open ? 0.15 : 0.03));
+    },
+    // Clap: vier Stöße, zwei leicht verschiedene Bänder links und rechts, kurzer Raum
+    clapDruck(beat, vel = 1) {
+      const t = T(beat);
+      for (const [pan, bp, d0] of [[-0.3, 1250, 0], [0.3, 1450, 0.004]]) {
+        const g = ctx.createGain();
+        g.connect(panTo(pan));
+        g.gain.setValueAtTime(0, t);
+        for (const d of [0, 0.009, 0.018, 0.027]) {
+          g.gain.setValueAtTime(0.75 * vel, t + d0 + d);
+          g.gain.exponentialRampToValueAtTime(0.12 * vel, t + d0 + d + 0.008);
+        }
+        g.gain.setValueAtTime(0.55 * vel, t + d0 + 0.036);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d0 + 0.3);
+        noiseSource(t, 0.34).connect(biquad('highpass', 700)).connect(biquad('bandpass', bp, 1.1)).connect(g);
+      }
+    },
+    // Rollbass: Sub-Sinus eine Oktave unter dem Ton, darüber eine Säge durch einen Tiefpass, der sich schnell schließt.
+    // Kurz und trocken, mono (kein Panorama, kein Raum)
+    rollBass(beat, midi, lenBeats, vel = 1) {
+      const t = T(beat);
+      const d = Math.max(0.04, T(lenBeats));
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.75 * vel, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.5 * vel, t + Math.max(0.004, d * 0.8));
+      g.gain.linearRampToValueAtTime(0, t + d + 0.012);
+      g.connect(out);
+      const sub = osc('sine', tf(midi - 12));
+      const sg = ctx.createGain();
+      sg.gain.value = 0.62;
+      sub.connect(sg).connect(g);
+      const saw = osc('sawtooth', tf(midi));
+      const lp1 = biquad('lowpass', 320, 1.2);
+      const lp2 = biquad('lowpass', 320, 0.7);
+      for (const lp of [lp1, lp2]) {
+        lp.frequency.setValueAtTime(1500 * vel + 300, t);
+        lp.frequency.exponentialRampToValueAtTime(320, t + 0.09);
+      }
+      const wg = ctx.createGain();
+      wg.gain.value = 0.42;
+      saw.connect(lp1).connect(lp2).connect(wg).connect(g);
+      for (const x of [sub, saw]) { x.start(t); x.stop(t + d + 0.03); }
     },
 
     // Selbst gerechneter Klang (E-Gitarre, src/dsp/guitar.js): fn(sampleRate, spb, semis) liefert Kanaldaten,

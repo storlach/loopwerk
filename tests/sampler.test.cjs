@@ -68,7 +68,7 @@ function installHelpers() {
       };
     });
     check('Feld „Klang“: Gruppe „Echte Instrumente (CC0)“ nach den Synth-Klängen',
-      sel.groups.length === 1 && sel.groups[0] === 'Echte Instrumente (CC0)' && sel.groupLast && sel.synth === 16 && JSON.stringify(sel.inGroup) === JSON.stringify([...fmt.ids, ...fmt.shelfIds, 'kf-gretsch', 'kf-hofner-kurz']),
+      sel.groups.length === 1 && sel.groups[0] === 'Echte Instrumente (CC0)' && sel.groupLast && sel.synth === 17 && JSON.stringify(sel.inGroup) === JSON.stringify([...fmt.ids, ...fmt.shelfIds, 'kf-gretsch', 'kf-hofner-kurz']),
       JSON.stringify(sel));
 
     // Auswahl startet das Laden sofort – auch ohne Noten (dann rendert das Pattern nichts, was laden müsste)
