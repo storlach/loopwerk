@@ -1,0 +1,12 @@
+{
+  "farbe": {
+    "index.html": 129,
+    "src/ui/arranger.js": 2,
+    "src/ui/glow.js": 10,
+    "src/ui/wave-handles.js": 1
+  },
+  "edition": {},
+  "timer": {
+    "src/engine.js": 6
+  }
+}
