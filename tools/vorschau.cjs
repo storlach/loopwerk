@@ -8,14 +8,13 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const PATHS = ['src', 'vendor', 'index.html'];
-const TAG_RE = /^vorschau-(\d+)$/;
 
 const HELP = `Vorschau vorbereiten
 
-  node tools/vorschau.cjs                 seit jüngstem Tag vorschau-<n> geänderte Dateien (src/, vendor/, index.html)
-  node tools/vorschau.cjs --since <c>     dasselbe ab Commit <c> (nötig, solange es keinen Tag gibt)
+  node tools/vorschau.cjs                 seit der zuletzt gemerkten Vorschau geänderte Dateien (src/, vendor/, index.html)
+  node tools/vorschau.cjs --since <c>     dasselbe ab Commit <c> (nötig, solange kein Stand gemerkt ist)
   node tools/vorschau.cjs --verify <dir>  Dateien in <dir> (mit Pfad, z. B. <dir>/src/x.js) gegen die Git-Historie prüfen
-  node tools/vorschau.cjs --mark <n>      Tag vorschau-<n> auf HEAD setzen (nur lokal, Pushen macht der Aufrufer)
+  node tools/vorschau.cjs --mark <n>      HEAD als Vorschau <n> merken (tools/vorschau-stand.json, einchecken)
 
 Ausgabe der Liste: JSON-Objekt { "src/a.js": "src/a.js", ... } auf stdout (gelöscht = null, ohne index.html),
 eine Zeile für Menschen auf stderr. Exit: 0 gut · 1 --verify fand Dateien außerhalb der Historie · 2 Bedienfehler.`;
@@ -26,13 +25,13 @@ function git(args, opts = {}) {
 }
 const gitText = (args) => git(args).toString('utf8');
 
-function latestTag() {
-  const tags = gitText(['tag', '--list', 'vorschau-*']).split('\n').map((t) => t.trim()).filter((t) => TAG_RE.test(t));
-  tags.sort((a, b) => Number(a.match(TAG_RE)[1]) - Number(b.match(TAG_RE)[1]));
-  return tags.length ? tags[tags.length - 1] : null;
+// Der letzte veröffentlichte Stand steht in tools/vorschau-stand.json (Tags kommen in dieser Umgebung nicht aufs Remote)
+const STAND = path.join(ROOT, 'tools', 'vorschau-stand.json');
+function latestStand() {
+  try { const j = JSON.parse(fs.readFileSync(STAND, 'utf8')); return j.commit ? j : null; } catch { return null; }
 }
 
-function listChanged(since) {
+function listChanged(since, label = since) {
   try { git(['rev-parse', '--verify', '-q', `${since}^{commit}`]); } catch { die(`Commit/Tag nicht gefunden: ${since}`); }
   const out = gitText(['diff', '--no-renames', '--name-status', since, 'HEAD', '--', ...PATHS]);
   const files = {};
@@ -46,7 +45,7 @@ function listChanged(since) {
   console.log(JSON.stringify(files, null, 2));
   const n = Object.keys(files).length;
   const del = Object.values(files).filter((v) => v === null).length;
-  console.error(`${n} Dateien geändert seit ${since} (${del} gelöscht), index.html ${indexChanged ? 'geändert' : 'unverändert'}.`);
+  console.error(`${n} Dateien geändert seit ${label} (${del} gelöscht), index.html ${indexChanged ? 'geändert' : 'unverändert'}.`);
   if (dirty.length) console.error(`Achtung: ${dirty.length} Datei(en) haben ungesicherte Änderungen und fehlen hier (nur Commits bis HEAD zählen).`);
 }
 
@@ -87,10 +86,9 @@ function verify(dir) {
 
 function mark(n) {
   if (!/^\d+$/.test(n || '')) die('--mark braucht eine Nummer');
-  const tag = `vorschau-${n}`;
-  try { git(['rev-parse', '--verify', '-q', `refs/tags/${tag}`]); die(`Tag ${tag} gibt es schon`); } catch (e) { if (e.status === undefined) throw e; }
-  git(['tag', tag, 'HEAD']);
-  console.log(`Tag ${tag} auf ${gitText(['rev-parse', '--short', 'HEAD']).trim()} gesetzt (lokal; Pushen: git push origin ${tag}).`);
+  const commit = gitText(['rev-parse', 'HEAD']).trim();
+  fs.writeFileSync(STAND, JSON.stringify({ nummer: Number(n), commit, datum: new Date().toISOString().slice(0, 10) }, null, 2) + '\n');
+  console.log(`Vorschau ${n} gemerkt: ${commit.slice(0, 7)} (tools/vorschau-stand.json – mit dem nächsten Commit einchecken).`);
 }
 
 function main() {
@@ -101,10 +99,13 @@ function main() {
   if (a.includes('--verify')) return verify(path.resolve(val('--verify')));
   if (a.includes('--mark')) return mark(val('--mark'));
   let since = val('--since');
+  let label = since;
   if (!since) {
-    since = latestTag();
-    if (!since) die('Noch kein Tag vorschau-<n> vorhanden. Bitte --since <commit> angeben (letzter veröffentlichter Stand); danach mit --mark <n> merken.');
+    const st = latestStand();
+    if (!st) die('Noch kein Stand gemerkt (tools/vorschau-stand.json). Bitte --since <commit> angeben; danach mit --mark <n> merken.');
+    since = st.commit;
+    label = `Vorschau ${st.nummer}`;
   }
-  listChanged(since);
+  listChanged(since, label);
 }
 main();
