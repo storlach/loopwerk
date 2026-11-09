@@ -3527,6 +3527,19 @@
   #pattern .dock-actions > :is(#pat-continue, #pat-sing-btn) { order: 0; }
   #pattern .dock-head::after { content: ""; order: 2; flex: 1 0 100%; height: 0; }
   #pattern .dock-head { justify-content: flex-start; }
+  /* Kick-Regler (Druck): einklappbare Zeile über dem Raster, vier Linien-Regler mit Wert, „Wie das Kit“ am Ende */
+  .pat-kick { flex: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: end; gap: 4px 20px; padding: 2px 2px 8px; border-bottom: 1px solid var(--line); }
+  .pat-kick[hidden] { display: none; }
+  .pat-kick-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px 8px; font: 500 10px/1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .pat-kick-row output { font: 500 11px/1.4 var(--font-mono); letter-spacing: 0; text-transform: none; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pat-kick-row input[type="range"] { grid-column: 1 / -1; width: 100%; min-width: 0; margin: 0; accent-color: var(--ink); }
+  .pat-kick-reset[aria-disabled="true"] { opacity: 0.45; }
+  @media (max-width: 760px) {
+    .pat-kick { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; padding: 0 4px 4px; }
+    .pat-kick-row { font-size: 11px; }
+    .pat-kick-row input[type="range"] { height: 44px; }
+    .pat-kick-reset { grid-column: 1 / -1; justify-self: stretch; }
+  }
   /* Anhören und Live wie Abspielen und Aufnahme im Deck (gleiche Bausteine); die Weißglut gehört nur diesem Fach */
   #pattern #pat-play:not(.on) { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.5); }
   #pattern #pat-play.on { background: var(--beam); color: var(--accent-ink); box-shadow: var(--beam-glow); }
@@ -4004,6 +4017,7 @@
           <select id="pat-bars"><option value="1">1</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option></select>
         </label>
         <label class="pat-field" id="pat-kit-field">Kit <select id="pat-kit"></select></label>
+        <button class="dbtn" id="pat-kick-btn" type="button" aria-expanded="false" aria-controls="pat-kick" title="Tonhöhe, Länge, Klick und Biss der Kick">Kick</button>
         <label class="pat-field" id="pat-preset-field">Klang <select id="pat-preset"></select></label>
         <label class="pat-field" id="pat-swing-field" title="Jede zweite Sechzehntel kommt etwas später – der Groove wird lockerer">Swing <select id="pat-swing"></select></label>
         <label class="pat-field" id="pat-vel-field" title="So laut werden neue Schritte und Noten. Antippen eines Schritts mit anderem Anschlag ändert ihn">Anschlag
@@ -4025,6 +4039,8 @@
           <select id="pat-quant"><option value="1" selected>1/16</option><option value="2">1/8</option></select>
         </label>
         <button class="dbtn" id="pat-quantize" type="button" title="Rückt Noten bzw. Schläge auf das Raster aus „Einrasten“. Rückgängig macht es wieder">Quantisieren</button>
+        <button class="dbtn" id="pat-bass-offbeat" type="button" title="Bass-Muster: Grundton auf jedem Offbeat, die Viertel bleiben für die Kick frei">Bass: Offbeat</button>
+        <button class="dbtn" id="pat-bass-roll" type="button" title="Bass-Muster: drei Sechzehntel je Schlag im Grundton, die Viertel bleiben für die Kick frei">Bass: Sechzehntel (rollend)</button>
         <div class="menu-wrap pat-more-wrap">
           <button class="dbtn" id="pat-more-btn" type="button" aria-haspopup="true" aria-expanded="false">Mehr ▾</button>
           <div class="pop pat-more" id="pat-more" hidden></div>
@@ -4033,6 +4049,13 @@
       </div>
     </div>
     <div class="pat-body">
+      <div class="pat-kick" id="pat-kick" role="group" aria-label="Kick einstellen" hidden>
+        <label class="pat-kick-row"><span>Tonhöhe</span><output id="pat-kick-pitch-out"></output><input type="range" id="pat-kick-pitch" min="28" max="37" step="1" aria-label="Tonhöhe der Kick"></label>
+        <label class="pat-kick-row"><span>Länge</span><output id="pat-kick-length-out"></output><input type="range" id="pat-kick-length" min="0.15" max="1.5" step="0.01" aria-label="Länge der Kick"></label>
+        <label class="pat-kick-row"><span>Klick</span><output id="pat-kick-click-out"></output><input type="range" id="pat-kick-click" min="0" max="1" step="0.01" aria-label="Klick der Kick"></label>
+        <label class="pat-kick-row"><span>Biss</span><output id="pat-kick-bite-out"></output><input type="range" id="pat-kick-bite" min="0" max="1" step="0.01" aria-label="Biss der Kick"></label>
+        <button class="dbtn pat-kick-reset" id="pat-kick-reset" type="button" title="Kick wieder wie das Kit">Wie das Kit</button>
+      </div>
       <div class="pat-pages cat-drums" id="pat-pages" role="group" aria-label="Takthälfte" hidden></div>
       <div class="pat-drums cat-drums" id="pat-drums"></div>
       <div class="pat-sing" id="pat-sing" hidden>

@@ -1,7 +1,7 @@
 // Instrumente: Beat-Patterns (Stepsequencer) und Melodie-Patterns (Piano-Roll) werden zu Loops gerendert.
 // So laufen sie durch dieselbe Engine wie jeder andere Clip (Fades, Effekte, Export, Rückgängig).
 
-import { createKit } from './samples.js';
+import { createKit, biteStage, chokeVoice } from './samples.js';
 import { isGuitarPreset, renderGuitarNotes } from './dsp/guitar.js';
 import {
   sampledInstruments, isSampled, getInstrument, loadInstrument, loadedInstrument, playSampled, fallbackPreset, releaseTail,
@@ -41,8 +41,13 @@ export const KITS = [
     id: 'techno', label: 'Techno (909-artig)',
     labels: { snare: 'Rim', tomLo: 'Rumble', tomHi: 'Clang', crash: 'Ride' },
   },
+  // Melodic Techno: lange Kick mit Klick und Biss, knappe Hats für Offbeats, breite Clap, Rim (synthetisch)
   {
-    id: 'akustik', label: 'Akustik (Sonic Pi)',
+    id: 'druck', label: 'Techno (Druck)',
+    labels: { snare: 'Rim', tomHi: 'Perc', crash: 'Ride' },
+  },
+  {
+    id: 'akustik', label: 'Akustik (Sonic Pi)', kickHz: 58,
     map: {
       kick: 'sp-bd-haus', snare: 'sp-drum-snare-hard', clap: 'sp-perc-snap', hat: 'sp-drum-cymbal-closed',
       open: 'sp-drum-cymbal-open', tomLo: 'sp-drum-tom-lo-hard', tomHi: 'sp-drum-tom-mid-hard', crash: 'sp-drum-cymbal-hard',
@@ -61,6 +66,7 @@ export const SYNTH_PRESETS = [
   { id: 'brass', label: 'Blech', category: 'synth' },
   { id: 'bass', label: 'Bass', category: 'bass' },
   { id: 'acid', label: 'Acid-Bass', category: 'bass' },
+  { id: 'rollbass', label: 'Rollbass', category: 'bass' },
   { id: 'pad', label: 'Fläche', category: 'chords' },
   // E-Gitarre: Saiten, Verstärker und Effekte selbst gerechnet (src/dsp/guitar.js)
   { id: 'guitar', label: 'E-Gitarre clean', category: 'chords' },
@@ -105,6 +111,7 @@ const PLAY = {
   strings: (k, p, b, len, v) => k.strings(b, p, len, v),
   brass: (k, p, b, len, v) => k.brass(b, p, len, v),
   acid: (k, p, b, len, v) => k.acid(b, p, len * 0.9, { accent: v > 0.9 }),
+  rollbass: (k, p, b, len, v) => k.rollBass(b, p, len * 0.9, v),
 };
 export function playNote(kit, preset, pitch, beat, len, vel, spb) {
   const fn = PLAY[preset];
@@ -128,7 +135,98 @@ const SYNTH_DRUMS = {
     hat: (k, b, v) => k.hat909(b, v), open: (k, b, v) => k.hat909(b, v, true), tomLo: (k, b, v) => k.rumble(b, 33, 0.5, v),
     tomHi: (k, b, v) => k.clang(b, 310, v), crash: (k, b, v) => k.ride(b, v),
   },
+  druck: {
+    kick: (k, b, v) => k.kickPro(b, v, { ...KICK_VOICES.druck.shape, ...KICK_VOICES.druck.defaults }),
+    snare: (k, b, v) => k.rim(b, v), clap: (k, b, v) => k.clapDruck(b, v),
+    hat: (k, b, v) => k.hatDruck(b, v), open: (k, b, v) => k.hatDruck(b, v, true), tomLo: (k, b, v) => k.tom(b, 82, v),
+    tomHi: (k, b, v) => k.conga(b, 330, v, { decay: 0.12, slap: 0.4 }), crash: (k, b, v) => k.ride(b, v),
+  },
 };
+
+// ---------- Kick-Regler (Druck) ----------
+// pattern.kick = { pitch (Hz), length (s), click (0–1), bite (0–1) } ist optional. Ohne das Feld klingt jedes Kit wie
+// bisher (gleicher Code-Weg); mit dem Feld spielt die Kick-Zeile eine einstellbare Fassung: synthetische Kits über
+// kit.kickPro mit dem Charakter des Kits, Sample-Kits über Tonhöhe (playbackRate), Länge (Fade), Biss (Shaper) und
+// Klick (zusätzliche Schicht). defaults: so stehen die Regler, solange das Feld fehlt (nahe am Klang des Kits).
+export const KICK_RANGE = { pitch: [40, 70], length: [0.15, 1.5], click: [0, 1], bite: [0, 1] };
+export const KICK_VOICES = {
+  elektro: { defaults: { pitch: 46, length: 0.42, click: 0, bite: 0 }, shape: { ratio: 165 / 46, sweep: 0.12, hold: false } },
+  techno: { defaults: { pitch: 48, length: 0.5, click: 0.3, bite: 0.3 }, shape: { ratio: 290 / 48, sweep: 0.06, hold: false } },
+  druck: { defaults: { pitch: 49, length: 0.9, click: 0.6, bite: 0.35 }, shape: { ratio: 7, sweep: 0.08, hold: true } },
+};
+const kitDef = (kitId) => KITS.find((k) => k.id === kitId);
+// Regler-Stand ohne eigenes Feld: Synth-Kits aus KICK_VOICES, Sample-Kits aus dem Sample (Grundton kickHz, Länge)
+export function kickDefaults(kitId, library) {
+  const k = kitDef(kitId);
+  if (k?.map) {
+    const dur = library?.get(k.map.kick)?.orig?.duration ?? 0.4;
+    return { pitch: k.kickHz ?? 55, length: clampTo(dur, KICK_RANGE.length), click: 0, bite: 0 };
+  }
+  return { ...(KICK_VOICES[kitId] ?? KICK_VOICES.elektro).defaults };
+}
+const clampTo = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
+// Eingestellte Werte des Patterns (vollständig, in den Grenzen) oder null = Kit-Kick wie bisher
+export function kickParams(pattern, library) {
+  if (!pattern?.kick || typeof pattern.kick !== 'object') return null;
+  const base = kickDefaults(pattern.kit, library);
+  const out = {};
+  for (const [key, range] of Object.entries(KICK_RANGE)) {
+    const v = Number(pattern.kick[key]);
+    out[key] = clampTo(Number.isFinite(v) ? v : base[key], range);
+  }
+  return out;
+}
+// Eine Kick mit Reglerwerten; beat in Schlägen des Kits (Vorhören: spb = 1, beat = Kontextzeit). → Stimme mit choke(t)
+const samplePeaks = new WeakMap();
+function peakOf(buf) {
+  let p = samplePeaks.get(buf);
+  if (p == null) {
+    p = 0;
+    for (let c = 0; c < buf.numberOfChannels; c++) for (const x of buf.getChannelData(c)) p = Math.max(p, Math.abs(x));
+    samplePeaks.set(buf, p);
+  }
+  return p;
+}
+function playKick(ctx, out, kit, kitId, beat, spb, vel, kp, library) {
+  const k = kitDef(kitId);
+  if (k?.map) {
+    const s = library?.get(k.map.kick);
+    if (!s?.orig) return null;
+    const t = beat * spb;
+    const src = ctx.createBufferSource();
+    src.buffer = library.source?.(s) ?? s.orig;
+    src.playbackRate.value = kp.pitch / (k.kickHz ?? 55);
+    const voice = chokeVoice(ctx, out);
+    const g = ctx.createGain();
+    // Platz für den Klick wie bei kickPro
+    const level = vel * (1 - 0.3 * kp.click);
+    g.gain.setValueAtTime(level, t);
+    g.gain.setValueAtTime(level, t + kp.length * 0.6);
+    g.gain.linearRampToValueAtTime(0, t + kp.length);
+    let node = src;
+    if (kp.bite > 0) {
+      // Biss auf das auf ±1 gebrachte Sample, danach zurück: die Spitze bleibt höchstens, wo sie war
+      const pk = Math.max(1e-6, peakOf(src.buffer));
+      const pre = ctx.createGain();
+      pre.gain.value = 1 / pk;
+      const b = biteStage(ctx, kp.bite);
+      const post = ctx.createGain();
+      post.gain.value = pk;
+      src.connect(pre).connect(b.input);
+      node = b.output.connect(post);
+    }
+    node.connect(g).connect(voice.input);
+    src.start(t);
+    src.stop(t + kp.length + 0.01);
+    if (kp.click > 0) kit.kickClick(beat, vel * kp.click);
+    return voice;
+  }
+  const voice = KICK_VOICES[kitId] ?? KICK_VOICES.elektro;
+  return kit.kickPro(beat, vel, { ...voice.shape, ...kp });
+}
+// Tonhöhe als Note (Anzeige am Regler): nächster Halbton, z. B. 49 Hz → „G1“
+export const hzToMidi = (hz) => 69 + 12 * Math.log2(hz / 440);
+export const midiToHz = (m) => 440 * 2 ** ((m - 69) / 12);
 export const PITCH_LOW = 36; // C2
 export const PITCH_HIGH = 84; // C6
 
@@ -142,6 +240,24 @@ export function newDrumPattern(n = 1) {
       open: row([]), tomLo: row([]), tomHi: row([]), crash: row([]),
     },
   };
+}
+
+// Bass-Muster (Melodie-Editor, Song-Starter): Grundton der Grundtonart in der Bass-Lage C2…H2 – der Rollbass legt seinen
+// Sub eine Oktave tiefer (33–62 Hz). Wechselt die Tonart je Takt, spielt die Engine die verschobene Fassung (key-bars).
+// Beide lassen die Viertel frei: dort schlägt die Kick, Sub und Kick überdecken sich nicht.
+export const BASS_TEMPLATES = [
+  { id: 'offbeat', label: 'Offbeat' },
+  { id: 'roll', label: 'Sechzehntel (rollend)' },
+];
+export const bassRoot = (tonic) => 36 + (((Math.round(tonic) % 12) + 12) % 12);
+export function bassTemplateNotes(id, tonic, bars = 1) {
+  const pitch = bassRoot(tonic);
+  const notes = [];
+  for (let beat = 0; beat < bars * 4; beat++) {
+    if (id === 'offbeat') notes.push({ pitch, start: beat + 0.5, len: 0.3, vel: 1 });
+    else for (const [s, vel] of [[1, 0.8], [2, 1], [3, 0.85]]) notes.push({ pitch, start: beat + s / 4, len: 0.2, vel });
+  }
+  return notes;
 }
 
 export function newSynthPattern(n = 1) {
@@ -268,11 +384,22 @@ export async function renderPattern(pattern, bpm, library) {
   if (pattern.type !== 'drums' && sw > 0.5) pattern = { ...pattern, notes: swingNotes(pattern.notes, sw) };
   if (pattern.type === 'drums') {
     const map = KITS.find((k) => k.id === pattern.kit)?.map;
+    // Kick mit Reglern (Feld am Pattern, beim Kit „Druck“ immer): eine Stimme, die nächste würgt die vorige ab – auch über
+    // die Loop-Grenze (die letzte endet, wo die erste der nächsten Runde anschlägt)
+    const kp = kickParams(pattern, library) ?? (pattern.kit === 'druck' ? kickDefaults('druck') : null);
+    let lastKick = null;
+    let firstKick = null;
     for (const row of DRUM_ROWS) {
       const steps = pattern.rows?.[row.id] || [];
       steps.forEach((v, i) => {
         if (!v || i >= beats * STEPS_PER_BEAT) return;
         const b = swingBeat(i / STEPS_PER_BEAT, sw);
+        if (kp && row.id === 'kick') {
+          lastKick?.choke(b * spb);
+          lastKick = playKick(ctx, bus, kit, pattern.kit, b, spb, v, kp, library);
+          if (firstKick == null) firstKick = b;
+          return;
+        }
         if (map) {
           const s = library?.get(map[row.id]);
           if (!s?.orig) return;
@@ -287,6 +414,7 @@ export async function renderPattern(pattern, bpm, library) {
         (SYNTH_DRUMS[pattern.kit] || SYNTH_DRUMS.elektro)[row.id]?.(kit, b, v);
       });
     }
+    if (lastKick && firstKick != null) lastKick.choke((firstKick + beats) * spb);
   } else {
     const preset = sampled(pattern.preset) ? fallbackPreset(getInstrument(pattern.preset)) : pattern.preset;
     if (!inst && isGuitarPreset(preset)) {
@@ -414,8 +542,13 @@ export function startNote(ctx, dest, preset, pitch, vel = 1) {
   };
 }
 
-// when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort
-export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1) {
+// when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort. kp: Kick-Regler (kickParams)
+export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1, kp = null) {
+  if (kp && rowId === 'kick') {
+    const { kit, out } = previewKit(ctx, dest);
+    playKick(ctx, out, kit, kitId, when ?? ctx.currentTime + 0.01, 1, vel, kp, library);
+    return;
+  }
   const map = KITS.find((k) => k.id === kitId)?.map;
   if (map) {
     const s = library.get(map[rowId]);

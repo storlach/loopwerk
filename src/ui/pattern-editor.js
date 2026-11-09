@@ -6,7 +6,9 @@ import {
   DRUM_ROWS, KITS, drumLabel, SYNTH_PRESETS, STEPS_PER_BEAT, PITCH_LOW, PITCH_HIGH,
   noteName, resizeDrumRows, previewNote, previewDrum, startNote, sampledPresets, allPresets, presetInfo, preparePreset,
   GLIDE_OPTIONS, glideOf, SWING_OPTIONS, swingOf, midiVelocity, GM_DRUMS,
+  KICK_RANGE, kickParams, kickDefaults, hzToMidi, midiToHz, BASS_TEMPLATES, bassTemplateNotes, NOTE_NAMES,
 } from '../instruments.js';
+import { tonicOf, keyOf } from '../model.js';
 import { patternSampleId } from '../patterns.js';
 import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
 import { runJob } from '../dsp/run.js';
@@ -72,7 +74,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
   // Seltenes und Einstellungen stehen unter „Mehr“, damit die Kopfzeile ruhig bleibt;
   // am Handy auch Takte, Kit, Weiterführen und Einsingen – so passt alles ohne Wischen in eine Zeile
   const moreEl = $('pat-more');
-  for (const node of [$('pat-bars-field'), $('pat-kit-field'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-chord-field'), $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
+  for (const node of [$('pat-bars-field'), $('pat-kit-field'), $('pat-kick-btn'), $('pat-swing-field'), $('pat-vel-field'), $('pat-glide-field'), $('pat-chord-field'), $('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-continue'), singBtn, $('pat-clear')]) {
     const always = [$('pat-len-field'), $('pat-quant-field'), quantBtn, recBtn, $('pat-clear')].includes(node);
     place(node, always ? { wide: moreEl, narrow: moreEl } : { narrow: moreEl });
   }
@@ -336,7 +338,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
         const label = el('button', 'pat-row-label', rowLabel);
         label.type = 'button';
         label.title = 'Anhören';
-        label.addEventListener('click', async () => previewDrum(await audio(), engine.mix.master, pat().kit, row.id, library));
+        label.addEventListener('click', async () => previewDrum(await audio(), engine.mix.master, pat().kit, row.id, library, undefined, 1, kickParams(pat(), library)));
         drumsEl.append(label);
         for (let i = from; i < from + n; i++) {
           const cell = el('button', `pat-cell${Math.floor(i / 4) % 2 ? ' alt' : ''}${i % 16 === 0 ? ' bar' : ''}`);
@@ -386,7 +388,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
       if (painting.done.has(i)) return;
       painting.done.add(i);
       update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? brush : 0; }, `paint-${id}-${e.timeStamp}`);
-      if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
+      if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library, undefined, 1, kickParams(pat(), library));
     };
     paint(cell);
     trackPointer(e, (ev) => {
@@ -406,7 +408,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const cur = pat().rows?.[row]?.[i];
     const on = !cur || !sameVel(cur);
     update((p) => { p.rows = resizeDrumRows(p.rows, p.bars); p.rows[row][i] = on ? brush : 0; });
-    if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library);
+    if (on) previewDrum(await audio(), engine.mix.master, pat().kit, row, library, undefined, 1, kickParams(pat(), library));
   });
   let lastTouch = false;
   drumsEl.addEventListener('pointerup', (e) => { if (e.pointerType === 'touch') lastTouch = true; }, true);
@@ -872,7 +874,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const p = pat();
     if (!p || p.type !== 'drums') return;
     const ctx = await audio();
-    previewDrum(ctx, engine.mix.master, p.kit, rowId, library, when, vel);
+    previewDrum(ctx, engine.mix.master, p.kit, rowId, library, when, vel, kickParams(p, library));
     const pad = padsEl.querySelector(`[data-row="${rowId}"]`);
     if (pad) {
       // Jeder Schlag leuchtet neu auf, auch wenn der vorige noch leuchtet
@@ -1282,6 +1284,65 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     }
   });
 
+  // ---------- Kick-Regler (Druck) ----------
+  // Zeile „Kick“ über dem Raster: Tonhöhe (in Halbtönen, als Note), Länge, Klick, Biss. Am Pattern als p.kick gespeichert;
+  // ohne Feld klingt das Kit wie bisher. Ein Ziehen = ein Rückgängig-Schritt; jede Änderung rendert das Pattern neu.
+  const kickBtn = $('pat-kick-btn');
+  const kickEl = $('pat-kick');
+  const kickReset = $('pat-kick-reset');
+  let kickOpen = false;
+  kickBtn.addEventListener('click', () => { kickOpen = !kickOpen; render(); });
+  const KICK_KEYS = Object.keys(KICK_RANGE);
+  const kickIn = Object.fromEntries(KICK_KEYS.map((k) => [k, $(`pat-kick-${k}`)]));
+  const kickOut = Object.fromEntries(KICK_KEYS.map((k) => [k, $(`pat-kick-${k}-out`)]));
+  const kickNow = () => kickParams(pat(), library) ?? kickDefaults(pat().kit, library);
+  const kickText = {
+    pitch: (v) => `${noteName(Math.round(hzToMidi(v)))} · ${Math.round(v)} Hz`,
+    length: (v) => `${v.toFixed(2).replace('.', ',')} s`,
+    click: (v) => `${Math.round(v * 100)} %`,
+    bite: (v) => `${Math.round(v * 100)} %`,
+  };
+  let kickGesture = null;
+  let kickN = 0;
+  for (const k of KICK_KEYS) {
+    const input = kickIn[k];
+    input.addEventListener('input', () => {
+      if (!pat() || pat().type !== 'drums') return;
+      if (!kickGesture) kickGesture = `kick-${id}-${++kickN}`;
+      const raw = Number(input.value);
+      const v = k === 'pitch' ? Math.round(midiToHz(raw) * 100) / 100 : raw;
+      const next = { ...kickNow(), [k]: v };
+      update((p) => { p.kick = next; }, kickGesture);
+    });
+    input.addEventListener('change', () => { kickGesture = null; });
+  }
+  kickReset.addEventListener('click', () => { if (pat()?.kick) update((p) => { delete p.kick; }); });
+  function renderKick(p) {
+    const kp = kickParams(p, library) ?? kickDefaults(p.kit, library);
+    for (const k of KICK_KEYS) {
+      const v = k === 'pitch' ? String(Math.round(hzToMidi(kp.pitch))) : String(kp[k]);
+      if (kickIn[k].value !== v) kickIn[k].value = v;
+      kickOut[k].textContent = kickText[k](kp[k]);
+    }
+    kickReset.setAttribute('aria-disabled', String(!p.kick));
+  }
+
+  // ---------- Bass-Muster (Melodie) ----------
+  // Grundton der Grundtonart; Takte mit anderer Tonart spielt die Engine verschoben. Ein Rückgängig-Schritt.
+  for (const [btnId, tpl] of [['pat-bass-offbeat', 'offbeat'], ['pat-bass-roll', 'roll']]) {
+    const b = $(btnId);
+    place(b, { wide: moreEl, narrow: moreEl });
+    b.addEventListener('click', () => {
+      const p = pat();
+      if (!p || p.type !== 'synth') return;
+      const tonic = tonicOf(keyOf(store.project));
+      const bassy = presetInfo(p.preset)?.category === 'bass';
+      update((q) => { q.notes = bassTemplateNotes(tpl, tonic, q.bars); if (!bassy) q.preset = 'rollbass'; });
+      const label = BASS_TEMPLATES.find((x) => x.id === tpl)?.label;
+      ui.flash?.(`Bass-Muster ${label} auf ${NOTE_NAMES[tonic]}${bassy ? '' : ' mit Rollbass'}.`);
+    });
+  }
+
   // ---------- Quantisieren ----------
 
   // Rückt Noten (Start, Länge auf mindestens ein Raster) bzw. Beat-Schläge auf das Raster aus „Einrasten“.
@@ -1415,6 +1476,13 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     const sv = swingOf(p);
     swingSel.value = String(SWING_OPTIONS.reduce((a, b) => (Math.abs(b.value - sv) < Math.abs(a.value - sv) ? b : a)).value);
     $('pat-kit-field').hidden = !drums;
+    kickBtn.hidden = !drums;
+    kickEl.hidden = !drums || !kickOpen;
+    kickBtn.setAttribute('aria-expanded', String(drums && kickOpen));
+    kickBtn.setAttribute('aria-pressed', String(drums && kickOpen));
+    if (drums) renderKick(p);
+    $('pat-bass-offbeat').hidden = drums;
+    $('pat-bass-roll').hidden = drums;
     $('pat-preset-field').hidden = drums;
     $('pat-glide-field').hidden = drums;
     $('pat-chord-field').hidden = drums;

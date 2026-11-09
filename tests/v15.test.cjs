@@ -109,7 +109,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
       }
       return out;
     });
-    check('Sechzehn Klänge für Melodien (mit fünf E-Gitarren), alle hörbar', Object.keys(inst).length === 16 && Object.values(inst).every((p) => p > 0.05 && p < 1.2), JSON.stringify(inst));
+    check('Siebzehn Klänge für Melodien (mit fünf E-Gitarren und Rollbass), alle hörbar', Object.keys(inst).length === 17 && Object.values(inst).every((p) => p > 0.05 && p < 1.2), JSON.stringify(inst));
 
     // ---------- Einsingen per Datei ----------
     await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createEmptyProject()); });

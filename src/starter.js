@@ -8,6 +8,9 @@ import { mulberry32 } from './util.js';
 import { loopHarmony, PROGRESSIONS, accompPattern, ACCOMP_STYLES, degreeOfSymbol, isChord } from './harmony.js';
 import { KEYS, keyOf, keyAtBar, tonicOf } from './model.js';
 import { patternSampleId } from './patterns.js';
+import { bassTemplateNotes, midiToHz, KICK_VOICES } from './instruments.js';
+import { EFFECT_IDS, busDef, cutoffHz } from './effects.js';
+import { MASTER_STYLES } from './dsp/master-core.js';
 
 export const STARTER_GENRES = [
   { id: 'house', label: 'House', bpm: 124, range: [120, 126], keys: ['Am', 'Cm', 'Fm', 'Gm', 'Dm'], pool: ['house', 'pop'], form: 'club', bassStyle: 'bass' },
@@ -19,6 +22,8 @@ export const STARTER_GENRES = [
   { id: 'ambient', label: 'Ambient', bpm: 85, range: [70, 92], keys: ['Am', 'Dm', 'Em', 'Cm'], pool: ['ambient'], form: 'ambient', bassStyle: 'sub' },
   { id: 'rock', label: 'Rock', bpm: 120, range: [108, 140], keys: ['Am', 'Em', 'Dm', 'Hm'], pool: ['rock', 'pop'], form: 'song', bassStyle: 'bass', drums: 'rock' },
   { id: 'breaks', label: 'DnB', bpm: 172, range: [166, 176], keys: ['Am', 'Fm', 'Gm'], pool: ['breaks'], form: 'club', bassStyle: 'sub' },
+  // Eigener Bauplan (planMelodic): Kick mit Druck, Rollbass, Pumpen, Hochpässe, Aufbau mit Filter, Mastering
+  { id: 'melodic', label: 'Melodic Techno', bpm: 124, range: [122, 126], keys: ['Am', 'Fm', 'Gm', 'Em', 'Cm'], pool: ['techno'], form: 'club', bassStyle: 'bass', plan: 'melodic' },
 ];
 export const starterGenre = (id) => STARTER_GENRES.find((g) => g.id === id) ?? null;
 
@@ -78,6 +83,7 @@ function candidates(library, cat, pool, filter = () => true) {
 // und Längen neu. mode: 'replace' (neues Lied) oder 'append' (ab dem Takt hinter dem letzten Clip).
 export function planStarter(genreId, library, { variant = 0, project = null, mode = 'replace' } = {}) {
   const genre = starterGenre(genreId) ?? starterGenre('pop');
+  if (genre.plan === 'melodic') return planMelodic(genre, library, { variant, project, mode });
   const rand = mulberry32(hash(genre.id) + variant * 7919);
   const pick = (list) => (list.length ? list[Math.floor(rand() * list.length) % list.length] : null);
   const bpb = project?.beatsPerBar ?? 4;
@@ -198,6 +204,130 @@ export function planStarter(genreId, library, { variant = 0, project = null, mod
 
   const summary = `${genre.label} · ${bpm} BPM${key ? ` · ${key}` : ''} · Takt ${appendAt}–${lastBar}: ${parts.map((p) => p[1]).join(' → ')}`;
   return { summary, actions, genre: genre.id, variant, sections: parts.map(([id, label]) => ({ id, label, ...at[id] })), progression: chordSeq, used };
+}
+
+// ---------- Melodic Techno (Druck) ----------
+// Aufbau 8 Takte ohne Kick, das Filter der Summe geht auf; dann setzt die lange Kick ein. Kick und Bass bleiben trocken
+// (kein Hall, kein Hochpass), alles andere bekommt einen Hochpass; Fläche und Bass pumpen; Arp mit Echo und Hall über
+// die Sends. Der Rollbass setzt auf den Vierteln aus (Platz für die Kick) und pumpt leicht nach.
+export const MELODIC_HP = { drums: 250, chords: 200, lead: 300, fx: 150 }; // Hz
+// Regler 0…1 des Filters für eine Frequenz (Umkehrung von cutoffHz)
+export const cutoffFor = (hz) => Math.round((Math.log2(hz / cutoffHz(0)) / 8.81) * 1000) / 1000;
+// Kick auf den Grundton stimmen, wenn er zwischen 40 und 70 Hz liegt (A1 55 Hz, F1 44 Hz …), sonst die Voreinstellung
+export function kickPitchFor(tonic) {
+  const list = [24, 36].map((o) => midiToHz(o + tonic)).filter((f) => f >= 40 && f <= 70);
+  return list.length ? Math.round(list.sort((a, b) => Math.abs(a - 50) - Math.abs(b - 50))[0] * 100) / 100 : KICK_VOICES.druck.defaults.pitch;
+}
+const MELODIC_PROGS = [['i', 'VI', 'III', 'VII'], ['i', 'VII', 'VI', 'VII'], ['i', 'iv', 'VI', 'v'], ['i', 'VI', 'iv', 'VII']];
+// Mastering-Stil „Club“, sobald es ihn gibt (paralleler Zweig), bis dahin „Laut“
+export const masterStyleFor = () => (MASTER_STYLES.some((x) => x.id === 'club') ? 'club' : 'loud');
+
+function planMelodic(genre, library, { variant = 0, project = null, mode = 'replace' } = {}) {
+  const rand = mulberry32(hash(genre.id) + variant * 7919);
+  const pick = (list) => (list.length ? list[Math.floor(rand() * list.length) % list.length] : null);
+  const bpb = project?.beatsPerBar ?? 4;
+  const appendAt = mode === 'append' && project
+    ? Math.ceil(Math.max(0, ...project.tracks.flatMap((t) => t.clips.map((c) => c.startBeat + c.lengthBeats))) / bpb - 1e-9) + 1 : 1;
+  const v = variant > 0;
+  const parts = [['I', 'Aufbau', 8], ['V', 'Groove', 16], ['C', 'Drop', 8], ['B', 'Break', 8], ['D', 'Drop', 8], ['O', 'Outro', 8]];
+  const at = {};
+  let bar = appendAt;
+  for (const [id, , len] of parts) { at[id] = { from: bar, to: bar + len - 1 }; bar += len; }
+  const lastBar = bar - 1;
+  const actions = [];
+  const bpm = v ? Math.round(genre.range[0] + rand() * (genre.range[1] - genre.range[0])) : genre.bpm;
+  const key = mode === 'append' ? null : v ? pick(genre.keys) : 'Am';
+  if (mode === 'replace') {
+    actions.push({ do: 'reset' });
+    actions.push({ do: 'name', name: `${genre.label}-Song` });
+  }
+  actions.push({ do: 'tempo', bpm });
+  if (key && KEYS.includes(key)) actions.push({ do: 'key', bar: 1, key });
+  actions.push({ do: 'length', bars: Math.max(lastBar, project?.lengthBars && mode === 'append' ? project.lengthBars : 0) });
+  const tonic = tonicOf(key ?? keyOf(project));
+  // Harmonie langsam: ein Akkord je zwei Takte
+  const prog = v ? pick(MELODIC_PROGS) : MELODIC_PROGS[0];
+  actions.push({ do: 'chords', fromBar: appendAt, toBar: lastBar, chords: prog, per: bpb * 2 });
+
+  const runs = (letters) => {
+    const out = [];
+    for (const [id] of parts) {
+      if (!letters.includes(id)) continue;
+      const r = at[id];
+      const last = out[out.length - 1];
+      if (last && last.to + 1 === r.from) last.to = r.to; else out.push({ ...r });
+    }
+    return out;
+  };
+  const made = new Set();
+  const place = (role, name, volume, base, letters, { fadeOut = 0 } = {}) => {
+    const list = runs(letters);
+    list.forEach((r, i) => {
+      const first = !made.has(role);
+      made.add(role);
+      actions.push({
+        ...base, fromBar: r.from, toBar: r.to, track: first ? 'neu' : role, as: role, name, volume,
+        ...(i === list.length - 1 && fadeOut && r.to === lastBar ? { fadeOutBars: fadeOut } : {}),
+      });
+    });
+  };
+  const row = (on, vel = 1) => Array.from({ length: 16 }, (_, i) => (on.includes(i) ? vel : 0));
+  const emptyRows = () => ({ kick: row([]), snare: row([]), clap: row([]), hat: row([]), open: row([]), tomLo: row([]), tomHi: row([]), crash: row([]) });
+  const hp = (hz) => ({ filter: { on: true, type: 'highpass', cutoff: cutoffFor(hz), reso: 0, lfo: 'off' } });
+
+  // Kick: 4/4, lang, auf den Grundton gestimmt
+  const kick = {
+    type: 'drums', name: 'Techno-Kick', bars: 1, kit: 'druck', rows: { ...emptyRows(), kick: row([0, 4, 8, 12]) },
+    kick: { ...KICK_VOICES.druck.defaults, pitch: kickPitchFor(tonic) },
+  };
+  place('kick', 'Kick', 0.9, { do: 'pattern', id: 'kick', pattern: kick }, 'VCDO', { fadeOut: 4 });
+  // Hats und Clap: offene Hat auf dem Offbeat, leise Sechzehntel dazwischen, Clap auf 2 und 4
+  const hats = {
+    type: 'drums', name: 'Offbeat-Hats', bars: 1, kit: 'druck',
+    rows: {
+      ...emptyRows(), open: row([2, 6, 10, 14], 0.85), clap: row([4, 12], 0.9),
+      hat: row(v && rand() < 0.5 ? [3, 7, 11, 15] : [1, 3, 5, 7, 9, 11, 13, 15], 0.32), snare: row(v && rand() < 0.5 ? [7, 15] : [], 0.5),
+    },
+  };
+  place('drums', 'Drums', 0.62, { do: 'pattern', id: 'drums', pattern: hats }, 'IVCDO', { fadeOut: 4 });
+  // Rollbass: drei Sechzehntel je Schlag, folgt den Akkorden (Vorlage auf Stufe i)
+  const bass = { type: 'synth', name: 'Rollbass', bars: 1, preset: 'rollbass', notes: bassTemplateNotes(v && rand() < 0.4 ? 'offbeat' : 'roll', tonic, 1), follow: true };
+  place('bass', 'Bass', 0.72, { do: 'pattern', id: 'bass', pattern: bass }, 'IVCD');
+  // Dunkle Fläche und Arp folgen den Akkorden
+  place('chords', 'Akkorde', 0.5, { do: 'accomp', id: 'chords', style: 'pad' }, 'IVCBDO', { fadeOut: 4 });
+  place('lead', 'Melodie', 0.42, { do: 'accomp', id: 'lead', style: 'arp' }, 'CBD', { fadeOut: 4 });
+
+  // FX wie bei den anderen Starts: Riser vor den Drops, Crash auf Groove, Drops und Outro
+  const fx = (re) => candidates(library, 'fx', [...genre.pool, 'pop'], (s) => (s.kind === 'oneshot' || s.oneShot) && re.test(s.name));
+  const riser = pick(fx(/riser|wirbel|übergang|sweep/i)) ?? library.get('fx-riser');
+  const crash = pick(fx(/crash|becken|impact/i)) ?? library.get('fx-crash');
+  const barsOf = (s) => Math.max(1, Math.round((s.beats ?? s.lengthBeats ?? 4) / bpb));
+  const fxAt = [];
+  for (const p of ['C', 'D']) if (riser) fxAt.push({ sound: riser.id, bar: Math.max(at.I.from, at[p].from - barsOf(riser)) });
+  for (const p of ['V', 'C', 'D', 'O']) if (crash) fxAt.push({ sound: crash.id, bar: at[p].from });
+  fxAt.sort((a, b) => a.bar - b.bar).forEach((f, i) => actions.push({
+    do: 'add', sound: f.sound, fromBar: f.bar, toBar: f.bar, track: i === 0 ? 'neu' : 'fx', as: 'fx', name: 'FX', volume: 0.5,
+  }));
+
+  // Mischung: Hochpass auf allem außer Kick und Bass, Pumpen auf Fläche und Bass, Sends nur von Fläche und Arp
+  actions.push({ do: 'fx', target: 'drums', fx: hp(MELODIC_HP.drums) });
+  actions.push({ do: 'fx', target: 'chords', fx: { ...hp(MELODIC_HP.chords), pump: { on: true, rate: '1/4', depth: 0.6, release: 0.5 } } });
+  actions.push({ do: 'fx', target: 'lead', fx: hp(MELODIC_HP.lead) });
+  if (fxAt.length) actions.push({ do: 'fx', target: 'fx', fx: hp(MELODIC_HP.fx) });
+  actions.push({ do: 'fx', target: 'bass', fx: { pump: { on: true, rate: '1/4', depth: 0.45, release: 0.65 } } });
+  actions.push({ do: 'send', target: 'chords', bus: 'hall', amount: 0.35 });
+  actions.push({ do: 'send', target: 'lead', bus: 'hall', amount: 0.3 });
+  actions.push({ do: 'send', target: 'lead', bus: 'echo', amount: 0.35 });
+  // Aufbau: Tiefpass der Summe geht über 8 Takte von etwa 500 Hz ganz auf; danach steht er offen (18 kHz, ohne Resonanz)
+  actions.push({
+    do: 'auto', target: 'master', key: 'filter.cutoff',
+    points: [{ beat: (at.I.from - 1) * bpb, value: cutoffFor(500) }, { beat: (at.V.from - 1) * bpb, value: 1 }],
+    fx: { on: true, type: 'lowpass', cutoff: 1, reso: 0, lfo: 'off' },
+  });
+  if (mode === 'replace') actions.push({ do: 'mastering', on: true, style: masterStyleFor() });
+
+  const summary = `${genre.label} · ${bpm} BPM${key ? ` · ${key}` : ''} · Takt ${appendAt}–${lastBar}: ${parts.map((p) => p[1]).join(' → ')}`;
+  return { summary, actions, genre: genre.id, variant, sections: parts.map(([id, label]) => ({ id, label, ...at[id] })), progression: prog, used: [riser?.id, crash?.id].filter(Boolean) };
 }
 
 // Rock-Beat für das akustische Kit (Sonic Pi): Bassdrum 1 und 3 (+ „und“ von 3), Snare 2 und 4, Achtel-Becken
@@ -353,6 +483,31 @@ export function applyPlan(store, library, plan) {
             fades(id, a, bpb);
             break;
           }
+          case 'fx': {
+            // Effekte einer Spur (Alias aus „as“) oder der Summe: fx = { <effekt>: { on, … } }
+            const t = a.target === 'master' ? null : findTrack(store.project, a.target);
+            if (a.target !== 'master' && !t) throw 0;
+            const list = Object.entries(a.fx || {});
+            if (!list.length || list.some(([id]) => !EFFECT_IDS.includes(id))) throw 0;
+            for (const [id, patch] of list) {
+              if (t) store.setTrackFx(t.id, id, patch); else store.setMasterFx(id, patch);
+            }
+            break;
+          }
+          case 'send': {
+            const t = findTrack(store.project, a.target);
+            if (!t || !busDef(a.bus) || !(Number(a.amount) >= 0)) throw 0;
+            store.setSend(t.id, a.bus, Number(a.amount));
+            break;
+          }
+          case 'auto': {
+            const target = a.target === 'master' ? 'master' : findTrack(store.project, a.target)?.id;
+            if (!target || !store.recordAutoLane(target, a.key, a.points, a.fx ?? null)) throw 0;
+            break;
+          }
+          case 'mastering':
+            store.setMastering({ on: !!a.on, ...(a.style ? { style: String(a.style) } : {}) });
+            break;
           default:
             throw 0;
         }
