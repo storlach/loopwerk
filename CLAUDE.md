@@ -58,7 +58,17 @@ Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer 
 - `artifact-sync` – Sichern (GitHub storlach/loopwerk führend) und Artifact-Vorschau aktualisieren
 - Persönliche Skills von Martin: `kritiker` (unabhängige Prüfung), `scout` (Skill-Review)
 
+## Werkzeuge (`tools/`, je mit `--help`)
+Wiederkehrende Handgriffe laufen über Skripte, nicht von Hand:
+- `npm test` (`tools/test.cjs`) – fährt die ganze Kette ohne Abbruch, wiederholt Ausfälle einmal (grün / wackelig / rot). `--only a,b`, `--repeat N name`. Die Kette steht in `tests/chain.txt` (ein Name je Zeile; neue Tests dort anhängen, `merge=union`).
+- `npm run regeln` – prüft die Regeln oben mechanisch (feste Farben, Editions-Abfragen in `src/ui`, Timer in der Engine, Katalog-Pflichtangaben, Tests in der Kette) gegen `tools/regeln-basis.json`.
+- `tools/merge-agent.sh <branch> [--tests a,b]` – Agent-Branch einfügen, testen, Worktree und Branch aufräumen; bleibt bei echten Konflikten stehen.
+- `npm run shots -- --out <ordner>` – fester Satz Bilder (Desktop, Handy, Loopwerk, Krachwerk; `--szene`, `--geraet`, `--edition`).
+- `npm run hoerprobe -- --starter <id|alle> | --beispiel | --projekt <datei>` – WAV zum Anhören (`--takte`, `--stil`); `npm run messen -- <wav…>` – Lautheit, Spitze, Bänder, Stereobreite (`--ziel`).
+- `npm run vorschau` – seit der letzten Veröffentlichung geänderte Dateien als `files`-Objekt; `--verify <ordner>` prüft veröffentlichte Stände gegen die Git-Historie; `--mark <n>` merkt den Stand (`tools/vorschau-stand.json`).
+- `tools/push.sh` – Push mit Wiederholung bei Netzfehlern.
+
 ## Fertig heißt
-- `npm test` grün (alle Stufen: Timing samplegenau, Effekte, Export, UI-Interaktionen, keine Konsolenfehler).
-- Ein Screenshot (`--shots`, `SHOT_DIR=…`) angesehen, Desktop und Handy-Breite (es gibt nur dunkel).
-- Klang beurteilt der Mensch: bei hörbaren Änderungen um ein Ohr-Feedback bitten.
+- `npm test` ohne Rot (alle Stufen: Timing samplegenau, Effekte, Export, UI-Interaktionen, keine Konsolenfehler) und `npm run regeln` ohne neue Verstöße.
+- Bilder angesehen (`npm run shots -- --out … --szene …`), Desktop und Handy-Breite (es gibt nur dunkel).
+- Klang beurteilt der Mensch: bei hörbaren Änderungen eine Hörprobe mitgeben (`npm run hoerprobe`, vorher/nachher) und um ein Ohr-Feedback bitten.

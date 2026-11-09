@@ -12,6 +12,8 @@ Wir können nicht hören. Deshalb wird jeder Klang in Zahlen übersetzt.
 - Im Browser: `window.loopwerk.renderProject(project, library, { limiter: false, toBeat })` liefert einen `AudioBuffer`.
 - Eigene Testsignale per `library.register({ id, name, category, lengthBeats, bpm, buffer })` – vorher `new AudioBuffer({ numberOfChannels: 2, length, sampleRate: 44100 })` füllen.
 
+- Fertige WAV-Dateien messen: `node tools/messen.cjs <wav…>` (LUFS, True Peak, Crest, Anteile Sub/Bass/Mitten/Höhen, Stereobreite gesamt und unter 120 Hz; `--ziel`, `--json`). Hörproben für Martin: `node tools/hoerprobe.cjs` (Starter, Beispiel oder Projektdatei, je Mastering-Stil).
+
 ## Muster
 | Frage | Testsignal | Messung | Toleranz |
 |---|---|---|---|
