@@ -217,7 +217,7 @@
 - Tests: `tests/scale-lock.test.cjs`
 
 ## ✅ 2.10 – Mastering mit einem Klick, Effekt-Pad
-- Mastering der Summe (`project.master.mastering = { on, style }`): Ausgewogen, Warm, Hell (−14 LUFS), Laut (−10 LUFS); EQ, Bus-Kompression, Breite nur in den Höhen, True-Peak-Limiter; Analyse für Export und Wiedergabe, A/B gleich laut (ADR 005)
+- Mastering der Summe (`project.master.mastering = { on, style }`): Ausgewogen, Warm, Hell (−14 LUFS), Laut (−10 LUFS), seit dem Club-Stil auch Club (−8 LUFS); EQ, Bus-Kompression, Breite nur in den Höhen, True-Peak-Limiter; Analyse für Export und Wiedergabe, A/B gleich laut (ADR 005)
 - Ort: Inspektor „Song“ unter Master, Export-Fach (Haken „Mit Mastering“)
 - Effekt-Pad (Filter, Echo, Stutter, Lo-Fi, Bandstopp, Halten) auf Summe oder Spur, nur live; Desktop: Reiter „FX-Pad“, Handy: Knopf im Mixer-Kopf
 - Tests: `tests/master-fxpad.test.cjs`
@@ -316,6 +316,11 @@
 - Krachwerk: Rezeptfeld `denoise`, Regler „Rauschen weg“ zuerst im Reiter Farbe (Resonanz → Feinheiten), gebacken als erster Schritt nach dem Ausschnitt, Stammbaum „entrauscht“, Varianten und Schnitte erben es, Song-ZIP trägt es
 - Test `tests/denoise.test.cjs` (Pausen −30 dB, Töne ±0,03 dB, Formanten ±1,2 dB, Brummen −30 dB, Ausreißer 0,05 % statt 7,8 % ohne Glättung, Stereo-Abweichung 0,03 dB statt 30 dB getrennt); Bilder `docs/ux/denoise/`
 - Vorschlag: nach einer Krachwerk-Aufnahme bei deutlichem Grundrauschen `denoise` 0,3 als Rezept vorschlagen (nicht-destruktiv)
+
+## ✅ Mastering-Stil „Club“ (−8 LUFS)
+- Fünfter Stil in `MASTER_STYLES` (`src/dsp/master-core.js`), dieselbe Kette in Worklet (Wiedergabe, Offline) und Analyse: Trittschall 30 Hz, Tiefen +2 dB (95 Hz), Schlamm −2 dB (300 Hz), Höhen +2 dB (10 kHz); Bass-Mono über Mitte/Seite, Seite mit Linkwitz-Riley 8. Ordnung bei 125 Hz (Mitte unberührt, Seite über 300 Hz flach); Bus-Kompressor mit 30 ms Attack und Detektor-Hochpass 100 Hz (die Kick zieht ihn nicht); Clipper zwischen Kompressor und Limiter, 4× überabgetastet, zwei Bänder (unter 250 Hz Sub und Bass, darüber Flächen; der Klick der Kick bleibt), Limiter mit 40 ms Rückkehr. Neue Stil-Felder optional (`eq.hp`, `mono`, `comp.sc`, `clip`) – die vier alten Stile rechnen bitgleich, ihre Latenz bleibt 237 Abtastwerte; Club 265 (`masterLatency(sr, style)`, Latenzausgleich der Aufnahme folgt)
+- UI: Chip „Club“ (Tooltip „Club · Ziel −8 LUFS“) im Inspektor „Song“, im Fach „Song“ und im Export; der fünfte Chip nimmt die ganze dritte Zeile, am Handy 44 px hoch
+- Test `tests/club-master.test.cjs`: Testmix (Kick mit Sub, Bass, Pad mit Sidechain, Hats) −8,25 LUFS, −1,36 dBTP (16×); Seite 80 Hz −31 dB, 300 Hz … 8 kHz ±0,01 dB; Crest der Kick 30 ms ab Einsatz 7,1 dB gegen 5,6 dB beim harten Limiter (8 ms, ohne Clipper, ebenfalls −8 LUFS; mit 60 ms Rückkehr schafft der Limiter allein höchstens −9,3 LUFS); Export = Wiedergabe-Kette; alte Stile per Fingerabdruck bitgleich; Bilder `docs/ux/druck/club-*`
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

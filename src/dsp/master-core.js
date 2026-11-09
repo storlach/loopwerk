@@ -1,7 +1,13 @@
 // Mastering-Kette als reiner JS-Code: läuft im AudioWorklet (Realtime und Offline) und im Hauptthread/Worker
 // für die Lautheitsanalyse. Dieselbe Rechnung an beiden Orten – darum klingen Export und Wiedergabe gleich.
-// Stufe 1 (MasterTone): Eingangspegel → EQ → Stereobreite nur in den Höhen (Bässe mono) → Bus-Kompressor.
+// Stufe 1 (MasterTone): Eingangspegel → EQ → Stereobreite nur in den Höhen (Bässe mono) → Bus-Kompressor
+//   [→ weicher Clipper, nur Stile mit `clip`].
 // Stufe 2 (TruePeakLimiter): Ziel-Verstärkung → Limiter mit Vorausschau und True-Peak-Erkennung (4× überabgetastet).
+// Optionale Felder eines Stils (fehlen sie, rechnet die Kette wie vor „Club“ – bitgleich):
+//   eq.hp   Trittschall-Hochpass (Hz, sonst 25)
+//   mono    Bass-Mono: Seite mit Linkwitz-Riley 8. Ordnung (2 × Butterworth 4.) ab dieser Frequenz statt LR4 bei 160 Hz
+//   comp.sc Hochpass im Detektor des Kompressors (Hz): der Sub der Kick zieht die Summe nicht mit
+//   clip    Clipper zwischen Kompressor und Limiter (siehe Clipper), verlängert die Latenz um TP_HALF + OS_Q
 // process() reserviert keinen Speicher: alle Puffer entstehen im Konstruktor bzw. in setStyle().
 
 export const MASTER_STYLES = [
@@ -25,6 +31,16 @@ export const MASTER_STYLES = [
     eq: { low: [110, 1.5], mud: [320, -1, 1], high: [8000, 2] }, width: 1.5,
     comp: { threshold: -20, ratio: 3, attack: 0.015, release: 0.15 }, release: 0.06, drive: 7,
   },
+  {
+    // Club (melodischer Techno, −8 LUFS): Tiefen fest, Schlamm raus, Höhen offen; Bass-Mono; Kompressor mit
+    // langsamem Attack und Detektor ohne Sub, damit die Kick durchkommt; Clipper in zwei Bändern liefert einen Teil der
+    // Lautheit (Sub und Flächen werden dichter, der Klick der Kick bleibt), der Limiter den Rest. Seite über 300 Hz
+    // unverändert (width 0), die Höhen öffnet der EQ.
+    id: 'club', label: 'Club', target: -8,
+    eq: { hp: 30, low: [95, 2], mud: [300, -2, 1], high: [10000, 2] }, width: 0, mono: 125,
+    comp: { threshold: -18, ratio: 2, attack: 0.03, release: 0.12, sc: 100 }, release: 0.04, drive: 11,
+    clip: { split: 250, low: [0, 4], high: [2, 6] },
+  },
 ];
 export const styleOf = (id) => MASTER_STYLES.find((s) => s.id === id) ?? MASTER_STYLES[0];
 
@@ -45,6 +61,9 @@ function biquad(type, f, sr, gainDb = 0, q = Math.SQRT1_2) {
   if (type === 'highpass') {
     const al = sw / (2 * q);
     b0 = (1 + cw) / 2; b1 = -(1 + cw); b2 = (1 + cw) / 2; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al;
+  } else if (type === 'lowpass') {
+    const al = sw / (2 * q);
+    b0 = (1 - cw) / 2; b1 = 1 - cw; b2 = (1 - cw) / 2; a0 = 1 + al; a1 = -2 * cw; a2 = 1 - al;
   } else if (type === 'peaking') {
     const al = sw / (2 * q);
     b0 = 1 + al * A; b1 = -2 * cw; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * cw; a2 = 1 - al / A;
@@ -62,6 +81,14 @@ function biquad(type, f, sr, gainDb = 0, q = Math.SQRT1_2) {
   return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
 }
 
+// Weiches Knie: linear bis a, darüber tanh bis zur Grenze a + w (Steigung 1 am Übergang)
+function soft(x, a, w) {
+  const ax = x < 0 ? -x : x;
+  if (ax <= a) return x;
+  const v = a + w * Math.tanh((ax - a) / w);
+  return x < 0 ? -v : v;
+}
+
 // Kette von Biquads für einen Kanal: Koeffizienten c (5 je Stufe), Zustand s (2 je Stufe, transponierte Direktform II)
 function runChain(c, s, n, x) {
   for (let k = 0; k < n; k++) {
@@ -75,14 +102,107 @@ function runChain(c, s, n, x) {
   return x;
 }
 
+// Clipper vor dem Limiter, 4× überabgetastet (Interpolation wie der True-Peak-Detektor, zurück mit linearphasigem
+// Tiefpass): kaum Spiegelfrequenzen, kaum Zwischenwert-Spitzen. Zwei Bänder (LR4-Tiefpass + Rest, Summe = Eingang),
+// jedes mit eigener Grenze – so kappt er den Sub der Kick und die Spitzen der Flächen, der Klick darüber bleibt.
+// cfg: { split (Hz), low: [über MASTER_REF dB, Knie dB], high: [...] } – fehlt ein Band, bleibt es linear.
+const OS = 4;
+const OS_Q = 12; // halbe Länge des Rück-Tiefpasses (Abtastwerte) = zusätzliche Latenz neben TP_HALF
+
+class Clipper {
+  constructor(sr, cfg) {
+    const H2 = 2 * TP_HALF;
+    this.up = tpFilter(OS, TP_HALF);
+    const c = OS * OS_Q;
+    this.K = 2 * c + 1;
+    this.down = new Float64Array(this.K);
+    let sum = 0;
+    for (let k = 0; k < this.K; k++) {
+      const t = (k - c) / OS;
+      const sinc = t === 0 ? 1 : Math.sin(Math.PI * t) / (Math.PI * t);
+      this.down[k] = sinc * (0.5 + 0.5 * Math.cos((Math.PI * (k - c)) / (c + 1)));
+      sum += this.down[k];
+    }
+    for (let k = 0; k < this.K; k++) this.down[k] /= sum;
+    this.hl = new Float64Array(2 * H2);
+    this.hr = new Float64Array(2 * H2);
+    this.hp = 0;
+    this.ol = new Float64Array(2 * this.K);
+    this.or = new Float64Array(2 * this.K);
+    this.op = 0;
+    this.lc = new Float64Array(10);
+    const lp = biquad('lowpass', cfg.split, sr * OS);
+    this.lc.set(lp, 0);
+    this.lc.set(lp, 5);
+    this.lsL = new Float64Array(4); // Zustand der Band-Weiche je Kanal
+    this.lsR = new Float64Array(4);
+    const knee = (b) => { if (!b) return [Infinity, 1]; const g = dbToGain(MASTER_REF + b[0]); const a = g * dbToGain(-b[1]); return [a, g - a]; };
+    [this.la, this.lw] = knee(cfg.low);
+    [this.ha, this.hw] = knee(cfg.high);
+    this.yl = 0;
+    this.yr = 0;
+  }
+
+  // ein Abtastwert je Kanal hinein, Ergebnis (TP_HALF + OS_Q Werte zurück) in this.yl / this.yr
+  step(xl, xr) {
+    const H = TP_HALF;
+    const H2 = 2 * H;
+    const hl = this.hl;
+    const hr = this.hr;
+    hl[this.hp] = xl;
+    hl[this.hp + H2] = xl;
+    hr[this.hp] = xr;
+    hr[this.hp + H2] = xr;
+    this.hp = this.hp + 1 === H2 ? 0 : this.hp + 1;
+    const w0 = this.hp;
+    const up = this.up;
+    const K = this.K;
+    for (let j = 0; j < OS; j++) {
+      let ul = hl[w0 + H - 1];
+      let ur = hr[w0 + H - 1];
+      if (j > 0) {
+        ul = 0;
+        ur = 0;
+        const o = (j - 1) * H2;
+        for (let m = 0; m < H2; m++) { ul += up[o + m] * hl[w0 + m]; ur += up[o + m] * hr[w0 + m]; }
+      }
+      const lol = runChain(this.lc, this.lsL, 2, ul);
+      const lor = runChain(this.lc, this.lsR, 2, ur);
+      const vl = soft(lol, this.la, this.lw) + soft(ul - lol, this.ha, this.hw);
+      const vr = soft(lor, this.la, this.lw) + soft(ur - lor, this.ha, this.hw);
+      this.ol[this.op] = vl;
+      this.ol[this.op + K] = vl;
+      this.or[this.op] = vr;
+      this.or[this.op + K] = vr;
+      this.op = this.op + 1 === K ? 0 : this.op + 1;
+      if (j === 0) {
+        // Rück-Tiefpass nur an den Stellen der Grundrate
+        const d = this.down;
+        const b = this.op;
+        let al = 0;
+        let ar = 0;
+        for (let k = 0; k < K; k++) { al += d[k] * this.ol[b + k]; ar += d[k] * this.or[b + k]; }
+        this.yl = al;
+        this.yr = ar;
+      }
+    }
+  }
+}
+
 export class MasterTone {
   constructor(sampleRate, styleId) {
     this.sr = sampleRate;
     this.eqC = new Float64Array(4 * 5);
     this.eqL = new Float64Array(8);
     this.eqR = new Float64Array(8);
-    this.sideC = new Float64Array(3 * 5);
-    this.sideS = new Float64Array(6);
+    this.sideC = new Float64Array(5 * 5);
+    this.sideS = new Float64Array(10);
+    this.sideN = 3;
+    this.scC = new Float64Array(5);
+    this.scL = new Float64Array(2);
+    this.scR = new Float64Array(2);
+    this.scOn = false;
+    this.clip = null; // Clipper (nur Stile mit `clip`)
     this.ms = 0; // geglättetes Quadrat (Pegeldetektor)
     this.grDb = 0; // aktuelle Pegelabsenkung des Kompressors
     this.setStyle(styleId);
@@ -91,13 +211,22 @@ export class MasterTone {
   setStyle(styleId) {
     const st = styleOf(styleId);
     const sr = this.sr;
-    const eq = [biquad('highpass', 25, sr), biquad('lowshelf', st.eq.low[0], sr, st.eq.low[1]),
+    const eq = [biquad('highpass', st.eq.hp ?? 25, sr), biquad('lowshelf', st.eq.low[0], sr, st.eq.low[1]),
       biquad('peaking', st.eq.mud[0], sr, st.eq.mud[1], st.eq.mud[2]), biquad('highshelf', st.eq.high[0], sr, st.eq.high[1])];
     eq.forEach((c, i) => this.eqC.set(c, i * 5));
-    // Seitensignal: unter 160 Hz weg (24 dB/Oktave), ab 3 kHz etwas breiter
-    const side = [biquad('highpass', 160, sr), biquad('highpass', 160, sr), biquad('highshelf', 3000, sr, st.width)];
+    // Seitensignal: unter 160 Hz weg (24 dB/Oktave), ab 3 kHz etwas breiter. Bass-Mono (st.mono): LR8 – unter
+    // f/1,5 mindestens 30 dB weg, ab 2,5·f flach; die Mitte bleibt unberührt (L = M + S', R = M − S')
+    const side = st.mono
+      ? [0.5411961, 1.3065630, 0.5411961, 1.3065630].map((q) => biquad('highpass', st.mono, sr, 0, q))
+      : [biquad('highpass', 160, sr), biquad('highpass', 160, sr)];
+    side.push(biquad('highshelf', 3000, sr, st.width));
+    this.sideS.fill(0);
+    this.sideN = side.length;
     side.forEach((c, i) => this.sideC.set(c, i * 5));
     const cp = st.comp;
+    this.scOn = !!cp.sc;
+    if (this.scOn) { this.scC.set(biquad('highpass', cp.sc, sr)); this.scL.fill(0); this.scR.fill(0); }
+    this.clip = st.clip ? new Clipper(sr, st.clip) : null;
     this.thr = cp.threshold;
     this.slope = 1 - 1 / cp.ratio;
     this.knee = 6;
@@ -113,15 +242,22 @@ export class MasterTone {
     const thr = this.thr;
     const knee = this.knee;
     const slope = this.slope;
+    const sideN = this.sideN;
+    const scOn = this.scOn;
+    const clip = this.clip;
     for (let i = 0; i < n; i++) {
       const l = runChain(eqC, this.eqL, 4, inL[i] * pre);
       const r = runChain(eqC, this.eqR, 4, inR[i] * pre);
       const m = (l + r) * 0.5;
-      const s = runChain(sideC, this.sideS, 3, (l - r) * 0.5);
+      const s = runChain(sideC, this.sideS, sideN, (l - r) * 0.5);
       const L = m + s;
       const R = m - s;
       // Bus-Kompressor: stereogekoppelt, RMS-Detektor, weiches Knie
-      this.ms += this.det * ((L * L + R * R) * 0.5 - this.ms);
+      if (scOn) {
+        const dl = runChain(this.scC, this.scL, 1, L);
+        const dr = runChain(this.scC, this.scR, 1, R);
+        this.ms += this.det * ((dl * dl + dr * dr) * 0.5 - this.ms);
+      } else this.ms += this.det * ((L * L + R * R) * 0.5 - this.ms);
       const lev = 10 * Math.log10(this.ms + 1e-12);
       const over = lev - thr;
       let want = 0;
@@ -129,8 +265,11 @@ export class MasterTone {
       else if (over > -knee / 2) { const u = over + knee / 2; want = (slope * u * u) / (2 * knee); }
       this.grDb += (want > this.grDb ? this.att : this.rel) * (want - this.grDb);
       const g = Math.pow(10, -this.grDb / 20);
-      outL[i] = L * g;
-      outR[i] = R * g;
+      let yl = L * g;
+      let yr = R * g;
+      if (clip) { clip.step(yl, yr); yl = clip.yl; yr = clip.yr; }
+      outL[i] = yl;
+      outR[i] = yr;
     }
   }
 }
@@ -267,5 +406,6 @@ export class TruePeakLimiter {
   }
 }
 
-// Verzögerung der Kette in Abtastwerten (nur der Limiter hat Vorausschau)
-export const masterLatency = (sampleRate) => Math.max(32, Math.round(0.005 * sampleRate)) + TP_HALF;
+// Verzögerung der Kette in Abtastwerten: Vorausschau des Limiters, bei Stilen mit Clipper dazu dessen Filter
+export const masterLatency = (sampleRate, styleId) => Math.max(32, Math.round(0.005 * sampleRate)) + TP_HALF
+  + (styleOf(styleId).clip ? TP_HALF + OS_Q : 0);

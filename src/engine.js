@@ -224,7 +224,7 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
 }
 
 export function mixLatency(sampleRate, mix) {
-  return mix?.mst ? masterLatency(sampleRate) : 0;
+  return mix?.mst ? masterLatency(sampleRate, mix.mst.style) : 0;
 }
 
 // Mastering-Knoten einsetzen, Stil wechseln (live mit Überblendung), A/B-Pegel setzen
@@ -506,7 +506,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   await library.applyRecipes?.(project);
   // Tonart je Takt und Akkord-Streifen: Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
   await library.ensureKeyVariants?.(project);
-  const lat = !compensate ? 0 : wantMaster ? masterLatency(sampleRate) : limiter ? await limiterLatency(sampleRate) : 0;
+  const lat = !compensate ? 0 : wantMaster ? masterLatency(sampleRate, masteringOf(project).style) : limiter ? await limiterLatency(sampleRate) : 0;
   const ctx = new OfflineAudioContext(analysis ? 4 : 2, frames + lat, sampleRate);
   const worklets = wantMaster || pad ? await loadFxWorklet(ctx) : false;
   let dest = ctx.destination;
@@ -722,7 +722,7 @@ export class Engine extends Emitter {
   playbackDelay() {
     if (!this.ctx || !this.mix) return 0;
     const sr = this.ctx.sampleRate;
-    const frames = this.mix.mst && this.mix.monitor?.ab !== 'A' ? masterLatency(sr) : (this.limiterFrames ?? 0);
+    const frames = this.mix.mst && this.mix.monitor?.ab !== 'A' ? masterLatency(sr, this.mix.mst.style) : (this.limiterFrames ?? 0);
     return frames / sr;
   }
 
