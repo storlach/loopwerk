@@ -63,8 +63,8 @@ class LimiterProcessor extends AudioWorkletProcessor {
 // nur den langsamen Pegel an; die Verdichtung innerhalb eines Schlags bleibt.
 // Gegen Pegelstöße: Setzt der verzerrte Weg später ein als der Bezug (Einblenden beim Aufbau der Kette, Einsatz nach
 // Stille), sähe der langsame Vergleich kurz „viel zu leise“ und würde hochdrehen. Darum: gemessen wird nur, wenn auf beiden
-// Seiten Signal anliegt (sonst bleibt der letzte Ausgleich stehen), aufwärts geht es gemächlich, abwärts sofort, und ein
-// schneller Vergleich (5 ms) deckelt den Ausgleich auf höchstens das Doppelte dessen, was gerade anliegt.
+// Seiten Signal anliegt (sonst bleibt der letzte Ausgleich stehen), und ein schneller Vergleich (5 ms) deckelt den Ausgleich
+// auf höchstens das Doppelte dessen, was gerade anliegt. Keine Schieflage auf/ab: die zöge den Pegel bei Schlagzeug herunter.
 const MATCH_EPS = 1e-10; // ≈ −100 dBFS
 const MATCH_FLOOR = 1e-8; // ≈ −80 dBFS (Leistung): darunter wird nicht gemessen
 const MATCH_MAX = 4;
@@ -75,7 +75,6 @@ class MatchProcessor extends AudioWorkletProcessor {
     super();
     const tau = options?.processorOptions?.tau ?? 0.2;
     this.a = 1 - Math.exp(-1 / (tau * sampleRate));
-    this.up = 1 - Math.exp(-1 / (0.15 * sampleRate)); // Ausgleich nach oben
     this.af = 1 - Math.exp(-1 / (0.005 * sampleRate)); // schneller Vergleich
     this.g = 1;
     this.prime = Math.round(MATCH_PRIME * sampleRate);
@@ -117,7 +116,6 @@ class MatchProcessor extends AudioWorkletProcessor {
     const m = this.m;
     const f = this.f;
     const af = this.af;
-    const up = this.up;
     for (let i = 0; i < n; i++) {
       const a0 = this.k(0, rl[i]);
       const a1 = this.k(1, rr[i]);
@@ -131,19 +129,24 @@ class MatchProcessor extends AudioWorkletProcessor {
       m[3] += a * (m[2] - m[3]);
       f[0] += af * (pr - f[0]);
       f[1] += af * (ps - f[1]);
-      if (m[1] > MATCH_FLOOR && m[3] > MATCH_FLOOR) {
-        let t = Math.sqrt(m[1] / m[3]);
-        if (t > MATCH_MAX) t = MATCH_MAX;
-        this.g = t < this.g ? t : this.g + (t - this.g) * up;
-      }
-      let g = this.g;
-      let cap;
+      // langsamer Vergleich (gilt nur mit Signal auf beiden Seiten, sonst bleibt der letzte Wert stehen)
+      let t = this.g;
+      if (m[1] > MATCH_FLOOR && m[3] > MATCH_FLOOR) { t = Math.sqrt(m[1] / m[3]); if (t > MATCH_MAX) t = MATCH_MAX; }
+      const fast = Math.sqrt((f[0] + MATCH_EPS) / (f[1] + MATCH_EPS));
+      let g;
       if (this.prime > 0) {
-        // allererster Einsatz: gegen die Augenblicksleistung deckeln – der geglättete Wert hinkt dem Einsatz 5 ms hinterher
-        cap = Math.sqrt((f[0] + MATCH_EPS) / ((ps > f[1] ? ps : f[1]) + MATCH_EPS));
-        if (f[1] > MATCH_FLOOR) { this.prime--; const c = Math.sqrt((f[0] + MATCH_EPS) / (f[1] + MATCH_EPS)); if (c < this.g) this.g = c; }
-      } else cap = MATCH_HEAD * Math.sqrt((f[0] + MATCH_EPS) / (f[1] + MATCH_EPS));
-      if (g > cap) g = cap;
+        // allererster Einsatz: nie über dem schnellen Vergleich, und gegen die Augenblicksleistung gedeckelt
+        // (der geglättete Wert hinkt dem Einsatz 5 ms hinterher)
+        if (f[1] > MATCH_FLOOR) this.prime--;
+        g = t < fast ? t : fast;
+        this.g = g;
+        const inst = Math.sqrt((f[0] + MATCH_EPS) / ((ps > f[1] ? ps : f[1]) + MATCH_EPS));
+        if (g > inst) g = inst;
+      } else {
+        this.g = t;
+        g = t;
+        if (g > MATCH_HEAD * fast) g = MATCH_HEAD * fast;
+      }
       ol[i] = sl[i] * g;
       or[i] = sr[i] * g;
     }

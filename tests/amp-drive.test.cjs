@@ -56,7 +56,10 @@ const { check, finish } = createChecker();
         const loud = await render(proj(fxWith({ type, drive: 0.4, tone: 0.75 }), 'amp-loud'));
         // Einsatz: kein Pegelstoß in den ersten 50 ms gegenüber dem eingeschwungenen Pegel (gemessener Ausgleich schwang über)
         const top = (x, a, z) => { let p = 0; for (let i = Math.round(a * 44100); i < Math.round(z * 44100) && i < x.length; i++) p = Math.max(p, Math.abs(x[i])); return p; };
-        (out.onset ||= {})[type] = Math.max(top(d, 0, 0.05) / top(d, 0.3, 2), top(loud, 0, 0.05) / top(loud, 0.3, 2));
+        // bezogen auf das trockene Signal, das selbst einen Anschlag haben kann
+        const rise = (x) => top(x, 0, 0.05) / top(x, 0.3, 2);
+        (out.onset ||= {})[type] = Math.max(rise(d) / rise(dry), rise(loud) / rise(dryLoud));
+        (out.onsetDry ||= {})[type] = [rise(dry), rise(dryLoud)];
         out.amp[type] = { h3: harm(d) - harm(dry), h2: even(d) - even(dry), level: db(rms(loud, 4410, 44100) / rms(dryLoud, 4410, 44100)), fizz: fizz(d), peak: Math.max(peak(d), peak(loud)), finite: d.every(Number.isFinite) && loud.every(Number.isFinite) };
       }
       const mix0 = await render(proj(fxWith({ type: 'amp-metal', drive: 1, mix: 0 })));
@@ -76,7 +79,8 @@ const { check, finish } = createChecker();
       return out;
     });
     const fmt = (o) => JSON.stringify(o, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v));
-    check('Verzerrer: kein Pegelstoß beim Einsatz (erste 50 ms höchstens 1,5-fach des eingeschwungenen Pegels)', Object.values(m.onset).every((v) => v <= 1.5), JSON.stringify(m.onset, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v)));
+    // Grenze 2 = Auslegung des Ausgleichs (MATCH_HEAD in src/dsp/fx-worklet.js: höchstens das Doppelte); vor der Korrektur 12- bis 23-fach
+    check('Verzerrer: kein Pegelstoß beim Einsatz (erste 50 ms höchstens das Doppelte des eingeschwungenen Pegels, bezogen auf das trockene Signal)', Object.values(m.onset).every((v) => v <= 2), JSON.stringify({ onset: m.onset, trocken: m.onsetDry['hard'] }, (k, v) => (typeof v === 'number' ? +v.toFixed(2) : v)));
     for (const t of ['amp-crunch', 'amp-lead', 'amp-metal']) {
       const d = m.amp[t];
       check(`Verzerrer „${t}“: kräftige Obertöne, gerade und ungerade (Röhre)`, d.h3 > 20 && d.h2 > 10 && d.finite, fmt(d));
