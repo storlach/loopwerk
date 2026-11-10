@@ -66,3 +66,4 @@ takes-loop
 bounce
 club-master
 druck
+klangfarbe

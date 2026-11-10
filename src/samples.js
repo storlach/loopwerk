@@ -63,6 +63,93 @@ function noiseFor(ctx) {
   return noise;
 }
 
+// Zweiter Rauschkanal für Stereo-Rauschen (Hats, Becken, FX): links wie noiseFor, rechts eigener Seed
+const noise2Cache = new Map();
+function noise2For(ctx) {
+  let buf = noise2Cache.get(ctx.sampleRate);
+  if (!buf) {
+    const mono = noiseFor(ctx);
+    const rand = mulberry32(5678);
+    buf = new AudioBuffer({ numberOfChannels: 2, length: mono.length, sampleRate: ctx.sampleRate });
+    buf.copyToChannel(mono.getChannelData(0), 0);
+    const r = buf.getChannelData(1);
+    for (let i = 0; i < r.length; i++) r[i] = rand() * 2 - 1;
+    noise2Cache.set(ctx.sampleRate, buf);
+  }
+  return buf;
+}
+
+// Sub mit Obertönen (kleine Lautsprecher): Grundton unverändert (Amplitude 1, ohne Normalisierung), darüber 2.–7.
+// Oberton mit fallender Stärke; die Phasen sind so gewählt, dass die Spitze kaum steigt (1,12 statt 1). Bei 55 Hz
+// bleibt nach einem Hochpass bei 150 Hz rund 6 LU weniger statt 30 LU (reiner Sinus). harm skaliert die Obertöne.
+const SUB_PARTIALS = [[2, 0.25, 6.24], [3, 0.3, 5.52], [4, 0.25, 1.04], [5, 0.18, 5.3], [6, 0.12, 2.24], [7, 0.08, 5.93]];
+const subWaves = new WeakMap();
+function subWave(ctx, harm, fundamental = 1) {
+  let m = subWaves.get(ctx);
+  if (!m) { m = new Map(); subWaves.set(ctx, m); }
+  const key = `${harm}|${fundamental}`;
+  let w = m.get(key);
+  if (!w) {
+    const real = new Float32Array(8);
+    const imag = new Float32Array(8);
+    imag[1] = fundamental;
+    for (const [n, a, ph] of SUB_PARTIALS) { real[n] = harm * a * Math.sin(ph); imag[n] = harm * a * Math.cos(ph); }
+    w = ctx.createPeriodicWave(real, imag, { disableNormalization: true });
+    m.set(key, w);
+  }
+  return w;
+}
+
+// Breite für Einzeltöne: rechts ein Gegenstück des Oszillators mit denselben Obertonstärken, jeder Oberton um +90°
+// oder −90° gedreht. So bleibt die Mono-Summe für jeden Oberton gleich stark (kein Kammfilter wie bei einer
+// Verzögerung), links und rechts sind unkorreliert. Die Vorzeichen sind so gesucht, dass die Spitze des Gegenstücks
+// nicht über der des Originals liegt (eine reine Kosinus-Reihe hätte beim Rechteck Spitzen von 3,7 statt 1,2).
+const QUAD_LOW = 50; // D3, rund 147 Hz: darunter bleibt alles mittig
+// Chromium skaliert die eingebauten Wellen auf ihre Spitze; gemessen (Effektivwert) Faktor 0,845 zur idealen Welle
+const QUAD_SCALE = 0.845;
+const QUAD_SIGNS = {
+  square: [1, -1, -1, -1, 1, 1, -1, 1, 1, -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, -1, 1, -1, -1, 1, 1, 1, -1, 1, -1, -1, -1, 1, 1,
+    1, -1, 1, 1, -1, -1],
+  sawtooth: [1, 1, -1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, -1, -1, -1, 1, 1, 1, -1, -1, 1, -1, 1, -1, -1, 1, 1, -1, -1, 1,
+    -1, 1, -1, -1, 1, 1],
+  organ: [1, -1, -1, 1, -1, -1],
+  keysBright: [1, 1, -1, -1, 1, 1, 1, -1, -1, 1],
+  keysWarm: [1, -1, -1],
+  pipe: [1, -1, -1],
+};
+// Spitze einer Sinusreihe (wie die Normierung der PeriodicWave)
+function seriesPeak(amps) {
+  let p = 0;
+  for (let i = 0; i < 2048; i++) {
+    const x = (2 * Math.PI * i) / 2048;
+    let y = 0;
+    for (let n = 1; n < amps.length; n++) y += amps[n] * Math.sin(n * x);
+    p = Math.max(p, Math.abs(y));
+  }
+  return p;
+}
+const quadWaves = new WeakMap();
+// type: 'sine' | 'square' | 'sawtooth' | Name aus WAVES (eigene Welle, von Chromium auf die Spitze normiert)
+function quadWave(ctx, type) {
+  let m = quadWaves.get(ctx);
+  if (!m) { m = new Map(); quadWaves.set(ctx, m); }
+  let w = m.get(type);
+  if (!w) {
+    let amps;
+    let scale = QUAD_SCALE;
+    if (type === 'sine') { amps = [0, 1]; scale = 1; }
+    else if (type === 'square') amps = [0, ...QUAD_SIGNS.square.map((_, i) => ((i + 1) % 2 ? 4 / (Math.PI * (i + 1)) : 0))];
+    else if (type === 'sawtooth') amps = [0, ...QUAD_SIGNS.sawtooth.map((_, i) => ((i + 1) % 2 ? 1 : -1) * 2 / (Math.PI * (i + 1)))];
+    else { amps = WAVES[type]; scale = 1 / seriesPeak(amps); }
+    const signs = QUAD_SIGNS[type] ?? [1];
+    const real = new Float32Array(amps.length);
+    for (let n = 1; n < amps.length; n++) real[n] = (signs[n - 1] ?? 1) * amps[n] * scale;
+    w = ctx.createPeriodicWave(real, new Float32Array(amps.length), { disableNormalization: true });
+    m.set(type, w);
+  }
+  return w;
+}
+
 // Plattenknistern: seltene, kurze Knackser (fester Seed). AudioBuffer gehören keinem Kontext:
 // einmal je Abtastrate erzeugen und in allen Renderings nutzen.
 const crackleCache = new Map();
@@ -312,10 +399,10 @@ export function createKit(ctx, out, spb, semis = 0) {
     w.oversample = '2x';
     return w;
   };
-  const metal = (t, dur, level, hp, bp) => {
+  const metal = (t, dur, level, hp, bp, dest = out) => {
     const mix = ctx.createGain();
     mix.gain.value = 1 / METAL.length;
-    mix.connect(biquad('bandpass', bp, 0.8)).connect(biquad('highpass', hp)).connect(decayGain(t, level, dur));
+    mix.connect(biquad('bandpass', bp, 0.8)).connect(biquad('highpass', hp)).connect(decayTo(dest, t, level, dur));
     for (const f of METAL) {
       const o = osc('square', f);
       o.connect(mix);
@@ -326,6 +413,7 @@ export function createKit(ctx, out, spb, semis = 0) {
   // Hüllkurven wie decayGain/holdGain, aber auf ein beliebiges Ziel (Panner, Filter)
   const decayTo = (dest, t, peak, decay, attack = 0.001) => {
     const g = ctx.createGain();
+    g.gain.value = 0; // vor t still
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(peak, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
@@ -334,6 +422,7 @@ export function createKit(ctx, out, spb, semis = 0) {
   };
   const holdTo = (dest, t, dur, level, attack, release) => {
     const g = ctx.createGain();
+    g.gain.value = 0; // vor t still
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(level, t + attack);
     g.gain.setValueAtTime(level, Math.max(t + attack, t + dur - release * 0.5));
@@ -350,30 +439,124 @@ export function createKit(ctx, out, spb, semis = 0) {
   };
   const notesOf = (m) => (Array.isArray(m) ? m : [m]);
 
+  // ---------- Breite (Klangfarbe 2026-11) ----------
+  // splitTo(c): Eingang mit zwei getrennten Hälften (links/rechts verschiedene, unkorrelierte Quellen: verstimmt,
+  // Gegenstück, eigenes Rauschen); jede Seite bekommt den Anteil c der anderen: L' = k(L + c·R), k = √2·gain/√(1 + c²).
+  // So bleibt jeder Kanal so laut wie früher mittig (die Spitze und damit das Einpegeln der Loops ändern sich kaum),
+  // die Mono-Summe verliert 10·log((1 + c)²/(2(1 + c²))): c = 0,45 → −0,6 dB, c = 0,6 → −0,26 dB. c = 1 wäre mono.
+  // gain = 1: beide Hälften klangen früher in beiden Kanälen (z. B. zwei verstimmte Sägen); gain = NOISE (√½): eine
+  // Quelle wurde zu zweien (Gegenstück, Stereo-Rauschen). Ein Knoten je c, gain und Kit.
+  const splits = new Map();
+  const NOISE = Math.SQRT1_2;
+  // Pegel für eine mittige Quelle, die in beide Hälften von splitTo(c, gain) geht: klingt dann so laut wie direkt
+  const midOf = (c, gain = 1) => Math.sqrt(1 + c * c) / (Math.SQRT2 * gain * (1 + c));
+  const splitTo = (c, gain = 1) => {
+    const key = `${c}|${gain}`;
+    let n = splits.get(key);
+    if (!n) {
+      n = ctx.createChannelSplitter(2);
+      const m = ctx.createChannelMerger(2);
+      const k = (Math.SQRT2 * gain) / Math.sqrt(1 + c * c);
+      for (const [from, to, g] of [[0, 0, k], [0, 1, c * k], [1, 1, k], [1, 0, c * k]]) {
+        const x = ctx.createGain();
+        x.gain.value = g;
+        n.connect(x, from);
+        x.connect(m, 0, to);
+      }
+      m.connect(out);
+      splits.set(key, n);
+    }
+    return n;
+  };
+  // Zwei Quellen als Paar: a nach links, b nach rechts → Knoten (2 Kanäle) für Filter/Hüllkurve, danach splitTo
+  const pairOf = (a, b) => {
+    const m = ctx.createChannelMerger(2);
+    a.connect(m, 0, 0);
+    b.connect(m, 0, 1);
+    return m;
+  };
+  // Panorama mit linearem Gesetz (L = 1 − p, R = 1 + p): Mono-Summe unverändert. Ein Knoten je Stellung und Kit.
+  const lins = new Map();
+  const linPan = (p) => {
+    p = Math.round(Math.max(-0.6, Math.min(0.6, p)) * 20) / 20;
+    if (!p) return out;
+    let n = lins.get(p);
+    if (!n) {
+      n = ctx.createGain();
+      n.channelCount = 1;
+      n.channelCountMode = 'explicit';
+      const m = ctx.createChannelMerger(2);
+      for (const [to, g] of [[0, 1 - p], [1, 1 + p]]) {
+        const x = ctx.createGain();
+        x.gain.value = g;
+        n.connect(x).connect(m, 0, to);
+      }
+      m.connect(out);
+      lins.set(p, n);
+    }
+    return n;
+  };
+  // Gegenstück eines Oszillators für die rechte Seite (quadWave). Links das Original, rechts das Gegenstück, danach
+  // splitTo(c, NOISE): Klangfarbe und Lautheit (auch mono) bleiben, das Bild wird breit. Erst ab QUAD_LOW.
+  const quad = (type, freq, wave = type) => {
+    const o = osc('sine', freq);
+    o.setPeriodicWave(quadWave(ctx, wave));
+    return o;
+  };
+  // Oszillator, wenn wide mit Gegenstück rechts: → { node (zum Verbinden), list (zum Starten) }; wave = Name aus WAVES
+  const oscPair = (type, f, wide, wave = null) => {
+    const a = osc(type, f);
+    if (wave) a.setPeriodicWave(waveFor(ctx, wave));
+    if (!wide) return { node: a, list: [a] };
+    const b = quad(type, f, wave ?? type);
+    return { node: pairOf(a, b), list: [a, b] };
+  };
+  // Rauschen in Stereo: links dasselbe wie noiseFor, rechts unabhängig
+  const noiseSource2 = (t, dur) => {
+    const s = ctx.createBufferSource();
+    s.buffer = noise2For(ctx);
+    s.loop = true;
+    s.start(t, (t * 0.731) % 1);
+    s.stop(t + dur);
+    return s;
+  };
+
   const kit = {
+    // Elektro-Kick: schneller Abwärtsschlag, dann trägt ein Körper auf 46 Hz (Sub), leicht gesättigt (hörbar auch auf
+    // kleinen Lautsprechern); mono
     kick(beat, vel = 1) {
       const t = T(beat);
       const o = osc('sine', 165);
       o.frequency.setValueAtTime(165, t);
-      o.frequency.exponentialRampToValueAtTime(46, t + 0.12);
-      o.connect(decayGain(t, vel, 0.42));
+      o.frequency.exponentialRampToValueAtTime(78, t + 0.028);
+      o.frequency.exponentialRampToValueAtTime(48, t + 0.12);
+      o.frequency.exponentialRampToValueAtTime(45, t + 0.45);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vel, t + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.3 * vel, t + 0.085);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      g.connect(out);
+      o.connect(shaper(1.6)).connect(g);
       o.start(t);
       o.stop(t + 0.5);
     },
+    // Snare: Fell um 190 Hz (Körper, mono), Knall um 2,4 kHz, heller Teppich leicht breit
     snare(beat, vel = 1) {
       const t = T(beat);
-      noiseSource(t, 0.3).connect(biquad('highpass', 1100)).connect(decayGain(t, 0.8 * vel, 0.18));
-      const o = osc('triangle', 220);
-      o.frequency.setValueAtTime(220, t);
-      o.frequency.exponentialRampToValueAtTime(160, t + 0.08);
-      o.connect(decayGain(t, 0.6 * vel, 0.09));
+      const o = osc('triangle', 320);
+      o.frequency.setValueAtTime(320, t);
+      o.frequency.exponentialRampToValueAtTime(190, t + 0.03);
+      o.connect(decayGain(t, 0.8 * vel, 0.14));
       o.start(t);
       o.stop(t + 0.2);
+      noiseSource(t, 0.12).connect(biquad('bandpass', 2400, 0.8)).connect(decayGain(t, 0.75 * vel, 0.07));
+      noiseSource2(t, 0.3).connect(biquad('highpass', 3500)).connect(decayTo(splitTo(0.6, NOISE), t, 0.6 * vel, 0.2));
     },
     clap(beat, vel = 1) {
       const t = T(beat);
       const g = ctx.createGain();
-      g.connect(out);
+      g.connect(splitTo(0.5, NOISE));
       g.gain.setValueAtTime(0, t);
       for (const d of [0, 0.011, 0.022]) {
         g.gain.setValueAtTime(0.9 * vel, t + d);
@@ -381,13 +564,14 @@ export function createKit(ctx, out, spb, semis = 0) {
       }
       g.gain.setValueAtTime(0.7 * vel, t + 0.033);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
-      noiseSource(t, 0.3).connect(biquad('bandpass', 1500, 1.4)).connect(g);
+      noiseSource2(t, 0.3).connect(biquad('bandpass', 1500, 1.4)).connect(g);
     },
+    // Hi-Hat: Rauschen links und rechts verschieden (breit), Schwerpunkt um 8–10 kHz
     hat(beat, vel = 1, open = false) {
       const t = T(beat);
-      noiseSource(t, open ? 0.45 : 0.08)
-        .connect(biquad('highpass', 7600))
-        .connect(decayGain(t, 0.45 * vel, open ? 0.32 : 0.045));
+      noiseSource2(t, open ? 0.45 : 0.08)
+        .connect(biquad('bandpass', 8500, 0.55))
+        .connect(decayTo(splitTo(0.45, NOISE), t, 0.78 * vel, open ? 0.32 : 0.05));
     },
     bass(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
@@ -401,10 +585,12 @@ export function createKit(ctx, out, spb, semis = 0) {
       o.start(t);
       o.stop(t + d + 0.05);
     },
-    sub(beat, midi, lenBeats) {
+    // harm: Stärke der Obertöne über dem Sub (kleine Lautsprecher), 0 = reiner Sinus
+    sub(beat, midi, lenBeats, { harm = 0 } = {}) {
       const t = T(beat);
       const d = T(lenBeats);
       const o = osc('sine', tf(midi));
+      if (harm) o.setPeriodicWave(subWave(ctx, harm));
       o.connect(holdGain(t, d, 0.9, 0.01, 0.08));
       o.start(t);
       o.stop(t + d + 0.1);
@@ -412,13 +598,16 @@ export function createKit(ctx, out, spb, semis = 0) {
     pad(beat, midis, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
-      const lp = biquad('lowpass', 1400, 0.8);
-      lp.connect(holdGain(t, d, 0.3 * vel, 0.35, 0.6));
+      // Verstimmte Hälften links und rechts (breit); offener als früher (1,4 kHz), dazu etwas Luft
+      const lp = biquad('lowpass', 2600, 0.7);
+      lp.connect(holdTo(splitTo(0.4), t, d, 0.3 * vel, 0.35, 0.6));
+      const pair = ctx.createChannelMerger(2);
+      pair.connect(lp);
       for (const m of midis) {
-        for (const det of [-9, 9]) {
+        for (const [det, side] of [[-9, 0], [9, 1]]) {
           const o = osc('sawtooth', tf(m));
           o.detune.value = det;
-          o.connect(lp);
+          o.connect(pair, 0, side);
           o.start(t);
           o.stop(t + d + 0.5);
         }
@@ -430,9 +619,10 @@ export function createKit(ctx, out, spb, semis = 0) {
       const lp = biquad('lowpass', 4200, 3);
       lp.frequency.setValueAtTime(4200, t);
       lp.frequency.exponentialRampToValueAtTime(500, t + decay);
-      o.connect(lp).connect(decayGain(t, 0.35 * vel, decay + 0.1));
-      o.start(t);
-      o.stop(t + decay + 0.15);
+      const wide = midi + semis >= QUAD_LOW;
+      const q = wide ? quad('square', tf(midi)) : null;
+      (q ? pairOf(o, q) : o).connect(lp).connect(decayTo(q ? splitTo(0.55, NOISE) : out, t, 0.35 * vel, decay + 0.1));
+      for (const x of q ? [o, q] : [o]) { x.start(t); x.stop(t + decay + 0.15); }
     },
     stab(beat, midis, vel = 1) {
       for (const m of midis) kit.pluck(beat, m, vel * 0.7, 0.16);
@@ -450,11 +640,11 @@ export function createKit(ctx, out, spb, semis = 0) {
       lfo.connect(depth);
       depth.connect(o1.detune);
       depth.connect(o2.detune);
+      // Säge links, Rechteck rechts (je zur Hälfte auch auf der Gegenseite): breit
       const mix = ctx.createGain();
       mix.gain.value = 0.5;
-      o1.connect(mix);
-      o2.connect(mix);
-      mix.connect(biquad('lowpass', 2600, 2)).connect(holdGain(t, d, 0.45 * vel, 0.012, 0.1));
+      pairOf(o1, o2).connect(mix);
+      mix.connect(biquad('lowpass', 2600, 2)).connect(holdTo(splitTo(0.5), t, d, 0.45 * vel, 0.012, 0.1));
       for (const o of [o1, o2, lfo]) { o.start(t); o.stop(t + d + 0.1); }
     },
     riser(beat, lenBeats) {
@@ -464,11 +654,11 @@ export function createKit(ctx, out, spb, semis = 0) {
       bp.frequency.setValueAtTime(300, t);
       bp.frequency.exponentialRampToValueAtTime(8000, t + d);
       const g = ctx.createGain();
-      g.connect(out);
+      g.connect(splitTo(0.5, NOISE));
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(0.9, t + d - 0.02);
       g.gain.linearRampToValueAtTime(0, t + d);
-      noiseSource(t, d).connect(bp).connect(g);
+      noiseSource2(t, d).connect(bp).connect(g);
       const o = osc('sawtooth', 110);
       o.frequency.setValueAtTime(110, t);
       o.frequency.exponentialRampToValueAtTime(880, t + d);
@@ -492,7 +682,7 @@ export function createKit(ctx, out, spb, semis = 0) {
     },
     crash(beat, vel = 1) {
       const t = T(beat);
-      noiseSource(t, 2).connect(biquad('highpass', 3800)).connect(decayGain(t, 0.5 * vel, 1.9));
+      noiseSource2(t, 2).connect(biquad('highpass', 3800)).connect(decayTo(splitTo(0.4, NOISE), t, 0.5 * vel, 1.9));
     },
     // ---------- Instrumente für Melodien (Piano-Roll, Einsingen) ----------
     // E-Piano per FM: Modulator im Verhältnis 1:1, dessen Anteil schnell abnimmt (heller Anschlag, weicher Ausklang)
@@ -501,30 +691,45 @@ export function createKit(ctx, out, spb, semis = 0) {
       const d = Math.max(T(lenBeats), 0.25);
       const f = tf(midi);
       const car = osc('sine', f);
+      const car2 = quad('sine', f);
       const mod = osc('sine', f);
       const idx = ctx.createGain();
       idx.gain.setValueAtTime(f * 2.2 * vel, t);
       idx.gain.exponentialRampToValueAtTime(f * 0.15, t + 0.7);
-      mod.connect(idx).connect(car.frequency);
+      mod.connect(idx);
+      idx.connect(car.frequency);
+      idx.connect(car2.frequency);
       const g = ctx.createGain();
+      g.gain.value = 0;
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.4 * vel, t + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.12 * vel, t + 0.6);
-      g.gain.setValueAtTime(0.12 * vel, t + d);
+      // Abklingen auf 30 % bis 0,6 s; endet die Note früher, endet die Rampe beim Wert, den sie dort hat (früher sprang
+      // sie dort von vollem Anschlag auf 30 %: Knacken, 10 dB). Etwas lauter als früher, weil kurze Noten nicht mehr
+      // auf vollem Pegel stehen bleiben.
+      const a0 = 0.5 * vel;
+      g.gain.linearRampToValueAtTime(a0, t + 0.004);
+      if (d < 0.6) g.gain.exponentialRampToValueAtTime(a0 * 0.3 ** ((d - 0.004) / 0.596), t + d);
+      else {
+        g.gain.exponentialRampToValueAtTime(0.3 * a0, t + 0.6);
+        g.gain.setValueAtTime(0.3 * a0, t + d);
+      }
       g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.35);
-      g.connect(out);
-      car.connect(g);
-      for (const o of [car, mod]) { o.start(t); o.stop(t + d + 0.4); }
+      g.connect(splitTo(0.45, NOISE));
+      pairOf(car, car2).connect(g);
+      for (const o of [car, car2, mod]) { o.start(t); o.stop(t + d + 0.4); }
     },
     organ(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
-      const g = holdGain(t, d, 0.22 * vel, 0.006, 0.06);
-      for (const [h, a] of [[1, 1], [2, 0.7], [3, 0.45], [4, 0.3], [6, 0.18]]) {
+      // Teiltöne abwechselnd links/rechts (Grundton mittig), wie ein Leslie im Stand
+      const g = holdTo(splitTo(0.45), t, d, 0.22 * vel, 0.006, 0.06);
+      const pair = ctx.createChannelMerger(2);
+      pair.connect(g);
+      for (const [h, a, sides] of [[1, 1, [0, 1]], [2, 0.7, [0]], [3, 0.45, [1]], [4, 0.3, [0]], [6, 0.18, [1]]]) {
         const o = osc('sine', tf(midi) * h);
         const og = ctx.createGain();
-        og.gain.value = a / 2.6;
-        o.connect(og).connect(g);
+        og.gain.value = (a / 2.6) * (sides.length > 1 ? midOf(0.45) : 1);
+        o.connect(og);
+        for (const side of sides) og.connect(pair, 0, side);
         o.start(t);
         o.stop(t + d + 0.1);
       }
@@ -533,46 +738,61 @@ export function createKit(ctx, out, spb, semis = 0) {
       const t = T(beat);
       const d = T(lenBeats);
       const f = tf(midi);
-      const g = holdGain(t, d, 0.35 * vel, 0.06, 0.08);
+      // Ton links, Gegenstück rechts (breit); Atem mittig
+      const g = holdTo(splitTo(0.5, NOISE), t, d, 0.35 * vel, 0.06, 0.08);
       const o = osc('sine', f);
+      const oq = quad('sine', f);
       const o2 = osc('sine', f * 2);
-      const g2 = ctx.createGain();
-      g2.gain.value = 0.12;
+      const o2q = quad('sine', f * 2);
       const vib = osc('sine', 5);
       const depth = ctx.createGain();
       depth.gain.setValueAtTime(0, t);
       depth.gain.linearRampToValueAtTime(12, t + Math.min(d, 0.5));
       vib.connect(depth);
-      depth.connect(o.detune);
-      depth.connect(o2.detune);
-      o.connect(g);
-      o2.connect(g2).connect(g);
+      for (const x of [o, oq, o2, o2q]) depth.connect(x.detune);
+      const pair = ctx.createChannelMerger(2);
+      pair.connect(g);
+      o.connect(pair, 0, 0);
+      oq.connect(pair, 0, 1);
+      for (const [x, side] of [[o2, 0], [o2q, 1]]) {
+        const g2 = ctx.createGain();
+        g2.gain.value = 0.12;
+        x.connect(g2).connect(pair, 0, side);
+      }
       const breath = ctx.createGain();
-      breath.gain.value = 0.06;
+      breath.gain.value = 0.06 * midOf(0.5, NOISE);
       noiseSource(t, d + 0.1).connect(biquad('bandpass', f * 2, 2)).connect(breath).connect(g);
-      for (const x of [o, o2, vib]) { x.start(t); x.stop(t + d + 0.1); }
+      for (const x of [o, oq, o2, o2q, vib]) { x.start(t); x.stop(t + d + 0.1); }
     },
     bell(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const f = tf(midi);
       const car = osc('sine', f);
+      const car2 = quad('sine', f);
       const mod = osc('sine', f * 3.5);
       const idx = ctx.createGain();
       idx.gain.setValueAtTime(f * 3 * vel, t);
       idx.gain.exponentialRampToValueAtTime(f * 0.05, t + 1.5);
-      mod.connect(idx).connect(car.frequency);
-      car.connect(decayGain(t, 0.32 * vel, 1.8, 0.002));
-      for (const o of [car, mod]) { o.start(t); o.stop(t + 1.9); }
+      mod.connect(idx);
+      idx.connect(car.frequency);
+      idx.connect(car2.frequency);
+      pairOf(car, car2).connect(decayTo(splitTo(0.4, NOISE), t, 0.32 * vel, 1.8, 0.002));
+      for (const o of [car, car2, mod]) { o.start(t); o.stop(t + 1.9); }
     },
     strings(beat, midi, lenBeats, vel = 1) {
       const t = T(beat);
       const d = T(lenBeats);
-      const lp = biquad('lowpass', 2400, 0.7);
-      lp.connect(holdGain(t, d, 0.2 * vel, 0.18, 0.45));
-      for (const det of [-12, 0, 11]) {
+      // drei Stimmen: tief verstimmt links, mittig, hoch verstimmt rechts
+      const lp = biquad('lowpass', 2800, 0.7);
+      lp.connect(holdTo(splitTo(0.4), t, d, 0.2 * vel, 0.18, 0.45));
+      const pair = ctx.createChannelMerger(2);
+      pair.connect(lp);
+      for (const [det, sides] of [[-12, [0]], [0, [0, 1]], [11, [1]]]) {
         const o = osc('sawtooth', tf(midi));
         o.detune.value = det;
-        o.connect(lp);
+        let src = o;
+        if (sides.length > 1) { src = ctx.createGain(); src.gain.value = midOf(0.4); o.connect(src); }
+        for (const side of sides) src.connect(pair, 0, side);
         o.start(t);
         o.stop(t + d + 0.5);
       }
@@ -585,9 +805,9 @@ export function createKit(ctx, out, spb, semis = 0) {
       lp.frequency.setValueAtTime(500, t);
       lp.frequency.linearRampToValueAtTime(2800 * vel, t + 0.07);
       lp.frequency.exponentialRampToValueAtTime(1500, t + 0.3);
-      o.connect(lp).connect(holdGain(t, d, 0.3 * vel, 0.035, 0.08));
-      o.start(t);
-      o.stop(t + d + 0.1);
+      const q = midi + semis >= QUAD_LOW ? quad('sawtooth', tf(midi)) : null;
+      (q ? pairOf(o, q) : o).connect(lp).connect(holdTo(q ? splitTo(0.5, NOISE) : out, t, d, 0.3 * vel, 0.035, 0.08));
+      for (const x of q ? [o, q] : [o]) { x.start(t); x.stop(t + d + 0.1); }
     },
 
     // ---------- Techno (909-artig, Industrial) ----------
@@ -604,22 +824,26 @@ export function createKit(ctx, out, spb, semis = 0) {
     },
     hat909(beat, vel = 1, open = false) {
       const t = T(beat);
-      metal(t, open ? 0.32 : 0.05, 1.4 * vel, 7000, 10000);
-      noiseSource(t, open ? 0.4 : 0.06).connect(biquad('highpass', 8000)).connect(decayGain(t, 0.2 * vel, open ? 0.28 : 0.035));
+      // etwas lauter und länger als früher, Metall leicht rechts, Rauschen breit (im Kit „Techno“ zusätzlich lauter,
+      // siehe SYNTH_DRUMS in instruments.js)
+      metal(t, open ? 0.32 : 0.06, 1.6 * vel, 7000, 10000, linPan(0.15));
+      noiseSource2(t, open ? 0.4 : 0.07).connect(biquad('bandpass', 9000, 0.7)).connect(decayTo(splitTo(0.45, NOISE), t, 0.5 * vel, open ? 0.28 : 0.04));
     },
     ride(beat, vel = 1) {
       const t = T(beat);
       metal(t, 1.1, 0.9 * vel, 4500, 6500);
-      noiseSource(t, 1).connect(biquad('bandpass', 9000, 1.5)).connect(decayGain(t, 0.12 * vel, 0.9));
+      noiseSource2(t, 1).connect(biquad('bandpass', 9000, 1.5)).connect(decayTo(splitTo(0.45, NOISE), t, 0.12 * vel, 0.9));
     },
+    // Rim: zwei Holz-Moden und ein kurzer Klick; länger als früher (18 ms), in den Kits zusätzlich lauter
     rim(beat, vel = 1) {
       const t = T(beat);
       for (const [f, l] of [[1700, 0.45], [820, 0.35]]) {
         const o = osc('triangle', f);
-        o.connect(biquad('bandpass', f, 2)).connect(decayGain(t, l * vel, 0.03));
+        o.connect(biquad('bandpass', f, 2)).connect(decayGain(t, l * vel, 0.06));
         o.start(t);
-        o.stop(t + 0.06);
+        o.stop(t + 0.1);
       }
+      noiseSource(t, 0.02).connect(biquad('bandpass', 4000, 1.2)).connect(decayGain(t, 0.2 * vel, 0.008));
     },
     // Industrial: metallischer Schlag per FM, angezerrt
     clang(beat, freq = 300, vel = 1) {
@@ -635,7 +859,7 @@ export function createKit(ctx, out, spb, semis = 0) {
       noiseSource(t, 0.08).connect(biquad('bandpass', 3000, 3)).connect(decayGain(t, 0.4 * vel, 0.05));
     },
     // Rumble: tiefe, verwaschene Bassfläche zwischen den Kicks (schwillt an, bricht vor der nächsten Kick ab)
-    rumble(beat, midi, lenBeats, vel = 1) {
+    rumble(beat, midi, lenBeats, vel = 1, { harm = 0 } = {}) {
       const t = T(beat);
       const d = T(lenBeats);
       const g = ctx.createGain();
@@ -645,6 +869,16 @@ export function createKit(ctx, out, spb, semis = 0) {
       g.connect(out);
       const lp = biquad('lowpass', 150, 1.2);
       lp.connect(g);
+      if (harm) {
+        // Obertöne am Tiefpass vorbei (der hält die Fläche dunkel)
+        const h = osc('sine', tf(midi));
+        h.setPeriodicWave(subWave(ctx, harm, 0));
+        const hg = ctx.createGain();
+        hg.gain.value = 0.85;
+        h.connect(hg).connect(g);
+        h.start(t);
+        h.stop(t + d + 0.02);
+      }
       const o = osc('sine', tf(midi));
       o.connect(shaper(3)).connect(lp);
       o.start(t);
@@ -677,19 +911,23 @@ export function createKit(ctx, out, spb, semis = 0) {
       g.gain.linearRampToValueAtTime(0.32 * vel, t + 0.004);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
       lp.connect(g);
-      g.connect(out);
+      // verstimmte Hälften links und rechts, Echo mit
+      const wide = splitTo(0.45);
+      g.connect(wide);
       const delay = ctx.createDelay(2);
       delay.delayTime.value = T(0.75);
       const fb = ctx.createGain();
       fb.gain.value = 0.42;
       const dlp = biquad('lowpass', 1600);
       g.connect(delay).connect(dlp).connect(fb).connect(delay);
-      dlp.connect(out);
+      dlp.connect(wide);
+      const pair = ctx.createChannelMerger(2);
+      pair.connect(lp);
       for (const m of midis) {
         for (const det of [-8, 8]) {
           const o = osc('sawtooth', tf(m));
           o.detune.value = det;
-          o.connect(lp);
+          o.connect(pair, 0, det < 0 ? 0 : 1);
           o.start(t);
           o.stop(t + 0.4);
         }
@@ -703,7 +941,7 @@ export function createKit(ctx, out, spb, semis = 0) {
       bp.frequency.setValueAtTime(down ? 9000 : 250, t);
       bp.frequency.exponentialRampToValueAtTime(down ? 180 : 10000, t + d);
       const g = ctx.createGain();
-      g.connect(out);
+      g.connect(splitTo(0.5, NOISE));
       if (down) {
         g.gain.setValueAtTime(0.8, t);
         g.gain.exponentialRampToValueAtTime(0.0001, t + d);
@@ -712,7 +950,7 @@ export function createKit(ctx, out, spb, semis = 0) {
         g.gain.exponentialRampToValueAtTime(0.8, t + d - 0.02);
         g.gain.linearRampToValueAtTime(0, t + d);
       }
-      noiseSource(t, d).connect(bp).connect(g);
+      noiseSource2(t, d).connect(bp).connect(g);
     },
     impact(beat) {
       const t = T(beat);
@@ -964,7 +1202,9 @@ export function createKit(ctx, out, spb, semis = 0) {
       o.connect(decayTo(dest, t, body * vel, 0.08));
       o.start(t);
       o.stop(t + 0.15);
-      noiseSource(t, decay + 0.05).connect(biquad('highpass', noiseHp)).connect(decayTo(dest, t, bright * vel, decay));
+      // Teppich ohne eigenes Panorama leicht breit (eigenes Rauschen je Seite), der Körper bleibt mittig
+      (pan ? noiseSource(t, decay + 0.05) : noiseSource2(t, decay + 0.05)).connect(biquad('highpass', noiseHp))
+        .connect(decayTo(pan ? dest : splitTo(0.6, NOISE), t, bright * vel, decay));
     },
     snap(beat, vel = 1, pan = 0) {
       const t = T(beat);
@@ -974,8 +1214,8 @@ export function createKit(ctx, out, spb, semis = 0) {
     },
     shaker(beat, vel = 1, { len = 0.06, pan = 0, tone = 7200 } = {}) {
       const t = T(beat);
-      noiseSource(t, len + 0.04).connect(biquad('bandpass', tone, 1.1)).connect(biquad('highpass', 4200))
-        .connect(decayTo(panTo(pan), t, 0.42 * vel, len, 0.01));
+      (pan ? noiseSource(t, len + 0.04) : noiseSource2(t, len + 0.04)).connect(biquad('bandpass', tone, 1.1)).connect(biquad('highpass', 4200))
+        .connect(decayTo(pan ? panTo(pan) : splitTo(0.45, NOISE), t, 0.42 * vel, len, 0.01));
     },
     // Conga/Bongo/Timbal: gestimmte Fellsine mit kurzem Pitch-Knick, Slap als Rauschanteil
     conga(beat, freq = 220, vel = 1, { decay = 0.22, slap = 0.25, pan = 0 } = {}) {
@@ -1039,10 +1279,10 @@ export function createKit(ctx, out, spb, semis = 0) {
       lfo.connect(depth).connect(bp.frequency);
       lfo.start(t);
       lfo.stop(t + d + 0.6);
-      noiseSource(t, d + 0.6).connect(bp).connect(holdGain(t, d, 0.9 * level, 0.5, 1));
+      noiseSource2(t, d + 0.6).connect(bp).connect(holdTo(splitTo(0.4, NOISE), t, d, 0.9 * level, 0.5, 1));
     },
     // 808-Bass: Sinus mit kurzem Anschlagknick, langer Ausklang, Glide vom vorigen Ton, leicht angezerrt
-    bass808(beat, midi, lenBeats, { vel = 1, glideFrom = null, glide = 0.09, drive = 1.8 } = {}) {
+    bass808(beat, midi, lenBeats, { vel = 1, glideFrom = null, glide = 0.09, drive = 1.8, harm = 0 } = {}) {
       const t = T(beat);
       const d = T(lenBeats);
       const f = tf(midi);
@@ -1055,6 +1295,7 @@ export function createKit(ctx, out, spb, semis = 0) {
       g.gain.exponentialRampToValueAtTime(0.8 * vel * Math.max(0.25, Math.exp(-d / 1.6)), t + Math.max(d, 0.01));
       g.gain.linearRampToValueAtTime(0, t + d + 0.04);
       g.connect(out);
+      if (harm) o.setPeriodicWave(subWave(ctx, harm));
       o.connect(shaper(drive)).connect(g);
       o.start(t);
       o.stop(t + d + 0.06);
@@ -1080,7 +1321,7 @@ export function createKit(ctx, out, spb, semis = 0) {
       for (const o of [...saws, s, lfo]) { o.start(t); o.stop(t + d + release); }
     },
     // Synth-Bass mit Filterhüllkurve (Sägezahn, Rechteck oder Dreieck), wahlweise Sinus-Sub
-    synthBass(beat, midi, lenBeats, { vel = 1, type = 'sawtooth', cutoff = 300, env = 1600, res = 4, decay = 0.16, sub = 0 } = {}) {
+    synthBass(beat, midi, lenBeats, { vel = 1, type = 'sawtooth', cutoff = 300, env = 1600, res = 4, decay = 0.16, sub = 0, harm = 0 } = {}) {
       const t = T(beat);
       const d = T(lenBeats);
       const f = tf(midi);
@@ -1094,6 +1335,7 @@ export function createKit(ctx, out, spb, semis = 0) {
       const oscs = [o];
       if (sub) {
         const s = osc('sine', f);
+        if (harm) s.setPeriodicWave(subWave(ctx, harm));
         const sg = ctx.createGain();
         sg.gain.value = sub;
         s.connect(sg).connect(g);
@@ -1141,28 +1383,28 @@ export function createKit(ctx, out, spb, semis = 0) {
     keys(beat, midis, lenBeats, { vel = 1, strum = 0, pan = 0 } = {}) {
       const t0 = T(beat);
       const d = Math.max(T(lenBeats), 0.1);
-      const dest = panTo(pan);
       const n = notesOf(midis);
       const lvl = vel / Math.sqrt(n.length);
       n.forEach((m, i) => {
         const t = t0 + T(strum) * i;
         const f = tf(m);
-        const bright = osc('sine', f);
-        bright.setPeriodicWave(waveFor(ctx, 'keysBright'));
-        bright.connect(decayTo(dest, t, 0.2 * lvl * (0.5 + 0.5 * vel), 0.3, 0.002));
-        bright.start(t);
-        bright.stop(t + 0.31);
-        const warm = osc('sine', f);
-        warm.setPeriodicWave(waveFor(ctx, 'keysWarm'));
+        // ohne eigenes Panorama ab D3 breit (Gegenstück rechts), darunter mittig
+        const wide = !pan && m + semis >= QUAD_LOW;
+        const dest = wide ? splitTo(0.7, NOISE) : panTo(pan);
+        const bright = oscPair('sine', f, wide, 'keysBright');
+        bright.node.connect(decayTo(dest, t, 0.2 * lvl * (0.5 + 0.5 * vel), 0.3, 0.002));
+        for (const x of bright.list) { x.start(t); x.stop(t + 0.31); }
+        const warmP = oscPair('sine', f, wide, 'keysWarm');
+        const warm = warmP.node;
         const g = ctx.createGain();
+        g.gain.value = 0;
         g.gain.setValueAtTime(0, t);
         g.gain.linearRampToValueAtTime(0.28 * lvl, t + 0.003);
         g.gain.exponentialRampToValueAtTime(0.28 * lvl * Math.max(0.15, Math.exp(-d / 1.2)), t + d);
         g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.3);
         g.connect(dest);
         warm.connect(g);
-        warm.start(t);
-        warm.stop(t + d + 0.32);
+        for (const x of warmP.list) { x.start(t); x.stop(t + d + 0.32); }
       });
     },
     // Orgel mit Zugriegel-Mischung als ein Oszillator je Ton; midis = Ton oder Akkord
@@ -1170,25 +1412,24 @@ export function createKit(ctx, out, spb, semis = 0) {
       const t = T(beat);
       const d = T(lenBeats);
       const n = notesOf(midis);
-      const g = holdTo(panTo(pan), t, d, 0.3 * vel / Math.sqrt(n.length), 0.005, 0.05);
+      const wide = !pan && Math.min(...n) + semis >= QUAD_LOW;
+      const g = holdTo(wide ? splitTo(0.5, NOISE) : panTo(pan), t, d, 0.3 * vel / Math.sqrt(n.length), 0.005, 0.05);
       for (const m of n) {
-        const o = osc('sine', tf(m));
-        o.setPeriodicWave(waveFor(ctx, 'organ'));
-        o.connect(g);
-        o.start(t);
-        o.stop(t + d + 0.05);
+        const o = oscPair('sine', tf(m), wide, 'organ');
+        o.node.connect(g);
+        for (const x of o.list) { x.start(t); x.stop(t + d + 0.05); }
       }
     },
     // Glocke/Glockenspiel: drei unharmonische Teiltöne, die höheren klingen schneller ab
     chime(beat, midi, vel = 1, { decay = 1.2, pan = 0 } = {}) {
       const t = T(beat);
       const f = tf(midi);
-      const dest = panTo(pan);
+      const wide = !pan && midi + semis >= QUAD_LOW;
+      const dest = wide ? splitTo(0.45, NOISE) : panTo(pan);
       for (const [r, a, k] of [[1, 0.4, 1], [2.76, 0.16, 0.45], [5.4, 0.08, 0.2]]) {
-        const o = osc('sine', f * r);
-        o.connect(decayTo(dest, t, a * vel, decay * k, 0.002));
-        o.start(t);
-        o.stop(t + decay * k + 0.01);
+        const o = oscPair('sine', f * r, wide);
+        o.node.connect(decayTo(dest, t, a * vel, decay * k, 0.002));
+        for (const x of o.list) { x.start(t); x.stop(t + decay * k + 0.01); }
       }
     },
     // Flöte/Pfeife: weicher Ton mit Vibrato, kurzer Atemstoß zu Beginn
@@ -1196,16 +1437,16 @@ export function createKit(ctx, out, spb, semis = 0) {
       const t = T(beat);
       const d = T(lenBeats);
       const f = tf(midi);
-      const o = osc('sine', f);
-      o.setPeriodicWave(waveFor(ctx, 'pipe'));
-      o.detune.automationRate = 'k-rate';
+      const wide = midi + semis >= QUAD_LOW;
+      const o = oscPair('sine', f, wide, 'pipe');
       const vib = osc('sine', 5);
       const depth = ctx.createGain();
       depth.gain.setValueAtTime(0, t);
       depth.gain.linearRampToValueAtTime(12, t + Math.min(d, 0.5));
-      vib.connect(depth).connect(o.detune);
-      o.connect(holdGain(t, d, 0.35 * vel, 0.05, 0.08));
-      for (const x of [o, vib]) { x.start(t); x.stop(t + d + 0.1); }
+      vib.connect(depth);
+      for (const x of o.list) { x.detune.automationRate = 'k-rate'; depth.connect(x.detune); }
+      o.node.connect(holdTo(wide ? splitTo(0.5, NOISE) : out, t, d, 0.35 * vel, 0.05, 0.08));
+      for (const x of [...o.list, vib]) { x.start(t); x.stop(t + d + 0.1); }
       noiseSource(t, 0.08).connect(biquad('bandpass', f * 2, 1.5)).connect(decayGain(t, 0.05 * vel, 0.06, 0.01));
     },
     // Lead: Sägezahn und Rechteck, Vibrato setzt verzögert ein; glideFrom gleitet vom vorigen Ton
@@ -1229,11 +1470,11 @@ export function createKit(ctx, out, spb, semis = 0) {
           o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
         }
       }
+      // Säge links, Rechteck rechts (wie lead)
       const mix = ctx.createGain();
       mix.gain.value = 0.5;
-      o1.connect(mix);
-      o2.connect(mix);
-      mix.connect(biquad('lowpass', cutoff, 2)).connect(holdGain(t, d, 0.45 * vel, 0.012, 0.1));
+      pairOf(o1, o2).connect(mix);
+      mix.connect(biquad('lowpass', cutoff, 2)).connect(holdTo(splitTo(0.5), t, d, 0.45 * vel, 0.012, 0.1));
       for (const o of [o1, o2, vib]) { o.start(t); o.stop(t + d + 0.1); }
     },
     // Gezupfter Sägezahn mit Filterhüllkurve; Einzelton mit zwei leicht verstimmten Stimmen,
@@ -1246,12 +1487,16 @@ export function createKit(ctx, out, spb, semis = 0) {
       lp.frequency.automationRate = 'k-rate';
       lp.frequency.setValueAtTime(cutoff, t);
       lp.frequency.exponentialRampToValueAtTime(Math.min(cutoff, f * 1.5 + 200), t + decay);
-      lp.connect(decayTo(panTo(pan), t, 0.28 * vel / Math.sqrt(n.length), decay + 0.08, 0.002));
+      // ohne eigenes Panorama: tiefer verstimmte Stimmen links, höher verstimmte rechts (breit)
+      const wide = !pan && Math.min(...n) + semis >= QUAD_LOW;
+      lp.connect(decayTo(wide ? splitTo(0.6) : panTo(pan), t, 0.28 * vel / Math.sqrt(n.length), decay + 0.08, 0.002));
+      const pair = wide ? ctx.createChannelMerger(2) : null;
+      pair?.connect(lp);
       const voices = n.length === 1 ? [[n[0], -7], [n[0], 7]] : n.map((m, i) => [m, i % 2 ? 6 : -6]);
       for (const [m, det] of voices) {
         const o = osc('sawtooth', tf(m));
         o.detune.value = det;
-        o.connect(lp);
+        if (pair) o.connect(pair, 0, det < 0 ? 0 : 1); else o.connect(lp);
         o.start(t);
         o.stop(t + decay + 0.12);
       }
@@ -1288,9 +1533,12 @@ export function createKit(ctx, out, spb, semis = 0) {
       const t = T(beat);
       const d = T(lenBeats);
       const FORMANTS = { a: [[800, 1], [1150, 0.5], [2900, 0.25]], o: [[450, 1], [800, 0.45], [2830, 0.15]], u: [[325, 1], [700, 0.3], [2530, 0.1]] };
-      const g = holdGain(t, d, 0.5 * vel, attack, release);
+      // verstimmte Hälften links und rechts
+      const g = holdTo(splitTo(0.45), t, d, 0.5 * vel, attack, release);
       const input = ctx.createGain();
       input.gain.value = 1 / Math.sqrt(notesOf(midis).length);
+      const pair = ctx.createChannelMerger(2);
+      pair.connect(input);
       for (const [ff, a] of FORMANTS[vowel] || FORMANTS.a) {
         const fg = ctx.createGain();
         fg.gain.value = a;
@@ -1308,7 +1556,7 @@ export function createKit(ctx, out, spb, semis = 0) {
           o.detune.value = det;
           o.detune.automationRate = 'k-rate';
           depth.connect(o.detune);
-          o.connect(input);
+          o.connect(pair, 0, det < 0 ? 0 : 1);
           o.start(t);
           o.stop(t + d + release);
         }
@@ -1318,15 +1566,14 @@ export function createKit(ctx, out, spb, semis = 0) {
     mallet(beat, midi, vel = 1, { decay = 0.5, ratio = 3.99, bright = 0.3, pan = 0 } = {}) {
       const t = T(beat);
       const f = tf(midi);
-      const dest = panTo(pan);
-      const o1 = osc('sine', f);
-      o1.connect(decayTo(dest, t, 0.42 * vel, decay, 0.002));
-      o1.start(t);
-      o1.stop(t + decay + 0.05);
-      const o2 = osc('sine', f * ratio);
-      o2.connect(decayTo(dest, t, 0.42 * vel * bright, decay * 0.22, 0.001));
-      o2.start(t);
-      o2.stop(t + decay * 0.22 + 0.01);
+      const wide = !pan && midi + semis >= QUAD_LOW;
+      const dest = wide ? splitTo(0.45, NOISE) : panTo(pan);
+      const o1 = oscPair('sine', f, wide);
+      o1.node.connect(decayTo(dest, t, 0.42 * vel, decay, 0.002));
+      for (const x of o1.list) { x.start(t); x.stop(t + decay + 0.05); }
+      const o2 = oscPair('sine', f * ratio, wide);
+      o2.node.connect(decayTo(dest, t, 0.42 * vel * bright, decay * 0.22, 0.001));
+      for (const x of o2.list) { x.start(t); x.stop(t + decay * 0.22 + 0.01); }
     },
     // Amapiano-Log-Drum: angezerrter Sinus mit Pitch-Knick, holziger Bass
     logDrum(beat, midi, lenBeats, { vel = 1, bend = 1.5, drive = 3, tone = 1100 } = {}) {
@@ -1380,8 +1627,8 @@ export function createKit(ctx, out, spb, semis = 0) {
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(0.7 * vel, t + d - 0.015);
       g.gain.linearRampToValueAtTime(0, t + d);
-      g.connect(out);
-      noiseSource(t, d).connect(hp).connect(g);
+      g.connect(splitTo(0.45, NOISE));
+      noiseSource2(t, d).connect(hp).connect(g);
     },
     // Sub-Drop: tiefer Sinus, der nach unten gleitet
     subDrop(beat, lenBeats, vel = 1) {
@@ -1401,6 +1648,8 @@ export function createKit(ctx, out, spb, semis = 0) {
 // Akkordfolge Am – F – C – G mit enger Stimmführung, dazu die Grundtöne.
 const CHORDS = [[57, 60, 64], [57, 60, 65], [55, 60, 64], [55, 59, 62]];
 const ROOTS = [33, 29, 36, 31];
+// Obertöne der reinen Sub-Bässe (Stärke, siehe subWave)
+const SUB_HARM = 1;
 const LEAD = [
   [0, 76, 1.5], [1.5, 74, 0.5], [2, 72, 1], [3, 71, 1],
   [4, 72, 1.5], [5.5, 69, 0.5], [6, 72, 1], [7, 74, 1],
@@ -1455,7 +1704,8 @@ export const LOOP_DEFS = [
   {
     id: 'bass-sub', name: 'Sub Am–F–C–G', genres: ['hiphop', 'pop'], category: 'bass', bars: 4, peak: 0.55,
     render(k) {
-      ROOTS.forEach((r, bar) => { k.sub(bar * 4, r, 1.5); k.sub(bar * 4 + 2, r, 1.25); k.sub(bar * 4 + 3.5, r, 0.4); });
+      const h = { harm: SUB_HARM };
+      ROOTS.forEach((r, bar) => { k.sub(bar * 4, r, 1.5, h); k.sub(bar * 4 + 2, r, 1.25, h); k.sub(bar * 4 + 3.5, r, 0.4, h); });
     },
   },
   {
@@ -1523,7 +1773,7 @@ export const LOOP_DEFS = [
   },
   {
     id: 'techno-rumble', name: 'Rumble-Bass A', genres: ['techno'], category: 'bass', bars: 1, peak: 0.55,
-    render(k) { for (let b = 0; b < 4; b++) k.rumble(b + 0.12, 33, 0.86); },
+    render(k) { for (let b = 0; b < 4; b++) k.rumble(b + 0.12, 33, 0.86, 1, { harm: 1 }); },
   },
   {
     id: 'techno-offbass', name: 'Offbeat-Bass A', genres: ['techno', 'house'], category: 'bass', bars: 1, peak: 0.5,
@@ -1618,7 +1868,14 @@ async function renderLoop(def, bpm, semis = 0) {
     const dst = buffer.getChannelData(ch);
     dst.set(src.subarray(0, loopFrames));
     // Ausklang an den Anfang falten: so läuft die Schleife ohne Bruch durch.
-    if (!def.oneShot) for (let i = loopFrames; i < src.length; i++) dst[i % loopFrames] += src[i];
+    if (!def.oneShot) {
+      for (let i = loopFrames; i < src.length; i++) dst[i % loopFrames] += src[i];
+      // Gleichanteil abziehen (Acid-Loops hatten bis 0,02): in der Schleife ohne Naht, anders als ein Hochpass
+      let m = 0;
+      for (let i = 0; i < loopFrames; i++) m += dst[i];
+      m /= loopFrames;
+      if (Math.abs(m) > 1e-4) for (let i = 0; i < loopFrames; i++) dst[i] -= m;
+    }
   }
   const peak = bufferPeak(buffer);
   if (peak > 0) scale(buffer, (def.peak ?? 0.5) / peak);
