@@ -74,6 +74,7 @@ Vorhanden:
 - `npm run vorschau` – seit der letzten Veröffentlichung geänderte Dateien als `files`-Objekt; `--verify <ordner>` prüft veröffentlichte Stände gegen die Git-Historie; `--mark <n>` merkt den Stand (`tools/vorschau-stand.json`).
 - `tools/push.sh` – Push mit Wiederholung bei Netzfehlern.
 - `npm run klangvergleich -- <vorher-ordner> <nachher-ordner>` – paart Hörproben über den Namen und zeigt Lautheit, Spitze, Tiefen/Mitten/Höhen und Breite vorher → nachher.
+- `tools/bisect-test.sh <guter-commit> <testname>` – findet in einem Wegwerf-Worktree den Commit, seit dem ein Test rot ist. Vorher mit `node tools/test.cjs --repeat 6 <name>` prüfen, ob der Test überhaupt verlässlich ist; bei Wacklern ist das Ergebnis Zufall.
 - `tools/agenten.sh [--dateien]` – Stand aller Agent-Worktrees (Commits vor main, ungesicherte Dateien, letzte Änderung).
 - `tools/klang/` – Messskripte zum Klang (offline im Headless-Chromium):
   - `sounds.cjs [--teile lib,kits,klaenge,piano,starter] [--vergleich vorher.json]` – Klangfarbe der Sounds selbst: Bänder, Stereobreite, Kits, Melodie-Klänge, Sprung am Notenende, kleine Lautsprecher.

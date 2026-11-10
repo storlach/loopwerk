@@ -983,9 +983,9 @@ const DEFS = [
       k.zap(2, 1.2, 2600, 50, { cutoff: 3000, vel: 1 });
     },
   },
-  shot('fxs-powerup', 'Power-Up', 1, ['synthwave', 'pop', 'house'], ['8-bit', 'chiptune', 'spiel', 'arcade'], powerUp, 0.28, { tonal: true }),
+  shot('fxs-powerup', 'Power-Up', 1, ['synthwave', 'pop', 'house'], ['8-bit', 'chiptune', 'spiel', 'arcade'], powerUp, 0.25, { tonal: true }),
   shot('fxs-glitch', 'Glitch-Stotterer', 1, ['techno', 'breaks', 'trap', 'hiphop'], ['glitch', 'stutter', 'stotter', 'bitcrush'], glitch),
-  shot('fxs-siren', 'Dub-Sirene', 2, ['breaks', 'reggaeton', 'techno', 'hiphop', 'afro'], ['sirene', 'alarm', 'dub', 'reggae'], siren, 0.25),
+  shot('fxs-siren', 'Dub-Sirene', 2, ['breaks', 'reggaeton', 'techno', 'hiphop', 'afro'], ['sirene', 'alarm', 'dub', 'reggae'], siren, 0.22),
   // ---------- Band und Platte ----------
   shot('fxs-tape-stop', 'Tape-Stopp', 1, ['hiphop', 'lofi', 'trap', 'funk', 'pop'], ['tape', 'band', 'stopp', 'bremse'], tapeStop, 0.45, { tonal: true }),
   shot('fxs-tape-start', 'Tape-Anlauf', 1, ['hiphop', 'lofi', 'house', 'funk'], ['tape', 'band', 'anlauf', 'start'], tapeStart, 0.45, { tonal: true }),
@@ -998,7 +998,7 @@ const DEFS = [
   shot('fxs-glass', 'Glas-Ping', 1, ['ambient', 'pop', 'lofi'], ['glas', 'klirren', 'ping', 'anstoßen'], glass),
   shot('fxs-swell', 'Flächen-Anschwellen', 4, ['ambient', 'synthwave', 'pop', 'lofi'], ['swell', 'anschwellen', 'fläche', 'pad'], swellPad, 0.45, { tonal: true }),
   shot('fxs-radio', 'Radio-Rauschen', 2, ['lofi', 'ambient', 'hiphop'], ['radio', 'rauschen', 'sender', 'störung'], radio, 0.4),
-  shot('fxs-heartbeat', 'Herzschlag', 1, ['ambient', 'trap', 'hiphop'], ['herz', 'puls', 'spannung', 'film'], heartbeat, 0.44),
+  shot('fxs-heartbeat', 'Herzschlag', 1, ['ambient', 'trap', 'hiphop'], ['herz', 'puls', 'spannung', 'film'], heartbeat, 0.39),
   shot('fxs-gong', 'Gong', 4, ['ambient', 'techno', 'rock'], ['gong', 'metall', 'schlag', 'asien'], gong, 0.55),
 ];
 
