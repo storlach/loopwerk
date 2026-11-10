@@ -288,7 +288,7 @@ const DEFS = [
     render(k) {
       prog('Am–Dm–Em–Am').forEach(({ r }, bar) => {
         [[0, r, 1.4], [1.75, r, 0.5], [2.5, r, 1], [3.5, r + 12, 0.35]].forEach(([b, m, l], i) =>
-          k.synthBass(bar * 4 + b, m, l, { cutoff: 200, env: 600, res: 1.5, decay: 0.25, sub: 0.8, vel: i ? 0.85 : 1 }));
+          k.synthBass(bar * 4 + b, m, l, { cutoff: 200, env: 600, res: 1.5, decay: 0.25, sub: 0.8, vel: i ? 0.85 : 1, harm: 1 }));
       });
     },
   },
@@ -296,7 +296,7 @@ const DEFS = [
     id: 'gen-hiphop-jazzbass', name: 'Jazz-Bass Am7–Dm7', genres: ['hiphop', 'lofi'], category: 'bass', bars: 2, peak: 0.55,
     render(k) {
       [33, 36, 40, 43, 38, 41, 45, 44].forEach((m, i) =>
-        k.synthBass(i, m, i === 3 ? 0.6 : 0.85, { type: 'triangle', cutoff: 500, env: 800, res: 1, decay: 0.12, sub: 0.5, vel: i % 2 ? 0.85 : 1 }));
+        k.synthBass(i, m, i === 3 ? 0.6 : 0.85, { type: 'triangle', cutoff: 500, env: 800, res: 1, decay: 0.12, sub: 0.5, vel: i % 2 ? 0.85 : 1, harm: 2.4 }));
       k.synthBass(3.67, 45, 0.25, { type: 'triangle', cutoff: 500, env: 600, res: 1, decay: 0.1, vel: 0.5 });
     },
   },
@@ -376,7 +376,7 @@ const DEFS = [
     id: 'gen-trap-808', name: '808 Glide A', genres: ['trap', 'hiphop'], category: 'bass', bars: 2, peak: 0.55,
     render(k) {
       [[0, 33, 1.5], [1.75, 33, 0.5], [2.5, 45, 0.5, 33], [3, 43, 1, 45], [4, 33, 1.5], [5.75, 36, 0.5], [6.5, 40, 0.75, 36], [7.25, 31, 0.75, 40]]
-        .forEach(([b, m, l, from]) => k.bass808(b, m, l, { glideFrom: from ?? null }));
+        .forEach(([b, m, l, from]) => k.bass808(b, m, l, { glideFrom: from ?? null, harm: 1 }));
     },
   },
   {
@@ -384,10 +384,10 @@ const DEFS = [
     render(k) {
       prog('Am–G–F–E').forEach(({ r }, bar) => {
         const o = bar * 4;
-        k.bass808(o, r, 1.5);
-        k.bass808(o + 1.75, r, 0.5, { vel: 0.8 });
-        k.bass808(o + 2.5, r + 12, 0.75, { glideFrom: r });
-        k.bass808(o + 3.25, r, 0.6, { glideFrom: r + 12, vel: 0.9 });
+        k.bass808(o, r, 1.5, { harm: 1 });
+        k.bass808(o + 1.75, r, 0.5, { vel: 0.8, harm: 1 });
+        k.bass808(o + 2.5, r + 12, 0.75, { glideFrom: r, harm: 1 });
+        k.bass808(o + 3.25, r, 0.6, { glideFrom: r + 12, vel: 0.9, harm: 1 });
       });
     },
   },
@@ -454,7 +454,7 @@ const DEFS = [
     render(k) {
       prog('Fmaj7–Em7–Dm7–Am7').forEach(({ r }, bar) => {
         [[0, r, 1.4], [1.5, r + 7, 0.4], [2.5, r, 0.9], [3.5, r + 12, 0.4]].forEach(([b, m, l], i) =>
-          k.synthBass(bar * 4 + b + (b % 1 ? 0.06 : 0), m, l, { type: 'triangle', cutoff: 220, env: 300, res: 1, decay: 0.3, sub: 0.7, vel: i ? 0.8 : 1 }));
+          k.synthBass(bar * 4 + b + (b % 1 ? 0.06 : 0), m, l, { type: 'triangle', cutoff: 220, env: 300, res: 1, decay: 0.3, sub: 0.7, vel: i ? 0.8 : 1, harm: 1 }));
       });
     },
   },
@@ -463,7 +463,7 @@ const DEFS = [
     render(k) {
       prog('Am9–Dm9').forEach(({ r }, bar) => {
         [[0, r, 2.4], [2.75, r + 7, 0.5], [3.5, r + 10, 0.4]].forEach(([b, m, l], i) =>
-          k.synthBass(bar * 4 + b, m, l, { type: 'triangle', cutoff: 260, env: 250, res: 1, decay: 0.4, sub: 0.8, vel: i ? 0.75 : 1 }));
+          k.synthBass(bar * 4 + b, m, l, { type: 'triangle', cutoff: 260, env: 250, res: 1, decay: 0.4, sub: 0.8, vel: i ? 0.75 : 1, harm: 1.6 }));
       });
     },
   },
@@ -567,7 +567,7 @@ const DEFS = [
     render(k) {
       prog('Am–F–C–G').forEach(({ r }, bar) => {
         [[0, r, 1.25], [1.5, r, 0.4], [2.5, r, 1.2], [3.5, r + 12, 0.4]].forEach(([b, m, l], i) =>
-          k.bass808(bar * 4 + b, m, l, { drive: 1.2, vel: i ? 0.85 : 1 }));
+          k.bass808(bar * 4 + b, m, l, { drive: 1.2, vel: i ? 0.85 : 1, harm: 1 }));
       });
     },
   },
@@ -631,7 +631,7 @@ const DEFS = [
     render(k) {
       prog('Am–F–C–G').forEach(({ r }, bar) => {
         [[0, r, 0.6], [0.75, r, 0.6], [1.5, r + 12, 0.4], [2, r, 0.6], [2.75, r, 0.6], [3.5, r + 7, 0.4]]
-          .forEach(([b, m, l], i) => k.bass808(bar * 4 + b, m, l, { drive: 2.2, vel: i % 3 ? 0.85 : 1 }));
+          .forEach(([b, m, l], i) => k.bass808(bar * 4 + b, m, l, { drive: 2.2, vel: i % 3 ? 0.85 : 1, harm: 1 }));
       });
     },
   },
@@ -1040,14 +1040,14 @@ const DEFS = [
   {
     id: 'gen-ambient-sub', name: 'Ambient-Sub Am–F–C–G', genres: ['ambient'], category: 'bass', bars: 4, peak: 0.55,
     render(k) {
-      prog('Am–F–C–G').forEach(({ r }, bar) => k.sub(bar * 4, r, 3.8));
+      prog('Am–F–C–G').forEach(({ r }, bar) => k.sub(bar * 4, r, 3.8, { harm: 1 }));
     },
   },
   {
     id: 'gen-ambient-pad', name: 'Weite Fläche Am–F–C–G', genres: ['ambient'], category: 'chords', bars: 4, peak: 0.42,
     render(k) {
       const s = k.bus({ highpass: 60 });
-      prog('Amadd9–Fmaj7–Cmaj7–G6').forEach(({ c }, bar) => s.supersaw(bar * 4, c, 4, { cutoff: 1200, attack: 1, release: 1.4, voices: 2 }));
+      prog('Amadd9–Fmaj7–Cmaj7–G6').forEach(({ c }, bar) => s.supersaw(bar * 4, c, 4, { cutoff: 2000, attack: 1, release: 1.4, voices: 2 }));
     },
   },
   {

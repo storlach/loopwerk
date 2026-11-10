@@ -123,21 +123,25 @@ export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G�
 export const noteName = (m) => `${NOTE_NAMES[m % 12]}${Math.floor(m / 12) - 1}`;
 export const drumLabel = (kitId, rowId) => KITS.find((k) => k.id === kitId)?.labels?.[rowId] ?? DRUM_ROWS.find((r) => r.id === rowId)?.label ?? rowId;
 
-// Synthetische Kits: welche Stimme des Klangbaukastens eine Zeile spielt (b = Schlag, v = Stärke)
+// Synthetische Kits: welche Stimme des Klangbaukastens eine Zeile spielt (b = Schlag, v = Stärke). Hats und Rim spielen
+// im Kit lauter als in den Bibliotheks-Loops (dort pegelt die Spitze ein): lagen 13–23 LU unter der Kick.
+const HAT_BOOST = 1.5;
+const RIM_BOOST = 1.7;
 const SYNTH_DRUMS = {
   elektro: {
     kick: (k, b, v) => k.kick(b, v), snare: (k, b, v) => k.snare(b, v), clap: (k, b, v) => k.clap(b, v),
-    hat: (k, b, v) => k.hat(b, v), open: (k, b, v) => k.hat(b, v, true), tomLo: (k, b, v) => k.tom(b, 95, v),
+    hat: (k, b, v) => k.hat(b, v * HAT_BOOST), open: (k, b, v) => k.hat(b, v * HAT_BOOST, true), tomLo: (k, b, v) => k.tom(b, 95, v),
     tomHi: (k, b, v) => k.tom(b, 150, v), crash: (k, b, v) => k.crash(b, v),
   },
   techno: {
-    kick: (k, b, v) => k.kick909(b, v), snare: (k, b, v) => k.rim(b, v), clap: (k, b, v) => k.clap(b, v),
-    hat: (k, b, v) => k.hat909(b, v), open: (k, b, v) => k.hat909(b, v, true), tomLo: (k, b, v) => k.rumble(b, 33, 0.5, v),
+    kick: (k, b, v) => k.kick909(b, v), snare: (k, b, v) => k.rim(b, v * RIM_BOOST), clap: (k, b, v) => k.clap(b, v),
+    hat: (k, b, v) => k.hat909(b, v * HAT_BOOST * 1.2), open: (k, b, v) => k.hat909(b, v * HAT_BOOST * 1.2, true),
+    tomLo: (k, b, v) => k.rumble(b, 33, 0.5, v),
     tomHi: (k, b, v) => k.clang(b, 310, v), crash: (k, b, v) => k.ride(b, v),
   },
   druck: {
     kick: (k, b, v) => k.kickPro(b, v, { ...KICK_VOICES.druck.shape, ...KICK_VOICES.druck.defaults }),
-    snare: (k, b, v) => k.rim(b, v), clap: (k, b, v) => k.clapDruck(b, v),
+    snare: (k, b, v) => k.rim(b, v * RIM_BOOST), clap: (k, b, v) => k.clapDruck(b, v),
     hat: (k, b, v) => k.hatDruck(b, v), open: (k, b, v) => k.hatDruck(b, v, true), tomLo: (k, b, v) => k.tom(b, 82, v),
     tomHi: (k, b, v) => k.conga(b, 330, v, { decay: 0.12, slap: 0.4 }), crash: (k, b, v) => k.ride(b, v),
   },

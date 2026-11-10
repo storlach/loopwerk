@@ -68,3 +68,4 @@ club-master
 druck
 stretch-transienten
 effekt-pegel
+klangfarbe

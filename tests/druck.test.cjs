@@ -141,10 +141,13 @@ async function openBeat(page) {
     saveWav('kick-alt-elektro.wav', k.wav.elektro);
     saveWav('kick-alt-909.wav', k.wav.techno);
     saveWav('kick-techno-druck.wav', k.wav.druck);
-    const subGain = db(k.sub.druck / k.sub.elektro);
+    // Bezug „heutige Kick“ = Stand vor „Druck“: Die Elektro-Kick hat seit „Klangfarbe“ (2026-11) selbst mehr Sub, ihr alter
+    // Wert (3,69·10⁻³, gemessen mit fd0406f) bleibt der Bezug; die neue Elektro-Kick steht nur zur Information daneben.
+    const ELEKTRO_SUB_ALT = 3.69e-3;
+    const subGain = db(k.sub.druck / ELEKTRO_SUB_ALT);
     const subGain909 = db(k.sub.druck / k.sub.techno);
     check('Techno-Kick: Sub-Energie 40–80 Hz über 0,9 s deutlich über der heutigen Kick (≥ +6 dB)', subGain >= 6 && subGain909 >= 6,
-      `Druck ${k.sub.druck.toExponential(2)}, Elektro ${k.sub.elektro.toExponential(2)} (+${subGain.toFixed(1)} dB), 909 ${k.sub.techno.toExponential(2)} (+${subGain909.toFixed(1)} dB)`);
+      `Druck ${k.sub.druck.toExponential(2)}, Elektro vor „Druck“ ${ELEKTRO_SUB_ALT.toExponential(2)} (+${subGain.toFixed(1)} dB), 909 ${k.sub.techno.toExponential(2)} (+${subGain909.toFixed(1)} dB), Elektro jetzt ${k.sub.elektro.toExponential(2)} (+${db(k.sub.druck / k.sub.elektro).toFixed(1)} dB)`);
     check('Techno-Kick: Voreinstellung um 50 Hz, Länge etwa 0,9 s, deutlicher Klick, etwas Biss', Math.abs(k.defaults.pitch - 50) <= 2 && Math.abs(k.defaults.length - 0.9) < 0.05 && k.defaults.click >= 0.5 && k.defaults.bite > 0 && k.defaults.bite < 0.6, JSON.stringify(k.defaults));
     const offPitch = k.pitch.filter((p) => Math.abs(p.got / p.want - 1) > 0.03);
     check('Tonhöhen-Regler trifft die Frequenz (±3 %) – Druck, Elektro, 909', !offPitch.length, k.pitch.map((p) => `${p.kit} ${p.want.toFixed(1)}→${p.got.toFixed(1)}`).join(', '));
