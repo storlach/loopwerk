@@ -7,7 +7,8 @@ Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000)
 - `src/model.js` – Projektmodell + `Store` (alle Änderungen über Aktionen → Undo/Redo). Positionen immer in Schlägen. Überlappende Clips bleiben erhalten; es klingt der obere (`clip.z`, `audibleRanges`).
 - `src/engine.js` – Scheduler mit Vorlauf, Loop-Sprünge, Live-Resync, Kanalzüge mit Effektketten in wählbarer Reihenfolge (`fxOrder`, Umstellen mit `keepTail`) und Send-Bussen Hall/Echo (`syncBuses`, ADR 008) (`buildMix`/`syncMix`), `renderProject` für Offline-Rendering/Export.
 - `src/samples.js` + `src/catalog.js` – Bibliothek: synthetische Loops und CC0-Sounds (Sonic Pi), Tempo-Vorbereitung (`setTempo`).
-- `src/effects.js` – Effekt-Rack (Verzerrer, Filter, EQ, Kompressor, Pumpen, Echo, Hall); taktsynchrone LFOs über `mix.grid`.
+- `src/effects.js` – Effekt-Rack (Verzerrer, Filter, EQ, Kompressor, Pumpen, Echo, Hall); taktsynchrone LFOs über `mix.grid`; Kompressor und Verzerrer pegelneutral, Echo als Ping-Pong, Schutz am Ausgang ist ein True-Peak-Begrenzer im Worklet (`loopwerk-limiter`).
+- `src/levels.js` + `src/levels-table.js` – Pegel nach Lautheit (ADR 013): Ziel-Lautheit je Rolle, die Drums führen; die Tabelle schreibt `tools/klang/pegel.cjs --tabelle` neu, wenn sich Sounds ändern.
 - `src/dsp/` – Time-Stretching (WSOLA), Bearbeitungsfunktionen, Aufnahme-Worklet, FFT, Tonhöhe (YIN → Noten), Autotune (PSOLA), Trennung (HPSS + Mitte, ADR 003), Rauschminderung (`denoise.js`, spektral, Profil automatisch, Brummen 50/60 Hz). Lange Rechnungen über `runJob` im Worker.
 - `src/own-sounds.js`, `src/recorder.js` – eigene Sounds (IndexedDB, Projektdatei), Mikrofon- und Tab-Aufnahme; `src/ui/link-import.js` – Sounds per Link holen.
 - `src/instruments.js`, `src/patterns.js` – Beat-/Melodie-Patterns, als Sounds „pat-…“ gerendert.
@@ -78,7 +79,7 @@ Vorhanden:
 - `tools/agenten.sh [--dateien]` – Stand aller Agent-Worktrees (Commits vor main, ungesicherte Dateien, letzte Änderung).
 - `tools/klang/` – Messskripte zum Klang (offline im Headless-Chromium):
   - `sounds.cjs [--teile lib,kits,klaenge,piano,starter] [--vergleich vorher.json]` – Klangfarbe der Sounds selbst: Bänder, Stereobreite, Kits, Melodie-Klänge, Sprung am Notenende, kleine Lautsprecher.
-  - `effekt-messen.cjs [--teil einschalten,hall] [--fassung 1|2|beide]` – was ein Effekt beim Einschalten mit dem Pegel macht; Pegel und Breite des Halls.
+  - `effekt-messen.cjs [--teil einschalten,hall,echo]` – was ein Effekt beim Einschalten mit dem Pegel macht; Pegel und Breite von Hall und Echo.
   - `anschlaege.cjs <wav|Sound> [--faktoren …]` – Anschläge zählen und ihre Lage nach der Tempo-Dehnung prüfen.
   - `rechenzeit.cjs <alter-stand> [<neuer-stand>]` – Rechenaufwand der synthetischen Bibliothek zweier Stände.
   - `druck-bezug.cjs [--muster …] [--write]` – Bezug `tests/fixtures/druck-old-patterns.json` erneuern, wenn sich Kit-Stimmen gewollt ändern.
