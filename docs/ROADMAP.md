@@ -328,6 +328,12 @@
 - Song-Starter „Melodic Techno“ (124 BPM, Am; „Nochmal“: 122–126 BPM, Am/Fm/Gm/Em/Cm, vier Folgen, ein Akkord je zwei Takte): Aufbau 8 Takte ohne Kick, Tiefpass der Summe geht über eine Kurve von 500 Hz ganz auf, dann Groove · Drop · Break · Drop · Outro (56 Takte). Kick auf den Grundton gestimmt (Am → A1 55 Hz), Offbeat-Hats und Clap auf 2 und 4, Rollbass folgt den Akkorden und pumpt, dunkle Fläche (Hochpass 200 Hz, Pumpen, Hall-Send), Arp (Hochpass 300 Hz, Hall- und Echo-Send), FX (Hochpass 150 Hz); kein Hall und kein Hochpass auf Kick und Bass; Mastering an mit Stil `club`, sobald es ihn gibt, sonst `loud`. Neue Plan-Bausteine `fx`, `send`, `auto`, `mastering` in `applyPlan`.
 - Test `tests/druck.test.cjs` (Sub-Energie 40–80 Hz der Druck-Kick +15,2 dB über Elektro, +9,8 dB über 909; Tonhöhe ±0,1 % bei 41–69 Hz in drei Kits, Sample ±3 %; Länge ±3 %; Biss: Obertöne +21 dB, Spitze 0,70 → 0,49; Bass-Grundton je Takt; Starter-Mix: Kick ab Takt 9 +29 dB auf den Vierteln, Höhen im Aufbau +25 dB; Handy 44 px, kein Überlauf). Bilder `docs/ux/druck/`
 
+
+## ✅ Tempo-Dehnung mit Anschlägen (Klanganalyse W7)
+- `src/dsp/stretch.js` (ADR 001, Nachtrag W7): Anschläge per Spektralfluss erkannt (FFT 1024, log-Betrag, ±1-Bin-Maximum gegen Vibrato, Feinlage auf den steilsten 1-ms-Anstieg, Flams unter 12 ms sind einer); daraus eine Zeitkarte: um jeden Anschlag 32 ms davor bis 60 ms danach 1:1, gedehnt bzw. gestaucht wird nur dazwischen (0,3- bis 4-facher mittlerer Faktor, enge Lücken verkleinern den 1:1-Bereich). WSOLA folgt der Karte; im 1:1-Bereich nur ±2 ms Feinsuche, davor wird die Suche enger, die Suche schiebt kein Fenster über einen Anschlag. Ohne erkannte Anschläge bitgleich wie vorher; `transients: false` rechnet das reine WSOLA. Ein Schnittplan für alle Kanäle, Länge exakt, Loops zyklisch. Rechenzeit ≈ 1,0- bis 1,2-fach
+- Gemessen an den sechs Sonic-Pi-Drum-Loops, −40 % … +40 %: Doppelschläge je Loop 0 (vorher bis 9), Zahl der deutlichen Anschläge −1,5 … 0 % (vorher −11,5 … −4,6 %), Lage Median 0,7–2,5 ms / 90 % ≤ 4 ms (vorher 3,5–12 / 7–12 ms); tonale Signale ohne neues Flattern, Pegel ±0,15 dB
+- Test `tests/stretch-transienten.test.cjs`; Messwerkzeug `node tools/klang/anschlaege.cjs <wav|Sound> [--faktoren …]` (Zählung und Lage je Faktor, neu gegen reines WSOLA); Hörproben Amen 90/170 BPM und Gitarre −25 % (alt/neu)
+
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen
 
