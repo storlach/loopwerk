@@ -16,3 +16,4 @@ Headless hat keine Grafikkarte: Bildraten sind Vergleichswerte.
 - `m9-scheduler.cjs` (mit `sched-probe.cjs`) – Scheduler: Reaktion auf Live-Änderungen und Folgen einer Blockade des Hauptthreads (Stille, falsche Stelle), Rampe als Sound
 - `render-null.cjs` – Nulltest: Beispiel offline rendern (`--out`, `--szene`), zwei Stände vergleichen (`--compare`; derselbe Stand zweimal liegt bei rund −112 dB)
 - `m11-mastering.cjs [start,unnoetig,spielen]` – Mastering-Messung im Hintergrund: Start und erster Ton, unnötige Messläufe (Umbenennen, Loop, Rückgängig), Takt und lange Aufgaben während der Messung
+- `m8c-worklet-mem.cjs` – Ursache von 5.8: Speicher je Offline-Rendern ohne Worklet, nur mit `addModule`, mit Worklet-Knoten
