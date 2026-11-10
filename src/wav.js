@@ -1,6 +1,11 @@
 // WAV-Kodierung: 16 oder 24 Bit PCM, 32 Bit Gleitkomma (übersteuert nicht: Werte über 0 dBFS bleiben erhalten).
 
-export function encodeWav(buffer, { bits = 16 } = {}) {
+export function encodeWav(buffer, opts) {
+  return new Blob([encodeWavBytes(buffer, opts)], { type: 'audio/wav' });
+}
+
+// Dieselben Bytes ohne Blob (auch im Rechen-Worker: wavJob)
+export function encodeWavBytes(buffer, { bits = 16 } = {}) {
   const ch = buffer.numberOfChannels;
   const frames = buffer.length;
   const float = bits === 32;
@@ -40,7 +45,20 @@ export function encodeWav(buffer, { bits = 16 } = {}) {
       }
     }
   }
-  return new Blob([view], { type: 'audio/wav' });
+  return new Uint8Array(view.buffer);
+}
+
+// Größter Betrag über alle Kanäle
+export function peakOfChannels(chs) {
+  let p = 0;
+  for (const d of chs) for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; }
+  return p;
+}
+
+// Export im Rechen-Worker (runJob 'wav'): WAV-Bytes, Spitze und auf Wunsch die Prüfsumme fürs ZIP
+export function wavJob({ chs, sampleRate, bits = 16, crc = false }, crc32) {
+  const bytes = encodeWavBytes({ numberOfChannels: chs.length, length: chs[0].length, sampleRate, getChannelData: (c) => chs[c] }, { bits });
+  return { bytes, peak: peakOfChannels(chs), crc: crc ? crc32(bytes) : null };
 }
 
 // Export-Format aus dem Wahlknopf: „wav“ (16 Bit), „wav24“, „wav32“ (Gleitkomma) oder „mp3“

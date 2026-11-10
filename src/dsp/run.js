@@ -4,11 +4,13 @@ import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
 import { timeStretch, pitchShift } from './stretch.js';
 import { detectKey } from './key.js';
-import { searchMaster } from './master-search.js';
+import { searchMaster, masteringJob } from './master-search.js';
 import { cookRecipe } from './recipe.js';
 import { detectOnsets } from './slice.js';
 import { mixMono } from './clean.js';
 import { denoise } from './denoise.js';
+import { wavJob } from '../wav.js';
+import { crc32 } from '../zip.js';
 
 let worker = null;
 let nextId = 1;
@@ -63,6 +65,9 @@ const LOCAL = {
   key: ({ chs, sampleRate }) => detectKey(chs, sampleRate),
   pitchshift: ({ chs, sampleRate, semis, loop }) => pitchShift(chs, semis, sampleRate, { loop }),
   denoise: ({ chs, sampleRate, opts }) => denoise(chs, sampleRate, opts),
+  wav: (args) => wavJob(args, crc32),
+  crc: ({ chs }) => crc32(chs[0]),
+  mastering: masteringJob,
 };
 
 export function runJob(job, args, { onProgress } = {}) {

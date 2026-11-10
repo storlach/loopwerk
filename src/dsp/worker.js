@@ -4,11 +4,13 @@ import { autotune } from './autotune.js';
 import { detectPitch, toMono } from './pitch.js';
 import { timeStretch, pitchShift } from './stretch.js';
 import { detectKey } from './key.js';
-import { searchMaster } from './master-search.js';
+import { searchMaster, masteringJob } from './master-search.js';
 import { cookRecipe } from './recipe.js';
 import { detectOnsets } from './slice.js';
 import { mixMono } from './clean.js';
 import { denoise } from './denoise.js';
+import { wavJob } from '../wav.js';
+import { crc32 } from '../zip.js';
 
 const JOBS = {
   separate: ({ chs, sampleRate }, progress) => separate(chs, sampleRate, { onProgress: progress }),
@@ -21,6 +23,9 @@ const JOBS = {
   key: ({ chs, sampleRate }) => detectKey(chs, sampleRate),
   pitchshift: ({ chs, sampleRate, semis, loop }) => pitchShift(chs, semis, sampleRate, { loop }),
   denoise: ({ chs, sampleRate, opts }) => denoise(chs, sampleRate, opts),
+  wav: (args) => wavJob(args, crc32),
+  crc: ({ chs }) => crc32(chs[0]),
+  mastering: masteringJob,
 };
 
 self.onmessage = (e) => {
@@ -28,10 +33,10 @@ self.onmessage = (e) => {
   if (job === 'ping') { self.postMessage({ id, pong: true }); return; }
   try {
     const result = JOBS[job](args, (p) => self.postMessage({ id, progress: p }));
-    // Float32Arrays ohne Kopie zurückgeben
+    // Abtastwerte und Bytes ohne Kopie zurückgeben
     const transfer = [];
     const collect = (v) => {
-      if (v instanceof Float32Array) transfer.push(v.buffer);
+      if (ArrayBuffer.isView(v)) transfer.push(v.buffer);
       else if (Array.isArray(v)) v.forEach(collect);
       else if (v && typeof v === 'object') Object.values(v).forEach(collect);
     };

@@ -257,14 +257,37 @@ async function open(browser, srv, opts = {}) {
           const res = what === 'stems' ? await ex.exportStems(store.project, library, { format: 'wav' }) : await ex.exportSong(store.project, library, { format: what === 'mp3' ? 'mp3' : 'wav' });
           const ms = performance.now() - t0;
           const f = window.__stopFrames();
-          return { ms, dur: res.duration, size: res.blob.size, stems: res.stems?.length, fps: f.fps, max: f.max, lt: f.lt, ltSum: f.ltSum, ltMax: f.ltMax };
+          // Datei = Kodierung desselben Renders im Hauptthread (alter Weg)? Dazu Prüfsummen eines festen Testsignals
+          const sha = async (blob) => [...new Uint8Array(await crypto.subtle.digest('SHA-1', await blob.arrayBuffer()))].map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 12);
+          let same = null;
+          if (res.audio) {
+            const { encodeWav } = await import('/src/wav.js');
+            const ref = what === 'mp3' ? await ex.encodeMp3(res.audio, { worker: false }) : encodeWav(res.audio);
+            same = (await sha(ref)) === (await sha(res.blob));
+          }
+          return { ms, dur: res.duration, size: res.blob.size, stems: res.stems?.length, fps: f.fps, max: f.max, lt: f.lt, ltSum: f.ltSum, ltMax: f.ltMax, same };
         }, what);
         rs.push(r);
         await ctx.close();
       }
       const m = (k, d = 0) => fmt(stats(rs.map((r) => r[k]), d));
-      console.log(`${what.padEnd(14)} ${rs[0].dur.toFixed(0)} s Audio${rs[0].stems ? ` · ${rs[0].stems} Spuren` : ''} · ${(rs[0].size / 1e6).toFixed(1)} MB · Dauer ${m('ms')} ms · dabei ${m('fps', 1)} Bilder/s, längstes Bild ${m('max')} ms · lange Aufgaben ${m('lt')}, Summe ${m('ltSum')} ms, längste ${m('ltMax')} ms`);
+      console.log(`${what.padEnd(14)} ${rs[0].dur.toFixed(0)} s Audio${rs[0].stems ? ` · ${rs[0].stems} Spuren` : ''} · ${(rs[0].size / 1e6).toFixed(1)} MB · Dauer ${m('ms')} ms · dabei ${m('fps', 1)} Bilder/s, längstes Bild ${m('max')} ms · lange Aufgaben ${m('lt')}, Summe ${m('ltSum')} ms, längste ${m('ltMax')} ms${rs[0].same == null ? '' : ` · gleich wie Hauptthread: ${rs.every((r) => r.same) ? 'ja' : 'NEIN'}`}`);
     }
+    // Prüfsummen eines festen Testsignals (10 s, zwei Sinus): vorher/nachher vergleichen = bitgleich
+    const { page, ctx } = await open(browser, srv);
+    const ref = await page.evaluate(async () => {
+      const ex = await import('/src/export.js');
+      const { encodeWav } = await import('/src/wav.js');
+      const sr = 44100; const n = 10 * sr;
+      const b = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: sr });
+      for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = 0.6 * Math.sin(2 * Math.PI * (220 + 110 * c) * i / sr) + 0.5 * Math.sin(i / 7000) * Math.sin(2 * Math.PI * 3000 * i / sr); }
+      const sha = async (blob) => [...new Uint8Array(await crypto.subtle.digest('SHA-1', await blob.arrayBuffer()))].map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 16);
+      const out = { mp3: await sha(await ex.encodeMp3(b)), wav16: await sha(encodeWav(b)), wav24: await sha(encodeWav(b, { bits: 24 })) };
+      if (ex.encodeWavJob) out.wavJob16 = await sha((await ex.encodeWavJob(b)).blob);
+      return out;
+    });
+    console.log('Prüfsummen Testsignal (vorher/nachher gleich = bitgleich):', JSON.stringify(ref));
+    await ctx.close();
   }
   await browser.close(); await srv.close(); process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -651,6 +651,8 @@ async function boot() {
   });
   mountSoundKeys({ store, library });
   const engine = new Engine(store, library);
+  // Freigeben vorgehörter Sounds: was im Song liegt oder gerade vorgehört wird, bleibt geladen
+  library.inUse = () => [...store.project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)), engine.preview?.sampleId];
   const ui = createUi();
 
   // Spuren scharf schalten (2.13 C; Krachwerk ohne: surfaces.recArm). busy setzt die Aufnahme weiter unten

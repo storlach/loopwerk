@@ -7,7 +7,7 @@ description: Wissen und Regeln für die Audio-Engine von Loopwerk – Web Audio 
 
 ## Zeit
 - Einheit im Modell: **Schläge**. Umrechnung nur über `spb = 60 / bpm`.
-- Uhr: ausschließlich `AudioContext.currentTime`. Der Scheduler (`_tick`, alle 25 ms aus einem Worker) plant alles ein, was in den nächsten `LOOKAHEAD` (0,15 s) beginnt.
+- Uhr: ausschließlich `AudioContext.currentTime`. Der Scheduler (`_tick`, alle 25 ms aus einem Worker) plant Stimmen ein, die in den nächsten `LOOKAHEAD` (0,5 s) beginnen; Kurven und Klick nur `NEAR` (0,15 s) voraus (`_planNear`). Ein trotzdem verspäteter Einsatz steigt in `_voice` mit Versatz an der richtigen Stelle ein. Live-Änderungen tauschen im geplanten Fenster aus: Clips über Signaturen (`_resync`), Loop/Songende über `_replan` (laufende Stimmen nahtlos ablösen). Messen: `tools/perf/m9-scheduler.cjs`.
 - `anchors` bilden Kontextzeit → Songposition ab. Jeder Loop-Sprung erzeugt einen Anker. `currentBeat()` und `timeAtBeat()` lesen nur daraus.
 - Grenzvergleiche immer mit `EPS`, und zwar konsistent: Segmente gehören zum Bereich `[b0 - EPS, b1 - EPS)`.
 

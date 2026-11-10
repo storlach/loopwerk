@@ -349,6 +349,14 @@
 - Starter neu gemischt (`starterMix`): Drums führen im Refrain 3,8–5,7 LU über dem Bass (vorher −11,9 … +2,4), Hochpass auf allem außer Drums und Bass, Hats/Percussion heller und seitlich, Hall-/Echo-Sends auf Percussion, Akkorden, Melodie, FX, Mastering je Genre (Laut: House, Techno, Trap, DnB; Ausgewogen: Hip-Hop, Rock; Hell: Pop; Warm: Lo-Fi, Ambient). Ohne Mastering um −16 LUFS, jeder Stil hebt an. Melodic Techno nur angeglichen (Kick 6,2 LU über dem Bass wie vorher 6,3). Beispiel-Arrangement ebenso gemischt, Mastering „Ausgewogen“ an.
 - Test `tests/pegel.test.cjs`; Messskripte `tools/klang/pegel.cjs`, `tools/klang/mix.cjs`; Bezüge `druck-old-patterns.json` und `fx-legacy.f32` neu
 - Offen: Klang-Patch „fett“ (Kompressor 60 %) hebt auf den jetzt leiseren Flächen/Bässen um 2,2–2,7 LU (Grenze 2); Zählbasis Desktop-Start 79 → 80 (Hall-Bus-Regler des Beispiels sichtbar)
+## ✅ Performance Teil 2 (Analyse `docs/analyse/2026-11-performance.md`: Kritisch 2, Wichtig 2–6, Feinschliff 5.8)
+- Scheduler: Stimmen 0,5 s voraus, Kurven und Klick weiter 0,15 s (`_planNear`); ein trotzdem verspäteter Einsatz steigt mit Versatz an der richtigen Stelle ein; Loop/Songende geändert → `_replan` (laufende Stimmen nahtlos abgelöst). Blockade 0,3/0,45 s: vorher 1,0 s Wiedergabe an falscher Stelle, jetzt 0; Live-Änderungen unverändert 10–35 ms; Loop-Ende kurz vor der Marke greift jetzt (vorher 0,5–1,3 s falsch). `tools/perf/m9-scheduler.cjs`
+- Krachwerk ohne Netz nach einem Besuch, mit Aufnahme, Mastering, Zerlegen, MP3 (ADR 014: feste Dateiliste aus `tools/werkstatt-page.cjs`, Fassung = Prüfsumme; Start aus dem Worker-Speicher, innerhalb von 9 Minuten durch zum Browser-Speicher)
+- Export: MP3 im eigenen Worker (`src/dsp/mp3-worker.js`), WAV/Spitze/Prüfsumme der Stems im Rechen-Worker, bitgleich; MP3 am Handy längste Blockade 2,8 s → 0,46 s (Rest: Rendern vorbereiten)
+- Mastering-Messung: Lautheit im Worker, Rendern in Scheiben, Abbruch bei neuer Änderung, nicht für Namen/Loop/Länge, Rückgängig aus dem Gedächtnis, erst 2,5 s nach dem Start
+- Bibliothek gibt vorgehörte Sounds über 150 MB wieder frei (Song und Vorhören nie): alle 537 vorgehört 646 → 165 MB
+- Hall je Spur nur gemessen (ohne Klangänderung nichts zu sparen); 5.8: Ursache im Browser (jedes `addModule` auf einem OfflineAudioContext bleibt im Speicher, `tools/perf/m8c-worklet-mem.cjs`)
+- Test `tests/perf-audio.test.cjs`; Nulltest `tools/perf/render-null.cjs`
 
 ## Entfernt
 - Wunsch-Agent („Wünschen“) – auf Wunsch von Martin gestrichen

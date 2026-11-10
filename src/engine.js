@@ -8,7 +8,14 @@ import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFE
 import { styleOf, masterLatency, peakLimiterLatency } from './dsp/master-core.js';
 import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey, sendKey, sendActive } from './automation.js';
 
-const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
+// Stimmen plant der Scheduler eine halbe Sekunde voraus: hängt der Hauptthread bis etwa 0,45 s, kommt trotzdem kein Einsatz
+// zu spät. Live-Änderungen tauschen im geplanten Fenster aus (_resync, _replan). Kurven und Klick laufen mit dem kurzen
+// Vorlauf NEAR, damit Änderungen daran wie bisher im nächsten Fenster greifen.
+const LOOKAHEAD = 0.5;
+const NEAR = 0.15;
+// Wird ein Einsatz trotzdem zu spät geplant, steigt er so knapp hinter „jetzt“ an der richtigen Stelle im Sample ein
+const LATE_LEAD = 0.005;
+const RESYNC_LEAD = 0.02;
 // Stillstand mit ausgeblendeter Summe: so lange hält die Master-Kurve, damit Hall-/Echo-Fahnen nicht wieder aufleben
 // (Hall klingt nach höchstens 4 s auf −60 dB aus); Vorhören, Pads und Pattern-Vorhören heben sie sofort auf 1
 const MASTER_REST = 4;
@@ -509,6 +516,13 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, 
   return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb), rate);
 }
 
+// Nächste Aufgabe der Ereignisschleife (ohne Zeitgeber): zwischen zwei Scheiben kommt die Oberfläche dran
+const nextTask = () => new Promise((resolve) => {
+  const ch = new MessageChannel();
+  ch.port1.onmessage = () => { ch.port1.close(); resolve(); };
+  ch.port2.postMessage(0);
+});
+
 // Rendert das Projekt offline (Tests, Export). Tonart- und Akkord-Fassungen werden vorher bereitgestellt. Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
 // onProgress(0…1) wird etwa alle 2 s Audio gemeldet.
 // compensate: Limiter-Verzögerung herausrechnen (für Export, damit Loops exakt am Dateianfang beginnen).
@@ -520,7 +534,8 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, 
 // Festhalten (ADR 011): onlyClips = nur diese Clips (Spur-Stumm und Solo zählen nicht, andere Clips verdecken weiter),
 // dry = Spuren ohne Effekte, Fader 1, Mitte, ohne Sends und Kurven. leadSeconds: Vorlauf vor fromBeat, in dem
 // Stimmen, die in fromBeat schon laufen, wie bei einem Loop-Sprung einblenden (gefaltet ergibt das den Loop-Klang).
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true, onlyClips = null, dry = false, leadSeconds = 0 } = {}) {
+// slices: nach jeder Spur dem Hauptthread eine Pause lassen (Hintergrund-Messung); signal: davor abbrechen (AbortError).
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true, onlyClips = null, dry = false, leadSeconds = 0, slices = false, signal = null } = {}) {
   if (onlyTrack != null || master === false || onlyClips || dry) project = renderView(project, { onlyTrack, master, onlyClips, dry });
   if (master === false) limiter = false;
   const only = onlyClips ? new Set(onlyClips) : null;
@@ -570,7 +585,12 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     }
   }
   const audible = audibleMap(project);
+  const pause = async () => {
+    if (signal?.aborted) throw new DOMException('Rendern abgebrochen', 'AbortError');
+    if (slices) await nextTask();
+  };
   for (const track of project.tracks) {
+    await pause();
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
       if (only && !only.has(clip.id)) continue;
@@ -581,6 +601,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
       }
     }
   }
+  await pause();
   if (onProgress) {
     for (let t = 2; t < duration; t += 2) {
       ctx.suspend(t).then(() => { onProgress(t / duration); ctx.resume(); });
@@ -776,6 +797,8 @@ export class Engine extends Emitter {
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     this.cursorBeat = fromBeat;
     this.cursorTime = t0;
+    this.nearTime = t0;
+    this._loopKey = this._loopSig();
     this._autoState = { beat: fromBeat };
     this._autoSmooth = false;
     this._syncAutoChains(false);
@@ -885,7 +908,8 @@ export class Engine extends Emitter {
     const spb = this.spb;
     const loop = this.project.loop;
     const songEnd = totalBeats(this.project);
-    const horizon = this.ctx.currentTime + LOOKAHEAD;
+    const now = this.ctx.currentTime;
+    const horizon = now + LOOKAHEAD;
     let guard = 0;
     while (this.cursorTime < horizon && guard++ < 32) {
       const looping = loop.on && loop.endBeat > loop.startBeat && this.cursorBeat < loop.endBeat - EPS;
@@ -894,25 +918,84 @@ export class Engine extends Emitter {
       const spanEndTime = Math.min(horizon, this.cursorTime + (limit - this.cursorBeat) * spb);
       const spanEndBeat = this.cursorBeat + (spanEndTime - this.cursorTime) / spb;
       this._scheduleSpan(this.cursorBeat, spanEndBeat, this.cursorTime, limit);
-      this._planAuto(this.cursorBeat, spanEndBeat, this.cursorTime, this._autoSmooth ? 'smooth' : 'cont');
-      this._autoSmooth = false;
-      if (this.metronome) this._metronome(this.cursorBeat, spanEndBeat, this.cursorTime);
       this.cursorBeat = spanEndBeat;
       this.cursorTime = spanEndTime;
       if (looping && this.cursorBeat >= limit - EPS) {
         this.cursorBeat = loop.startBeat;
-        this.anchors.push({ time: this.cursorTime, beat: loop.startBeat });
+        this.anchors.push({ time: this.cursorTime, beat: loop.startBeat, wrap: true });
         this._scheduleActiveAt(loop.startBeat, this.cursorTime, loop.endBeat);
-        this._autoSmooth = true;
         // Anker werden nach 1 s gekürzt – wer jeden Sprung braucht (Takes im Loop), hört hier mit
         this.emit('wrap', { time: this.cursorTime, beat: loop.startBeat });
       }
     }
+    this._planNear(Math.min(now + NEAR, this.cursorTime));
     // Alte Ankerpunkte aufräumen (einer vor "jetzt" bleibt für die Positionsberechnung).
-    const now = this.ctx.currentTime;
     // Anker eine Weile behalten: die hörbare Position (heardBeat) liegt um die Ausgabelatenz zurück
     while (this.anchors.length > 1 && this.anchors[1].time <= now - 1) this.anchors.shift();
     if (this.currentBeat() >= songEnd - EPS) this.stop();
+  }
+
+  // Kurven und Klick bis `until` planen, entlang der Anker, die das Stimmen-Fenster gesetzt hat (nach einem Loop-Sprung
+  // setzen die Kurven weich an, wie bisher)
+  _planNear(until) {
+    const spb = this.spb;
+    const anchors = this.anchors;
+    let t = this.nearTime;
+    let i = 0;
+    while (i + 1 < anchors.length && anchors[i + 1].time <= t + 1e-9) i++;
+    let guard = 0;
+    while (t < until - 1e-9 && guard++ < 64) {
+      const a = anchors[i];
+      const next = anchors[i + 1];
+      const tEnd = next ? Math.min(next.time, until) : until;
+      const b0 = a.beat + (t - a.time) / spb;
+      const b1 = a.beat + (tEnd - a.time) / spb;
+      this._planAuto(b0, b1, t, this._autoSmooth ? 'smooth' : 'cont');
+      this._autoSmooth = false;
+      if (this.metronome) this._metronome(b0, b1, t);
+      t = tEnd;
+      if (next && t >= next.time - 1e-9) {
+        i++;
+        if (next.wrap) this._autoSmooth = true;
+      }
+    }
+    this.nearTime = Math.max(this.nearTime, t);
+  }
+
+  // Loop und Songende bestimmen, wohin das Stimmen-Fenster springt
+  _loopSig() {
+    const l = this.project.loop;
+    return `${!!l.on}|${l.startBeat}|${l.endBeat}|${totalBeats(this.project)}`;
+  }
+
+  // Loop oder Songende geändert: alles hinter jetzt + RESYNC_LEAD neu planen. Noch nicht begonnene Stimmen fallen weg,
+  // laufende werden dort nahtlos abgelöst (gleiche Überblendung wie beim Teilen), damit sie zum neuen Loop passen.
+  _replan() {
+    this._loopKey = this._loopSig();
+    const now = this.ctx.currentTime;
+    const t = now + RESYNC_LEAD;
+    if (this.cursorTime <= t) return;
+    const beat = this.currentBeat(t);
+    this.anchors = this.anchors.filter((a) => a.time <= t + 1e-9);
+    const resume = new Set();
+    const XF = 96 / this.ctx.sampleRate;
+    for (const v of [...this.voices]) {
+      if (v.when >= t - 1e-9) {
+        try { v.src.stop(t); } catch { /* bereits gestoppt */ }
+        this.voices.delete(v);
+      } else if (v.end > t + 1e-4) {
+        v.g.gain.cancelScheduledValues(t - XF);
+        v.g.gain.setValueAtTime(1, t - XF);
+        v.g.gain.linearRampToValueAtTime(0, t + XF);
+        try { v.src.stop(t + XF + 0.001); } catch { /* bereits gestoppt */ }
+        this.voices.delete(v);
+        resume.add(v.clipId);
+      }
+    }
+    this.cursorBeat = beat;
+    this.cursorTime = t;
+    if (resume.size) this._scheduleActiveAt(beat, t, this._limitFor(beat), (clip) => resume.has(clip.id));
+    this._tick();
   }
 
   // ---------- Automation ----------
@@ -1033,17 +1116,19 @@ export class Engine extends Emitter {
     if (!this.playing || !this.anchors.length) {
       for (const l of lanes) (strip.autoHeld ||= {})[l.key] = put(l, this.positionBeat, now);
     } else {
+      // Kurven sind bis nearTime geplant (kurzer Vorlauf)
+      const until = this.nearTime;
       let t = Math.max(now, this.anchors[0].time);
-      if (t >= this.cursorTime - 1e-9) {
+      if (t >= until - 1e-9) {
         for (const l of lanes) put(l, this.currentBeat(t), t);
       } else {
         let i = 0;
         while (i + 1 < this.anchors.length && this.anchors[i + 1].time <= t) i++;
         let entry = 'set';
-        while (t < this.cursorTime - 1e-9 && i < this.anchors.length) {
+        while (t < until - 1e-9 && i < this.anchors.length) {
           const a = this.anchors[i];
           const next = this.anchors[i + 1];
-          const tEnd = next ? Math.min(next.time, this.cursorTime) : this.cursorTime;
+          const tEnd = next ? Math.min(next.time, until) : until;
           const b0 = a.beat + (t - a.time) / spb;
           const b1 = a.beat + (tEnd - a.time) / spb;
           for (const l of lanes) planLane(l.param, l.map, l.points, b0, b1, t, spb, entry);
@@ -1105,9 +1190,12 @@ export class Engine extends Emitter {
   }
 
   _voice(track, clip, sample, node, seg, fromBeat, toBeat, when, rate = 1) {
+    // Zu spät geplant (Hauptthread hing): an der Stelle einsteigen, die jetzt klingen müsste, statt verspätet von vorn
+    const soon = this.ctx.currentTime + LATE_LEAD;
+    if (when < soon) { fromBeat += (soon - when) / this.spb; when = soon; }
     if (toBeat - fromBeat <= 1e-4) return;
     const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb, rate);
-    const voice = { clipId: clip.id, sig: this._sig(track, clip), src, g };
+    const voice = { clipId: clip.id, sig: this._sig(track, clip), src, g, when, end: when + (toBeat - fromBeat) * this.spb };
     this.voices.add(voice);
     src.onended = () => this.voices.delete(voice);
   }
@@ -1123,6 +1211,7 @@ export class Engine extends Emitter {
     const bpb = countIn ? b1 : this.project.beatsPerBar;
     for (let k = Math.ceil(b0 - EPS); k < b1 - EPS; k++) {
       const t = t0 + (k - b0) * this.spb;
+      if (!countIn && t < this.ctx.currentTime) continue; // verspätet: lieber kein Klick als einer neben dem Takt
       const o = this.ctx.createOscillator();
       o.type = 'square';
       o.frequency.value = k % bpb === 0 ? 1760 : 1175;
@@ -1181,6 +1270,7 @@ export class Engine extends Emitter {
     }
     syncMix(this.ctx, this.project, this.mix, this.spb, true);
     this._syncAutoChains();
+    if (this.playing && this._loopKey !== this._loopSig()) this._replan();
     if (this.playing) this._resync();
   }
 
@@ -1257,7 +1347,7 @@ export class Engine extends Emitter {
     await this._ensure();
     this.stopPreview();
     // Sound auf Abruf: beim ersten Anhören laden bzw. erzeugen
-    const sample = await this.library.ensure?.(sampleId) ?? this.library.get(sampleId);
+    const sample = await this.library.ensure?.(sampleId, { browse: true }) ?? this.library.get(sampleId);
     if (!sample?.buffer) return;
     let when = this.ctx.currentTime + 0.02;
     if (this.playing) {

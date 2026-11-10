@@ -3,6 +3,7 @@
 // Genutzt von tools/build-pages.cjs (GitHub Pages) und tests/serve.cjs (lokal).
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -58,13 +59,48 @@ function werkstattManifest() {
   }, null, 2);
 }
 
+// Dateiliste für den Service Worker (ADR 014): alles, was Krachwerk ohne Netz braucht – alle Module unter src/ (auch die
+// erst bei Bedarf geladenen: Worklets, Rechen-Worker, Zerlegen), der MP3-Encoder und die Icons. Pfade relativ zu /werkstatt/.
+// Keine Klänge: Krachwerk hat keine Kataloge.
+function walk(dir, out = []) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) walk(f, out); else out.push(f);
+  }
+  return out;
+}
+function precacheList() {
+  const rel = (f) => '../' + path.relative(ROOT, f).split(path.sep).join('/');
+  const sw = path.join(ROOT, 'src', 'werkstatt', 'sw.js');
+  const src = walk(path.join(ROOT, 'src')).filter((f) => f.endsWith('.js') && f !== sw);
+  const lame = walk(path.join(ROOT, 'vendor', 'lamejs')).filter((f) => f.endsWith('.js'));
+  const icons = walk(path.join(ROOT, 'assets', 'icons')).filter((f) => /krachwerk/.test(path.basename(f)));
+  return [...src, ...lame, ...icons].sort().map((f) => [rel(f), f]);
+}
+
+const FONT_CSS = /<link rel="stylesheet" href="(https:\/\/fonts\.googleapis\.com\/[^"]+)"/;
+
+// sw.js mit vorangestellter Liste; version = Prüfsumme über alle Dateien, damit jede neue Fassung neu vorgeladen wird
+function werkstattSw(page, manifest) {
+  const list = precacheList();
+  const hash = crypto.createHash('sha1');
+  const template = fs.readFileSync(path.join(ROOT, 'src', 'werkstatt', 'sw.js'), 'utf8');
+  for (const part of [page, manifest, template]) hash.update(part);
+  for (const [name, f] of list) hash.update(name).update(fs.readFileSync(f));
+  const fonts = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').match(FONT_CSS)?.[1].replace(/&amp;/g, '&') ?? null;
+  const pre = { version: hash.digest('hex').slice(0, 12), files: ['./', 'manifest.webmanifest', ...list.map(([name]) => name)], fonts };
+  return `self.PRECACHE = ${JSON.stringify(pre)};\n` + template;
+}
+
 // Alle Dateien unter /werkstatt/: Name → [Inhalt, Typ]
 function werkstattFiles(skeletonHead) {
+  const page = werkstattPage(skeletonHead);
+  const manifest = werkstattManifest();
   return {
-    'index.html': [werkstattPage(skeletonHead), 'text/html'],
-    'manifest.webmanifest': [werkstattManifest(), 'application/manifest+json'],
-    'sw.js': [fs.readFileSync(path.join(ROOT, 'src', 'werkstatt', 'sw.js'), 'utf8'), 'text/javascript'],
+    'index.html': [page, 'text/html'],
+    'manifest.webmanifest': [manifest, 'application/manifest+json'],
+    'sw.js': [werkstattSw(page, manifest), 'text/javascript'],
   };
 }
 
-module.exports = { werkstattPage, werkstattManifest, werkstattFiles };
+module.exports = { werkstattPage, werkstattManifest, werkstattFiles, precacheList };
