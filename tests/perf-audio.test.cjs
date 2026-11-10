@@ -1,6 +1,11 @@
 // Performance Teil 2 (docs/analyse/2026-11-performance.md): Scheduler mit Vorlauf und Einstieg mit Versatz,
 // Krachwerk ohne Netz, MP3 ohne Blockade, Mastering-Messung, Freigeben von Klängen. Grenzen prüfen Verhalten, nicht die Uhr.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { chromium } = require('playwright');
 const { openApp, createChecker } = require('./harness.cjs');
+const { start } = require('./serve.cjs');
 const { schedProbe } = require('../tools/perf/sched-probe.cjs');
 
 const { check, finish } = createChecker();
@@ -29,9 +34,80 @@ async function scheduler() {
   await app.close();
 }
 
+// Mikrofon-Attrappe: 1 s Stille, dann ein kurzer tiefer Schlag (wie in werkstatt.test)
+function micWav(file) {
+  const sr = 48000, n = sr * 4;
+  const buf = Buffer.alloc(44 + n * 2);
+  buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12);
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22); buf.writeUInt32LE(sr, 24);
+  buf.writeUInt32LE(sr * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+  let ph = 0;
+  for (let i = 0; i < n; i++) {
+    let v = 0;
+    const k = i - sr;
+    if (k >= 0 && k < sr * 0.4) { const f = 46 + 119 * Math.exp(-k / (sr * 0.03)); ph += 2 * Math.PI * f / sr; v = 0.3 * Math.sin(ph) * Math.exp(-k / (sr * 0.09)); }
+    buf.writeInt16LE(Math.round(v * 32767), 44 + i * 2);
+  }
+  fs.writeFileSync(file, buf);
+}
+
+// Krachwerk: ein Besuch mit Netz, dann ohne Netz starten, alles Nachgeladene prüfen und aufnehmen
+async function krachwerk() {
+  const server = await start();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const wav = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'perf-audio-')), 'bumm.wav');
+  micWav(wav);
+  const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wav}%noloop`] });
+  const C = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  const page = await C.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  try {
+    await page.goto(`${base}/werkstatt/`);
+    await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
+    // Vorladen fertig: der Worker ist aktiv (aktiviert erst nach vollständigem addAll)
+    const pre = await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.ready;
+      const keys = await caches.keys();
+      const name = keys.find((k) => k.startsWith('krachwerk-') && k !== 'krachwerk-runtime');
+      return { active: !!reg.active, entries: name ? (await (await caches.open(name)).keys()).length : 0 };
+    });
+    check('Krachwerk: nach dem ersten Besuch liegt die ganze Dateiliste im Speicher', pre.active && pre.entries > 100, JSON.stringify(pre));
+    await C.setOffline(true);
+    await page.reload();
+    const ok = await page.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 }).then(() => true, () => false);
+    check('Krachwerk startet nach einem Besuch ohne Netz', ok);
+    if (ok) {
+      const p = await page.evaluate(async () => {
+        const out = {};
+        const lw = window.loopwerk;
+        await lw.engine._ensure();
+        out.fxWorklet = lw.engine.worklets === true;
+        try { const { runJob } = await import('./src/dsp/run.js'); out.worker = (await runJob('crc', { chs: [new Uint8Array([1, 2, 3])] })) > 0; } catch (e) { out.worker = e.message; }
+        try { await import('./src/cut-sound.js'); out.cut = true; } catch (e) { out.cut = e.message; }
+        try { const r = await fetch('vendor/lamejs/lame.min.js'); out.lame = r.ok; } catch (e) { out.lame = e.message; }
+        try { const r = await fetch('src/dsp/mp3-worker.js'); out.mp3 = r.ok; } catch (e) { out.mp3 = e.message; }
+        return out;
+      });
+      check('Ohne Netz: Mastering-Worklet, Rechen-Worker, Zerlegen und MP3-Encoder da', p.fxWorklet === true && p.worker === true && p.cut === true && p.lame === true && p.mp3 === true, JSON.stringify(p));
+      await page.tap('#rec-btn');
+      const rec = await page.waitForFunction(() => window.loopwerk.store.project.tracks.some((t) => t.clips.length), null, { timeout: 20000 }).then(() => true, () => false);
+      const st = await page.evaluate(() => ({ state: window.loopwerk.recorder.state, clips: window.loopwerk.store.project.tracks.flatMap((t) => t.clips).length }));
+      check('Ohne Netz: Aufnahme mit ● wird zum Clip', rec, JSON.stringify(st));
+    }
+    await C.setOffline(false);
+    check('Krachwerk ohne Netz: keine Konsolenfehler', errors.length === 0, errors.join(' | '));
+  } catch (e) {
+    check('Krachwerk: Ablauf ohne Ausnahme', false, e.stack);
+  }
+  await browser.close();
+  server.close();
+}
+
 (async () => {
   const only = process.env.PERF_AUDIO_ONLY ? process.env.PERF_AUDIO_ONLY.split(',') : null;
-  const parts = { scheduler };
+  const parts = { scheduler, krachwerk };
   for (const [name, fn] of Object.entries(parts)) if (!only || only.includes(name)) await fn();
   finish();
 })();
