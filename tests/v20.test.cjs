@@ -262,6 +262,17 @@ const { check, finish } = createChecker();
     const swiped = await mixState();
     check('Handy: waagrecht über die Fader wischen scrollt die Kanäle', swiped.scroll > before.scroll + 60, `${before.scroll} → ${swiped.scroll}`);
     check('Handy: dabei verstellt sich kein Fader und kein Panorama', JSON.stringify(swiped.vols) === JSON.stringify(before.vols) && JSON.stringify(swiped.pans) === JSON.stringify(before.pans), JSON.stringify({ before: before.vols, after: swiped.vols }));
+    // Erst warten, bis die Kanalliste vom Wischen ausgerollt ist: Ein Tipp in eine noch gleitende Liste stoppt nur das Gleiten
+    // (wie in jeder Scroll-Liste) und erreicht den Fader nicht.
+    await page.evaluate(() => new Promise((done) => {
+      const n = document.querySelector('#mixer .mixer-strips');
+      let last = n.scrollLeft; let still = 0;
+      const tick = () => { if (n.scrollLeft === last) still++; else { still = 0; last = n.scrollLeft; } if (still >= 12) done(); else requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }));
+    // Der Kanal, an dem gleich gezogen wird, muss im Bild liegen (das Wischen oben scrollt je nach Schwung unterschiedlich weit)
+    await page.evaluate(() => document.querySelector('#mixer .strip[data-strip-id="t3"]').scrollIntoView({ inline: 'center', block: 'nearest' }));
+    await page.waitForTimeout(250);
     // Antippen springt nicht, senkrecht ziehen verstellt relativ
     const f3 = await page.locator('#mixer .strip[data-strip-id="t3"] .strip-fader-row').boundingBox();
     await page.touchscreen.tap(f3.x + f3.width / 2, f3.y + 10);
