@@ -237,14 +237,16 @@ async function soundCache() {
       const before = rms(await renderProject(store.project, library, opts));
       const limit = 20e6;
       library.cacheLimit = limit;
-      const free = () => library.list().filter((s) => !songIds.has(s.id) && !s.lazy && (s.def || s._load) && s.category !== 'own');
-      const ids = library.list().filter((s) => !songIds.has(s.id) && (s.def || s._load) && s.category !== 'own').map((s) => s.id).slice(0, 60);
+      const free = () => library.list().filter((s) => !songIds.has(s.id) && !s.lazy && s.browsed && (s.def || s._load) && s.category !== 'own');
+      const ids = library.list().filter((s) => !songIds.has(s.id) && s.lazy && (s.def || s._load) && s.category !== 'own').map((s) => s.id).slice(0, 60);
       for (const id of ids) { await engine.previewSample(id).catch(() => {}); engine.stopPreview(); }
       const last = ids[ids.length - 1];
       await sleep(3600); // Aufräumen in Ruhe
       const bytes = free().reduce((a, s) => a + library.soundBytes(s), 0);
       const song = [...songIds].every((id) => library.get(id)?.buffer && !library.get(id).lazy);
       const after = rms(await renderProject(store.project, library, opts));
+      // Ohne Vorhören Geladenes (Grundausstattung, Song) bleibt
+      const coreKept = library.coreIds.filter((id) => !songIds.has(id)).every((id) => !library.get(id).lazy);
       // Freigegebener Sound lädt beim nächsten Vorhören wieder
       const gone = ids.find((id) => library.get(id).lazy);
       await engine.previewSample(gone);
@@ -254,10 +256,11 @@ async function soundCache() {
       await sleep(600);
       const voices = engine.voices.size;
       engine.stop();
-      return { bytes, limit, song, before, after, lastLoaded: !library.get(last).lazy, released: ids.filter((id) => library.get(id).lazy).length, again, voices, tracks: store.project.tracks.filter((t) => t.clips.some((c) => c.startBeat < 1)).length };
+      return { bytes, limit, song, before, after, coreKept, lastLoaded: !library.get(last).lazy, released: ids.filter((id) => library.get(id).lazy).length, again, voices, tracks: store.project.tracks.filter((t) => t.clips.some((c) => c.startBeat < 1)).length };
     });
     check('Nach 60 vorgehörten Sounds: Speicher der freigebbaren Klänge unter der Obergrenze', r.bytes <= r.limit && r.released > 0, `${(r.bytes / 1e6).toFixed(1)} MB ≤ ${(r.limit / 1e6).toFixed(0)} MB, ${r.released} freigegeben`);
     check('Zuletzt vorgehörter Sound bleibt geladen', r.lastLoaded);
+    check('Ohne Vorhören Geladenes (Grundausstattung) bleibt', r.coreKept);
     check('Song-Sounds bleiben geladen, der Song klingt wie vorher', r.song && Math.abs(r.after - r.before) < 1e-4 * Math.max(1, r.before), `RMS ${r.before.toFixed(5)} → ${r.after.toFixed(5)}`);
     check('Freigegebener Sound lädt beim Vorhören wieder', r.again);
     check('Song spielt danach (Stimmen geplant)', r.voices >= r.tracks && r.voices > 0, `${r.voices} Stimmen, ${r.tracks} Spuren ab Schlag 0`);

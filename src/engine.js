@@ -1347,7 +1347,7 @@ export class Engine extends Emitter {
     await this._ensure();
     this.stopPreview();
     // Sound auf Abruf: beim ersten Anhören laden bzw. erzeugen
-    const sample = await this.library.ensure?.(sampleId) ?? this.library.get(sampleId);
+    const sample = await this.library.ensure?.(sampleId, { browse: true }) ?? this.library.get(sampleId);
     if (!sample?.buffer) return;
     let when = this.ctx.currentTime + 0.02;
     if (this.playing) {

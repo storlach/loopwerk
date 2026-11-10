@@ -1977,8 +1977,9 @@ export class Library extends Emitter {
     this._recipesJson = null; // zuletzt übernommene project.recipes (applyRecipes)
     this._recipeRun = Promise.resolve();
     this.materialColors = false; // Krachwerk: colorCat aus dem Material (Kiste und Song gleich gefärbt)
-    // Freigeben (trim): vorgehörte Katalog-Sounds und erzeugte Loops, die weder im Song liegen noch gerade klingen
-    // (inUse liefert die IDs, main.js), fallen über cacheLimit Bytes wieder weg – zuletzt benutzte bleiben
+    // Freigeben (trim): vorgehörte Katalog-Sounds und erzeugte Loops (ensure mit browse), die weder im Song liegen noch
+    // gerade klingen (inUse liefert die IDs, main.js), fallen über cacheLimit Bytes wieder weg – zuletzt benutzte bleiben.
+    // Was ohne Vorhören geladen wurde (Song, Export, Grundausstattung), bleibt.
     this.cacheLimit = SOUND_CACHE_BYTES;
     this.inUse = null;
     this._used = new Map(); // id → Zähler der letzten Benutzung
@@ -1992,7 +1993,7 @@ export class Library extends Emitter {
 
   // Lässt sich der Klang später genauso wieder laden bzw. erzeugen? Eigene Sounds, Patterns, Rezepte und Testsignale nicht.
   _releasable(s) {
-    return !s.lazy && !!(s.def || s._load) && s.category !== 'own' && !s.make && !s.recipeKey && !s.cooked
+    return !s.lazy && !!s.browsed && !!(s.def || s._load) && s.category !== 'own' && !s.make && !s.recipeKey && !s.cooked
       && !this.pending.has(s.id) && !this._inflight.has(s);
   }
 
@@ -2354,10 +2355,12 @@ export class Library extends Emitter {
     return sample;
   }
 
-  async ensure(id) {
+  // browse: zum Vorhören geladen (darf später wieder freigegeben werden)
+  async ensure(id, { browse = false } = {}) {
     const s = this.samples.get(id);
     if (!s) return s;
     this._touch(id);
+    if (browse && s.lazy && !this.pending.has(id)) s.browsed = true;
     if (!s.lazy) {
       // Nach einem Tempowechsel noch nicht angepasst (kommt sonst im Hintergrund dran): bei Gebrauch sofort –
       // jeder in einer eigenen Aufgabe, damit viele gleichzeitige Anfragen den Hauptthread nicht am Stück belegen
