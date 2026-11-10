@@ -213,7 +213,7 @@ function installPegel() {
         // „Presets“: Arten des Verzerrers, Klang aus Beschreibung („fett“, „verzerrt“, „stark verzerrt“, „8-Bit“)
         hard: with2('drive', { type: 'hard' }), fuzz: with2('drive', { type: 'fuzz' }), crush: with2('drive', { type: 'crush' }),
         crunch: with2('drive', { type: 'amp-crunch' }), lead: with2('drive', { type: 'amp-lead' }), metal: with2('drive', { type: 'amp-metal' }),
-        fett: with2('comp', { amount: 0.6 }), verzerrt: with2('drive', { drive: 0.5 }), stark: with2('drive', { drive: 0.8 }), bit: with2('drive', { type: 'crush', drive: 0.7, tone: 0.6 }),
+        /* „fett“ wie in src/ai.js (Kompressor 45 %) */ fett: with2('comp', { amount: 0.45 }), verzerrt: with2('drive', { drive: 0.5 }), stark: with2('drive', { drive: 0.8 }), bit: with2('drive', { type: 'crush', drive: 0.7, tone: 0.6 }),
         oldComp: (() => { const fx = FX.defaultFx(); fx.comp.on = true; return fx; })(),
         oldDrive: (() => { const fx = FX.defaultFx(); fx.drive.on = true; return fx; })(),
       };
