@@ -1879,9 +1879,11 @@ async function renderLoop(def, bpm, semis = 0) {
     }
   }
   const peak = bufferPeak(buffer);
-  if (peak > 0) scale(buffer, (def.peak ?? 0.5) / peak);
-  // Lautheit der Rolle (ADR 013, feste Tabelle – beim Laden wird nichts gemessen); wirkt in der Stimme neuer Projekte
-  return { buffer, lengthBeats: beats, level: soundLevel(def.id) };
+  // Spitze wie bisher, dann die Lautheit der Rolle (ADR 013, feste Tabelle – beim Laden wird nichts gemessen);
+  // level = angewandter Faktor gegen die Spitzen-Normalisierung (für tools/klang/pegel.cjs)
+  const level = soundLevel(def.id);
+  if (peak > 0) scale(buffer, ((def.peak ?? 0.5) / peak) * level);
+  return { buffer, lengthBeats: beats, level };
 }
 
 // Echte Loops auf das Projekttempo strecken (Länge exakt in Schlägen). WSOLA rechnet der Rechen-Worker,
@@ -2610,8 +2612,9 @@ async function loadCatalogEntry(entry) {
   try {
     const orig = await decode(await fetchAsset(entry.file));
     const peak = bufferPeak(orig);
-    if (peak > 0) scale(orig, (PEAK_TARGET[entry.category] ?? 0.5) / peak);
-    const sample = { ...entry, orig, duration: orig.duration, level: soundLevel(entry.id) };
+    const level = soundLevel(entry.id);
+    if (peak > 0) scale(orig, ((PEAK_TARGET[entry.category] ?? 0.5) / peak) * level);
+    const sample = { ...entry, orig, duration: orig.duration, level };
     if (entry.kind === 'loop') sample.bpm = Math.round((entry.beats * 60 / orig.duration) * 100) / 100;
     return sample;
   } catch (err) {

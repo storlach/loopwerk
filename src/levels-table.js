@@ -548,7 +548,7 @@ export const SOUND_DB = {
   "vc-xylofon-g5": [-5.6, 'note'],
 };
 export const KIT_DB = {
-  "akustik": [-6.2, 'drums'],
+  "akustik": [-3.2, 'drums'],
   "druck": [-7.2, 'drums'],
   "elektro": [-8, 'drums'],
   "techno": [-6.8, 'drums'],

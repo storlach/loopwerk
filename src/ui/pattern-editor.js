@@ -14,7 +14,6 @@ import { trackToNotes, fitOctaves, SCALES } from '../dsp/pitch.js';
 import { runJob } from '../dsp/run.js';
 import { startMicCapture } from '../recorder.js';
 import { decodeAudio } from '../samples.js';
-import { levelTrim } from '../engine.js';
 import { continueMelody, designSound } from '../ai.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { place, touch } from './place.js';
@@ -806,9 +805,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
       const src = ctx.createBufferSource();
       src.buffer = s.buffer;
       src.loop = true;
-      // so laut wie im Song (Pegel nach Lautheit, ADR 013)
-      const k = levelTrim(store.project, s);
-      if (k !== 1) { const g = ctx.createGain(); g.gain.value = k; src.connect(g).connect(engine.mix.master); } else src.connect(engine.mix.master);
+      src.connect(engine.mix.master);
       src.start(when);
       for (const old of this.srcs) old.stop(when);
       this.srcs = [src];

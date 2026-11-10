@@ -1,7 +1,7 @@
 // Gemeinsame Messung für tools/klang/pegel.cjs und tests/pegel.test.cjs (ADR 013): Lautheit, Spitze und Rolle je
 // Bibliotheks-Sound, je Drum-Kit (Grundbeat) und je Melodie-Klang (Standard-Melodie bzw. -Akkorde).
-// Ergebnis je Eintrag: { role, loud, peakDb, levelDb, low } – loud/peakDb so, wie es in einem neuen Projekt klingt
-// (Puffer · level); levelDb = Pegel gegen die Spitzen-Normalisierung (sample.level bzw. renderPattern().level).
+// Ergebnis je Eintrag: { role, loud, peakDb, levelDb, low } – loud/peakDb so, wie es klingt; levelDb = angewandter
+// Pegel gegen die Spitzen-Normalisierung (sample.level bzw. renderPattern().level).
 
 // Grundbeat und Standard-Melodien (auch für die Tabelle in src/levels-table.js)
 const BEAT = { kick: [0, 4, 8, 12], snare: [4, 12], hat: [0, 2, 4, 6, 8, 10, 12, 14] };
@@ -45,8 +45,7 @@ async function measureAll(page, { parts = ['lib', 'kits', 'klaenge'], ids = '' }
         if (!b) continue;
         const one = s.kind === 'oneshot' || !!s.oneShot;
         const f = { low: Math.round(low(b) * 1000) / 1000 };
-        const L = db(s.level ?? 1); // so klingt es in einem neuen Projekt (Puffer · level, ADR 013)
-        res.lib[s.id] = { role: LV.soundRole(s.id) ?? LV.roleOf(s, f), loud: (one ? mom(b) : integ(b)) + L, peakDb: db(peak(b)) + L, levelDb: L, ...f, cat: s.category, one };
+        res.lib[s.id] = { role: LV.soundRole(s.id) ?? LV.roleOf(s, f), loud: one ? mom(b) : integ(b), peakDb: db(peak(b)), levelDb: db(s.level ?? 1), ...f, cat: s.category, one };
       }
     }
     if (parts.includes('kits')) {
@@ -56,8 +55,7 @@ async function measureAll(page, { parts = ['lib', 'kits', 'klaenge'], ids = '' }
         for (const [k, on] of Object.entries(BEAT)) for (const i of on) rows[k][i] = 1;
         if (kit.map) await library.ensureMany(Object.values(kit.map));
         const r = await I.renderPattern({ type: 'drums', name: 'Grundbeat', bars: 1, kit: kit.id, rows }, 120, library);
-        const L = db(r.level ?? 1);
-        res.kits[kit.id] = { role: 'drums', loud: integ(r.buffer) + L, peakDb: db(peak(r.buffer)) + L, levelDb: L };
+        res.kits[kit.id] = { role: 'drums', loud: integ(r.buffer), peakDb: db(peak(r.buffer)), levelDb: db(r.level ?? 1) };
       }
     }
     if (parts.includes('klaenge')) {
@@ -69,76 +67,80 @@ async function measureAll(page, { parts = ['lib', 'kits', 'klaenge'], ids = '' }
           : MELODY.map((pitch, i) => ({ pitch: pitch - (role === 'bass' ? 12 : 0), start: i, len: 0.9, vel: 0.9 }));
         if (p.sampled) await I.preparePreset(p.id);
         const r = await I.renderPattern({ type: 'synth', name: 'm', bars: 2, preset: p.id, notes }, 120, library);
-        const L = db(r.level ?? 1);
-        res.klaenge[p.id] = { role, loud: integ(r.buffer) + L, peakDb: db(peak(r.buffer)) + L, levelDb: L };
+        res.klaenge[p.id] = { role, loud: integ(r.buffer), peakDb: db(peak(r.buffer)), levelDb: db(r.level ?? 1) };
       }
     }
     return res;
   }, { parts, ids, BEAT, MELODY, CHORDS });
 }
 
-// Alte Projekte für den Nulltest (ADR 013): im jeweiligen Stand erzeugt (Starter, Beispiel, ein gemischtes Projekt mit
-// Fremd-Loops, Einzelklängen, Beat- und Melodie-Patterns, Sampler, Tonartwechsel, Dehnung). Ohne `levels` = vor ADR 013.
-async function makeOldProjects(page) {
-  return page.evaluate(async () => {
-    const { store, library } = window.loopwerk;
-    const S = await import('./src/starter.js');
+// Mischung eines Starters bzw. des Beispiels (ADR 013, K1/K2/K3/W1): Lautheit je Spur im Refrain (ohne Limiter),
+// Refrain so, wie er klingt (Mastering wie gesetzt): Lautheit, Anteil unter 250 Hz / über 2 kHz / über 4 kHz, Breite
+// (Seite/(Mitte+Seite)); dazu der Song-Abschnitt `song` ohne Mastering und mit jedem Stil (wie der Export).
+// Ergebnis auch: Mastering-Einstellung, Sends und Effekte je Spur (für die Prüfung „nie auf Kick und Bass“).
+async function measureMix(page, { id, variant = 0, styles = null, song = 'VC' } = {}) {
+  return page.evaluate(async ({ id, variant, styles, song }) => {
     const M = await import('./src/model.js');
-    const out = {};
-    const strip = (p) => { const q = JSON.parse(JSON.stringify(p)); delete q.levels; return q; };
-    for (const id of ['pop', 'hiphop', 'rock']) { await S.runStarter(id, { store, library }); out[id] = strip(store.project); }
-    out.demo = strip(M.createDemoProject());
-    const p = M.createEmptyProject({ tracks: 6, bpm: 100 });
-    p.name = 'Gemischt';
-    p.keyChanges = [{ beat: 16, key: 'Cm' }];
-    const row = (on, v = 1) => Array.from({ length: 16 }, (_, i) => (on.includes(i) ? v : 0));
-    const rows = (o) => ({ kick: row([]), snare: row([]), clap: row([]), hat: row([]), open: row([]), tomLo: row([]), tomHi: row([]), crash: row([]), ...o });
-    p.patterns = {
-      b1: { type: 'drums', name: 'Beat', bars: 1, kit: 'elektro', rows: rows({ kick: row([0, 4, 8, 12]), snare: row([4, 12]), hat: row([0, 2, 4, 6, 8, 10, 12, 14], 0.7) }) },
-      b2: { type: 'drums', name: 'Akustik', bars: 1, kit: 'akustik', rows: rows({ kick: row([0, 8, 10]), snare: row([4, 12]), hat: row([0, 2, 4, 6, 8, 10, 12, 14]) }) },
-      m1: { type: 'synth', name: 'Melodie', bars: 2, preset: 'pluck', notes: [57, 60, 64, 62, 60, 59, 57, 64].map((pitch, i) => ({ pitch, start: i, len: 0.9, vel: 0.9 })) },
-      m2: { type: 'synth', name: 'Klavier', bars: 2, preset: 'vc-grand', notes: [[57, 60, 64], [53, 57, 60]].flatMap((c, j) => c.map((pitch) => ({ pitch, start: j * 4, len: 3.9, vel: 0.8 }))) },
-    };
-    const clip = (n, sampleId, startBeat, lengthBeats, extra = {}) => ({ id: 'c' + n, sampleId, startBeat, lengthBeats, offsetBeats: 0, ...extra });
-    p.tracks[0].clips = [clip(1, 'pat-b1', 0, 16), clip(2, 'pat-b2', 16, 16)];
-    p.tracks[1].clips = [clip(3, 'sp-loop-amen', 0, 16), clip(4, 'sp-bd-808', 16, 2), clip(5, 'vc-kick-3', 20, 2)];
-    p.tracks[2].clips = [clip(6, 'gen-hiphop-bass', 0, 32)];
-    p.tracks[3].clips = [clip(7, 'pat-m1', 0, 16), clip(8, 'pat-m2', 16, 16)];
-    p.tracks[4].clips = [clip(9, 'chords-pad', 0, 16, { gain: 0.7, fadeInBeats: 4 }), clip(10, 'gtr-pop-strum', 16, 16, { stretch: 2 })];
-    p.tracks[5].clips = [clip(11, 'fx-riser', 8, 8), clip(12, 'sp-ambi-swoosh', 24, 4), clip(13, 'kf-gretsch-a2', 28, 4)];
-    p.tracks[2].volume = 0.7;
-    out.gemischt = strip(p);
-    return out;
-  });
-}
-
-// Projekt rendern und messen: Effektivwert je 100 ms (dB, je Kanal) der Summe ohne Limiter und integrierte Lautheit je Spur
-async function measureProject(page, project, { fromBeat = 0, toBeat = 64 } = {}) {
-  return page.evaluate(async ({ project, fromBeat, toBeat }) => {
-    const { library, renderProject, patterns } = window.loopwerk;
+    const S = await import('./src/starter.js');
+    const E = await import('./src/export.js');
+    const MC = await import('./src/dsp/master-core.js');
     const Lo = await import('./src/dsp/loudness.js');
-    await patterns.sync(project);
-    await library.ensureProject(project);
-    project.master = { ...(project.master || {}), mastering: { ...(project.master?.mastering || {}), on: false } };
-    const end = Math.min(toBeat, project.lengthBars * project.beatsPerBar);
-    const opts = { fromBeat, toBeat: end, limiter: false };
-    const db = (x) => (x > 0 ? 20 * Math.log10(x) : -200);
-    const sum = await renderProject(project, library, opts);
-    const step = Math.round(0.1 * sum.sampleRate);
-    const blocks = [];
-    for (let c = 0; c < 2; c++) {
-      const d = sum.getChannelData(c);
-      for (let a = 0; a + step <= d.length; a += step) { let e = 0; for (let i = a; i < a + step; i++) e += d[i] * d[i]; blocks.push(Math.round(db(Math.sqrt(e / step)) * 1000) / 1000); }
+    const F = await import('./src/dsp/fft.js');
+    const { store, library, tempo, patterns, renderProject } = window.loopwerk;
+    let sections;
+    if (id === 'demo') {
+      store.replace(M.createDemoProject());
+      sections = [{ id: 'V', from: 5, to: 12 }, { id: 'C', from: 13, to: 16 }];
+    } else {
+      store.replace(M.createEmptyProject());
+      sections = (await S.runStarter(id, { store, library, variant })).sections;
     }
+    await tempo.apply();
+    await patterns.sync(store.project);
+    await library.ensureProject(store.project);
+    const p0 = structuredClone(store.project);
+    const bpb = p0.beatsPerBar;
+    const sec = (ids) => { const l = sections.filter((x) => ids.includes(x.id)); return [(Math.min(...l.map((x) => x.from)) - 1) * bpb, Math.max(...l.map((x) => x.to)) * bpb]; };
+    const [c0, c1] = sec(['C']);
+    const set = p0.master?.mastering ?? { on: false };
+    const withStyle = (p, style) => { const q = structuredClone(p); const cur = q.master?.mastering ?? { style: 'balanced' }; q.master = { ...(q.master || {}), mastering: style ? { ...cur, on: true, style } : { ...cur, on: false } }; return q; };
+    const decode = async (blob) => new OfflineAudioContext(2, 1, 44100).decodeAudioData(await blob.arrayBuffer());
+    const exportRange = async (p, b0, b1, style) => { const q = withStyle(p, style); q.loop = { ...(q.loop || {}), startBeat: b0, endBeat: b1 }; return decode((await E.exportSong(q, library, { format: 'wav', range: 'loop', tail: false })).blob); };
+    const lufs = (b) => Lo.integratedLoudness([b.getChannelData(0), b.getChannelData(1)], b.sampleRate);
+    const r1 = (x) => Math.round(x * 10) / 10;
+    // Spuren im Refrain, ohne Limiter und ohne Mastering
     const tracks = {};
-    for (const t of project.tracks) {
+    const dry = withStyle(p0, null);
+    for (const t of p0.tracks) {
       if (!t.clips.length) continue;
-      const b = await renderProject(project, library, { ...opts, onlyTrack: t.id });
-      const v = Lo.integratedLoudness([b.getChannelData(0), b.getChannelData(1)], b.sampleRate);
-      tracks[t.name + ' ' + t.id] = Number.isFinite(v) ? Math.round(v * 1000) / 1000 : null;
+      const b = await renderProject(dry, library, { fromBeat: c0, toBeat: c1, limiter: false, onlyTrack: t.id });
+      tracks[t.name] = r1(lufs(b));
     }
-    return { blocks, tracks };
-  }, { project, fromBeat, toBeat });
+    // Refrain wie gesetzt: Bänder und Breite
+    const ref = await exportRange(p0, c0, c1, set.on ? set.style : null);
+    const N = 4096, sr = ref.sampleRate, win = F.hann(N);
+    const l = ref.getChannelData(0), r = ref.getChannelData(1);
+    const re = new Float64Array(N), im = new Float64Array(N), re2 = new Float64Array(N), im2 = new Float64Array(N);
+    let tot = 0, low = 0, hi2 = 0, hi4 = 0, mid = 0, side = 0;
+    for (let s0 = 0; s0 + N <= l.length; s0 += N / 2) {
+      for (let i = 0; i < N; i++) { const x = l[s0 + i], y = r[s0 + i]; re[i] = 0.5 * (x + y) * win[i]; im[i] = 0; re2[i] = 0.5 * (x - y) * win[i]; im2[i] = 0; }
+      F.fft(re, im); F.fft(re2, im2);
+      for (let k = 1; k < N / 2; k++) {
+        const f = (k * sr) / N; if (f < 30) continue;
+        const pm = re[k] * re[k] + im[k] * im[k], ps = re2[k] * re2[k] + im2[k] * im2[k], e = pm + ps;
+        tot += e; mid += pm; side += ps;
+        if (f < 250) low += e; if (f >= 2000) hi2 += e; if (f >= 4000) hi4 += e;
+      }
+    }
+    const pc = (x) => r1((100 * x) / tot);
+    const refrain = { lufs: r1(lufs(ref)), low: pc(low), hi2k: pc(hi2), hi4k: pc(hi4), width: Math.round((1000 * side) / (mid + side)) / 1000 };
+    // Song-Abschnitt ohne Mastering und mit jedem Stil
+    const [s0, s1] = sec(song.split(''));
+    const out = { ohne: r1(lufs(await exportRange(p0, s0, s1, null))) };
+    for (const st of styles ?? MC.MASTER_STYLES.map((x) => x.id)) out[st] = r1(lufs(await exportRange(p0, s0, s1, st)));
+    const strips = p0.tracks.filter((t) => t.clips.length).map((t) => ({ name: t.name, volume: t.volume, sends: t.sends ?? {}, fx: Object.fromEntries(Object.entries(t.fx || {}).filter(([, v]) => v?.on).map(([k, v]) => [k, v])) }));
+    return { tracks, refrain, song: out, mastering: set, strips, range: { refrain: [c0, c1], song: [s0, s1] } };
+  }, { id, variant, styles, song });
 }
 
-module.exports = { measureAll, makeOldProjects, measureProject, BEAT, MELODY, CHORDS };
+module.exports = { measureAll, measureMix, BEAT, MELODY, CHORDS };

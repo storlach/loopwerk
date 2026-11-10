@@ -6,7 +6,6 @@ import { runJob } from '../dsp/run.js';
 import { MIN_PROFILE_SEC } from '../dsp/denoise.js';
 import { STEMS, mixStems } from '../dsp/separate.js';
 import { channelsToBuffer, bufferToChannels } from '../own-sounds.js';
-import { levelTrim } from '../engine.js';
 import { clamp, el, trackPointer } from '../util.js';
 
 const fmtSec = (s) => `${s.toFixed(2).replace('.', ',')} s`;
@@ -38,14 +37,10 @@ export function mountEditor({ root, store, engine, library, ui, own }) {
     if (sample?.lazy) { library.ensure(sample.id).then(() => { if (!sample.lazy) open(clipId); }).catch(() => ui.flash('Dieser Sound ist im Browser nicht mehr gespeichert.')); return; }
     if (!sample?.buffer || sample.missing) { if (sample?.missing) ui.flash('Sound fehlt – öffne die Projektdatei, um ihn zurückzuholen.'); return; }
     const base = sample.orig || sample.buffer;
-    // Bibliotheks-Sound: mit seinem Pegel im Song (ADR 013), damit der bearbeitete eigene Sound genauso laut bleibt
-    const chs = bufferToChannels(base);
-    const k = sample.category === 'own' ? 1 : levelTrim(store.project, sample);
-    if (k !== 1) for (const d of chs) for (let i = 0; i < d.length; i++) d[i] *= k;
     st = {
       clipId,
       src: sample,
-      chs,
+      chs: bufferToChannels(base),
       sr: base.sampleRate,
       history: [],
       sel: null,

@@ -5,7 +5,6 @@ import { Emitter } from './util.js';
 import { KEYS, KEY_MAJOR, minorOf, wrapSemis, isSoundKey } from './keys.js';
 import { withFx, fxOrderOf, isDefaultOrder, busDef, ECHO_TIMES, stampFx, BUS_VERSION } from './effects.js';
 import { isChord } from './harmony.js';
-import { LEVELS_VERSION } from './levels.js';
 import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
 
@@ -16,8 +15,6 @@ export const PROJECT_VERSION = 1;
 export function createEmptyProject({ tracks = 8, bpm = 120 } = {}) {
   return {
     version: PROJECT_VERSION,
-    // Pegel-Stand (ADR 013): neue Songs klingen mit der Lautheits-Tabelle; fehlt er, klingt alles wie vorher
-    levels: LEVELS_VERSION,
     name: 'unbenannt',
     bpm,
     beatsPerBar: 4,
@@ -1413,7 +1410,6 @@ export class Store extends Emitter {
   // Leeres Lied (Song-Starter „Ersetzen“): keine Spuren, Patterns, Wechsel und Akkorde; Master bleibt. Ein Schritt.
   clearSong() {
     this.dispatch('clear-song', (p) => {
-      p.levels = LEVELS_VERSION; // ein leeres Lied ist ein neues: Pegel nach Lautheit (ADR 013)
       p.tracks = [];
       delete p.patterns;
       delete p.groups;

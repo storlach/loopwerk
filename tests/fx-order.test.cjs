@@ -17,10 +17,6 @@ function renderLegacy() {
     const { EFFECT_IDS } = await import('./src/effects.js');
     const { library, renderProject } = window.loopwerk;
     const p = m.createDemoProject();
-    // Gespeichert vor ADR 013: ohne Pegel-Stand und mit der damaligen Mischung des Beispiels
-    delete p.levels;
-    delete p.master;
-    p.tracks.forEach((t, i) => { t.volume = i === 3 ? 0.65 : i === 4 ? 0.6 : 0.8; t.pan = 0; delete t.fx; delete t.sends; });
     p.tracks[0].fx = Object.fromEntries(EFFECT_IDS.map((id) => [id, { on: true }]));
     p.master = { volume: 0.85, fx: { eq: { on: true, low: 3, high: -2 }, hall: { on: true } } };
     await library.ensureProject?.(p);

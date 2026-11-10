@@ -1,13 +1,9 @@
 // Pegel nach Lautheit (ADR 013, Klanganalyse K1/W4). Jeder mitgelieferte Sound, jedes Drum-Kit und jeder Melodie-Klang
 // landet auf einer Ziel-Lautheit je Rolle; die Drums sind der Bezug. Die Verstärkungen stehen fest in levels-table.js
-// (einmal gemessen mit tools/klang/pegel.cjs --tabelle), beim Laden wird nichts gemessen.
-// Projekte tragen den Stand in project.levels; fehlt er (vor ADR 013 gespeichert), spielt die Engine jeden Sound mit
-// 1 / sample.level und damit so laut wie vorher.
+// (einmal gemessen mit tools/klang/pegel.cjs --tabelle) und werden beim Erzeugen bzw. Laden in den Puffer gerechnet –
+// beim Laden wird nichts gemessen.
 
 import { SOUND_DB, KIT_DB, PRESET_DB } from './levels-table.js';
-
-export const LEVELS_VERSION = 2;
-export const levelsOf = (project) => (Number(project?.levels) >= LEVELS_VERSION ? LEVELS_VERSION : 1);
 
 // Ziel-Lautheit je Rolle (LUFS; Loops integriert über eine Runde, Einzelklänge: lauteste 400 ms).
 // Drums führen: Kick/Snare-Loop über Bass, Flächen und Melodie darunter, Hats/Percussion als Begleitung.

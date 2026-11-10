@@ -449,10 +449,10 @@ export async function renderPattern(pattern, bpm, library) {
     for (let i = frames; i < src.length; i++) dst[i % frames] += src[i];
     for (let i = 0; i < frames; i++) { const v = Math.abs(dst[i]); if (v > peak) peak = v; }
   }
-  // Lautheit je Kit bzw. Klang (ADR 013), nie über die Spitzen-Obergrenze. Der Puffer bleibt wie früher; level wirkt in
-  // der Stimme neuer Projekte (Engine) und beim Vorhören
+  // Lautheit je Kit bzw. Klang (ADR 013), nie über die Spitzen-Obergrenze: ein neuer Beat spitzt höchstens bei −0,5 dBFS
   let level = pattern.type === 'drums' ? kitLevel(pattern.kit) : presetLevel(inst ? pattern.preset : sampled(pattern.preset) ? fallbackPreset(getInstrument(pattern.preset)) : pattern.preset);
   if (peak * level > PATTERN_PEAK_MAX) level = PATTERN_PEAK_MAX / peak;
+  if (level !== 1) for (let c = 0; c < 2; c++) { const d = buffer.getChannelData(c); for (let i = 0; i < frames; i++) d[i] *= level; }
   return { buffer, lengthBeats: beats, level };
 }
 
