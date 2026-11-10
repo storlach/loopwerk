@@ -163,9 +163,69 @@ async function exportWorker() {
   await app.close();
 }
 
+// Mastering-Messung: nur bei Änderungen, die die Lautheit betreffen; Rückgängig ohne neue Messung; im Worker; Abbruch
+async function masteringMeasure() {
+  const app = await openApp();
+  const { page } = app;
+  try {
+    const r = await page.evaluate(async () => {
+      const { store, engine, mastering } = window.loopwerk;
+      const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+      const idle = async () => { await sleep(1600); while (mastering.state.busy) await sleep(50); };
+      const jobs = [];
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (m, ...rest) { if (m && m.job) jobs.push(m.job); return post.call(this, m, ...rest); };
+      store.setMastering({ on: true, style: 'balanced' });
+      await engine._ensure();
+      await mastering.now();
+      await idle();
+      const out = { first: { ...engine.mix.gains } };
+      const runs0 = mastering.state.runs;
+      store.setTrack(store.project.tracks[0].id, { name: 'Anders' });
+      store.setLoop({ on: true, startBeat: 4, endBeat: 12 });
+      store.setLength(store.project.lengthBars + 2);
+      store.setProjectName('Messprobe');
+      await idle();
+      out.cosmetic = mastering.state.runs - runs0;
+      out.worker = jobs.includes('mastering');
+      // Lautheit ändert sich: misst neu, bis dahin bleiben die alten Verstärkungen
+      store.setTrack(store.project.tracks[0].id, { volume: 0.2 });
+      await sleep(1300);
+      out.busyGains = mastering.state.busy ? { ...engine.mix.gains } : null;
+      await idle();
+      out.fader = mastering.state.runs - runs0 - out.cosmetic;
+      out.second = { ...engine.mix.gains };
+      // Rückgängig: der Stand ist schon gemessen
+      store.undo();
+      await idle();
+      out.undo = mastering.state.runs - runs0 - out.cosmetic - out.fader;
+      out.back = { ...engine.mix.gains };
+      // Neue Änderung während einer Messung: am Ende gilt der neueste Stand
+      store.setTrack(store.project.tracks[1].id, { volume: 0.3 });
+      await sleep(1300);
+      while (!mastering.state.busy) await sleep(20);
+      store.setTrack(store.project.tracks[1].id, { volume: 0.31 });
+      await idle();
+      const { masteringKey } = await import('./src/mastering.js');
+      out.latest = mastering.state.key === masteringKey(store.project, window.loopwerk.library);
+      Worker.prototype.postMessage = post;
+      return out;
+    });
+    check('Mastering: Umbenennen, Loop, Songlänge, Songname messen nicht neu', r.cosmetic === 0, `${r.cosmetic} Messungen`);
+    check('Mastering: Lautheitsmessung rechnet im Worker', r.worker);
+    check('Mastering: Fader misst einmal neu, solange gelten die alten Verstärkungen', r.fader === 1 && (r.busyGains == null || (r.busyGains.pre === r.first.pre && r.busyGains.drive === r.first.drive)) && r.second.pre !== r.first.pre, JSON.stringify({ fader: r.fader, first: r.first, busy: r.busyGains, second: r.second }));
+    check('Mastering: Rückgängig ohne neue Messung, Verstärkungen wie vorher', r.undo === 0 && r.back.pre === r.first.pre && r.back.drive === r.first.drive, JSON.stringify({ undo: r.undo, back: r.back }));
+    check('Mastering: Änderung während der Messung – am Ende gilt der neueste Stand', r.latest);
+    check('Mastering: keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
+  } catch (e) {
+    check('Mastering: Ablauf ohne Ausnahme', false, e.stack);
+  }
+  await app.close();
+}
+
 (async () => {
   const only = process.env.PERF_AUDIO_ONLY ? process.env.PERF_AUDIO_ONLY.split(',') : null;
-  const parts = { scheduler, krachwerk, exportWorker };
+  const parts = { scheduler, krachwerk, exportWorker, masteringMeasure };
   for (const [name, fn] of Object.entries(parts)) if (!only || only.includes(name)) await fn();
   finish();
 })();

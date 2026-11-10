@@ -49,3 +49,8 @@ export function searchMaster(chs, sampleRate, styleId, target = styleOf(styleId)
   }
   return { pre, drive: d, inLufs, outLufs: l, peak: truePeak([ol, or]), style: st.id, target };
 }
+
+// Rechen-Worker (job 'mastering'): Suche auf der Summe vor dem Mastering (Kanäle 0, 1) und Lautheit ohne Mastering (2, 3)
+export function masteringJob({ chs, sampleRate, style, target }) {
+  return { ...searchMaster(chs.slice(0, 2), sampleRate, style, target), aLufs: integratedLoudness(chs.slice(2, 4), sampleRate) };
+}
