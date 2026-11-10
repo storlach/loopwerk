@@ -71,3 +71,4 @@ effekt-pegel
 klangfarbe
 perf-ui
 pegel
+perf-audio

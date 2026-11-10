@@ -13,3 +13,5 @@ Aus der Bestandsanalyse `docs/analyse/2026-11-performance.md`. Jede Verbesserung
 - `scen.cjs` – Szenen (Beispiel, großer Song mit 448 Clips)
 
 Headless hat keine Grafikkarte: Bildraten sind Vergleichswerte.
+- `m9-scheduler.cjs` (mit `sched-probe.cjs`) – Scheduler: Reaktion auf Live-Änderungen und Folgen einer Blockade des Hauptthreads (Stille, falsche Stelle), Rampe als Sound
+- `render-null.cjs` – Nulltest: Beispiel offline rendern (`--out`, `--szene`), zwei Stände vergleichen (`--compare`; derselbe Stand zweimal liegt bei rund −112 dB)
