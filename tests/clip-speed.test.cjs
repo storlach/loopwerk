@@ -103,16 +103,19 @@ const { check, finish } = createChecker();
       const s = new M.Store(JSON.parse(JSON.stringify(p)), { sampleBeats: (id) => library.get(id).lengthBeats });
       const eng = new E.Engine(s, library);
       const b0 = 2.3;
-      eng.ctx = new OfflineAudioContext(2, Math.round((12 - b0) * 22050), sr);
+      // Vorlauf wie im Betrieb: Seit dem längeren Ton-Vorlauf steigt eine Stimme, die auf „jetzt“ geplant wird, mit Versatz ein
+      const LEAD = Math.round(0.1 * sr);
+      eng.ctx = new OfflineAudioContext(2, Math.round((12 - b0) * 22050) + LEAD, sr);
       eng.mix = E.buildMix(eng.ctx, s.project, { limiter: false });
-      eng._scheduleActiveAt(b0, 0, 12);
-      eng._scheduleSpan(b0, 12, 0, 12);
+      eng._scheduleActiveAt(b0, LEAD / sr, 12);
+      eng._scheduleSpan(b0, 12, LEAD / sr, 12);
       const voices = [...eng.voices];
       const rates = voices.map((v) => v.src.playbackRate.value);
-      const r = (await eng.ctx.startRendering()).getChannelData(0);
+      const r = (await eng.ctx.startRendering()).getChannelData(0).subarray(LEAD);
       const o = (await renderProject(p, library, { limiter: false, fromBeat: b0, toBeat: 12 })).getChannelData(0);
       let diff = 0; let peak = 0;
-      for (let i = 0; i < Math.min(r.length, o.length); i++) { diff = Math.max(diff, Math.abs(r[i] - o[i])); peak = Math.max(peak, Math.abs(o[i])); }
+      // ab Abtastwert 128: die Einstiegs-Überblendung (96 Werte) läuft mit Vorlauf ganz, beim Offline-Start ist sie an der Null abgeschnitten
+      for (let i = 128; i < Math.min(r.length, o.length); i++) { diff = Math.max(diff, Math.abs(r[i] - o[i])); peak = Math.max(peak, Math.abs(o[i])); }
       // Schnittkanten der Wiederholungen: kein Klick (größter Schritt ≈ Sägezahn-Flanke 0,4 · Rate)
       eng.ticker?.stop();
       return { diff, peak, voices: voices.length, rates };

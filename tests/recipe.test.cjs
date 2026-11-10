@@ -336,14 +336,17 @@ function helpers() {
       await library.applyRecipes(s.project);
       const eng = new E.Engine(s, library);
       const b0 = 1.3;
-      eng.ctx = new OfflineAudioContext(2, Math.round((8 - b0) * 0.5 * T.sr), T.sr);
+      // Vorlauf wie im Betrieb: Seit dem längeren Ton-Vorlauf steigt eine Stimme, die auf „jetzt“ geplant wird, mit Versatz ein
+      const LEAD = Math.round(0.1 * T.sr);
+      eng.ctx = new OfflineAudioContext(2, Math.round((8 - b0) * 0.5 * T.sr) + LEAD, T.sr);
       eng.mix = E.buildMix(eng.ctx, s.project, { limiter: false });
-      eng._scheduleActiveAt(b0, 0, 8);
-      eng._scheduleSpan(b0, 8, 0, 8);
-      const r = (await eng.ctx.startRendering()).getChannelData(0);
+      eng._scheduleActiveAt(b0, LEAD / T.sr, 8);
+      eng._scheduleSpan(b0, 8, LEAD / T.sr, 8);
+      const r = (await eng.ctx.startRendering()).getChannelData(0).subarray(LEAD);
       const o = (await renderProject(s.project, library, { limiter: false, fromBeat: b0, toBeat: 8 })).getChannelData(0);
       let diff = 0;
-      for (let i = 0; i < Math.min(r.length, o.length); i++) diff = Math.max(diff, Math.abs(r[i] - o[i]));
+      // ab Abtastwert 128: die Einstiegs-Überblendung (96 Werte) läuft mit Vorlauf ganz, beim Offline-Start ist sie an der Null abgeschnitten
+      for (let i = 128; i < Math.min(r.length, o.length); i++) diff = Math.max(diff, Math.abs(r[i] - o[i]));
       return { diff, peak: T.peak(o), voices: eng.voices.size };
     });
     check('18 Realtime-Scheduler = Offline mit Rezept (größte Abweichung < 1e-4)', r18.diff < 1e-4 && r18.peak > 0.05, JSON.stringify(r18));

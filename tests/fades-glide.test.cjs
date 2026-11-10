@@ -95,15 +95,18 @@ function installPitch() {
       const eng = new E.Engine(s, library);
       const b0 = 1.5;
       const frames = Math.round((12 - b0) * 22050);
-      eng.ctx = new OfflineAudioContext(2, frames, 44100);
+      // Vorlauf wie im Betrieb: Seit dem längeren Ton-Vorlauf steigt eine Stimme, die auf „jetzt“ geplant wird, mit Versatz ein
+      const LEAD = 4410; // 0,1 s
+      eng.ctx = new OfflineAudioContext(2, frames + LEAD, 44100);
       eng.mix = E.buildMix(eng.ctx, s.project, { limiter: false });
-      eng._scheduleActiveAt(b0, 0, 12);
-      eng._scheduleSpan(b0, 12, 0, 12);
+      eng._scheduleActiveAt(b0, 0.1, 12);
+      eng._scheduleSpan(b0, 12, 0.1, 12);
       const planned = eng.voices.size;
-      const rt = (await eng.ctx.startRendering()).getChannelData(0);
+      const rt = (await eng.ctx.startRendering()).getChannelData(0).subarray(LEAD);
       const off = (await renderProject(p, library, { limiter: false, fromBeat: b0, toBeat: 12 })).getChannelData(0);
       let rd = 0;
-      for (let i = 0; i < Math.min(rt.length, off.length); i++) rd = Math.max(rd, Math.abs(rt[i] - off[i]));
+      // ab Abtastwert 128: die Einstiegs-Überblendung (96 Werte) läuft mit Vorlauf ganz, beim Offline-Start ist sie an der Null abgeschnitten
+      for (let i = 128; i < Math.min(rt.length, off.length); i++) rd = Math.max(rd, Math.abs(rt[i] - off[i]));
       out.rt = { diff: rd, voices: planned, mid: rt[Math.round((7.5 - b0) * 22050)], start: rt[Math.round(0.5 * 22050)], want: M.clipEnvelope(rtClip, 2) };
       eng.ticker.stop();
 
