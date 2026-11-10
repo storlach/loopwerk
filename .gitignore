@@ -5,3 +5,5 @@ _site/
 !docs/ux/**/*.png
 .claude/worktrees/
 !docs/analyse/**/*.png
+tools/perf/out-*.json
+tools/perf/*.pem
