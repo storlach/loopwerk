@@ -3,7 +3,7 @@
 
 import { tpFilter } from './master-core.js';
 
-function kFilters(sr) {
+export function kFilters(sr) {
   let f0 = 1681.974450955533;
   const G = 3.999843853973347;
   let Q = 0.7071752369554196;

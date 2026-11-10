@@ -25,3 +25,20 @@ Jede Spur und die Summe haben heute ein festes Rack: `fx` ist ein Objekt mit ein
 - Wird nur die Reihenfolge umgestellt, gibt es einen neuen Ketten-Übergang: Der Eingang wird überblendet, und die alte Kette klingt aus.
 - Bus-Knoten entstehen erst, wenn eine Spur sendet. Projekte ohne Sends haben denselben Graphen wie heute.
 - Die Skills `effekt-bauen` (Abschnitt Modell) und `audio-engine-regeln` (Signalkette) werden auf diesen Stand gebracht.
+
+## Nachtrag 2026-11 – Fassung der Klangabstimmung (`v`), Klanganalyse W3 und K3
+**Kontext:** Kompressor und Verzerrer machten beim bloßen Einschalten 4–9 LU lauter (Kompressor: fester Ausgleich +4,5 dB plus die eingebaute Anhebung des Browser-Kompressors; Verzerrer: Ausgleich nur für einen Pegel von 0,3). Der Hall lag mit der Voreinstellung rund 19 dB unter dem Direktsignal (Breite 0,008), hell und mit vollen Tiefen. Gespeicherte Songs sollen trotzdem genau so weiterklingen.
+
+**Entscheidung:**
+1. Neues optionales Feld `v` (Fassung) an `fx.drive`, `fx.comp`, `fx.hall` und an `project.buses.hall`. Es steht nicht in den Parametern, `withFx`/`busOf` füllen es also nicht auf: **fehlt `v`, rechnet der Effekt wie vorher** (bitgleich, `tests/effekt-pegel.test.cjs` Teil 1). `PROJECT_VERSION` bleibt 1.
+2. Gesetzt wird `v` nur beim Umschalten (`stampFx` in `src/effects.js`, aufgerufen von `setTrackFx`, `setMasterFx`, `applySound`, `_autoFxOn`, `recordAutoLane`): neu eingeschaltet → aktuelle Fassung (`FX_VERSION`, heute 2); ein alter, eingeschalteter Effekt bekommt beim Ausschalten `v: 1`, damit Aus/Ein im A/B-Vergleich nicht umstimmt. Drehen an Reglern ändert `v` nie. Hall-Bus (`setSend`): der erste Send eines Songs ohne Sender setzt `buses.hall.v = 2`, der letzte entfernte Send eines alten Songs `v: 1`.
+3. **Fassung 2:**
+   - Verzerrer: fester Ausgleich auf den Effektivwert eines Sinus mit Spitze 0,25 und dahinter ein **gemessener Ausgleich** (Worklet `loopwerk-match`: Ausgang = verzerrt · √(Leistung trocken / Leistung verzerrt), K-gewichtet wie LUFS, zweimal mit 0,2 s geglättet) – auch für die Verstärker-Arten. Die Kennlinien bleiben, nur der Pegel folgt dem trockenen Signal. Ohne Worklet bleibt der feste Ausgleich.
+   - Kompressor: Verhältnis 1 + Stärke · 4 (statt · 7), Knie 12 dB (statt 6), die Anhebung des DynamicsCompressor (Blink/WebKit: (1/Kennlinie bei 0 dBFS)^0,6, nachgerechnet in `dcMakeupDb`) wird herausgenommen, eigener Ausgleich 60 % der Absenkung bei −11,5 dBFS. Stärke 50 %: 0 dBFS → −4,4 dBFS (Fassung 1: +0,9).
+   - Hall: neue Impulsantwort (`hallImpulse2`): links/rechts unabhängiges Rauschen, Vorverzögerung 8–25 ms, weicher Einsatz, wärmer, Hochpass 200 Hz (24 dB/Oktave), feste Energie (`normalize` aus) mit `HALL_GAIN` so, dass die Voreinstellung (Anteil 25 %) auf einer Fläche rund 12 dB unter dem Direktsignal liegt; der Bus mit Send 50 % und Lautstärke 80 % genauso.
+4. Gemessen (Drums / Fläche / Bass / Arp der Analyse): Kompressor neu −1,3 / +1,1 / −0,1 / +1,1 LU (Fassung 1: +5,7 / +9,4 / +6,7 / +9,3), Verzerrer neu −0,5 / 0,0 / 0,0 / +0,2 LU (Fassung 1: +4,2 / +8,6 / +5,7 / +8,9), Hall neu −13 dB unter dem Direktsignal, Breite der Fläche 0,011 → 0,027, 50–110 Hz −31 dB unter 1 kHz.
+
+**Folgen:**
+- Ein Song aus einem Starter, der Effekte oder Sends setzt („Melodic Techno“), bekommt beim Erzeugen die neue Fassung (Hall-Bus etwa 2 dB lauter und wärmer); gespeicherte Songs nicht.
+- Wer eine Kopie einer Spur anlegt, kopiert `v` mit. Ältere App-Stände ignorieren das Feld und spielen dann Fassung 1.
+- Neue Fassungen später (`v: 3`) gehen genauso: alte Werte bleiben, neue entstehen nur beim Einschalten.

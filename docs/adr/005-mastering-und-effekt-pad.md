@@ -16,3 +16,10 @@ Martin will den fertigen Song mit einem Klick radiotauglich machen (Ziel etwa �
 - Der 4×-Detektor sieht zwischen seinen Stützstellen bis zu 0,3 dB nicht; die Grenze liegt deshalb bei −1,7 dBTP, gemessen (16×) landen die Songs bei etwa −1,4 dBTP.
 - Ohne AudioWorklet (sehr alte Browser) gibt es kein Mastering; Lo-Fi fällt auf eine reine Bit-Kennlinie zurück.
 - Tests: `tests/master-fxpad.test.cjs`.
+
+## Nachtrag 2026-11 – Schutz-Limiter als echter Spitzenbegrenzer (Klanganalyse W2)
+- **Problem:** Der Weg A ohne Mastering lief über einen `DynamicsCompressorNode` (Schwelle −6 dB, 12:1). Chrome hebt damit alles pauschal um 2,6 dB an, regelt in Songs kaum (0–0,4 % der Zeit mehr als 1 dB) und ließ beim Rock-Starter trotzdem +0,5 dBTP durch.
+- **Entscheidung:** Weg A ist jetzt `feste Anhebung (PROTECT_GAIN_DB) → True-Peak-Limiter` (Worklet-Prozessor `loopwerk-limiter`, dieselbe Klasse `TruePeakLimiter` wie im Mastering, Grenze −1,7 dB am 4×-Detektor, Ausklang 0,2 s). Die Anhebung ist ausdrücklich und browserunabhängig; ihr Wert ist so gemessen, dass die integrierte Lautheit aller Starter ohne Mastering höchstens 0,5 LU vom alten Stand abweicht (Bezugswerte in `tests/effekt-pegel.test.cjs`). Mastering an: Weg A ist stumm (`aGain` = 0), es wird nur einmal begrenzt.
+- **Latenz:** `peakLimiterLatency(sr)` = 5 ms Vorausschau + 16 Abtastwerte Interpolator (44,1 kHz: 237 Werte, 5,37 ms). `mixLatency(sr, mix)` kennt beide Wege (Mastering, wenn es klingt, sonst Schutz-Limiter); `Engine.playbackDelay()` (Aufnahme-Ausgleich) und `renderProject({ compensate })` (Export, Stems) nutzen sie. Offline wird mit etwas Vorrat gerendert und genau die Verzögerung der tatsächlich gebauten Kette herausgeschnitten. `limiter: false` (Timing-Tests) baut keinen Limiter.
+- **Rückfall:** Ohne AudioWorklet bleibt der alte DynamicsCompressor (Verzögerung wie bisher einmal gemessen) – es spielt weiter, klingt wie vorher.
+- `renderProject` lädt das Worklet-Modul jetzt immer (Limiter, Mastering, Pad, Pegelausgleich des Verzerrers).

@@ -5,7 +5,7 @@ import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleS
 import { Emitter } from './util.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS, BUSES, busOf, sendOf, createBus } from './effects.js';
-import { styleOf, masterLatency } from './dsp/master-core.js';
+import { styleOf, masterLatency, peakLimiterLatency } from './dsp/master-core.js';
 import { AUTO_PARAMS, autoKeys, autoRest, laneOf, autoValueAt, planLane, autoWindow, handover, fxOfKey, sendKey, sendActive } from './automation.js';
 
 const LOOKAHEAD = 0.15;   // Sekunden, die der Scheduler vorausplant
@@ -168,7 +168,13 @@ function syncStrip(ctx, strip, level, panValue, fx, order, spb, live, grid, skip
 
 export const masterOf = (project) => ({ volume: 0.85, fx: null, ...(project.master || {}) });
 
-function createLimiter(ctx) {
+// Schutz-Limiter der Summe ohne Mastering (W2, ADR 005, Nachtrag 2026-11): feste Anhebung um PROTECT_GAIN_DB, dann der True-Peak-Limiter
+// aus dem Mastering im Worklet (Spitze < −1 dBTP, Realtime und Offline dieselbe Rechnung). Die Anhebung ersetzt die
+// versteckte des früheren DynamicsCompressor (Chrome: +2,6 dB bei leisen Signalen), damit Songs gleich laut bleiben.
+// Ohne Worklet: der alte DynamicsCompressor (latency: null = messen).
+export const PROTECT_GAIN_DB = 2.6;
+export const PROTECT_RELEASE = 0.05;
+function createDcLimiter(ctx) {
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -6;
   comp.knee.value = 4;
@@ -177,8 +183,24 @@ function createLimiter(ctx) {
   comp.release.value = 0.2;
   return comp;
 }
+function createLimiter(ctx, worklets) {
+  if (worklets) {
+    try {
+      const node = new AudioWorkletNode(ctx, 'loopwerk-limiter', {
+        numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit',
+        processorOptions: { release: PROTECT_RELEASE },
+      });
+      const pre = ctx.createGain();
+      pre.gain.value = dbGain(PROTECT_GAIN_DB);
+      pre.connect(node);
+      return { input: pre, output: node, latency: peakLimiterLatency(ctx.sampleRate), kind: 'peak' };
+    } catch { /* Rückfall unten */ }
+  }
+  const comp = createDcLimiter(ctx);
+  return { input: comp, output: comp, latency: null, kind: 'dc' };
+}
 
-// Der Limiter verzögert um einige Millisekunden (Vorausschau). Einmal messen, beim Export ausgleichen.
+// Verzögerung des Rückfall-Limiters (DynamicsCompressor mit Vorausschau): einmal messen, beim Export ausgleichen.
 const latencyCache = new Map();
 export async function limiterLatency(sampleRate) {
   if (latencyCache.has(sampleRate)) return latencyCache.get(sampleRate);
@@ -187,7 +209,7 @@ export async function limiterLatency(sampleRate) {
   b.getChannelData(0)[0] = 0.5;
   const src = ctx.createBufferSource();
   src.buffer = b;
-  src.connect(createLimiter(ctx)).connect(ctx.destination);
+  src.connect(createDcLimiter(ctx)).connect(ctx.destination);
   src.start(0);
   const d = (await ctx.startRendering()).getChannelData(0);
   let peak = 0;
@@ -207,14 +229,15 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
   const aGain = ctx.createGain();
   const bBus = ctx.createGain();
   post.connect(aGain);
-  if (limiter) aGain.connect(createLimiter(ctx)).connect(final);
-  else aGain.connect(final);
+  // limiter: 'dc' = der Rückfall-Limiter auch mit Worklet (Vergleich mit dem alten Stand in Tests)
+  const lim = limiter ? createLimiter(ctx, worklets && limiter !== 'dc') : null;
+  if (lim) { aGain.connect(lim.input); lim.output.connect(final); } else aGain.connect(final);
   bBus.connect(final);
   final.connect(dest);
   const masterStrip = createStrip(ctx, post, { pan: false });
   const style = masteringOf(project).style;
   const mix = {
-    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, tracks: new Map(), buses: new Map(), grid,
+    master: masterStrip.input, masterStrip, post, output: final, aGain, bBus, lim, tracks: new Map(), buses: new Map(), grid,
     canMaster: worklets && mastering !== false, mst: null,
     gains: mastering && typeof mastering === 'object' ? { ...mastering } : defaultMasterGains(style),
     monitor: { ab: null, aDb: 0, bDb: 0, ...(monitor || {}) },
@@ -223,8 +246,13 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
   return mix;
 }
 
-export function mixLatency(sampleRate, mix) {
-  return mix?.mst ? masterLatency(sampleRate, mix.mst.style) : 0;
+// Verzögerung der Summe in Abtastwerten: Mastering-Kette (wenn sie klingt) oder Schutz-Limiter. dcFrames: gemessene
+// Verzögerung des Rückfall-Limiters (limiterLatency), falls er im Einsatz ist.
+export function mixLatency(sampleRate, mix, dcFrames = 0) {
+  if (!mix) return 0;
+  if (mix.mst && mix.monitor?.ab !== 'A') return masterLatency(sampleRate, mix.mst.style);
+  if (!mix.lim) return 0;
+  return mix.lim.latency ?? dcFrames;
 }
 
 // Mastering-Knoten einsetzen, Stil wechseln (live mit Überblendung), A/B-Pegel setzen
@@ -506,9 +534,12 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   await library.applyRecipes?.(project);
   // Tonart je Takt und Akkord-Streifen: Fassungen vorher bereitstellen, damit Offline genauso klingt wie Realtime
   await library.ensureKeyVariants?.(project);
-  const lat = !compensate ? 0 : wantMaster ? masterLatency(sampleRate, masteringOf(project).style) : limiter ? await limiterLatency(sampleRate) : 0;
-  const ctx = new OfflineAudioContext(analysis ? 4 : 2, frames + lat, sampleRate);
-  const worklets = wantMaster || pad ? await loadFxWorklet(ctx) : false;
+  // Platz für die Verzögerung der Summe (Mastering oder Schutz-Limiter, höchstens wenige Millisekunden); welche Kette
+  // es wird, steht erst nach dem Laden des Worklets fest – herausgeschnitten wird genau ihre Verzögerung
+  const room = compensate ? Math.ceil(0.02 * sampleRate) : 0;
+  const ctx = new OfflineAudioContext(analysis ? 4 : 2, frames + room, sampleRate);
+  // Worklet-Modul immer laden: Schutz-Limiter, Mastering, Pad und der Pegelausgleich des Verzerrers rechnen darin
+  const worklets = await loadFxWorklet(ctx);
   let dest = ctx.destination;
   let taps = null;
   if (analysis) {
@@ -557,7 +588,8 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   }
   let out = await ctx.startRendering();
   if (analysis) return { x: [out.getChannelData(0), out.getChannelData(1)], a: [out.getChannelData(2), out.getChannelData(3)], sampleRate };
-  if (lat) {
+  if (room) {
+    const lat = Math.min(room, mixLatency(sampleRate, mix, mix.lim?.kind === 'dc' ? await limiterLatency(sampleRate) : 0));
     const trimmed = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate });
     for (let c = 0; c < 2; c++) trimmed.copyToChannel(out.getChannelData(c).subarray(lat, lat + frames), c);
     out = trimmed;
@@ -668,6 +700,7 @@ export class Engine extends Emitter {
       for (const type of ['pointerup', 'touchend', 'keydown']) document.addEventListener(type, wake, { capture: true, passive: true });
       const worklets = await loadFxWorklet(ctx);
       const loopExtra = await measureLoopExtra(ctx.sampleRate);
+      // Verzögerung des Rückfall-Limiters (falls das Worklet fehlt); der Spitzenbegrenzer kennt seine selbst
       this.limiterFrames = await limiterLatency(ctx.sampleRate);
       this.ctx = ctx;
       this.worklets = worklets;
@@ -722,8 +755,7 @@ export class Engine extends Emitter {
   playbackDelay() {
     if (!this.ctx || !this.mix) return 0;
     const sr = this.ctx.sampleRate;
-    const frames = this.mix.mst && this.mix.monitor?.ab !== 'A' ? masterLatency(sr, this.mix.mst.style) : (this.limiterFrames ?? 0);
-    return frames / sr;
+    return mixLatency(sr, this.mix, this.limiterFrames ?? 0) / sr;
   }
 
   // ---------- Transport ----------
