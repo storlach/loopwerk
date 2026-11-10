@@ -56,7 +56,7 @@ function installHelpers() {
           });
         }
         const b = await ctx.startRendering();
-        return { d: b.getChannelData(0), built };
+        return { d: b.getChannelData(0), r: b.getChannelData(1), built };
       };
       const s = await run(true);
       const n = await run(false);
@@ -64,13 +64,19 @@ function installHelpers() {
       return {
         built: s.built,
         near: S.maxStep(s.d, at(0.95), at(1.05)), before: S.maxStep(s.d, at(0.3), at(0.9)), after: S.maxStep(s.d, at(1.1), at(1.9)),
-        wetGain: 10 * Math.log10(S.energy(s.d, at(1.4), at(2.4)) / S.energy(n.d, at(1.4), at(2.4))),
+        // Nachhall = Unterschied zum Lauf ohne Send (beide Kanäle): der Hall ist links/rechts unkorreliert und kann den
+        // Sinus auf einem Kanal teilweise auslöschen, die Summe der Energie steigt dann nicht verlässlich
+        wetDb: (() => {
+          let w = 0, d = 0;
+          for (const [x, y] of [[s.d, n.d], [s.r, n.r]]) for (let i = at(1.4); i < at(2.4); i++) { w += (x[i] - y[i]) ** 2; d += y[i] * y[i]; }
+          return 10 * Math.log10(w / d + 1e-30);
+        })(),
       };
     });
     const ref15 = Math.max(t15.before, t15.after);
     check('15 Live: erster Send baut den Bus (0 → 1) mit Send-Gain, der bei 0 beginnt', t15.built?.[0] === 0 && t15.built[1] === 1 && t15.built[2] < 0.1, JSON.stringify(t15.built));
     check('15 Live: Sprungtest – größter Schritt ±50 ms ≤ 1,5 × eingeschwungen', t15.near <= 1.5 * ref15, `±50 ms ${t15.near.toFixed(4)}, davor ${t15.before.toFixed(4)}, danach ${t15.after.toFixed(4)}`);
-    check('15 Live: der Hall klingt nach dem Einschalten (Energie steigt)', t15.wetGain > 0.1, `${t15.wetGain.toFixed(2)} dB`);
+    check('15 Live: der Hall klingt nach dem Einschalten (Nachhall höchstens 20 dB unter dem Direktsignal)', t15.wetDb > -20, `${t15.wetDb.toFixed(2)} dB`);
 
     // ---------- Pegel der Rückkanäle (busPeak) ----------
     const pk = await page.evaluate(async () => {

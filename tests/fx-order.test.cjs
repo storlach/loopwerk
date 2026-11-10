@@ -1,5 +1,6 @@
 // Tests für die Effekt-Reihenfolge (2.14, ADR 008): node tests/fx-order.test.cjs [--ref] [--shots]
-// --ref schreibt die Referenz tests/fixtures/fx-legacy.f32 (nur mit dem Stand vor 2.14 erzeugen!).
+// --ref schreibt den Bezug tests/fixtures/fx-legacy.f32: Klang der Grundreihenfolge mit allen Effekten (zuletzt neu erzeugt,
+// als die frühere Fassung 1 der Effekte wegfiel, 2026-11). Nur neu erzeugen, wenn sich der Klang eines Effekts gewollt ändert.
 const path = require('path');
 const fs = require('fs');
 const { openApp, createChecker } = require('./harness.cjs');
@@ -10,7 +11,7 @@ const SHOT_DIR = process.env.SHOT_DIR || '.';
 const REF_PATH = path.join(__dirname, 'fixtures', 'fx-legacy.f32');
 const { check, finish } = createChecker();
 
-// Läuft im Browser: Demo-Projekt, alle sieben Spur-Effekte auf „Drums“, Master mit EQ und Hall; Schlag 16–24, 22,05 kHz.
+// Läuft im Browser: Demo-Projekt ohne fxOrder, alle sieben Spur-Effekte auf „Drums“, Master mit EQ und Hall; Schlag 16–24, 22,05 kHz.
 function renderLegacy() {
   return (async () => {
     const m = await import('./src/model.js');
@@ -75,7 +76,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
   const app = await openApp({ viewport: { width: 1440, height: 900 } });
   const { page } = app;
   try {
-    // ---------- 1. Null-Test alter Projekte ----------
+    // ---------- 1. Null-Test: Grundreihenfolge gegen den gespeicherten Klang ----------
     const now = new Float32Array(await page.evaluate(renderLegacy));
     if (REF) {
       fs.mkdirSync(path.dirname(REF_PATH), { recursive: true });
@@ -91,7 +92,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     // Rauschboden zwischen zwei Seitenladungen: −94 bis −110 dB (die synthetischen Loops schwanken minimal)
     // Grenze −80 dB: Der Bezug gegen sich selbst (zweimal frisch erzeugt) liegt bei −87 bis −90 dB, weil die Kette mit allen
     // sieben Effekten das Rauschen zwischen zwei Seitenladungen um etwa 45 dB anhebt. Ein echter Unterschied läge über −40 dB.
-    check('1 Null-Test: altes Projekt klingt wie vor 2.14 (Differenz < −80 dB)', ref.length === now.length && db(diff) < -80 && peak > 0.05,
+    check('1 Null-Test: Grundreihenfolge (Projekt ohne fxOrder, alle Effekte) klingt wie der gespeicherte Bezug (Differenz < −80 dB)', ref.length === now.length && db(diff) < -80 && peak > 0.05,
       `Differenz ${fmtDb(db(diff))}, Spitze ${peak.toFixed(3)}, Längen ${ref.length}/${now.length}`);
 
     await page.evaluate(installHelpers);
@@ -138,21 +139,23 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
       `Unterschied ${gain2.toFixed(1)} dB (Anteil über 2 kHz: Filter→Verzerrer ${(10 * Math.log10(t2.flt / t2.fltAll)).toFixed(1)} dB, Verzerrer→Filter ${(10 * Math.log10(t2.dfl / t2.dflAll)).toFixed(1)} dB)`);
 
     // ---------- 3. Lineare Effekte vertauschen ändert nichts ----------
+    // Filter und EQ wirken auf beide Kanäle gleich und vertauschen mit allem. Echo vor Hall bleibt: das Ping-Pong-Echo
+    // (mono → links/rechts) und der Hall (je Kanal eigene Antwort) ergeben vertauscht einen anderen Klang.
     const t3 = await page.evaluate(async () => {
       const { buildMix } = await import('./src/engine.js');
       const { library, renderProject } = window.loopwerk;
       const F = window.__fx;
       const fx = { filter: { on: true, cutoff: 0.55, reso: 0.3 }, eq: { on: true, low: 4, mid: -3, high: 2 }, echo: { on: true, mix: 0.4 }, hall: { on: true, mix: 0.3 } };
       const clips = [F.clip('c1', 'test-sine', 0, 4), F.clip('c2', 'test-click', 4, 4)];
-      const rev = { fxOrder: ['hall', 'echo', 'eq', 'filter'] };
+      const rev = { fxOrder: ['echo', 'hall', 'eq', 'filter'] };
       const o = { toBeat: 8, limiter: false, tailSeconds: 1.5 };
       const a = await renderProject(F.project(fx, {}, clips), library, o);
       const b = await renderProject(F.project(fx, rev, clips), library, o);
       const key = (extra) => buildMix(new OfflineAudioContext(2, 128, 44100), F.project(fx, extra, clips), { limiter: false }).tracks.get('t1').chain.key;
       return { d: F.diffDb(a, b), peak: F.peak(a), k0: key({}), k1: key(rev) };
     });
-    check('3 Filter, EQ, Echo, Hall umgekehrt: Kette wirklich umgestellt', t3.k0 === 'filter+eq+echo+hall' && t3.k1 === 'hall+echo+eq+filter', `${t3.k0} / ${t3.k1}`);
-    check('3 Lineare Effekte umgekehrt: Differenz < −90 dB', t3.d < -90 && t3.peak > 0.1, `${fmtDb(t3.d)}, Spitze ${t3.peak.toFixed(3)}`);
+    check('3 Filter und EQ umgekehrt hinter Echo und Hall: Kette wirklich umgestellt', t3.k0 === 'filter+eq+echo+hall' && t3.k1 === 'echo+hall+eq+filter', `${t3.k0} / ${t3.k1}`);
+    check('3 Lineare Effekte umgestellt (Echo vor Hall): Differenz < −90 dB', t3.d < -90 && t3.peak > 0.1, `${fmtDb(t3.d)}, Spitze ${t3.peak.toFixed(3)}`);
 
     // ---------- 4. Live ohne Knackser, Hall-Fahne bleibt ----------
     const t4 = await page.evaluate(async () => {

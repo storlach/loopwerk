@@ -97,13 +97,16 @@ function installHelpers() {
       const busMute = await renderProject(S.echoProject({ busMute: true }), library, o);
       return {
         mute: await busPart({ mute: true }), solo: await busPart({ solo2: true }),
-        busMute: S.diff(dry, busMute), panR: await busPart({ pan: -1 }, 1), panL: await busPart({ pan: -1 }, 0),
+        busMute: S.diff(dry, busMute), panL: await busPart({ pan: -1 }, 0), panRL: await busPart({ pan: 1 }, 0),
       };
     });
     check('10 Spur stumm: Bus unter −120 dB', t10.mute < -120, `${t10.mute} dB`);
     check('10 Andere Spur solo: Bus unter −120 dB', t10.solo < -120, `${t10.solo} dB`);
     check('10 Bus stumm: nur das trockene Signal', t10.busMute < 1e-7, t10.busMute.toExponential(2));
-    check('10 Panorama −1: rechter Kanal des Busses unter −120 dB, links klingt er', t10.panR < -120 && t10.panL > -60, `rechts ${t10.panR} dB, links ${t10.panL.toFixed(1)} dB`);
+    // Vor dem Panorama klänge der Bus bei −1 und +1 gleich. Das Echo verteilt die Mitte als Ping-Pong (erste Wiederholung
+    // links), die Seite bleibt: links ist das Echo einer Quelle ganz links deutlich lauter als das einer Quelle ganz rechts.
+    check('10 Send hinter dem Panorama: Bus links bei Panorama −1 mindestens 10 dB lauter als bei +1', t10.panL > -60 && t10.panL - t10.panRL >= 10,
+      `links bei −1 ${t10.panL.toFixed(1)} dB, bei +1 ${t10.panRL.toFixed(1)} dB`);
 
     // ---------- 11. Hall-Bus ----------
     const t11 = await page.evaluate(async () => {
@@ -229,9 +232,9 @@ function installHelpers() {
     check('16 setSend beim Ziehen: ein Schritt', t16.drag.steps === 1 && t16.drag.v.hall === 0.35, JSON.stringify(t16.drag));
     check('16 setSend begrenzt auf 0…1, 0 löscht den Eintrag, leeres Objekt fällt weg', t16.clamp === 1 && t16.zero === '{"hall":0.35}' && t16.empty === false, JSON.stringify(t16));
     check('16 Undo stellt den Send wieder her, unbekannter Bus wird ignoriert', t16.undo === 0.35 && t16.bogus);
-    // "v": 2 = Fassung des Hall-Busses, gesetzt vom ersten Send eines neuen Songs (ADR 008, Nachtrag 2026-11)
+    // Ohne Fassung "v" (seit 2026-11 gibt es nur noch eine): der Send schreibt nichts in project.buses
     check('16 setBus: Werte gesetzt (unbekannte ignoriert), Ziehen ein Schritt',
-      t16.bus.steps === 2 && JSON.stringify(t16.bus.buses) === '{"hall":{"v":2,"volume":0.4},"echo":{"time":"1/8","feedback":0.6,"mute":true}}', JSON.stringify(t16.bus));
+      t16.bus.steps === 2 && JSON.stringify(t16.bus.buses) === '{"hall":{"volume":0.4},"echo":{"time":"1/8","feedback":0.6,"mute":true}}', JSON.stringify(t16.bus));
     check('16 JSON hin und zurück gleich; sends: [] und buses: [] ungültig', t16.round && t16.rejectSends && t16.rejectBuses);
     check('16 insertStemTracks und duplicateTrack übernehmen die Sends (Kopie); clearSong lässt die Busse', JSON.stringify(t16.stems) === '{"hall":0.35}' && t16.stemCopy && JSON.stringify(t16.dup) === '{"hall":0.35}' && t16.cleared?.hall?.volume === 0.4,
       JSON.stringify({ stems: t16.stems, dup: t16.dup, cleared: t16.cleared }));
@@ -294,7 +297,7 @@ function installHelpers() {
     await page.selectOption('#insp-bus-echo-time', '1/4');
     r = await read();
     check('17 Song-Block „Busse“: Lautstärke, Raumgröße, Zeit, Wiederholungen setzen project.buses',
-      JSON.stringify(r.buses) === '{"hall":{"v":2,"volume":0.5,"size":0.3},"echo":{"volume":0.6,"feedback":0.2,"time":"1/4"}}', JSON.stringify(r.buses));
+      JSON.stringify(r.buses) === '{"hall":{"volume":0.5,"size":0.3},"echo":{"volume":0.6,"feedback":0.2,"time":"1/4"}}', JSON.stringify(r.buses));
     const busGeom = await page.evaluate(() => {
       const g = document.querySelector('.insp-grp-buses');
       const m = document.querySelector('.insp-grp-master');

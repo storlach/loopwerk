@@ -23,3 +23,7 @@ Martin will den fertigen Song mit einem Klick radiotauglich machen (Ziel etwa �
 - **Latenz:** `peakLimiterLatency(sr)` = 5 ms Vorausschau + 16 Abtastwerte Interpolator (44,1 kHz: 237 Werte, 5,37 ms). `mixLatency(sr, mix)` kennt beide Wege (Mastering, wenn es klingt, sonst Schutz-Limiter); `Engine.playbackDelay()` (Aufnahme-Ausgleich) und `renderProject({ compensate })` (Export, Stems) nutzen sie. Offline wird mit etwas Vorrat gerendert und genau die Verzögerung der tatsächlich gebauten Kette herausgeschnitten. `limiter: false` (Timing-Tests) baut keinen Limiter.
 - **Rückfall:** Ohne AudioWorklet bleibt der alte DynamicsCompressor (Verzögerung wie bisher einmal gemessen) – es spielt weiter, klingt wie vorher.
 - `renderProject` lädt das Worklet-Modul jetzt immer (Limiter, Mastering, Pad, Pegelausgleich des Verzerrers).
+
+## Nachtrag 2026-11 – Fassung 1 entfernt (Entscheidung Martin, 2026-11)
+- Auf bestehende Songs wird keine Rücksicht mehr genommen: Verzerrer, Kompressor, Hall und Hall-Bus haben nur noch eine Fassung (ADR 008, gleichnamiger Nachtrag).
+- Schutz-Limiter unverändert: feste Anhebung → True-Peak-Limiter im Worklet. Der `DynamicsCompressorNode` als Begrenzer der Summe bleibt nur als Rückfall ohne AudioWorklet (`createDcLimiter` in `src/engine.js`; `limiter: 'dc'` erzwingt ihn für Tests, `limiterLatency` misst seine Verzögerung). Der Kompressor-Effekt nutzt weiter einen eigenen `DynamicsCompressorNode`, das ist kein Limiter.

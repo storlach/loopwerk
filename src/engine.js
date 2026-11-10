@@ -236,7 +236,7 @@ export function buildMix(ctx, project, { limiter = true, grid = 0, dest = ctx.de
   const aGain = ctx.createGain();
   const bBus = ctx.createGain();
   post.connect(aGain);
-  // limiter: 'dc' = der Rückfall-Limiter auch mit Worklet (Vergleich mit dem alten Stand in Tests)
+  // limiter: 'dc' = Rückfall ohne Worklet erzwingen (Tests prüfen ihn so)
   const lim = limiter ? createLimiter(ctx, worklets && limiter !== 'dc') : null;
   if (lim) { aGain.connect(lim.input); lim.output.connect(final); } else aGain.connect(final);
   bBus.connect(final);

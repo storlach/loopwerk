@@ -68,10 +68,11 @@ const { check, finish } = createChecker();
         midSame: bandDb(eqHigh, 600, 1200) - bandDb(a0, 600, 1200),
       };
 
-      // Echo 1/8 bei 120 BPM = 0,25 s: Wiederholungen bei 11025 und 22050 Frames
-      const e = (await render(proj('test-click', fxWith('echo', { time: '1/8', feedback: 0.5, mix: 0.5 }), {}, 1), 4)).getChannelData(0);
-      const peakNear = (f) => { let p = 0; for (let i = f - 200; i < f + 400; i++) p = Math.max(p, Math.abs(e[i])); return p; };
-      out.echo = { first: peakNear(11025), second: peakNear(22050), gap: rms(e, 2000, 10500) };
+      // Echo 1/8 bei 120 BPM = 0,25 s: Wiederholungen bei 11025 (links) und 22050 Frames (rechts, Ping-Pong)
+      const eb = await render(proj('test-click', fxWith('echo', { time: '1/8', feedback: 0.5, mix: 0.5 }), {}, 1), 4);
+      const e = eb.getChannelData(0), er = eb.getChannelData(1);
+      const peakNear = (d, f) => { let p = 0; for (let i = f - 200; i < f + 400; i++) p = Math.max(p, Math.abs(d[i])); return p; };
+      out.echo = { first: peakNear(e, 11025), second: peakNear(er, 22050), gap: Math.max(rms(e, 2000, 10500), rms(er, 2000, 10500)) };
 
       // Hall: Ausklang nach dem Impuls, größer bei größerem Raum
       const h0 = (await render(proj('test-click', null, {}, 1), 8)).getChannelData(0);
@@ -104,7 +105,7 @@ const { check, finish } = createChecker();
     check('EQ Höhen +12 dB hebt die Höhen an', m.eq.highBoost > 9, `${m.eq.highBoost.toFixed(1)} dB über 9 kHz`);
     check('EQ Tiefen −12 dB senkt die Tiefen ab', m.eq.lowCut < -8, `${m.eq.lowCut.toFixed(1)} dB unter 120 Hz`);
     check('EQ lässt die Mitten in Ruhe', Math.abs(m.eq.midSame) < 1.5, `${m.eq.midSame.toFixed(1)} dB bei 600–1200 Hz`);
-    check('Echo 1/8 wiederholt nach 0,25 s und 0,5 s', m.echo.first > 0.05 && m.echo.second > 0.02 && m.echo.second < m.echo.first && m.echo.gap < 0.005,
+    check('Echo 1/8 wiederholt nach 0,25 s (links) und 0,5 s (rechts)', m.echo.first > 0.05 && m.echo.second > 0.02 && m.echo.second < m.echo.first && m.echo.gap < 0.005,
       `1. ${m.echo.first.toFixed(3)}, 2. ${m.echo.second.toFixed(3)}, dazwischen ${m.echo.gap.toExponential(1)}`);
     check('Hall erzeugt einen Ausklang', m.hall.dry < 1e-6 && m.hall.early > 1e-4, `trocken ${m.hall.dry.toExponential(1)}, mit Hall ${m.hall.early.toExponential(1)} (0,1–0,4 s)`);
     check('Größerer Raum klingt länger', m.hall.large > m.hall.small * 3, `nach 0,8–1,2 s: klein ${m.hall.small.toExponential(1)}, groß ${m.hall.large.toExponential(1)}`);
