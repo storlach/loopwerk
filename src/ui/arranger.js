@@ -13,6 +13,9 @@ import { mountChordRow } from './chord-row.js';
 import { mountAutoLanes } from './auto-lane.js';
 import { recipeKey } from '../recipe.js';
 
+// Notfarbe, falls ein Token (noch) nicht aufgelöst ist
+const FALLBACK_INK = '#888';
+
 // Breite der Spurköpfe; auf schmalen Bildschirmen schmaler, damit mehr Raster sichtbar bleibt.
 // Am Tablet (Finger, breit) etwas breiter: vier fingergroße Knöpfe in einer Reihe.
 const narrow = window.matchMedia('(max-width: 760px)');
@@ -357,7 +360,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     members.forEach((t, i) => {
       for (const clip of t.clips) {
         const s = library.get(clip.sampleId);
-        c.fillStyle = css.getPropertyValue(`--cat-${s?.colorCat ?? s?.category ?? 'fx'}`).trim() || '#888';
+        c.fillStyle = css.getPropertyValue(`--cat-${s?.colorCat ?? s?.category ?? 'fx'}`).trim() || FALLBACK_INK;
         c.fillRect(clip.startBeat * ppb(), y0 + i * band + 1, Math.max(2, clip.lengthBeats * ppb() - 1), band - 2);
       }
     });
@@ -654,7 +657,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const c = canvas.getContext('2d');
     c.setTransform(sx, 0, 0, dpr, -from * sx, 0);
     c.clearRect(from, 0, cw, h);
-    color ??= getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888';
+    color ??= getComputedStyle(canvas).getPropertyValue('--wave').trim() || FALLBACK_INK;
     c.fillStyle = color;
     const mid = h / 2;
     const off = clip.offsetBeats || 0;
@@ -878,7 +881,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   function waveColor(canvas, cat, grey) {
     const k = `${cat}|${grey}`;
     let c = waveColors.get(k);
-    if (!c && canvas.isConnected) { c = getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888'; waveColors.set(k, c); }
+    if (!c && canvas.isConnected) { c = getComputedStyle(canvas).getPropertyValue('--wave').trim() || FALLBACK_INK; waveColors.set(k, c); }
     return c || null;
   }
 

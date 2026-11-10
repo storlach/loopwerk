@@ -75,8 +75,13 @@ Vorhanden:
 - `tools/push.sh` – Push mit Wiederholung bei Netzfehlern.
 - `npm run klangvergleich -- <vorher-ordner> <nachher-ordner>` – paart Hörproben über den Namen und zeigt Lautheit, Spitze, Tiefen/Mitten/Höhen und Breite vorher → nachher.
 - `tools/agenten.sh [--dateien]` – Stand aller Agent-Worktrees (Commits vor main, ungesicherte Dateien, letzte Änderung).
-- `tools/klang/` – Messskripte zum Klang: `anschlaege.cjs <wav|Sound> [--faktoren …]` zählt Anschläge und prüft ihre Lage nach der Tempo-Dehnung.
-- `tools/perf/` – Messskripte der Performance-Analyse (Laden, Bedienung, Arranger-Skalierung, Stillstand, Audio-Last, Speicher, Service Worker), siehe `tools/perf/README.md`.
+- `tools/klang/` – Messskripte zum Klang (offline im Headless-Chromium):
+  - `sounds.cjs [--teile lib,kits,klaenge,piano,starter] [--vergleich vorher.json]` – Klangfarbe der Sounds selbst: Bänder, Stereobreite, Kits, Melodie-Klänge, Sprung am Notenende, kleine Lautsprecher.
+  - `effekt-messen.cjs [--teil einschalten,hall] [--fassung 1|2|beide]` – was ein Effekt beim Einschalten mit dem Pegel macht; Pegel und Breite des Halls.
+  - `anschlaege.cjs <wav|Sound> [--faktoren …]` – Anschläge zählen und ihre Lage nach der Tempo-Dehnung prüfen.
+  - `rechenzeit.cjs <alter-stand> [<neuer-stand>]` – Rechenaufwand der synthetischen Bibliothek zweier Stände.
+  - `druck-bezug.cjs [--muster …] [--write]` – Bezug `tests/fixtures/druck-old-patterns.json` erneuern, wenn sich Kit-Stimmen gewollt ändern.
+- `tools/perf/` – Messskripte der Performance-Analyse (Laden, Bedienung, Arranger-Skalierung, Stillstand, Audio-Last, Speicher, Service Worker), siehe `tools/perf/README.md`; `kennzahlen.cjs [--vorher <ordner>]` misst die wichtigsten Kennzahlen der Oberfläche in einem Lauf (Stillstand, Abspielen und Zoom mit 448 Clips, Leinwand-Speicher).
 
 ## Fertig heißt
 - `npm test` ohne Rot (alle Stufen: Timing samplegenau, Effekte, Export, UI-Interaktionen, keine Konsolenfehler) und `npm run regeln` ohne neue Verstöße.
