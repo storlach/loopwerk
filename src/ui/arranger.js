@@ -885,26 +885,36 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   followChip.title = 'Die Ansicht folgt wieder der Abspielmarke';
   root.parentElement?.append(followChip);
   followChip.addEventListener('click', () => { freeView = false; setPlayhead(engine.heardBeat()); });
+  // Scrollposition und Breite merken: die Marke liest je Bild nichts aus dem Layout
+  let viewLeft = root.scrollLeft;
+  let viewW = root.clientWidth;
+  let phGripW = null; // Breite des Griffs (CSS, je Gerät): einmal gemessen
+  new ResizeObserver(() => { viewW = root.clientWidth; phGripW = null; }).observe(root);
   root.addEventListener('scroll', () => {
-    if (Math.abs(root.scrollLeft - appLeft) < 0.5) return;
-    appLeft = root.scrollLeft;
+    viewLeft = root.scrollLeft;
+    if (Math.abs(viewLeft - appLeft) < 0.5) return;
+    appLeft = viewLeft;
     if (engine.playing) freeView = true;
   }, { passive: true });
   const userMovedView = () => { if (engine.playing) freeView = true; };
+  const phShown = { x: null, g: null, chip: null };
   function setPlayhead(beat) {
     if (gripDrag != null) beat = gripDrag;
     const x = headW() + beat * ppb();
-    playhead.style.transform = `translateX(${x}px)`;
+    if (x !== phShown.x) { playhead.style.transform = `translateX(${x}px)`; phShown.x = x; }
     // Am Songanfang ganz sichtbar statt halb unter der Ecke: der Griff rückt bis zu seiner halben Breite nach rechts
-    phGrip.style.transform = `translateX(${Math.max(beat * ppb(), (phGrip.offsetWidth || 14) / 2)}px)`;
+    if (phGripW == null) phGripW = phGrip.offsetWidth;
+    const g = Math.max(beat * ppb(), (phGripW || 14) / 2);
+    if (g !== phShown.g) { phGrip.style.transform = `translateX(${g}px)`; phShown.g = g; }
     if (engine.playing && !wasPlaying) freeView = false;
     wasPlaying = engine.playing;
+    let chip = true;
     if (engine.playing) {
-      const view = root.clientWidth;
-      const out = x > root.scrollLeft + view - 40 || x < root.scrollLeft + headW();
-      if (out && !freeView) { root.scrollLeft = x - headW() - 24; appLeft = root.scrollLeft; }
-      followChip.hidden = !(freeView && out);
-    } else followChip.hidden = true;
+      const out = x > viewLeft + viewW - 40 || x < viewLeft + headW();
+      if (out && !freeView) { root.scrollLeft = x - headW() - 24; viewLeft = appLeft = root.scrollLeft; }
+      chip = !(freeView && out);
+    }
+    if (chip !== phShown.chip) { followChip.hidden = chip; phShown.chip = chip; }
   }
 
   // ---------- Zeiger-Interaktionen ----------
@@ -1420,7 +1430,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
         root.scrollTop = Math.max(0, top - y);
       }
     }
-    appLeft = root.scrollLeft;
+    viewLeft = appLeft = root.scrollLeft;
     ui.emit();
     return true;
   }
@@ -1520,8 +1530,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   }
 
   store.on(() => render());
-  narrow.addEventListener('change', () => render(true));
-  touch.addEventListener('change', () => render(true));
+  narrow.addEventListener('change', () => { phGripW = null; render(true); });
+  touch.addEventListener('change', () => { phGripW = null; render(true); });
   render(true);
   // Scharf für die Aufnahme: roter Punkt im Spurkopf (nur Anzeige)
   const markArmed = () => { for (const [tid, r] of rows) r.row.classList.toggle('rec-armed', !!recArm && !!ui.recTracks?.includes(tid)); };

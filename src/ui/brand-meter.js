@@ -15,8 +15,10 @@ export function mountBrandMeter(engine, root = document.getElementById('brand-ba
   const bars = [...root.children];
   const level = IDLE.slice(0, bars.length);
   const shown = bars.map(() => -1);
+  // Höhe einmal messen (und bei Größenänderung): je Bild kein Lesen aus dem Layout
+  let max = root.clientHeight || 20;
+  new ResizeObserver(() => { max = root.clientHeight || 20; }).observe(root);
   function frame() {
-    const max = root.clientHeight || 20;
     const bands = engine.outputBands(bars.length);
     const loud = !!bands && bands.some((v) => v > 0.04);
     root.classList.toggle('live', loud);
