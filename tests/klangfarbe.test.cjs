@@ -156,12 +156,13 @@ function helpers() {
       const { library } = window.loopwerk;
       const out = {};
       for (const [kit, row] of [['elektro', 'kick'], ['elektro', 'snare'], ['elektro', 'hat'], ['techno', 'kick'], ['techno', 'hat'], ['techno', 'snare'], ['druck', 'kick'], ['druck', 'snare']]) {
-        const { buffer } = await I.renderPattern(window.__hit(kit, row), 120, library);
+        const { buffer, level = 1 } = await I.renderPattern(window.__hit(kit, row), 120, library);
         const m = window.__m(buffer, { sub: [30, 80], body: [150, 300], low: [0, 250] });
         const d = buffer.getChannelData(0);
         let p = 0; for (const x of d) p = Math.max(p, Math.abs(x));
         let e = 0; for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > p * 0.01) e = i;
-        out[`${kit}.${row}`] = { ...m, mom: window.__mom(buffer), len40: e / 44100 };
+        // Klangfarbe vor dem Pegel des Kits (ADR 013; die Lautheit je Kit prüft tests/pegel.test.cjs)
+        out[`${kit}.${row}`] = { ...m, mom: window.__mom(buffer) - 20 * Math.log10(level), len40: e / 44100 };
       }
       return out;
     });

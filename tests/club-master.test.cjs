@@ -398,7 +398,8 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
     try {
       await page.tap('#tab-song');
       await page.waitForTimeout(500);
-      await page.tap('#song-mst-on');
+      // Das Beispiel startet seit ADR 013 mit Mastering an: nur einschalten, wenn es aus ist
+      if (!(await page.evaluate(() => window.loopwerk.store.project.master?.mastering?.on))) await page.tap('#song-mst-on');
       await page.waitForTimeout(300);
       await page.evaluate(() => document.getElementById('song-mst-style-club').scrollIntoView({ block: 'center' }));
       await page.waitForTimeout(300);

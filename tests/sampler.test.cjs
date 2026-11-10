@@ -104,7 +104,7 @@ function installHelpers() {
         const spb = 60 / library.bpm;
         const ctx = new OfflineAudioContext(2, a.length, 44100);
         const bus = ctx.createGain();
-        bus.gain.value = 0.9;
+        bus.gain.value = 0.9 * (direct.level ?? 1); // mit dem Pegel des Klangs (ADR 013)
         bus.connect(ctx.destination);
         for (const n of p.notes) S.playSampled(ctx, bus, loaded, n.pitch, n.start * spb, n.len * spb, n.vel);
         const r = (await ctx.startRendering()).getChannelData(0);

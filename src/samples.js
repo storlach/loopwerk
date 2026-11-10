@@ -15,6 +15,7 @@ import { minorOf, wrapSemis } from './keys.js';
 import { DEGREE_IDS, REST } from './harmony.js';
 import { normalizeRecipe, recipeKey, soundFields, materialOf, suggestMaterial, RECIPE } from './recipe.js';
 import { cookRecipe, peakOfChannels } from './dsp/recipe.js';
+import { soundLevel } from './levels.js';
 
 export const CATEGORIES = [
   { id: 'drums', label: 'Drums' },
@@ -1878,8 +1879,11 @@ async function renderLoop(def, bpm, semis = 0) {
     }
   }
   const peak = bufferPeak(buffer);
-  if (peak > 0) scale(buffer, (def.peak ?? 0.5) / peak);
-  return { buffer, lengthBeats: beats };
+  // Spitze wie bisher, dann die Lautheit der Rolle (ADR 013, feste Tabelle – beim Laden wird nichts gemessen);
+  // level = angewandter Faktor gegen die Spitzen-Normalisierung (für tools/klang/pegel.cjs)
+  const level = soundLevel(def.id);
+  if (peak > 0) scale(buffer, ((def.peak ?? 0.5) / peak) * level);
+  return { buffer, lengthBeats: beats, level };
 }
 
 // Echte Loops auf das Projekttempo strecken (Länge exakt in Schlägen). WSOLA rechnet der Rechen-Worker,
@@ -2083,7 +2087,7 @@ export class Library extends Emitter {
             const kv = {
               id: key, baseId: id, delta, chord, baseRev, atBpm: bpm, rev: ++this.variantRev,
               name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
-              buffer: r.buffer, lengthBeats: r.lengthBeats,
+              buffer: r.buffer, lengthBeats: r.lengthBeats, level: r.level ?? base.level,
             };
             // Nur übernehmen, wenn sich der Grund-Sound währenddessen nicht geändert hat
             if (base.rev === baseRev) this.keyedVariants.set(key, kv);
@@ -2150,10 +2154,13 @@ export class Library extends Emitter {
       const baseBeats = base.lengthBeats;
       let buffer;
       let atBpm = base.atBpm;
+      let level = base.level;
       if (rerender) {
         atBpm = bpm;
         // Erzeugte Loops und Patterns: im passenden Tempo neu rendern – verlustfrei wie beim Tempowechsel (ADR 001)
-        buffer = (await rerender(bpm / factor)).buffer;
+        const r = await rerender(bpm / factor);
+        buffer = r.buffer;
+        level = r.level ?? level;
       } else {
         const { runJob } = await import('./dsp/run.js');
         const chs = Array.from({ length: baseBuf.numberOfChannels }, (_, c) => baseBuf.getChannelData(c));
@@ -2165,7 +2172,7 @@ export class Library extends Emitter {
       const v = {
         id: key, baseId: id, factor, baseRev, baseFrames: baseBuf.length, atBpm, rev: ++this.variantRev,
         name: base.name, category: base.category, colorCat: base.colorCat, kind: base.kind, patternId: base.patternId,
-        buffer, lengthBeats, peaks: computePeaks(buffer, lengthBeats),
+        buffer, lengthBeats, level, peaks: computePeaks(buffer, lengthBeats),
       };
       this.variants.set(key, v);
       this.emit();
@@ -2365,6 +2372,8 @@ export class Library extends Emitter {
     if (patch) Object.assign(s, patch);
     s.buffer = r.buffer;
     s.lengthBeats = r.lengthBeats;
+    // Pegel gegen die alte Spitzen-Normalisierung (ADR 013); Fremd-Sounds tragen ihn seit dem Laden
+    if (r.level != null) s.level = r.level;
     // Tempo, für das der Puffer gilt. Läuft der Song schon in einem anderen, gleicht die Engine es wie Tonband aus,
     // bis die neue Fassung da ist. One-Shots klingen in jedem Tempo gleich (nur aufgefüllt): kein Ausgleich.
     s.atBpm = r.oneShot ? undefined : bpm;
@@ -2603,8 +2612,9 @@ async function loadCatalogEntry(entry) {
   try {
     const orig = await decode(await fetchAsset(entry.file));
     const peak = bufferPeak(orig);
-    if (peak > 0) scale(orig, (PEAK_TARGET[entry.category] ?? 0.5) / peak);
-    const sample = { ...entry, orig, duration: orig.duration };
+    const level = soundLevel(entry.id);
+    if (peak > 0) scale(orig, ((PEAK_TARGET[entry.category] ?? 0.5) / peak) * level);
+    const sample = { ...entry, orig, duration: orig.duration, level };
     if (entry.kind === 'loop') sample.bpm = Math.round((entry.beats * 60 / orig.duration) * 100) / 100;
     return sample;
   } catch (err) {
@@ -2638,7 +2648,7 @@ export async function buildLibrary({ bpm = LIBRARY_BPM, semis = 0, onProgress, n
     lib.stub({ ...entry, key: entry.key === 'keine' ? null : entry.key ?? null }, async (s) => {
       const loaded = await loadCatalogEntry(entry);
       if (!loaded) throw new Error('nicht geladen');
-      Object.assign(s, { orig: loaded.orig, duration: loaded.duration, bpm: loaded.bpm ?? s.bpm });
+      Object.assign(s, { orig: loaded.orig, duration: loaded.duration, bpm: loaded.bpm ?? s.bpm, level: loaded.level });
     });
   }
   lib.coreIds = [...LOOP_DEFS.map((d) => d.id), ...CATALOG.map((e) => e.id)];

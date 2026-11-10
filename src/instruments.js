@@ -3,6 +3,7 @@
 
 import { createKit, biteStage, chokeVoice } from './samples.js';
 import { isGuitarPreset, renderGuitarNotes } from './dsp/guitar.js';
+import { kitLevel, presetLevel, PATTERN_PEAK_MAX } from './levels.js';
 import {
   sampledInstruments, isSampled, getInstrument, loadInstrument, loadedInstrument, playSampled, fallbackPreset, releaseTail,
 } from './sampler.js';
@@ -202,8 +203,8 @@ function playKick(ctx, out, kit, kitId, beat, spb, vel, kp, library) {
     src.playbackRate.value = kp.pitch / (k.kickHz ?? 55);
     const voice = chokeVoice(ctx, out);
     const g = ctx.createGain();
-    // Platz für den Klick wie bei kickPro
-    const level = vel * (1 - 0.3 * kp.click);
+    // Platz für den Klick wie bei kickPro; Sample auf seiner Spitzen-Normalisierung (die Lautheit regelt das Kit, ADR 013)
+    const level = (vel * (1 - 0.3 * kp.click)) / (s.level || 1);
     g.gain.setValueAtTime(level, t);
     g.gain.setValueAtTime(level, t + kp.length * 0.6);
     g.gain.linearRampToValueAtTime(0, t + kp.length);
@@ -410,7 +411,7 @@ export async function renderPattern(pattern, bpm, library) {
           const src = ctx.createBufferSource();
           src.buffer = library.source?.(s) ?? s.orig;
           const g = ctx.createGain();
-          g.gain.value = v;
+          g.gain.value = v / (s.level || 1); // Kit-Balance wie gespitzt; die Lautheit regelt das Kit (ADR 013)
           src.connect(g).connect(bus);
           src.start(b * spb);
           return;
@@ -439,29 +440,42 @@ export async function renderPattern(pattern, bpm, library) {
 
   const rendered = await ctx.startRendering();
   const buffer = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: SR });
+  let peak = 0;
   for (let c = 0; c < 2; c++) {
     const src = rendered.getChannelData(c);
     const dst = buffer.getChannelData(c);
     dst.set(src.subarray(0, frames));
     // Ausklang an den Anfang falten: das Pattern läuft als Loop nahtlos
     for (let i = frames; i < src.length; i++) dst[i % frames] += src[i];
+    for (let i = 0; i < frames; i++) { const v = Math.abs(dst[i]); if (v > peak) peak = v; }
   }
-  return { buffer, lengthBeats: beats };
+  // Lautheit je Kit bzw. Klang (ADR 013), nie über die Spitzen-Obergrenze: ein neuer Beat spitzt höchstens bei −0,5 dBFS
+  let level = pattern.type === 'drums' ? kitLevel(pattern.kit) : presetLevel(inst ? pattern.preset : sampled(pattern.preset) ? fallbackPreset(getInstrument(pattern.preset)) : pattern.preset);
+  if (peak * level > PATTERN_PEAK_MAX) level = PATTERN_PEAK_MAX / peak;
+  if (level !== 1) for (let c = 0; c < 2; c++) { const d = buffer.getChannelData(c); for (let i = 0; i < frames; i++) d[i] *= level; }
+  return { buffer, lengthBeats: beats, level };
 }
 
-// Vorhören (Piano-Roll, Tastatur, MIDI, Stepsequencer): ein Kit pro AudioContext, Zeiten relativ zu „jetzt“
+// Vorhören (Piano-Roll, Tastatur, MIDI, Stepsequencer): ein Kit je AudioContext, Ziel und Pegel, Zeiten relativ zu „jetzt“.
+// level: derselbe Faktor wie beim Rendern des Patterns (ADR 013), damit Vorhören und Song gleich laut sind
 const previewKits = new WeakMap();
-function previewKit(ctx, dest) {
-  let entry = previewKits.get(ctx);
+function previewKit(ctx, dest, level = 1) {
+  let map = previewKits.get(ctx);
+  if (!map) previewKits.set(ctx, (map = new Map()));
+  const key = `${level}`;
+  let byDest = map.get(dest);
+  if (!byDest) map.set(dest, (byDest = new Map()));
+  let entry = byDest.get(key);
   if (!entry) {
     const out = ctx.createGain();
-    out.gain.value = 0.8;
+    out.gain.value = 0.8 * level;
     out.connect(dest);
     entry = { kit: createKit(ctx, out, 1), out }; // spb = 1: Schlag = Sekunde
-    previewKits.set(ctx, entry);
+    byDest.set(key, entry);
   }
   return entry;
 }
+const previewLevel = (preset) => presetLevel(sampled(preset) && !loadedInstrument(preset) ? fallbackPreset(getInstrument(preset)) : preset);
 
 // Echtes Instrument fürs Vorhören: geladen → Sampler; sonst Laden anstoßen und den Synth-Ersatz nennen
 function liveSampler(preset) {
@@ -497,7 +511,7 @@ function playGuitar(ctx, dest, preset, pitch, seconds, when) {
 
 // vel (0–1): Anschlag; leiser gespielt klingt es auch beim Vorhören leiser
 export function previewNote(ctx, dest, preset, pitch, vel = 1) {
-  const { kit, out } = previewKit(ctx, dest);
+  const { kit, out } = previewKit(ctx, dest, previewLevel(preset));
   const t = ctx.currentTime + 0.01;
   const s = liveSampler(preset);
   if (s.loaded) { playSampled(ctx, out, s.loaded, pitch, t, 0.4, vel); return; }
@@ -520,15 +534,16 @@ export function previewNote(ctx, dest, preset, pitch, vel = 1) {
 const HOLD_MAX = 12;
 const GUITAR_HOLD = 3; // Gitarre klingt ohnehin aus
 export function startNote(ctx, dest, preset, pitch, vel = 1) {
+  const level = previewLevel(preset);
   const s = liveSampler(preset);
   if (s.loaded) {
-    const voice = playSampled(ctx, previewKit(ctx, dest).out, s.loaded, pitch, ctx.currentTime + 0.005, null, vel);
+    const voice = playSampled(ctx, previewKit(ctx, dest, level).out, s.loaded, pitch, ctx.currentTime + 0.005, null, vel);
     return { stop: () => voice.release(ctx.currentTime) };
   }
   preset = s.preset;
   const g = ctx.createGain();
   g.connect(dest);
-  g.gain.value = 0.8 * vel;
+  g.gain.value = 0.8 * vel * level;
   const t = ctx.currentTime + 0.005;
   if (isGuitarPreset(preset)) playGuitar(ctx, g, preset, pitch, GUITAR_HOLD, t);
   else playNote(createKit(ctx, g, 1), preset, pitch, t, HOLD_MAX, 1, 1);
@@ -548,8 +563,9 @@ export function startNote(ctx, dest, preset, pitch, vel = 1) {
 
 // when: Kontextzeit für den Schlag (Wiederholung beim Halten); ohne Angabe sofort. kp: Kick-Regler (kickParams)
 export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1, kp = null) {
+  const level = kitLevel(kitId);
   if (kp && rowId === 'kick') {
-    const { kit, out } = previewKit(ctx, dest);
+    const { kit, out } = previewKit(ctx, dest, level);
     playKick(ctx, out, kit, kitId, when ?? ctx.currentTime + 0.01, 1, vel, kp, library);
     return;
   }
@@ -559,15 +575,16 @@ export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1, kp 
     if (!s?.orig) return;
     const src = ctx.createBufferSource();
     src.buffer = library.source?.(s) ?? s.orig;
-    if (vel < 0.999) {
+    const k = (vel * level) / (s.level || 1);
+    if (Math.abs(k - 1) > 1e-3) {
       const g = ctx.createGain();
-      g.gain.value = vel;
+      g.gain.value = k;
       src.connect(g).connect(dest);
     } else src.connect(dest);
     src.start(when ?? 0);
     return;
   }
-  const k = previewKit(ctx, dest).kit;
+  const k = previewKit(ctx, dest, level).kit;
   const t = when ?? ctx.currentTime + 0.01;
   (SYNTH_DRUMS[kitId] || SYNTH_DRUMS.elektro)[rowId]?.(k, t, vel);
 }

@@ -128,7 +128,10 @@ const { check, finish } = createChecker();
     await page.click('#fx-hall-on');
     const hallOn = await page.evaluate(() => window.loopwerk.store.track('t1').fx.hall.on);
     check('Hall-Schalter schaltet Hall ein', hallOn === true);
-    check('Kanalzug zeigt „1 Effekt“', (await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').textContent()) === '1 Effekt');
+    // Das Beispiel hat seit ADR 013 auf den Drums schon den EQ an: der Hall kommt dazu
+    const fxOn = await page.evaluate(() => Object.values(window.loopwerk.store.track('t1').fx).filter((x) => x?.on).length);
+    const sum = await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').textContent();
+    check('Kanalzug zählt die Effekte (mit Hall)', sum === (fxOn === 1 ? '1 Effekt' : `${fxOn} Effekte`) && fxOn >= 1, `${sum}, an: ${fxOn}`);
 
     await page.locator('#fx-hall-mix').fill('0.6');
     const mix = await page.evaluate(() => window.loopwerk.store.track('t1').fx.hall.mix);
