@@ -3,7 +3,7 @@
 
 import { Emitter } from './util.js';
 import { KEYS, KEY_MAJOR, minorOf, wrapSemis, isSoundKey } from './keys.js';
-import { withFx, fxOrderOf, isDefaultOrder, busDef, ECHO_TIMES } from './effects.js';
+import { withFx, fxOrderOf, isDefaultOrder, busDef, ECHO_TIMES, stampFx, BUS_VERSION } from './effects.js';
 import { isChord } from './harmony.js';
 import { normalizeRecipe, soundFields, newVariantId, newGroupId, MIN_SPAN } from './recipe.js';
 import { AUTO_PARAMS, autoKeys, laneOf, setLane, templateRange, templatePoints, templateRest, carryAutomation, AUTO_TEMPLATES, STEP_BEATS, fxOfKey } from './automation.js';
@@ -1018,7 +1018,9 @@ export class Store extends Emitter {
     this.dispatch('fx', () => {
       const t = this.track(trackId);
       t.fx = withFx(t.fx);
+      const was = t.fx[fxId].on;
       Object.assign(t.fx[fxId], patch);
+      stampFx(fxId, t.fx[fxId], was);
     }, { coalesce });
   }
 
@@ -1033,7 +1035,12 @@ export class Store extends Emitter {
         const t = this.track(id);
         if (!t || !fx) continue;
         t.fx = withFx(t.fx);
-        for (const [fxId, patch] of Object.entries(fx)) if (t.fx[fxId]) Object.assign(t.fx[fxId], patch);
+        for (const [fxId, patch] of Object.entries(fx)) {
+          if (!t.fx[fxId]) continue;
+          const was = t.fx[fxId].on;
+          Object.assign(t.fx[fxId], patch);
+          stampFx(fxId, t.fx[fxId], was);
+        }
       }
     });
   }
@@ -1099,11 +1106,18 @@ export class Store extends Emitter {
     if (!t || !busDef(bus)) return;
     const v = Math.max(0, Math.min(1, Number(amount) || 0));
     if ((t.sends?.[bus] ?? 0) === v) return;
-    this.dispatch('send', () => {
+    this.dispatch('send', (p) => {
       const tr = this.track(trackId);
+      const fed = p.tracks.some((x) => (x.sends?.[bus] ?? 0) > 0);
       const s = { ...(tr.sends || {}) };
       if (v > 0) s[bus] = v; else delete s[bus];
       if (Object.keys(s).length) tr.sends = s; else delete tr.sends;
+      // Fassung des Busses (ADR 008, Nachtrag): der erste Send bringt die aktuelle, der letzte hält die alte fest
+      const now = p.tracks.some((x) => (x.sends?.[bus] ?? 0) > 0);
+      if (BUS_VERSION[bus] && fed !== now && p.buses?.[bus]?.v == null) {
+        p.buses = { ...(p.buses || {}) };
+        p.buses[bus] = { ...(p.buses[bus] || {}), v: now ? BUS_VERSION[bus] : 1 };
+      }
     }, { coalesce });
   }
 
@@ -1131,7 +1145,9 @@ export class Store extends Emitter {
     this.dispatch('fx', (p) => {
       p.master = { volume: 0.85, ...(p.master || {}) };
       p.master.fx = withFx(p.master.fx);
+      const was = p.master.fx[fxId].on;
       Object.assign(p.master.fx[fxId], patch);
+      stampFx(fxId, p.master.fx[fxId], was);
     }, { coalesce });
   }
 
@@ -1442,6 +1458,7 @@ export class Store extends Emitter {
     owner.fx = withFx(owner.fx);
     if (owner.fx[id].on) return;
     owner.fx[id].on = true;
+    stampFx(id, owner.fx[id], false);
     if (id === 'filter') owner.fx[id].type = 'lowpass';
   }
 
@@ -1509,7 +1526,7 @@ export class Store extends Emitter {
     this.dispatch('auto-record', () => {
       const o = this._autoOwner(target, true);
       setLane(o, key, points);
-      if (id && fx) { o.fx = withFx(o.fx); Object.assign(o.fx[id], fx); } else this._autoFxOn(o, key);
+      if (id && fx) { o.fx = withFx(o.fx); const was = o.fx[id].on; Object.assign(o.fx[id], fx); stampFx(id, o.fx[id], was); } else this._autoFxOn(o, key);
     });
     return true;
   }

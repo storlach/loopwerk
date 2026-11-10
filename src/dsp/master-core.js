@@ -323,7 +323,12 @@ export class TruePeakLimiter {
   }
 
   setStyle(styleId) {
-    this.rel = 1 - Math.exp(-1 / (styleOf(styleId).release * this.sr));
+    this.setRelease(styleOf(styleId).release);
+  }
+
+  // Ausklingzeit in Sekunden (Schutz-Limiter ohne Mastering-Stil)
+  setRelease(seconds) {
+    this.rel = 1 - Math.exp(-1 / (seconds * this.sr));
   }
 
   // drive: Verstärkung vor dem Limiter (linear). Erkennung und Absenkung sind getrennt, damit die Analyse die
@@ -407,5 +412,5 @@ export class TruePeakLimiter {
 }
 
 // Verzögerung der Kette in Abtastwerten: Vorausschau des Limiters, bei Stilen mit Clipper dazu dessen Filter
-export const masterLatency = (sampleRate, styleId) => Math.max(32, Math.round(0.005 * sampleRate)) + TP_HALF
-  + (styleOf(styleId).clip ? TP_HALF + OS_Q : 0);
+export const peakLimiterLatency = (sampleRate) => Math.max(32, Math.round(0.005 * sampleRate)) + TP_HALF;
+export const masterLatency = (sampleRate, styleId) => peakLimiterLatency(sampleRate) + (styleOf(styleId).clip ? TP_HALF + OS_Q : 0);
