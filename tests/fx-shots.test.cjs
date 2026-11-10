@@ -115,7 +115,7 @@ const { check, finish } = createChecker();
 
       const out = [];
       for (const def of defs) {
-        const res = { id: def.id, name: def.name, bars: def.bars, peakSet: def.peak, genres: def.genres, tags: def.tags, category: def.category, oneShot: def.oneShot };
+        const res = { id: def.id, name: def.name, bars: def.bars, peakSet: def.peak, level: (await import('./src/levels.js')).soundLevel(def.id), genres: def.genres, tags: def.tags, category: def.category, oneShot: def.oneShot };
         try {
           res.outside = record(def);
           const p120 = await prepare(def, 120);
@@ -192,7 +192,7 @@ const { check, finish } = createChecker();
     check('Länge exakt Takte × 4 Schläge (120, 93, 150 BPM)', badLen.length === 0, badLen.map((x) => `${x.id}: ${x.length}/${x.expected}`).join(' | '));
     const nan = ok.filter((x) => x.nan || x.nan93 || x.nan150);
     check('Kein NaN/Inf', nan.length === 0, nan.map((x) => x.id).join(', '));
-    const badPeak = ok.filter((x) => !(x.peak <= 0.99 && x.peak93 <= 0.99 && x.peak150 <= 0.99) || Math.abs(x.peak - x.peakSet) > 0.01);
+    const badPeak = ok.filter((x) => !(x.peak <= 0.99 && x.peak93 <= 0.99 && x.peak150 <= 0.99) || Math.abs(x.peak / x.level - x.peakSet) > 0.01); // peak vor dem Lautheits-Pegel (ADR 013)
     check('Kein Clipping (Spitze ≤ 0,99) und Spitze wie in peak', badPeak.length === 0, badPeak.map((x) => `${x.id}: ${x.peak.toFixed(3)}`).join(', '));
     const silent = ok.filter((x) => !(x.rms > 0.01));
     check('Kein FX ist still (RMS > 0,01)', silent.length === 0, silent.map((x) => `${x.id}: ${x.rms}`).join(', '));

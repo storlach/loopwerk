@@ -203,8 +203,8 @@ function playKick(ctx, out, kit, kitId, beat, spb, vel, kp, library) {
     src.playbackRate.value = kp.pitch / (k.kickHz ?? 55);
     const voice = chokeVoice(ctx, out);
     const g = ctx.createGain();
-    // Platz für den Klick wie bei kickPro
-    const level = vel * (1 - 0.3 * kp.click);
+    // Platz für den Klick wie bei kickPro; Sample auf seiner Spitzen-Normalisierung (die Lautheit regelt das Kit, ADR 013)
+    const level = (vel * (1 - 0.3 * kp.click)) / (s.level || 1);
     g.gain.setValueAtTime(level, t);
     g.gain.setValueAtTime(level, t + kp.length * 0.6);
     g.gain.linearRampToValueAtTime(0, t + kp.length);
@@ -411,7 +411,7 @@ export async function renderPattern(pattern, bpm, library) {
           const src = ctx.createBufferSource();
           src.buffer = library.source?.(s) ?? s.orig;
           const g = ctx.createGain();
-          g.gain.value = v;
+          g.gain.value = v / (s.level || 1); // Kit-Balance wie gespitzt; die Lautheit regelt das Kit (ADR 013)
           src.connect(g).connect(bus);
           src.start(b * spb);
           return;
@@ -575,7 +575,7 @@ export function previewDrum(ctx, dest, kitId, rowId, library, when, vel = 1, kp 
     if (!s?.orig) return;
     const src = ctx.createBufferSource();
     src.buffer = library.source?.(s) ?? s.orig;
-    const k = vel * level;
+    const k = (vel * level) / (s.level || 1);
     if (Math.abs(k - 1) > 1e-3) {
       const g = ctx.createGain();
       g.gain.value = k;

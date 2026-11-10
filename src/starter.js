@@ -46,7 +46,8 @@ const ROLES = [
 // Mischung je Rolle (ADR 013, Klanganalyse K1/K2/K3/W1). Die Sounds liegen nach Lautheit je Rolle (src/levels.js), die
 // Fader setzen das Verhältnis: Drums führen (Loop mit Kick, kein Hochpass), Bass trocken und mittig darunter, alles
 // andere mit Hochpass; Hats/Percussion heller und leicht seitlich; Raum über die Sends (nie auf Drums mit Kick und Bass).
-// hp: Hochpass (Hz), high: EQ-Höhen (dB), hall/echo: Send-Anteil, pan: Panorama. style: Mastering-Stil des Genres.
+// hp: Hochpass (Hz), high: EQ-Höhen (dB), hall/echo: Send-Anteil, pan: Panorama. style: Mastering-Stil des Genres,
+// trim: Faktor auf alle Fader.
 const MIX_BASE = {
   drums: { volume: 1, high: 2 },
   perc: { volume: 0.7, hp: 400, high: 4, pan: -0.35, hall: 0.2 },
@@ -57,18 +58,19 @@ const MIX_BASE = {
 };
 const MIX_GENRE = {
   house: { style: 'loud' },
-  techno: { style: 'loud', drums: { volume: 1, high: 5 }, perc: { high: 6 }, chords: { high: 3 } },
+  techno: { style: 'loud', trim: 0.87, drums: { volume: 1, high: 5 }, perc: { high: 6 }, chords: { high: 3 } },
   hiphop: { style: 'balanced' },
   lofi: { style: 'warm' },
   pop: { style: 'bright' },
   trap: { style: 'loud' },
-  ambient: { style: 'warm', drums: { volume: 0.75, high: 2 }, chords: { volume: 0.85, hp: 150, high: 3, hall: 0.5 }, lead: { volume: 0.8, high: 3, hall: 0.5, echo: 0.3 } },
+  ambient: { style: 'warm', drums: { volume: 0.75, high: 2 }, chords: { volume: 0.85, hp: 150, high: 3, hall: 0.5 }, lead: { volume: 0.7, high: 3, hall: 0.5, echo: 0.3 } },
   rock: { style: 'balanced', drums: { volume: 1, high: 0 }, chords: { high: -3 }, lead: { high: -2 } },
-  breaks: { style: 'loud' },
+  breaks: { style: 'loud', trim: 0.87 },
 };
 export function starterMix(genreId) {
   const g = MIX_GENRE[genreId] ?? {};
-  const roles = Object.fromEntries(Object.entries(MIX_BASE).map(([id, m]) => [id, { ...m, ...(g[id] || {}) }]));
+  // trim: alle Fader gemeinsam (dichte Genres, damit ohne Mastering unter −15 LUFS bleibt und jeder Stil anhebt)
+  const roles = Object.fromEntries(Object.entries(MIX_BASE).map(([id, m]) => { const r = { ...m, ...(g[id] || {}) }; r.volume = Math.round(r.volume * (g.trim ?? 1) * 100) / 100; return [id, r]; }));
   return { style: g.style ?? 'balanced', roles };
 }
 

@@ -78,8 +78,8 @@ async function measureAll(page, { parts = ['lib', 'kits', 'klaenge'], ids = '' }
 // Refrain so, wie er klingt (Mastering wie gesetzt): Lautheit, Anteil unter 250 Hz / über 2 kHz / über 4 kHz, Breite
 // (Seite/(Mitte+Seite)); dazu der Song-Abschnitt `song` ohne Mastering und mit jedem Stil (wie der Export).
 // Ergebnis auch: Mastering-Einstellung, Sends und Effekte je Spur (für die Prüfung „nie auf Kick und Bass“).
-async function measureMix(page, { id, variant = 0, styles = null, song = 'VC', only = null } = {}) {
-  return page.evaluate(async ({ id, variant, styles, song, only }) => {
+async function measureMix(page, { id, variant = 0, styles = null, song = 'VC' } = {}) {
+  return page.evaluate(async ({ id, variant, styles, song }) => {
     const M = await import('./src/model.js');
     const S = await import('./src/starter.js');
     const E = await import('./src/export.js');
@@ -109,11 +109,6 @@ async function measureMix(page, { id, variant = 0, styles = null, song = 'VC', o
     const lufs = (b) => Lo.integratedLoudness([b.getChannelData(0), b.getChannelData(1)], b.sampleRate);
     const r1 = (x) => Math.round(x * 10) / 10;
     const [s0, s1] = sec(song.split(''));
-    if (only === 'song') {
-      const o = {};
-      for (const st of styles) o[st] = r1(lufs(await exportRange(p0, s0, s1, st)));
-      return { song: o };
-    }
     // Spuren im Refrain, ohne Limiter und ohne Mastering
     const tracks = {};
     const dry = withStyle(p0, null);
@@ -142,10 +137,11 @@ async function measureMix(page, { id, variant = 0, styles = null, song = 'VC', o
     const refrain = { lufs: r1(lufs(ref)), low: pc(low), hi2k: pc(hi2), hi4k: pc(hi4), width: Math.round((1000 * side) / (mid + side)) / 1000, widthUp: Math.round((1000 * sideU) / (midU + sideU)) / 1000 };
     // Song-Abschnitt ohne Mastering und mit jedem Stil
     const out = { ohne: r1(lufs(await exportRange(p0, s0, s1, null))) };
-    for (const st of styles ?? MC.MASTER_STYLES.map((x) => x.id)) out[st] = r1(lufs(await exportRange(p0, s0, s1, st)));
+    const list = styles === 'set' ? (set.on ? [set.style] : []) : styles ?? MC.MASTER_STYLES.map((x) => x.id);
+    for (const st of list) out[st] = r1(lufs(await exportRange(p0, s0, s1, st)));
     const strips = p0.tracks.filter((t) => t.clips.length).map((t) => ({ name: t.name, volume: t.volume, sends: t.sends ?? {}, fx: Object.fromEntries(Object.entries(t.fx || {}).filter(([, v]) => v?.on).map(([k, v]) => [k, v])) }));
     return { tracks, refrain, song: out, mastering: set, strips, range: { refrain: [c0, c1], song: [s0, s1] } };
-  }, { id, variant, styles, song, only });
+  }, { id, variant, styles, song });
 }
 
 module.exports = { measureAll, measureMix, BEAT, MELODY, CHORDS };

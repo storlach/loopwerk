@@ -134,7 +134,7 @@ async function helpers() {
       await prepare(G.GUITAR_LOOP_DEFS[0], 120); // Aufwärmen
       const out = [];
       for (const def of G.GUITAR_LOOP_DEFS) {
-        const res = { id: def.id, name: def.name, category: def.category, bars: def.bars, peakSet: def.peak, oneShot: !!def.oneShot, genres: def.genres, tags: def.tags };
+        const res = { id: def.id, name: def.name, category: def.category, bars: def.bars, peakSet: def.peak, level: (await import('./src/levels.js')).soundLevel(def.id), oneShot: !!def.oneShot, genres: def.genres, tags: def.tags };
         try {
           const { s, ms, lib } = await prepare(def, 120);
           res.ms = ms;
@@ -247,7 +247,7 @@ async function helpers() {
     const badLen = ok.filter((x) => x.length !== x.expected || x.length93 !== x.expected93);
     check('Länge exakt Takte × 4 Schläge (120 und 93 BPM)', badLen.length === 0, badLen.map((x) => `${x.id}: ${x.length}/${x.expected}, ${x.length93}/${x.expected93}`).join(' | '));
     check('Kein NaN/Inf', ok.every((x) => !x.nan));
-    const badPeak = ok.filter((x) => Math.abs(x.peak - x.peakSet) > 0.01);
+    const badPeak = ok.filter((x) => Math.abs(x.peak / x.level - x.peakSet) > 0.01); // vor dem Lautheits-Pegel (ADR 013)
     check('Spitzenpegel wie angegeben (Akkorde 0,42, One-Shots 0,45)', badPeak.length === 0, badPeak.map((x) => `${x.id}: ${x.peak.toFixed(3)}`).join(', '));
     const quiet = ok.filter((x) => !(x.rms > 0.02));
     check('Jeder Gitarren-Sound klingt (RMS > 0,02)', quiet.length === 0, quiet.map((x) => `${x.id}: ${x.rms.toFixed(4)}`).join(', ') || `min ${Math.min(...ok.map((x) => x.rms)).toFixed(3)}`);
@@ -317,7 +317,7 @@ async function helpers() {
         // Zwei Takte, Töne nur im ersten: Echo und Hall sind vor der Nahtstelle verklungen
         const pat = { type: 'synth', name: 'G', bars: 2, preset, notes: [{ start: 1, len: 1, pitch: 57, vel: 1 }, { start: 3, len: 0.5, pitch: 64, vel: 1 }] };
         const t0 = performance.now();
-        const { buffer } = await I.renderPattern(pat, 120, library);
+        const { buffer, level = 1 } = await I.renderPattern(pat, 120, library);
         const d = buffer.getChannelData(0);
         let pre = 0;
         for (let i = 0; i < 22050 - 64; i++) pre = Math.max(pre, Math.abs(d[i]));
@@ -325,7 +325,7 @@ async function helpers() {
         while (first < d.length && Math.abs(d[first]) < 1e-3) first++;
         return {
           ms: performance.now() - t0, length: buffer.length, pre, first,
-          p1: H.pitchAt(d, 0.6, 1.0), p2: H.pitchAt(d, 1.55, 1.7), peak: H.analyse([d]).peak,
+          p1: H.pitchAt(d, 0.6, 1.0), p2: H.pitchAt(d, 1.55, 1.7), peak: H.analyse([d]).peak / level, // vor dem Pegel des Klangs (ADR 013)
         };
       };
       res.clean = await renderMelody('guitar');
@@ -337,11 +337,11 @@ async function helpers() {
       for (const inst of CG.GUITAR_INSTRUMENTS) {
         const loaded = await SM.loadInstrument(inst.id);
         const pat = { type: 'synth', name: 'E', bars: 1, preset: inst.id, notes: [{ start: 0, len: 1.5, pitch: 57, vel: 1 }] };
-        const { buffer } = await I.renderPattern(pat, 120, library);
+        const { buffer, level = 1 } = await I.renderPattern(pat, 120, library);
         const d = buffer.getChannelData(0);
         res.instruments[inst.id] = {
           zones: loaded.zones.length, decoded: loaded.zones.every((z) => z.buffer.duration > 0.3),
-          pitch: H.pitchAt(d, 0.05, inst.id === 'kf-hofner-kurz' ? 0.25 : 0.6), peak: H.analyse([d]).peak,
+          pitch: H.pitchAt(d, 0.05, inst.id === 'kf-hofner-kurz' ? 0.25 : 0.6), peak: H.analyse([d]).peak / level,
           license: inst.license, licenseUrl: inst.licenseUrl, source: inst.source, fallback: SM.fallbackPreset(inst),
         };
       }

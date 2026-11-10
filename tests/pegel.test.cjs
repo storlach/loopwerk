@@ -99,8 +99,8 @@ const STARTERS = arg('--starter') ?? Object.keys(CORRIDOR);
       for (const id of STARTERS) {
         // Alle Stile an Pop und Beispiel (die Stile treffen ihr Ziel fest, siehe master-fxpad), sonst der gesetzte
         const all = id === 'pop' || id === 'demo';
-        const m = await measureMix(page, { id, styles: all ? null : [] });
-        if (!all && m.mastering.on) m.song[m.mastering.style] = (await measureMix(page, { id, styles: [m.mastering.style], only: 'song' })).song[m.mastering.style];
+        // Song-Abschnitt für ohne/mit Stil: der Refrain (der lauteste Teil; so bleibt der Test unter der Zeitgrenze)
+        const m = await measureMix(page, { id, styles: all ? null : 'set', song: 'C' });
         const t = m.tracks;
         const lead = id === 'melodic' ? 'Kick' : 'Drums';
         const bass = t.Bass;

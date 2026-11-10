@@ -223,7 +223,8 @@ const { check, finish } = createChecker();
         let peak = 0, e = 0, lo = 0, y = 0;
         const a = 1 - Math.exp(-2 * Math.PI * 150 / s.buffer.sampleRate);
         for (let i = 0; i < d.length; i++) { const v = d[i]; peak = Math.max(peak, Math.abs(v)); e += v * v; y += a * (v - y); lo += y * y; }
-        return { id: s.id, cat: s.category, genres: s.genres, peak: +peak.toFixed(3), low: +(lo / Math.max(e, 1e-12)).toFixed(3), beats: s.lengthBeats };
+        // Spitze vor dem Pegel nach Lautheit (ADR 013)
+        return { id: s.id, cat: s.category, genres: s.genres, peak: +(peak / (s.level || 1)).toFixed(3), low: +(lo / Math.max(e, 1e-12)).toFixed(3), beats: s.lengthBeats };
       });
     });
     check('14 Techno-Sounds in der Bibliothek', techno.length === 14, techno.map((t) => t.id).join(','));

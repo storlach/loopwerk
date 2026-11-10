@@ -53,7 +53,7 @@ export function createDemoProject() {
   // Raum über die Sends, Mastering an
   const hp = (hz) => ({ on: true, type: 'highpass', cutoff: Math.round((Math.log2(hz / 40) / 8.81) * 1000) / 1000, reso: 0, lfo: 'off' });
   const mix = [
-    { volume: 1, fx: { eq: { on: true, low: 0, mid: 0, high: 2 } } },
+    { volume: 1 },
     { volume: 0.7, pan: -0.35, fx: { filter: hp(400), eq: { on: true, low: 0, mid: 0, high: 4 } }, sends: { hall: 0.2 } },
     { volume: 0.8 },
     { volume: 0.75, pan: -0.15, fx: { filter: hp(180) }, sends: { hall: 0.35 } },

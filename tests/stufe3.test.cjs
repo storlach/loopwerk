@@ -21,7 +21,8 @@ const { check, finish } = createChecker();
         amenLen: lib.get('sp-loop-amen').buffer.length,
         amenBpm: lib.get('sp-loop-amen').bpm,
         kick: [lib.get('sp-bd-haus').lengthBeats, lib.get('sp-bd-haus').buffer.length],
-        peaksOk: CATALOG.every((e) => { const s = lib.get(e.id); let m = 0; for (const v of s.buffer.getChannelData(0)) m = Math.max(m, Math.abs(v)); return m > 0.2 && m < 0.7; }),
+        // Spitze angeglichen vor dem Pegel nach Lautheit (ADR 013, s.level) und danach nie über −0,5 dBFS
+        peaksOk: CATALOG.every((e) => { const s = lib.get(e.id); let m = 0; for (const v of s.buffer.getChannelData(0)) m = Math.max(m, Math.abs(v)); const raw = m / (s.level || 1); return raw > 0.2 && raw < 0.7 && m <= 0.95; }),
       };
     });
     check('Alle Katalog-Sounds geladen', cat.loaded === cat.total, `${cat.loaded} von ${cat.total}`);
