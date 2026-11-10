@@ -140,6 +140,8 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       await page.selectOption('#song-length', '48');
       check(`Handy ${w} px: Längen-Kachel stellt die Takte`, await page.evaluate(() => window.loopwerk.store.project.lengthBars) === 48);
       await page.selectOption('#song-length', '32');
+      // Das Beispiel startet seit „Pegel nach Lautheit“ mit Mastering an: erst ausschalten, dann wie ein Neuling einschalten
+      if (await page.evaluate(() => window.loopwerk.store.project.master.mastering?.on)) await page.tap('#song-mst-on');
       await page.tap('#song-mst-on');
       await page.tap('#song-mst-style-warm');
       const mst = await page.evaluate(() => window.loopwerk.store.project.master.mastering);

@@ -113,6 +113,8 @@ const lcd = (page) => page.evaluate(() => ['lcd-bar', 'lcd-beat', 'lcd-time'].ma
 
     // Großer Song im Stillstand: ebenfalls Ruhe (vorher 98 % Hauptthread am gedrosselten Handy)
     await page.evaluate(bigSong, 448);
+    // Das Beispiel startet mit Mastering an: die Lautheitsmessung des neuen Songs abwarten, sie schreibt einmal ihr Ergebnis
+    await page.waitForFunction(() => !window.loopwerk.mastering?.state?.busy, null, { timeout: 120000 }).catch(() => null);
     await page.waitForTimeout(1200);
     l0 = await metric('LayoutCount');
     mut = await page.evaluate(mutations, 2000);

@@ -119,8 +119,10 @@ function geometry(pitch) {
     const heardLoud = await page.evaluate((from) => window.__gains.slice(from).map((g) => +g.gain.value.toFixed(4)), g1);
     await midi(NOTE_OFF(67));
     const want = +(0.8 * m.v32).toFixed(4);
-    check('Vorhören: leise gespielter Ton läuft mit 0,8 · Anschlag, voller Anschlag mit 0,8 (lauter)',
-      heard.some((v) => Math.abs(v - want) < 0.001) && want < 0.5 && heardLoud.some((v) => Math.abs(v - 0.8) < 0.001), `${want} in ${j(heard)}; voll ${j(heardLoud)}`);
+    // Seit „Pegel nach Lautheit“ (ADR 013) steckt der Pegel des Klangs mit drin: voll = 0,8 · Pegel, leise = voll · Anschlag
+    const full = heardLoud.find((b) => b > 0.3 && b <= 0.8 + 1e-3 && heard.some((a) => Math.abs(a / b - m.v32) < 0.002));
+    check('Vorhören: leise gespielter Ton läuft mit Anschlag · voller Verstärkung, voller Anschlag höchstens 0,8 (lauter)',
+      full != null && want < 0.5, `Anschlag ${m.v32}; leise ${j(heard)}; voll ${j(heardLoud)} → ${full}`);
     await waitNotes(5);
     // Computertastatur und Klaviatur bleiben beim Pinsel
     await page.selectOption('#pat-vel', '0.7');
