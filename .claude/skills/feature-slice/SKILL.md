@@ -24,7 +24,7 @@ Vor jedem wiederkehrenden Handgriff in `tools/` nachsehen (Liste in `CLAUDE.md`,
 
 ## Parallelisieren
 
-Unabhängige Teile (z. B. zwei Effekte, Export und Bibliothek) dürfen parallel in getrennten Worktrees laufen; eingefügt wird mit `tools/merge-agent.sh <branch> --tests …`. Modell- und Engine-Änderungen, die sich überschneiden, nie parallel.
+Unabhängige Teile (z. B. zwei Effekte, Export und Bibliothek) dürfen parallel in getrennten Worktrees laufen; eingefügt wird mit `tools/merge-agent.sh <branch> --tests …`. Laufen mehrere Agenten gleichzeitig, testet jeder nur seinen Bereich (`node tools/test.cjs --only …`); die ganze Kette fährt die Haupt-Session einmal nach dem Einfügen. Mehrere ganze Ketten gleichzeitig überlasten die Maschine und reißen Zeitgrenzen. Modell- und Engine-Änderungen, die sich überschneiden, nie parallel.
 
 ## Größe
 
