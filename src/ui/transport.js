@@ -95,17 +95,25 @@ export function mountTransport({ store, engine, ui, arranger, emptyProject = cre
   store.on(sync);
   sync();
 
-  // Anzeige, Pegel und Abspielmarke laufen im Bildtakt.
+  // Anzeige, Pegel und Abspielmarke laufen im Bildtakt – geschrieben wird nur, was sich geändert hat
+  // (im Stillstand also nichts: kein Layout, keine Stilrechnung je Bild).
   const mc = meter.getContext('2d');
   let hold = 0;
   let holdAge = 0;
+  const shown = { bar: null, beat: null, time: null, lit: -1 };
+  const setText = (node, key, v) => { if (shown[key] !== v) { node.textContent = v; shown[key] = v; } };
+  // Maße und Farben des Pegels: einmal lesen, bei Größenänderung neu
+  let mw = 0;
+  let mh = 0;
+  let colors = null;
+  new ResizeObserver(() => { mw = meter.clientWidth; mh = meter.clientHeight; colors = null; shown.lit = -1; }).observe(meter);
   function frame() {
     const beat = engine.heardBeat();
     const bpb = store.project.beatsPerBar;
-    lcdBar.textContent = String(Math.floor(beat / bpb) + 1).padStart(3, '0');
-    lcdBeat.textContent = String(Math.floor(beat % bpb) + 1);
+    setText(lcdBar, 'bar', String(Math.floor(beat / bpb) + 1).padStart(3, '0'));
+    setText(lcdBeat, 'beat', String(Math.floor(beat % bpb) + 1));
     const sec = beat * (60 / store.project.bpm);
-    lcdTime.textContent = `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}.${Math.floor((sec % 1) * 10)}`;
+    setText(lcdTime, 'time', `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}.${Math.floor((sec % 1) * 10)}`);
     arranger.setPlayhead(beat);
 
     const level = engine.peakLevel();
@@ -116,22 +124,32 @@ export function mountTransport({ store, engine, ui, arranger, emptyProject = cre
     requestAnimationFrame(frame);
   }
 
+  const SEGS = 24;
   function drawMeter(frac, peak) {
+    // Welche Segmente leuchten: nur bei einer Änderung neu zeichnen
+    let lit = 0;
+    for (let i = 0; i < SEGS; i++) {
+      const pos = (i + 0.5) / SEGS;
+      if (pos <= frac || Math.abs(pos - peak) < 0.5 / SEGS) lit |= 1 << i;
+    }
+    if (lit === shown.lit || !mw) return;
+    shown.lit = lit;
     const dpr = window.devicePixelRatio || 1;
-    const w = meter.clientWidth;
-    const h = meter.clientHeight;
+    const w = mw;
+    const h = mh;
     if (meter.width !== Math.round(w * dpr)) { meter.width = Math.round(w * dpr); meter.height = Math.round(h * dpr); }
+    if (!colors) {
+      const css = getComputedStyle(meter);
+      colors = Object.fromEntries(['--meter-hot', '--meter-warm', '--meter-ok', '--meter-off'].map((k) => [k, css.getPropertyValue(k).trim()]));
+    }
     mc.setTransform(dpr, 0, 0, dpr, 0, 0);
     mc.clearRect(0, 0, w, h);
-    const css = getComputedStyle(meter);
-    const segs = 24;
     const gap = 2;
-    const sw = (w - gap * (segs - 1)) / segs;
-    for (let i = 0; i < segs; i++) {
-      const pos = (i + 0.5) / segs;
-      const lit = pos <= frac || Math.abs(pos - peak) < 0.5 / segs;
+    const sw = (w - gap * (SEGS - 1)) / SEGS;
+    for (let i = 0; i < SEGS; i++) {
+      const pos = (i + 0.5) / SEGS;
       const zone = pos > 0.92 ? '--meter-hot' : pos > 0.75 ? '--meter-warm' : '--meter-ok';
-      mc.fillStyle = css.getPropertyValue(lit ? zone : '--meter-off').trim();
+      mc.fillStyle = colors[lit & (1 << i) ? zone : '--meter-off'];
       mc.fillRect(i * (sw + gap), 0, sw, h);
     }
   }

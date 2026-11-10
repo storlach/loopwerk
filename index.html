@@ -2496,8 +2496,12 @@
   .loop-fav, .loop-fav:hover { color: var(--muted); }
   .loop-fav.on { color: var(--ink); }
 
-  /* Spur, auf der gerade etwas klingt: leuchtet leise in ihrer Farbe (glow.js setzt --lit 0…1 und --lit-c) */
+  /* Spur, auf der gerade etwas klingt: leuchtet leise in ihrer Farbe (glow.js setzt --lit 0…1 und --lit-c an Kopf,
+     Punkt und Fläche). Nicht vererbt: ein Wechsel je Bild rechnet nicht alle Clips der Spur neu. */
+  @property --lit { syntax: '<number>'; inherits: false; initial-value: 0; }
+  @property --lit-c { syntax: '*'; inherits: false; }
   .lane::after {
+    --lit: inherit; --lit-c: inherit;
     content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
     background: linear-gradient(90deg, rgb(var(--lit-c, 255 255 255) / calc(var(--lit, 0) * 0.16)), rgb(var(--lit-c, 255 255 255) / calc(var(--lit, 0) * 0.06)) 60%);
   }

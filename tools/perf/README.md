@@ -9,6 +9,7 @@ Aus der Bestandsanalyse `docs/analyse/2026-11-performance.md`. Jede Verbesserung
 - `m5-memory.cjs`, `m8b-render-mem.cjs` – Speicher
 - `m6-sw.cjs`, `m6b-offline.cjs` – Service Worker, ohne Netz (brauchen ein Zertifikat: `cert.pem`/`key.pem` im Arbeitsordner, selbst erzeugen)
 - `m7-tests.cjs` – Dauer der Testkette
+- `kennzahlen.cjs` – die wichtigsten Kennzahlen in einem Lauf als Tabelle vorher/nachher (Stillstand, Abspielen mit 448 Clips, Zoom-Schritt, Clip-Knoten, Leinwand-Speicher); `--vorher <ordner>` z. B. aus `git archive`
 - `scen.cjs` – Szenen (Beispiel, großer Song mit 448 Clips)
 
 Headless hat keine Grafikkarte: Bildraten sind Vergleichswerte.

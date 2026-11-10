@@ -69,3 +69,4 @@ druck
 stretch-transienten
 effekt-pegel
 klangfarbe
+perf-ui

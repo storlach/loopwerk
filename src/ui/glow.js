@@ -87,6 +87,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   let shown = false;
   let bw = 0;
   let bh = 0;
+  let beamTf = '';
 
   // Clip, der auf einer Spur an dieser Stelle klingt (der obere bei Überlappung)
   function clipAt(track, beat) {
@@ -101,6 +102,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   // Spuren, auf denen gerade etwas klingt, leuchten leise in ihrer Farbe (Spurkopf und Fläche, CSS --lit/--lit-c)
   const litRows = new Map(); // trackId → { row, v }
   const trackCat = new Map();
+  const litParts = (row) => [row.querySelector('.track-head'), row.querySelector('.track-dot'), row.querySelector('.lane')].filter(Boolean);
+  const unlit = (row) => { for (const n of litParts(row)) n.style.removeProperty('--lit'); };
   function litTracks(p, hits) {
     for (const h of hits) trackCat.set(h.trackId, h.cat);
     const seen = new Set();
@@ -114,21 +117,88 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       const row = (prev?.row?.isConnected && prev.row) || grid.querySelector(`.lane[data-track-id="${t.id}"]`)?.closest('.track-row');
       if (!row) continue;
       const [r, gg, b] = rgb[trackCat.get(t.id)] || [136, 136, 136];
-      row.style.setProperty('--lit', String(v));
-      row.style.setProperty('--lit-c', `${r} ${gg} ${b}`);
+      // --lit erbt nicht (index.html, @property): gesetzt wird es an den drei Stellen, die leuchten – so rechnet der
+      // Browser je Bild nur diese Elemente neu, nicht alle Clips der Spur
+      for (const n of litParts(row)) { n.style.setProperty('--lit', String(v)); n.style.setProperty('--lit-c', `${r} ${gg} ${b}`); }
       if (v) litRows.set(t.id, { row, v });
-      else { litRows.delete(t.id); row.style.removeProperty('--lit'); }
+      else { litRows.delete(t.id); unlit(row); }
     }
-    for (const [id, x] of litRows) if (!seen.has(id)) { x.row.style.removeProperty('--lit'); litRows.delete(id); }
+    for (const [id, x] of litRows) if (!seen.has(id)) { unlit(x.row); litRows.delete(id); }
   }
 
   function hide() {
     if (!shown) return;
     shown = false;
-    for (const x of litRows.values()) x.row.style.removeProperty('--lit');
+    for (const x of litRows.values()) unlit(x.row);
     litRows.clear();
     beam.hidden = true;
     sparks = [];
+  }
+
+  // Maße aus dem Layout (Spuren, Marke, Arranger) nur nach einer Layout-Änderung neu holen, nie je Bild
+  const scroller = grid.parentElement;
+  let geo = null;
+  let scrollX = scroller.scrollLeft;
+  const relayout = () => { geo = null; roomDirty = true; };
+  root.addEventListener('arr-layout', relayout);
+  scroller.addEventListener('scroll', () => { scrollX = scroller.scrollLeft; }, { passive: true });
+  window.addEventListener('resize', relayout);
+  new ResizeObserver(relayout).observe(root);
+  ui.on?.(relayout);
+  function measure() {
+    if (geo) return geo;
+    const rowsEl = grid.querySelector('.rows');
+    const top = rowsEl.offsetTop;
+    const lanes = new Map();
+    for (const lane of grid.querySelectorAll('.lane[data-track-id]')) {
+      if (lane.offsetParent) lanes.set(lane.dataset.trackId, { lane, y0: lane.offsetTop - top, h: lane.offsetHeight });
+    }
+    // Marke: Bildschirm-x = Versatz + Rasterposition − Scrollweite
+    const ph = grid.querySelector('.playhead');
+    const pr = ph?.getBoundingClientRect();
+    const tx = parseFloat(/translateX\(([-\d.e]+)px\)/.exec(ph?.style.transform || '')?.[1]) || 0;
+    scrollX = scroller.scrollLeft;
+    const ar = root.getBoundingClientRect();
+    geo = { top, h: Math.max(1, rowsEl.offsetHeight), lanes, phOff: pr ? pr.left + pr.width / 2 - tx + scrollX : null, ar: { left: ar.left, right: ar.right, top: ar.top, bottom: ar.bottom, height: ar.height }, inner: null };
+    return geo;
+  }
+  // Wellenform eines Clips im Raster: Lage aus den Stilwerten des Arrangers (left/width), Ränder einmal gemessen
+  function waveGeo(g, clip, lane) {
+    const wave = lane.querySelector(`.clip[data-clip-id="${clip.id}"] .clip-wave`);
+    if (!wave || !wave.width) return null;
+    const node = wave.parentElement;
+    if (!g.inner) {
+      let x = 0, y = 0;
+      for (let n = wave; n && n !== lane; n = n.offsetParent) { x += n.offsetLeft + (n === wave ? 0 : n.clientLeft); y += n.offsetTop + (n === wave ? 0 : n.clientTop); }
+      const L = g.lanes.get(lane.dataset.trackId);
+      g.inner = { dx: x - node.offsetLeft - wave.offsetLeft, dy: y, h: wave.offsetHeight, laneX: lane.offsetLeft, laneY: L ? L.y0 + g.top : lane.offsetTop };
+    }
+    const L = g.lanes.get(lane.dataset.trackId);
+    const w = parseFloat(wave.style.width) || 0;
+    return { wave, x: g.inner.laneX + (parseFloat(node.style.left) || 0) + g.inner.dx + (parseFloat(wave.style.left) || 0), y: (L ? L.y0 + g.top : g.inner.laneY) + g.inner.dy, w, h: g.inner.h };
+  }
+
+  // Raumlicht-Fassung: full wie gestaltet; lean (Software-Grafik) zeichnet in der Stille nicht weiter und beim Spielen
+  // seltener; off zeigt nur noch die Lichtleiste. Bleibt das Bild über Sekunden zu langsam, eine Stufe herunter.
+  const MODES = ['full', 'lean', 'off'];
+  let mode = shader?.software ? 'lean' : 'full';
+  let modeFixed = false;
+  let roomDirty = true;
+  let slowRoom = 0;
+  let speedMs = 16;
+  const SLOW_MS = 30; // gleitender Bildabstand: darüber gilt das Bild als zu langsam (unter etwa 33 Bilder/s)
+  const SLOW_FOR = 3000; // so lange am Stück, bevor das Licht sparsamer wird
+  function setMode(m) {
+    mode = m;
+    slowRoom = 0;
+    amb.hidden = m === 'off';
+    roomDirty = true;
+  }
+  function watchSpeed(dtMs, active) {
+    speedMs += (Math.min(100, dtMs) - speedMs) * 0.1;
+    if (modeFixed || mode === 'off' || document.hidden) { slowRoom = 0; return; }
+    slowRoom = active && speedMs > SLOW_MS && (!shader || glFixed || glQ == null || glQ <= GL_LOW || shader.software) ? slowRoom + Math.min(250, dtMs) : 0;
+    if (slowRoom > SLOW_FOR) setMode(MODES[MODES.indexOf(mode) + 1]);
   }
 
   let cost = 0;
@@ -150,8 +220,12 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     // Raumlicht (Hintergrund, Leiste oben) läuft immer, gemächlich: höchstens 20 Bilder pro Sekunde, auch bei 120 Hz
     // Shader: 30 Bilder pro Sekunde, damit der Nebel fließt; in der Stille genügen 15
     const roomIdle = !live && (room.K || 0) < 0.002 && room.glow.every((g) => g < 0.01);
-    if (now - roomAt >= (shader ? (roomIdle ? 66 : shader.software ? 45 : 32) : 45)) {
+    const lean = mode !== 'full';
+    watchSpeed(dtMs, !(lean && roomIdle));
+    const every = lean ? 66 : shader ? (roomIdle ? 66 : shader.software ? 45 : 32) : 45;
+    if (now - roomAt >= every && !(lean && roomIdle && !roomDirty)) {
       roomAt = now;
+      roomDirty = false;
       const r0 = performance.now();
       drawRoom(now / 1000);
       roomCost += (performance.now() - r0 - roomCost) * 0.2;
@@ -204,10 +278,10 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     // ---------- Marke: Leuchten und Funken ----------
     const ppb = ui.pxPerBeat;
     const x = headW() + beat * ppb;
-    const rowsEl = grid.querySelector('.rows');
-    const top = rowsEl.offsetTop;
+    const G = measure();
+    const top = G.top;
     const w = BEHIND + AHEAD;
-    const h = Math.max(1, rowsEl.offsetHeight);
+    const h = G.h;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     if (w !== bw || h !== bh) {
       bw = w;
@@ -217,22 +291,24 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       beam.style.width = w + 'px';
       beam.style.height = h + 'px';
     }
-    beam.style.transform = `translate(${x - BEHIND}px, ${top}px)`;
+    const tf = `translate(${x - BEHIND}px, ${top}px)`;
+    if (tf !== beamTf) { beam.style.transform = tf; beamTf = tf; }
     bc.setTransform(dpr, 0, 0, dpr, 0, 0);
     bc.clearRect(0, 0, w, h);
     bc.globalCompositeOperation = 'lighter';
     for (const t of p.tracks) {
       const g = trackGlow.get(t.id);
       if (g === undefined) continue;
-      const lane = grid.querySelector(`.lane[data-track-id="${t.id}"]`);
-      if (!lane?.offsetParent) continue;
+      const L = G.lanes.get(t.id);
+      if (!L?.lane.isConnected) continue;
+      const lane = L.lane;
       const hit = hits.find((hh) => hh.trackId === t.id);
       // Kein Clip mehr unter der Marke: dort bleibt die Linie leise
       if (!hit) continue;
       const cat = hit?.cat ?? 'fx';
       const [r, gg, b] = rgb[cat] || [136, 136, 136];
-      const y0 = lane.offsetTop - top;
-      const lh = lane.offsetHeight;
+      const y0 = L.y0;
+      const lh = L.h;
       const I = Math.min(1, 0.3 + g * 3);
       // Hof: schmal, nur direkt an der Marke
       bc.save();
@@ -249,7 +325,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       bc.fillRect(-30, -30, 60, 60);
       bc.restore();
       // Wellenform vor und hinter der Marke leuchtet in der Clip-Farbe, zur Marke hin am hellsten
-      if (hit?.clip) glowWave(hit.clip, lane, r, gg, b, I, dpr);
+      if (hit?.clip) glowWave(G, hit.clip, lane, x, r, gg, b, I, dpr);
       // heller Kern mit Schein: nur wo die Marke einen Clip trifft (sonst bleibt die Linie leise)
       bc.save();
       bc.globalCompositeOperation = 'source-over';
@@ -284,12 +360,14 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   // Ausschnitt der Wellenform um die Marke: maskiert (Mitte hell, Ränder weich) und mit Schein aufaddiert
   const off = document.createElement('canvas');
   const oc = off.getContext('2d');
-  function glowWave(clip, lane, r, g, b, I, dpr) {
-    const wave = lane.querySelector(`.clip[data-clip-id="${clip.id}"] .clip-wave`);
-    if (!wave || !wave.width) return;
-    const wr = wave.getBoundingClientRect();
-    const br = beam.getBoundingClientRect();
-    if (!wr.width || !br.width) return;
+  function glowWave(G, clip, lane, x, r, g, b, I, dpr) {
+    const wg = waveGeo(G, clip, lane);
+    if (!wg || !wg.w) return;
+    const wave = wg.wave;
+    // alles im Raster gerechnet: Leinwand bei wg.x/wg.y, Strahl bei x − BEHIND / G.top
+    const bl = x - BEHIND;
+    const wr = { left: wg.x, top: wg.y, width: wg.w, height: wg.h };
+    const br = { left: bl, top: G.top };
     const L = Math.max(0, br.left + BEHIND - WAVE_GLOW - wr.left);
     const Rr = Math.min(wr.width, br.left + BEHIND + WAVE_GLOW - wr.left);
     if (Rr <= L) return;
@@ -417,10 +495,12 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     let x = -1, y0 = room.y0 ?? 0, y1 = room.y1 ?? H;
     if (live) {
       if (!phEl?.isConnected) phEl = grid.querySelector('.playhead');
-      const ar = root.getBoundingClientRect();
-      const r = phEl?.getBoundingClientRect();
-      if (r && ar.height) {
-        const px = r.left + r.width / 2;
+      // Lage aus den gemerkten Maßen und der aktuellen Verschiebung der Marke (ohne Layout zu lesen)
+      const G = measure();
+      const ar = G.ar;
+      if (phEl && G.phOff != null && ar.height) {
+        const tx = parseFloat(/translateX\(([-\d.e]+)px\)/.exec(phEl.style.transform)?.[1]) || 0;
+        const px = G.phOff + tx - scrollX;
         if (px >= ar.left && px <= ar.right) x = (px / vw) * W;
         y0 = (Math.max(0, ar.top) / vh) * H;
         y1 = (Math.min(vh, ar.bottom) / vh) * H;
@@ -557,7 +637,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     // ---------- Hintergrund: Anthrazit-Wabern (still wie bisher) ----------
     if (!shader) ac.globalCompositeOperation = 'source-over';
     if (!shader) ac.clearRect(0, 0, W, H);
-    for (let k = 0; k < (shader ? 0 : 3); k++) {
+    for (let k = 0; k < (shader || mode === 'off' ? 0 : 3); k++) {
       const [x, y] = spot(7, k, still, 0.35);
       const g = ac.createRadialGradient(x * W, y * H, 0, x * W, y * H, L * 0.55);
       g.addColorStop(0, `rgba(${GREY},${0.16 + 0.05 * Math.sin(still * 0.3 + k)})`);
@@ -582,10 +662,11 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     const hue = room.hue;
     for (const c of CATS) hue[c] += (level[c] - hue[c]) * (1 - Math.exp(-dt / (level[c] > hue[c] ? 0.7 : 1.6)));
     const mix = total > 0.0005 ? mixRGB((c) => hue[c]) : null;
+    const roomOff = mode === 'off'; // nur noch die Lichtleiste
     if (shader) {
       flow += dt * (calm ? 0.12 : 0.35 + 1.1 * A * (K / (ambientMax || 1)));
-      drawShader({ W, H, L, dt, mix, K, A, calm, still, hue });
-    } else if (mix && K > 0.002) {
+      if (!roomOff) drawShader({ W, H, L, dt, mix, K, A, calm, still, hue });
+    } else if (!roomOff && mix && K > 0.002) {
       const bandC = [0, 1, 2].map((b) => mixRGB((c) => hue[c] * AFF[c][b]) || mix);
       // Mitte satter: ein großer Grund in der Mischfarbe statt einer flachen Fläche
       blob(W / 2, H * 0.5, L * 0.6, L * 0.45, soft(bandC[1], 0.5 * K * (0.4 + 0.6 * A)));
@@ -642,12 +723,12 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     }
 
     // ---------- Lichtwelle an der Abspielmarke ----------
-    if (shader) { /* in drawShader */ } else if (!calm) drawWave(W, H, L, dt, mix, K);
+    if (shader || roomOff) { /* in drawShader */ } else if (!calm) drawWave(W, H, L, dt, mix, K);
     else { room.waves = []; room.ghosts = []; room.colI = 0; }
 
     // ---------- Nachglühen nach lauten Stellen: heller Schimmer, löst sich über 2–3 s auf ----------
     const gl = room.glow;
-    if (!shader && mix && (gl[0] + gl[1] + gl[2]) > 0.01) {
+    if (!shader && !roomOff && mix && (gl[0] + gl[1] + gl[2]) > 0.01) {
       ac.globalCompositeOperation = 'lighter';
       const shimmer = (b) => toWhite(mixRGB((c) => hue[c] * AFF[c][b]) || mix, 0.55);
       const M = ambientMax;
@@ -658,7 +739,7 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
     }
 
     // ---------- Kontrast: Ränder zurück ins Anthrazit (nur wenn Licht da ist) ----------
-    if (!shader && room.vig > 0.01) {
+    if (!shader && !roomOff && room.vig > 0.01) {
       ac.globalCompositeOperation = 'destination-out';
       blob(W / 2, H / 2, W * 0.62, H * 0.62, [[0, 'rgba(0,0,0,0)'], [0.6, 'rgba(0,0,0,0)'], [0.8, `rgba(0,0,0,${(0.35 * room.vig).toFixed(3)})`], [1, `rgba(0,0,0,${(0.85 * room.vig).toFixed(3)})`]]);
       ac.globalCompositeOperation = 'source-over';
@@ -692,24 +773,35 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
 
   // ---------- Regal: Wellenform in der gewählten Zeile ----------
   let rowKey = '';
+  // Größe der Zeile: beim Wechsel gemessen, danach vom ResizeObserver
+  const rowBox = { item: null, w: 0, h: 0 };
+  const rowSize = new ResizeObserver(() => { if (rowBox.item) { rowBox.w = rowBox.item.clientWidth; rowBox.h = rowBox.item.clientHeight; } });
   function drawRow() {
     const id = ui.armedSampleId ?? engine.preview?.sampleId;
     const item = id && shelfEl?.querySelector(`.loop-item[data-sample-id="${CSS.escape(id)}"]`);
     const s = item && library.get(id);
     if (!s) {
       if (rowWave.isConnected) rowWave.remove();
+      if (rowBox.item) { rowSize.unobserve(rowBox.item); rowBox.item = null; }
       preview = 0;
       rowKey = '';
       return;
     }
-    if (rowWave.parentNode !== item) { item.prepend(rowWave); rowKey = ''; }
+    if (rowWave.parentNode !== item) {
+      item.prepend(rowWave);
+      rowKey = '';
+      if (rowBox.item) rowSize.unobserve(rowBox.item);
+      rowBox.item = item;
+      rowBox.w = item.clientWidth;
+      rowBox.h = item.clientHeight;
+      rowSize.observe(item);
+    }
     const pv = engine.preview?.sampleId === id ? engine.preview : null;
     const bands = pv ? engine.outputBands(4) : null;
     const lv = bands ? Math.min(1, (bands.reduce((x, y) => x + y, 0) / bands.length) * 1.6) : 0;
     preview += (lv - preview) * (lv > preview ? 0.6 : 0.12);
     const prog = pv?.when != null && engine.ctx ? Math.max(0, Math.min(1, (engine.ctx.currentTime - pv.when) / pv.duration)) : -1;
-    const w = item.clientWidth;
-    const h = item.clientHeight;
+    const { w, h } = rowBox;
     // Ruhig und unverändert: nicht neu zeichnen
     const key = `${id}|${w}|${h}|${!!s.peaks}|${colorAge === 0 ? 'c' : ''}`;
     if (prog < 0 && preview < 0.005 && key === rowKey) return;
@@ -766,7 +858,9 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   readColors();
   beam.hidden = true;
   requestAnimationFrame(frame);
-  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, glQ, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader }; },
+  return { get state() { return { shown, amp, cost, preview, sparks: sparks.length, levels: { ...level }, roomCost, glQ, room: { n: room.n, K: room.K, vig: room.vig, band: [...room.band], glow: [...room.glow], waves: room.waves.length, col: room.colI, x: room.colX, w: room.W, h: room.H }, shader: !!shader, mode, software: !!shader?.software, frameMs: speedMs, slowFor: slowRoom, fixed: modeFixed }; },
+    // Raumlicht-Fassung festlegen ('full' | 'lean' | 'off'; 'auto' = wieder selbst wählen) – für Tests und Bildschirmfotos
+    setMode(m) { if (m === 'auto') { modeFixed = false; setMode(shader?.software ? 'lean' : 'full'); } else { modeFixed = true; setMode(m); } },
     // Für Tests und Bildschirmfotos: Auflösungsstufe des Shaders setzen (CSS-Pixel-Faktor)
     setQuality(q, { fixed = false } = {}) { glQ = q; glFixed = fixed; },
     get react() { return { spec: [...react.spec], col: lastReact ? [...lastReact.col] : [] }; },

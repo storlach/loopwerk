@@ -87,8 +87,20 @@ const { check, finish } = createChecker();
     check('Zoom vergrößert weit über das alte Maximum', z1 > 64 && z1 > z0, `${z0} → ${z1}`);
     const fine = await page.evaluate(() => document.querySelector('.arr-grid').classList.contains('fine'));
     check('Bei großem Zoom erscheinen Sechzehntel-Linien', fine);
-    const clipW = await page.locator('.lane[data-track-id="t2"] .clip').first().evaluate((n) => n.getBoundingClientRect().width);
-    check('Clips wachsen mit dem Zoom', Math.abs(clipW - 4 * z1) < 2, `${clipW} px`);
+    // Der Arranger zeichnet nur Clips im Bild: geprüft wird ein gezeichneter Clip gegen seine Länge im Modell
+    // (liegt keiner im Bild, holt revealClip einen hinein; die Ansicht kehrt danach zurück)
+    const grown = await page.evaluate(() => {
+      const sc = document.getElementById('arr-scroll');
+      const { left, top } = { left: sc.scrollLeft, top: sc.scrollTop };
+      let n = sc.querySelector('.clip');
+      if (!n) { window.loopwerk.arranger.revealClip(window.loopwerk.store.track('t2').clips[0].id); n = sc.querySelector('.clip'); }
+      const c = window.loopwerk.store.findClip(n.dataset.clipId).clip;
+      const w = n.getBoundingClientRect().width;
+      sc.scrollLeft = left; sc.scrollTop = top;
+      return { w, want: c.lengthBeats * window.loopwerk.ui.pxPerBeat };
+    });
+    await page.waitForTimeout(100);
+    check('Clips wachsen mit dem Zoom', Math.abs(grown.w - grown.want) < 2 && grown.want > 4 * 64, JSON.stringify(grown));
 
     // Strg + Mausrad zoomt um den Mauszeiger: der Schlag unter dem Zeiger bleibt stehen
     const arr = await page.locator('#arr-scroll').boundingBox();
@@ -113,6 +125,7 @@ const { check, finish } = createChecker();
     check('Ganz klein: mindestens 4 px pro Schlag, Taktzahlen ausgedünnt', zmin.ppb >= 4 && zmin.marks < zmin.bars, JSON.stringify(zmin));
     for (let i = 0; i < 20; i++) await page.click('#zoom-in');
     const zmax = await page.evaluate(() => {
+      if (!document.querySelector('.clip-wave')) window.loopwerk.arranger.revealClip(window.loopwerk.store.track('t2').clips[0].id); // nur Clips im Bild sind gezeichnet
       const cv = document.querySelector('.clip-wave');
       return { ppb: window.loopwerk.ui.pxPerBeat, canvas: cv.width };
     });

@@ -103,6 +103,8 @@ const stats = (js) => { const s = [...js].sort((a, b) => a - b); return { max: +
   const { page, errors } = app;
   try {
     await page.evaluate(registerSounds);
+    // Geprüft wird das gestaltete Licht (wie mit Grafikchip): ohne Grafikchip spart die App sonst selbst (tests/perf-ui)
+    await page.evaluate(() => window.loopwerk.glow.setMode('full'));
     const wait = (ms) => page.waitForTimeout(ms);
 
     // ---------- Still: Anthrazit, keine Farbe ----------

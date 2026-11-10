@@ -30,6 +30,13 @@ export function mountMixer({ root, store, engine, ui }) {
   const stripsEl = root.querySelector('#mixer-strips');
   const detailEl = root.querySelector('#mixer-detail');
   const strips = new Map();
+  // Pegel: Maße je Leinwand vom ResizeObserver, Farben einmal gelesen
+  const meterBox = new WeakMap();
+  const meterSeen = new WeakSet();
+  let meterColors = null;
+  const meterSize = new ResizeObserver((list) => {
+    for (const e of list) meterBox.set(e.target, { w: e.target.clientWidth, h: e.target.clientHeight });
+  });
   let selected = null;
   let detailFor = null;
   let detailControls = new Map();
@@ -156,7 +163,7 @@ export function mountMixer({ root, store, engine, ui }) {
   function sync() {
     if (root.hidden) return;
     const ids = [...store.project.tracks.map((t) => t.id), ...BUSES.map((b) => BUS_PREFIX + b.id), MASTER];
-    for (const [id, s] of strips) if (!ids.includes(id)) { s.strip.remove(); strips.delete(id); }
+    for (const [id, s] of strips) if (!ids.includes(id)) { s.strip.remove(); meterSize.unobserve(s.meter); strips.delete(id); }
     ids.forEach((id, i) => {
       const s = strips.get(id) || makeStrip(id);
       if (stripsEl.children[i] !== s.strip) stripsEl.insertBefore(s.strip, stripsEl.children[i] || null);
@@ -475,19 +482,25 @@ export function mountMixer({ root, store, engine, ui }) {
         const db = level > 0 ? 20 * Math.log10(level) : -60;
         const frac = clamp((db + 48) / 48, 0, 1);
         s.peak = Math.max(frac, s.peak - 0.015);
+        // Nur bei geändertem Ausschlag zeichnen; Maße kommen vom ResizeObserver, Farben einmal gelesen
         const c = s.meter;
-        const dpr = window.devicePixelRatio || 1;
-        const w = c.clientWidth;
-        const h = c.clientHeight;
-        if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
-        const g = c.getContext('2d');
-        g.setTransform(dpr, 0, 0, dpr, 0, 0);
-        const css = getComputedStyle(c);
-        g.fillStyle = css.getPropertyValue('--meter-off').trim();
-        g.fillRect(0, 0, w, h);
-        const top = h * (1 - s.peak);
-        g.fillStyle = css.getPropertyValue(s.peak > 0.92 ? '--meter-hot' : s.peak > 0.75 ? '--meter-warm' : '--meter-ok').trim();
-        g.fillRect(0, top, w, h - top);
+        if (!meterSeen.has(c)) { meterSeen.add(c); meterSize.observe(c); }
+        const box = meterBox.get(c);
+        const key = box && `${s.peak}|${box.w}|${box.h}`;
+        if (box && s.drawn !== key) {
+          s.drawn = key;
+          const dpr = window.devicePixelRatio || 1;
+          const { w, h } = box;
+          if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+          const g = c.getContext('2d');
+          g.setTransform(dpr, 0, 0, dpr, 0, 0);
+          meterColors ??= ((css) => Object.fromEntries(['--meter-off', '--meter-hot', '--meter-warm', '--meter-ok'].map((k) => [k, css.getPropertyValue(k).trim()])))(getComputedStyle(c));
+          g.fillStyle = meterColors['--meter-off'];
+          g.fillRect(0, 0, w, h);
+          const top = h * (1 - s.peak);
+          g.fillStyle = meterColors[s.peak > 0.92 ? '--meter-hot' : s.peak > 0.75 ? '--meter-warm' : '--meter-ok'];
+          g.fillRect(0, top, w, h - top);
+        }
         if (s.locked) { const t = store.track(id); if (t) showPan(s, t); }
         for (const sd of s.sends || []) if (sd.locked) { const t = store.track(id); if (t) showSend(sd, t); }
       }
