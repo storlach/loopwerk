@@ -3,6 +3,7 @@
 
 import { clipSignature, clipEnvelope, clipGain, totalBeats, audibleMap, audibleSegments, sampleFor, tapeRate, trackState, anySoloOf, keyChangesOf, keySpans, harmonySpans, keyDelta, EPS } from './model.js';
 import { Emitter } from './util.js';
+import { levelsOf, LEVELS_VERSION } from './levels.js';
 import { FxPad, measureLoopExtra } from './fxpad.js';
 import { buildFxChain, fxKey, sameFxSet, fxOrderOf, updateFxParams, withFx, EFFECT_IDS, BUSES, busOf, sendOf, createBus } from './effects.js';
 import { styleOf, masterLatency, peakLimiterLatency } from './dsp/master-core.js';
@@ -502,11 +503,22 @@ export function clipPieces(project, library, clip, ranges, { stale = false } = {
   return out;
 }
 
-// Spielt einen Clip-Ausschnitt [fromBeat, toBeat] eines Segments ab Kontextzeit `when`.
-function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, rate = 1) {
+// Pegel nach Lautheit (ADR 013): Puffer bleiben spitzen-normalisiert wie früher, neue Projekte spielen jeden Sound mit
+// sample.level; Projekte ohne `levels` (vor ADR 013 gespeichert) laufen unverändert den alten Weg
+export const levelTrim = (project, sample) => (levelsOf(project) >= LEVELS_VERSION && sample?.level > 0 ? sample.level : 1);
+
+// Clip-Hüllkurve mal festem Faktor; ohne Hüllkurve eine flache
+function trimEnvelope(env, k, when) {
+  if (k === 1) return env;
+  if (!env) return { t0: when, v0: k, ops: [] };
+  return { t0: env.t0, v0: env.v0 * k, ops: env.ops.map((op) => (op[0] === 'curve' ? [op[0], op[1], op[2], op[3].map((v) => v * k)] : [op[0], op[1], op[2] * k])) };
+}
+
+// Spielt einen Clip-Ausschnitt [fromBeat, toBeat] eines Segments ab Kontextzeit `when`. trim: fester Pegel-Faktor
+function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, rate = 1, trim = 1) {
   const offset = (fromBeat - seg.start + seg.offset) * spb * rate;
   const stopAt = when + (toBeat - fromBeat) * spb;
-  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb), rate);
+  return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, trimEnvelope(envelopeAutomation(clip, fromBeat, toBeat, when, spb), trim, when), rate);
 }
 
 // Rendert das Projekt offline (Tests, Export). Tonart- und Akkord-Fassungen werden vorher bereitgestellt. Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
@@ -577,7 +589,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
       for (const { seg, from, to, sample, rate } of clipPieces(project, library, clip, audible.get(clip.id))) {
         if (from >= end - EPS || to <= fromBeat + EPS) continue;
         const f = Math.max(from, fromBeat);
-        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), lead + (f - fromBeat) * spb, spb, rate);
+        playSegment(ctx, dest, clip, sample, seg, f, Math.min(to, end), lead + (f - fromBeat) * spb, spb, rate, levelTrim(project, sample));
       }
     }
   }
@@ -1106,7 +1118,7 @@ export class Engine extends Emitter {
 
   _voice(track, clip, sample, node, seg, fromBeat, toBeat, when, rate = 1) {
     if (toBeat - fromBeat <= 1e-4) return;
-    const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb, rate);
+    const { src, g } = playSegment(this.ctx, node.input, clip, sample, seg, fromBeat, toBeat, when, this.spb, rate, levelTrim(this.project, sample));
     const voice = { clipId: clip.id, sig: this._sig(track, clip), src, g };
     this.voices.add(voice);
     src.onended = () => this.voices.delete(voice);
@@ -1143,7 +1155,7 @@ export class Engine extends Emitter {
   _sig(track, clip) {
     const ranges = this._audible().get(clip.id) ?? [];
     const base = sampleFor(this.library, clip, true);
-    let sig = clipSignature(track.id, clip) + '|' + (base?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',');
+    let sig = clipSignature(track.id, clip) + '|' + (base?.rev ?? 0) + '|' + ranges.map((r) => r.join('-')).join(',') + '|L' + levelsOf(this.project);
     if (this.library.followsChords?.(clip.sampleId)) {
       // Akkord-Streifen: auch Pausen und Abschnitte auf Stufe i gehören dazu
       sig += '|' + this._pieces(clip).map((p) => `${p.from}-${p.to}:${p.sample.id}.${p.sample.rev}`).join(',');
@@ -1268,7 +1280,7 @@ export class Engine extends Emitter {
     const src = this.ctx.createBufferSource();
     src.buffer = sample.buffer;
     const g = this.ctx.createGain();
-    g.gain.value = 0.8;
+    g.gain.value = 0.8 * levelTrim(this.project, sample); // so laut wie im Song (ADR 013)
     if (src.buffer.numberOfChannels === 1) { g.channelCount = 2; g.channelCountMode = 'explicit'; } // wie startVoice
     src.connect(g).connect(this.mix.master);
     let duration = sample.buffer.duration;
