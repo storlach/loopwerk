@@ -102,6 +102,8 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
   // Spuren, auf denen gerade etwas klingt, leuchten leise in ihrer Farbe (Spurkopf und Fläche, CSS --lit/--lit-c)
   const litRows = new Map(); // trackId → { row, v }
   const trackCat = new Map();
+  const litParts = (row) => [row.querySelector('.track-head'), row.querySelector('.track-dot'), row.querySelector('.lane')].filter(Boolean);
+  const unlit = (row) => { for (const n of litParts(row)) n.style.removeProperty('--lit'); };
   function litTracks(p, hits) {
     for (const h of hits) trackCat.set(h.trackId, h.cat);
     const seen = new Set();
@@ -115,18 +117,19 @@ export function mountGlow({ engine, store, library, ui, root = document.querySel
       const row = (prev?.row?.isConnected && prev.row) || grid.querySelector(`.lane[data-track-id="${t.id}"]`)?.closest('.track-row');
       if (!row) continue;
       const [r, gg, b] = rgb[trackCat.get(t.id)] || [136, 136, 136];
-      row.style.setProperty('--lit', String(v));
-      row.style.setProperty('--lit-c', `${r} ${gg} ${b}`);
+      // --lit erbt nicht (index.html, @property): gesetzt wird es an den drei Stellen, die leuchten – so rechnet der
+      // Browser je Bild nur diese Elemente neu, nicht alle Clips der Spur
+      for (const n of litParts(row)) { n.style.setProperty('--lit', String(v)); n.style.setProperty('--lit-c', `${r} ${gg} ${b}`); }
       if (v) litRows.set(t.id, { row, v });
-      else { litRows.delete(t.id); row.style.removeProperty('--lit'); }
+      else { litRows.delete(t.id); unlit(row); }
     }
-    for (const [id, x] of litRows) if (!seen.has(id)) { x.row.style.removeProperty('--lit'); litRows.delete(id); }
+    for (const [id, x] of litRows) if (!seen.has(id)) { unlit(x.row); litRows.delete(id); }
   }
 
   function hide() {
     if (!shown) return;
     shown = false;
-    for (const x of litRows.values()) x.row.style.removeProperty('--lit');
+    for (const x of litRows.values()) unlit(x.row);
     litRows.clear();
     beam.hidden = true;
     sparks = [];
