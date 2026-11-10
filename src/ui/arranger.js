@@ -638,18 +638,23 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     }
   }
 
-  function drawWave(canvas, clip, sample) {
+  // from/to: gezeichneter Ausschnitt des Clips in Pixeln ab Clip-Anfang (nur was im Bild liegt, plus Rand) –
+  // die Leinwand ist so groß wie der Ausschnitt, nicht wie der ganze Clip
+  function drawWave(canvas, clip, sample, from = 0, to = Infinity, h = canvas.clientHeight || 30, color = null) {
     const w = Math.max(1, Math.round(clip.lengthBeats * ppb()));
-    const h = canvas.clientHeight || 30;
+    from = clamp(Math.floor(from), 0, w - 1);
+    to = clamp(Math.ceil(to), from + 1, w);
+    const cw = to - from;
     const dpr = canvasDpr();
-    const sx = Math.min(dpr, MAX_CANVAS / w);
-    canvas.width = Math.max(1, Math.round(w * sx));
+    const sx = Math.min(dpr, MAX_CANVAS / cw);
+    canvas.width = Math.max(1, Math.round(cw * sx));
     canvas.height = Math.round(h * dpr);
-    canvas.style.width = w + 'px';
+    canvas.style.width = cw + 'px';
+    canvas.style.left = from ? from + 'px' : '';
     const c = canvas.getContext('2d');
-    c.setTransform(sx, 0, 0, dpr, 0, 0);
-    c.clearRect(0, 0, w, h);
-    const color = getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888';
+    c.setTransform(sx, 0, 0, dpr, -from * sx, 0);
+    c.clearRect(from, 0, cw, h);
+    color ??= getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888';
     c.fillStyle = color;
     const mid = h / 2;
     const off = clip.offsetBeats || 0;
@@ -657,14 +662,14 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     if (pat?.type === 'synth' && pat.notes?.length) drawNotes(c, clip, pat, w, h);
     else if (!sample.peaks) {
       // Sound wird noch geladen: gestrichelte Mittellinie, die Wellenform folgt gleich
-      for (let x = 0; x < w; x += 6) c.fillRect(x, Math.round(mid), 3, 1);
+      for (let x = Math.floor(from / 6) * 6; x < to; x += 6) c.fillRect(x, Math.round(mid), 3, 1);
     } else {
       // Wellenform als Lichtstriche: senkrechte 1-px-Linien im 2-px-Raster, symmetrisch zur Mitte
       const peaks = sample.peaks;
       const perBeat = peaks.length / sample.lengthBeats;
       const PITCH = 2;
       const line = shaped(sample.id) || sample.parentId; // Varianten haben immer ein Rezept
-      for (let x = 0; x < w; x += PITCH) {
+      for (let x = from - (from % PITCH); x < to; x += PITCH) {
         const b0 = off + x / ppb();
         let m = 0;
         const k0 = Math.floor(b0 * perBeat);
@@ -708,14 +713,27 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   const envY = (v, h) => 1 + (1 - Math.min(1, v)) * (h - 2); // über 0 dB bleibt der Griff am oberen Rand
 
   // Griffe sitzen auf der Hüllkurve: Fade-In-Ende, Mitte (Lautstärke), Fade-Out-Anfang.
+  // Maße im Clip (Höhe und Lage der Wellenform, Griffgröße aus dem CSS – am Tablet größer) hängen nur an Spurhöhe und
+  // Gerät: einmal an einem Clip im Bild messen statt an jedem
+  let inner = null;
+  const innerKey = () => `${rowH()}|${narrow.matches}|${touch.matches}`;
+  function clipInner(node) {
+    const k = innerKey();
+    if (inner?.k === k) return inner;
+    const canvas = node.querySelector('canvas');
+    if (!node.isConnected) return { k: '', h: 30, top: WAVE_TOP, half: 5.5 };
+    inner = { k, h: canvas?.clientHeight || 30, top: canvas?.offsetTop ?? WAVE_TOP, half: (node.querySelector('.clip-vol').offsetWidth || 11) / 2 };
+    return inner;
+  }
   function placeHandles(node, clip) {
-    const h = (node.querySelector('canvas')?.clientHeight || 30);
-    const y = (node.querySelector('canvas')?.offsetTop ?? WAVE_TOP) + envY(clipGain(clip), h) - 5;
+    const m = clipInner(node);
+    const h = m.h;
+    const y = m.top + envY(clipGain(clip), h) - 5;
     const L = clip.lengthBeats * ppb();
     const fi = (clip.fadeInBeats || 0) * ppb();
     const fo = (clip.fadeOutBeats || 0) * ppb();
-    // Griffgröße aus dem CSS (am Tablet größer); Mitte des Griffs liegt auf der Hüllkurve
-    const half = (node.querySelector('.clip-vol').offsetWidth || 11) / 2;
+    // Mitte des Griffs liegt auf der Hüllkurve
+    const half = m.half;
     const edge = Math.max(5, half);
     const set = (cls, x) => { const n = node.querySelector(cls); n.style.left = x - half + 'px'; n.style.top = y + 5 - half + 'px'; };
     set('.clip-fade-in', clamp(fi, edge, L - edge));
@@ -781,30 +799,193 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     return { node, canvas, sample };
   }
 
-  // Nur Spuren neu zeichnen, deren Clips sich geändert haben: schnelle Eingaben (Tasten, Pads) bleiben flüssig.
-  // Während eines Ziehens verändert die Vorschau das DOM direkt – dann zeichnet der nächste Durchlauf alles neu.
-  let forceAll = true;
-  const laneKey = (track, silent) => `${ppb()}|${headW()}|${rowH()}|${silent ? 'stumm' : 'laut'}|${track.clips.map((c) => `${c.id}:${clipSignature('', c)}:${library.get(c.sampleId)?.rev ?? 0}:${library.get(c.sampleId)?.colorCat ?? ''}:${shaped(c.sampleId) ? 1 : 0}:${sampleFor(library, c)?.rev ?? '-'}`).join(',')}`;
-  function renderLane(r, track) {
-    // Stumme Spuren zeichnen die Wellenform grau (--wave): beim Wechsel muss die Fläche neu gezeichnet werden
-    const key = laneKey(track, r.silent);
-    if (!forceAll && r.key === key) return;
-    r.key = key;
-    for (const n of r.lane.querySelectorAll('.clip')) n.remove();
+  // ---------- Nur zeichnen, was man sieht ----------
+  // Clip-Knoten und Wellenformen gibt es nur im sichtbaren Ausschnitt plus Rand (Analyse 3.1). Ausgewählte und gerade
+  // bearbeitete Clips bleiben immer im DOM. Jeder Clip hat einen Inhalts-Schlüssel: nur geänderte werden neu gebaut;
+  // Zoom und Spurhöhe verschieben und zeichnen die vorhandenen nur neu. Die Namen aller Clips stehen je Spur in einer
+  // Beschriftung der Spurfläche (Screenreader: Reihenfolge und Namen bleiben erreichbar).
+  const clipNodes = new Map(); // clipId → { node, canvas, sample, trackId, ckey, gkey, from, to }
+  const rebuild = new Set(); // nach einer Vorschau beim Ziehen: neu bauen
+  const pinned = new Set(); // während eines Ziehens: nicht anfassen
+  const laneInfo = new Map(); // trackId → { sig, meta: Map(clipId → { stack, covered, onTop }) }
+  let viewTop = root.scrollTop;
+  let viewH = root.clientHeight;
+  let rowBox = null; // trackId → { top, bottom } im Inhalt; null = alle Spuren gelten als sichtbar
+  let rowBoxKey = '';
+  let fillRaf = 0;
+  let holdClips = false;
+  const waveColors = new Map();
+
+  function trackMeta(track) {
+    const sig = track.clips.map((c) => `${c.id}:${clipSignature('', c)}`).join(',');
+    const had = laneInfo.get(track.id);
+    if (had?.sig === sig) return had.meta;
     // Übereinanderliegende Clips: der obere klingt und liegt sichtbar oben, der untere bleibt erhalten
     const order = [...track.clips].sort((a, b) => (isAbove(a, b, track.clips) ? 1 : -1));
     const audible = audibleRanges(track);
+    const meta = new Map();
     for (const clip of track.clips) {
-      const { node, canvas, sample } = makeClip(clip);
-      node.style.setProperty('--stack', String(order.indexOf(clip) + 1));
-      const heard = (audible.get(clip.id) ?? []).reduce((s, [a, b]) => s + b - a, 0);
-      node.classList.toggle('covered', heard < clip.lengthBeats - EPS);
-      node.classList.toggle('on-top', track.clips.some((o) => o !== clip && isAbove(clip, o, track.clips) && o.startBeat < clip.startBeat + clip.lengthBeats - EPS && o.startBeat + o.lengthBeats > clip.startBeat + EPS));
-      r.lane.append(node);
-      if (sample) drawWave(canvas, clip, sample);
-      placeHandles(node, clip);
+      const heard = (audible.get(clip.id) ?? []).reduce((x, [a, b]) => x + b - a, 0);
+      meta.set(clip.id, {
+        stack: order.indexOf(clip) + 1,
+        covered: heard < clip.lengthBeats - EPS,
+        onTop: track.clips.some((o) => o !== clip && isAbove(clip, o, track.clips) && o.startBeat < clip.startBeat + clip.lengthBeats - EPS && o.startBeat + o.lengthBeats > clip.startBeat + EPS),
+      });
+    }
+    laneInfo.set(track.id, { sig, meta });
+    return meta;
+  }
+
+  // Namen aller Clips je Spur in zeitlicher Reihenfolge als Beschriftung der Spurfläche (Screenreader), ohne Knoten
+  function syncNames(r, track) {
+    const bpb = store.project.beatsPerBar;
+    const key = track.clips.map((c) => `${c.id}:${c.startBeat}:${library.get(c.sampleId)?.name ?? ''}`).join(',') + `|${track.name}|${bpb}`;
+    if (r.namesKey === key) return;
+    r.namesKey = key;
+    const list = [...track.clips].sort((a, b) => a.startBeat - b.startBeat).map((c) => `${library.get(c.sampleId)?.name ?? 'Fehlendes Sample'}, ${formatPos(c.startBeat, bpb)}`);
+    r.lane.setAttribute('role', 'group');
+    r.lane.setAttribute('aria-label', `${track.name}: ${list.length} ${list.length === 1 ? 'Clip' : 'Clips'}${list.length ? ' – ' + list.join('; ') : ''}`);
+  }
+
+  const contentKey = (track, clip, silent, m) => {
+    const s = library.get(clip.sampleId);
+    const cut = s?.group && / · \d+$/.test(s.name) ? (clip.lengthBeats * ppb() < 72 ? 'n' : 'w') : '';
+    return `${clip.id}:${clipSignature('', clip)}:${s?.rev ?? 0}:${s?.colorCat ?? ''}:${s?.name ?? ''}:${shaped(clip.sampleId) ? 1 : 0}:${sampleFor(library, clip)?.rev ?? '-'}:${clip.takes?.length ?? 0}|${silent ? 1 : 0}|${cut}`;
+  };
+  const geoKey = () => `${ppb()}|${headW()}|${innerKey()}`;
+
+  // Ausschnitt im Inhalt der Spuren (x ab Spuranfang, y ab Rasteroberkante); extra = Vielfaches des Rands
+  function viewRange(extra = 1) {
+    const w = Math.max(1, viewW - headW());
+    const mx = Math.max(w * 0.5, 240) * extra;
+    const my = Math.max(viewH * 0.5, 120) * extra;
+    return { x0: viewLeft - mx, x1: viewLeft + w + mx, v0: viewLeft, v1: viewLeft + w, y0: viewTop - my, y1: viewTop + viewH + my, t0: viewTop, t1: viewTop + viewH };
+  }
+
+  // Lage der Spuren (einmal je Änderung der Zeilen gemessen; ohne senkrechtes Scrollen gelten alle als sichtbar)
+  function measureRows() {
+    const key = `${rowH()}|${[...rowsEl.children].map((n) => (n.hidden ? '-' : n.className.split(' ')[0])).join(',')}|${viewH}|${harmMode}|${keyRow.row.dataset.tier ?? ''}|${chordRow.row.dataset.tier ?? ''}|${autoLanes.isOpen('master')}`;
+    if (key === rowBoxKey) return;
+    rowBoxKey = key;
+    rowBox = new Map();
+    for (const [id, r] of rows) {
+      if (r.row.hidden) { rowBox.set(id, null); continue; }
+      const top = r.row.offsetTop;
+      rowBox.set(id, { top, bottom: top + r.row.offsetHeight });
     }
   }
+
+  function waveColor(canvas, cat, grey) {
+    const k = `${cat}|${grey}`;
+    let c = waveColors.get(k);
+    if (!c && canvas.isConnected) { c = getComputedStyle(canvas).getPropertyValue('--wave').trim() || '#888'; waveColors.set(k, c); }
+    return c || null;
+  }
+
+  // Wellenform eines Clips für den aktuellen Ausschnitt zeichnen (der Rand reicht für kleines Scrollen)
+  function paintClip(ent, clip, r, win) {
+    if (!ent.sample) return;
+    const s0 = clip.startBeat * ppb();
+    const from = Math.max(0, win.x0 - s0);
+    const to = Math.min(clip.lengthBeats * ppb(), win.x1 - s0);
+    const m = clipInner(ent.node);
+    const cat = ent.sample.colorCat ?? ent.sample.category ?? 'fx';
+    drawWave(ent.canvas, clip, ent.sample, from, Math.max(from + 1, to), m.h, waveColor(ent.canvas, cat, r.silent || clip.mute ? 1 : 0));
+    ent.from = from;
+    ent.to = to;
+  }
+
+  // Stapel (wer oben liegt, wer verdeckt ist): ändert sich oft mit dem Nachbarn – nur Klasse und z-Ebene anpassen
+  function stackFlags(ent, m) {
+    const f = `${m.stack}|${m.covered}|${m.onTop}`;
+    if (ent.flags === f) return;
+    ent.flags = f;
+    ent.node.style.setProperty('--stack', String(m.stack));
+    ent.node.classList.toggle('covered', m.covered);
+    ent.node.classList.toggle('on-top', m.onTop);
+  }
+
+  function buildClip(track, clip, r, m, ckey, gkey, win) {
+    const old = clipNodes.get(clip.id);
+    const { node, canvas, sample } = makeClip(clip);
+    if (old) old.node.replaceWith(node);
+    if (node.parentElement !== r.lane) r.lane.append(node);
+    const ent = { node, canvas, sample, trackId: track.id, ckey, gkey };
+    stackFlags(ent, m);
+    clipNodes.set(clip.id, ent);
+    paintClip(ent, clip, r, win);
+    placeHandles(node, clip);
+    return ent;
+  }
+
+  // Abgleich: fehlende Clips im Ausschnitt bauen, geänderte ersetzen, verschobene neu zeichnen, ferne entfernen.
+  // budget (ms): Clips im Rand dürfen auf die nächsten Bilder warten; was im Bild liegt, entsteht sofort.
+  function syncClips(budget = Infinity) {
+    if (fillRaf) { cancelAnimationFrame(fillRaf); fillRaf = 0; }
+    const t0 = performance.now();
+    const p = store.project;
+    const P = ppb();
+    const gkey = geoKey();
+    const win = viewRange(1);
+    const keep = viewRange(2);
+    const forced = new Set(ui.selectedIds());
+    if (p.tracks.length * rowH() > viewH * 0.6) measureRows(); else rowBox = null;
+    const want = new Set();
+    let later = false;
+    for (const t of p.tracks) {
+      const r = rows.get(t.id);
+      if (!r) continue;
+      const m = trackMeta(t);
+      syncNames(r, t);
+      const rb = rowBox?.get(t.id);
+      const shown = !r.row.hidden;
+      const rowIn = shown && (!rb || (rb.bottom > win.y0 && rb.top < win.y1));
+      const rowKeep = shown && (!rb || (rb.bottom > keep.y0 && rb.top < keep.y1));
+      const rowSeen = shown && (!rb || (rb.bottom > win.t0 && rb.top < win.t1));
+      for (const clip of t.clips) {
+        const id = clip.id;
+        if (pinned.has(id)) { want.add(id); continue; }
+        const s0 = clip.startBeat * P;
+        const s1 = s0 + clip.lengthBeats * P;
+        const ent = clipNodes.get(id);
+        const inWin = rowIn && s1 > win.x0 && s0 < win.x1;
+        if (!inWin && !forced.has(id)) {
+          if (ent && rowKeep && s1 > keep.x0 && s0 < keep.x1 && ent.trackId === t.id && ent.gkey === gkey && !rebuild.has(id)) want.add(id);
+          continue;
+        }
+        want.add(id);
+        const meta = m.get(id);
+        const ckey = contentKey(t, clip, r.silent, meta);
+        if (!ent || ent.ckey !== ckey || ent.trackId !== t.id || rebuild.has(id) || !ent.node.isConnected) {
+          const seen = rowSeen && s1 > win.v0 && s0 < win.v1;
+          if (!seen && performance.now() - t0 > budget) { later = true; if (!ent) want.delete(id); continue; }
+          buildClip(t, clip, r, meta, ckey, gkey, win);
+          rebuild.delete(id);
+          continue;
+        }
+        stackFlags(ent, meta);
+        if (ent.gkey !== gkey) {
+          ent.node.style.left = s0 + 'px';
+          ent.node.style.width = clip.lengthBeats * P + 'px';
+          ent.gkey = gkey;
+          paintClip(ent, clip, r, win);
+          placeHandles(ent.node, clip);
+        } else if (ent.sample && (ent.from > Math.max(0, win.v0 - s0) + 1 || ent.to < Math.min(clip.lengthBeats * P, win.v1 - s0) - 1)) {
+          paintClip(ent, clip, r, win); // langer Clip: der gezeichnete Ausschnitt reicht nicht mehr
+        }
+      }
+    }
+    for (const [id, ent] of clipNodes) if (!want.has(id)) { ent.node.remove(); clipNodes.delete(id); rebuild.delete(id); }
+    for (const id of laneInfo.keys()) if (!rows.has(id)) laneInfo.delete(id);
+    if (later) fillRaf = requestAnimationFrame(() => { fillRaf = 0; syncClips(6); markSelection(); });
+  }
+
+  // Scrollen und Größe: im nächsten Bild abgleichen (Rand zuerst nur im Rahmen eines kleinen Zeitbudgets)
+  let viewRaf = 0;
+  const onView = () => {
+    if (viewRaf) return;
+    viewRaf = requestAnimationFrame(() => { viewRaf = 0; syncClips(6); markSelection(); });
+  };
 
   // ---------- Lineal und Loop ----------
 
@@ -834,7 +1015,13 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   }
 
   function render(force = false) {
-    if (force) forceAll = true;
+    if (force) {
+      for (const ent of clipNodes.values()) ent.node.remove();
+      clipNodes.clear();
+      waveColors.clear();
+      inner = null;
+      rowBoxKey = '';
+    }
     const p = store.project;
     grid.style.setProperty('--ppb', ppb() + 'px');
     grid.style.setProperty('--bar', ppb() * p.beatsPerBar + 'px');
@@ -859,9 +1046,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       if (has || root.closest('#app')?.classList.contains('harmony-on')) { delete r.dataset.tier; delete r.dataset.tierOnly; } else { r.dataset.tier = '3'; }
     }
     syncRows();
-    for (const t of p.tracks) renderLane(rows.get(t.id), t);
     autoLanes.render();
-    forceAll = false;
+    if (!holdClips) syncClips();
     if (ui.selectedClipId && !store.findClip(ui.selectedClipId)) ui.select(null);
     else if (ui.multi.length && ui.multi.some((id) => !store.findClip(id))) ui.selectMany(ui.multi.filter((id) => store.findClip(id)));
     markSelection();
@@ -889,9 +1075,16 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   let viewLeft = root.scrollLeft;
   let viewW = root.clientWidth;
   let phGripW = null; // Breite des Griffs (CSS, je Gerät): einmal gemessen
-  new ResizeObserver(() => { viewW = root.clientWidth; phGripW = null; }).observe(root);
+  new ResizeObserver(() => {
+    if (viewW === root.clientWidth && viewH === root.clientHeight) return;
+    viewW = root.clientWidth;
+    viewH = root.clientHeight;
+    phGripW = null;
+    onView();
+  }).observe(root);
   root.addEventListener('scroll', () => {
     viewLeft = root.scrollLeft;
+    if (viewTop !== root.scrollTop) { viewTop = root.scrollTop; onView(); } else onView();
     if (Math.abs(viewLeft - appLeft) < 0.5) return;
     appLeft = viewLeft;
     if (engine.playing) freeView = true;
@@ -923,12 +1116,16 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
 
   function markSelection() {
     const ids = new Set(ui.selectedIds());
-    for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', ids.has(n.dataset.clipId));
+    for (const [id, ent] of clipNodes) ent.node.classList.toggle('selected', ids.has(id));
   }
   function select(clipId) {
     ui.select(clipId);
     markSelection();
   }
+
+  // Während eines Ziehens verändert die Vorschau die Knoten direkt: der Abgleich lässt sie in Ruhe und baut sie danach neu
+  function hold(ids) { for (const id of ids) pinned.add(id); }
+  function release(ids, dirty = true) { for (const id of ids) { pinned.delete(id); if (dirty) rebuild.add(id); } }
 
   // Gemeinsamer Rahmen für alle Griff-Bewegungen: Vorschau beim Ziehen, eine Store-Aktion beim Loslassen.
   function dragClip(e, node, { preview, commit }) {
@@ -939,7 +1136,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const sample = base && clip.stretch ? { ...base, lengthBeats: base.lengthBeats * clip.stretch } : base;
     const canvas = node.querySelector('canvas');
     select(clip.id);
-    forceAll = true;
+    hold([clip.id]);
     node.classList.add('editing');
     let result = null;
     trackPointer(e, (ev) => {
@@ -948,14 +1145,16 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       const temp = { ...clip, ...result.clip };
       if (result.left != null) node.style.left = result.left * ppb() + 'px';
       node.style.width = temp.lengthBeats * ppb() + 'px';
-      if (sample) drawWave(canvas, temp, sample);
+      if (sample) { const win = viewRange(1); const s0 = temp.startBeat * ppb(); drawWave(canvas, temp, sample, win.x0 - s0, win.x1 - s0, clipInner(node).h); }
       placeHandles(node, temp);
       ui.status(result.status);
     }, () => {
       node.classList.remove('editing');
       ui.status(null);
+      release([clip.id], !!result);
       if (result) commit(clip, result.clip);
-    }, () => { node.classList.remove('editing'); ui.status(null); render(true); });
+      else render();
+    }, () => { node.classList.remove('editing'); ui.status(null); release([clip.id]); render(); });
   }
 
   // Mehrere ausgewählte Clips zusammen verschieben (Alt/Strg: kopieren); Abstände und Spurabstände bleiben
@@ -965,9 +1164,10 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const order = p.tracks.map((t) => t.id);
     const items = ui.selectedIds().map((id) => {
       const f = store.findClip(id);
-      return f && { clip: f.clip, ti: order.indexOf(f.track.id), node: root.querySelector(`.clip[data-clip-id="${id}"]`) };
-    }).filter((x) => x && x.node);
+      return f && { clip: f.clip, ti: order.indexOf(f.track.id), node: clipNodes.get(id)?.node ?? null };
+    }).filter(Boolean);
     const lead = items.find((x) => x.node === node) ?? items[0];
+    const ids = items.map((x) => x.clip.id);
     const minStart = Math.min(...items.map((x) => x.clip.startBeat));
     const maxEnd = Math.max(...items.map((x) => x.clip.startBeat + x.clip.lengthBeats));
     const minTi = Math.min(...items.map((x) => x.ti));
@@ -977,7 +1177,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     let moved = false;
     let db = 0;
     let dt = 0;
-    forceAll = true;
+    hold(ids);
     trackPointer(e, (ev) => {
       if (pinch || (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4)) return;
       moved = true;
@@ -987,6 +1187,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       const lane = laneAt(ev.clientX, ev.clientY);
       if (lane) dt = clamp(order.indexOf(lane.dataset.trackId) - lead.ti, -minTi, order.length - 1 - maxTi);
       for (const x of items) {
+        if (!x.node) continue; // außerhalb des Bildes: zieht unsichtbar mit
         x.node.classList.add('dragging');
         x.node.classList.toggle('copying', copy);
         x.node.style.left = (x.clip.startBeat + db) * ppb() + 'px';
@@ -995,15 +1196,16 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       }
       ui.status(`${items.length} Clips · ${formatPos(lead.clip.startBeat + db, p.beatsPerBar)}`);
     }, (ev) => {
-      for (const x of items) x.node.classList.remove('dragging', 'copying');
+      for (const x of items) x.node?.classList.remove('dragging', 'copying');
       ui.status(null);
+      release(ids, moved);
       if (!moved) { toggle?.(); return; }
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
-      if (!copy && !db && !dt) { render(true); return; }
-      const ids = store.moveClips(items.map((x) => ({ id: x.clip.id, trackId: order[x.ti + dt], startBeat: x.clip.startBeat + db })), { copy });
-      ui.selectMany(ids);
-      render(true);
-    }, () => { ui.status(null); render(true); });
+      if (!copy && !db && !dt) { render(); return; }
+      const moved2 = store.moveClips(items.map((x) => ({ id: x.clip.id, trackId: order[x.ti + dt], startBeat: x.clip.startBeat + db })), { copy });
+      ui.selectMany(moved2);
+      render();
+    }, () => { ui.status(null); release(ids); render(); });
   }
 
   // Rahmen aufziehen (Maus, freie Fläche): alle berührten Clips auswählen; Umschalt fügt hinzu.
@@ -1024,12 +1226,20 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       const y0 = Math.min(sy, ev.clientY);
       const y1 = Math.max(sy, ev.clientY);
       Object.assign(marquee.style, { left: `${x0 - g.left}px`, top: `${y0 - g.top}px`, width: `${x1 - x0}px`, height: `${y1 - y0}px` });
-      hits = [...root.querySelectorAll('.clip')].filter((n) => {
-        const r = n.getBoundingClientRect();
-        return r.right > x0 && r.left < x1 && r.bottom > y0 && r.top < y1;
-      }).map((n) => n.dataset.clipId);
+      // aus dem Modell: auch Clips, die gerade nicht gezeichnet sind (Clip = Spurfläche ohne 3 px oben und unten)
+      hits = [];
+      for (const t of store.project.tracks) {
+        const r = rows.get(t.id);
+        if (!r || r.row.hidden) continue;
+        const lr = r.lane.getBoundingClientRect();
+        if (!(lr.bottom - 3 > y0 && lr.top + 3 < y1)) continue;
+        for (const c of t.clips) {
+          const cl = lr.left + c.startBeat * ppb();
+          if (cl + c.lengthBeats * ppb() > x0 && cl < x1) hits.push(c.id);
+        }
+      }
       const show = new Set([...keep, ...hits]);
-      for (const n of root.querySelectorAll('.clip')) n.classList.toggle('selected', show.has(n.dataset.clipId));
+      for (const [id, ent] of clipNodes) ent.node.classList.toggle('selected', show.has(id));
       ui.status(hits.length ? `${show.size} ${show.size === 1 ? 'Clip' : 'Clips'} ausgewählt` : null);
     }, (ev) => {
       marquee.remove();
@@ -1052,7 +1262,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const sy = e.clientY;
     let moved = false;
     let newStart = clip.startBeat;
-    forceAll = true;
+    hold([clip.id]);
     trackPointer(e, (ev) => {
       // Zwei Finger zoomen – dann bleibt der Clip liegen
       if (pinch || (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4)) return;
@@ -1067,13 +1277,14 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     }, (ev) => {
       node.classList.remove('dragging', 'copying');
       ui.status(null);
+      release([clip.id], moved);
       if (!moved) { toggle?.(); return; }
       const targetId = node.parentElement.dataset.trackId;
       const copy = ev.altKey || ev.ctrlKey || ev.metaKey;
-      if (!copy && targetId === track.id && newStart === clip.startBeat) { render(true); return; }
+      if (!copy && targetId === track.id && newStart === clip.startBeat) { render(); return; }
       const id = store.moveClip(clip.id, targetId, newStart, { copy });
       select(id);
-    }, () => { ui.status(null); render(true); });
+    }, () => { ui.status(null); release([clip.id]); render(); });
   }
 
   function startResize(e, node) {
@@ -1083,7 +1294,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
         const len = clamp(snap(clip.lengthBeats + dx / ppb(), ev), step(ev), total - clip.startBeat);
         return { clip: { lengthBeats: len }, status: `Länge: ${formatBeats(len)}` };
       },
-      commit: (clip, r) => { if (r.lengthBeats !== clip.lengthBeats) store.resizeClip(clip.id, r.lengthBeats); else render(true); },
+      commit: (clip, r) => { if (r.lengthBeats !== clip.lengthBeats) store.resizeClip(clip.id, r.lengthBeats); else render(); },
     });
   }
 
@@ -1096,7 +1307,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
         const offsetBeats = ((((clip.offsetBeats || 0) + start - clip.startBeat) % sb) + sb) % sb;
         return { clip: { startBeat: start, lengthBeats: end - start, offsetBeats }, left: start, status: `Anfang: ${formatPos(start, store.project.beatsPerBar)}` };
       },
-      commit: (clip, r) => { if (r.startBeat !== clip.startBeat) store.trimClipStart(clip.id, r.startBeat); else render(true); },
+      commit: (clip, r) => { if (r.startBeat !== clip.startBeat) store.trimClipStart(clip.id, r.startBeat); else render(); },
     });
   }
 
@@ -1139,7 +1350,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
         c = fadeCurveOf(Math.round(c * 100) / 100);
         return { clip: { [key]: c }, status: `${which === 'in' ? 'Fade-In' : 'Fade-Out'}: ${formatCurve(c)}` };
       },
-      commit: (clip, r) => { if ((r[key] || 0) !== (clip[key] || 0)) store.setClip(clip.id, r); else render(true); },
+      commit: (clip, r) => { if ((r[key] || 0) !== (clip[key] || 0)) store.setClip(clip.id, r); else render(); },
     });
   }
 
@@ -1349,9 +1560,33 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     else if (r.top < top) root.scrollTop -= top - r.top;
   }
 
-  // Clip über einer Schublade sichtbar halten: so scrollen, dass er oberhalb von `limitTop` liegt
+  // Clip über einer Schublade sichtbar halten: so scrollen, dass er oberhalb von `limitTop` liegt.
+  // Ohne limitTop: den Clip ganz ins Bild holen (auch waagrecht) – er wird dabei gezeichnet, falls er es noch nicht war.
   function revealClip(clipId, limitTop) {
-    const node = root.querySelector(`.clip[data-clip-id="${clipId}"]`);
+    const found = store.findClip(clipId);
+    if (!found) return;
+    if (limitTop == null) {
+      const w = viewW - headW();
+      const s0 = found.clip.startBeat * ppb();
+      const s1 = s0 + found.clip.lengthBeats * ppb();
+      if (s0 < viewLeft || s1 > viewLeft + w) {
+        root.scrollLeft = Math.max(0, s1 - s0 > w ? s0 - 24 : s0 - (w - (s1 - s0)) / 2);
+        viewLeft = appLeft = root.scrollLeft;
+        userMovedView();
+      }
+      const row = rows.get(found.track.id)?.row;
+      if (row && !row.hidden) {
+        const top = row.offsetTop - rowsEl.offsetTop;
+        const head = rowsEl.offsetTop; // klebende Kopfzeilen
+        if (row.offsetTop < root.scrollTop + head) root.scrollTop = Math.max(0, top);
+        else if (row.offsetTop + row.offsetHeight > root.scrollTop + viewH) root.scrollTop = row.offsetTop + row.offsetHeight - viewH;
+        viewTop = root.scrollTop;
+      }
+      if (!clipNodes.has(clipId)) syncClips();
+      markSelection();
+      limitTop = root.getBoundingClientRect().bottom;
+    }
+    const node = clipNodes.get(clipId)?.node;
     if (!node) return;
     const r = node.getBoundingClientRect();
     const box = root.getBoundingClientRect();
@@ -1421,7 +1656,9 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     ui.pxPerBeat = nx;
     ui.trackZoom = ny;
     userMovedView();
-    render();
+    // Clips erst abgleichen, wenn die neue Scrollposition steht (sonst entstünden sie für den alten Ausschnitt)
+    holdClips = true;
+    try { render(); } finally { holdClips = false; }
     if (after) after();
     else {
       if (changedX) root.scrollLeft = Math.max(0, beat * nx + headW() - x);
@@ -1431,6 +1668,9 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       }
     }
     viewLeft = appLeft = root.scrollLeft;
+    viewTop = root.scrollTop;
+    syncClips();
+    markSelection();
     ui.emit();
     return true;
   }
@@ -1537,6 +1777,9 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   const markArmed = () => { for (const [tid, r] of rows) r.row.classList.toggle('rec-armed', !!recArm && !!ui.recTracks?.includes(tid)); };
   ui.on(() => {
     for (const [tid, r] of rows) r.row.classList.toggle('selected', !ui.selectedClipId && ui.selectedTrackId === tid);
+    // Ausgewählte Clips sind immer gezeichnet (Werkzeug am Clip, Tipps, Tastatur); abgewählte räumt der nächste Abgleich weg
+    if (ui.selectedIds().some((id) => !clipNodes.has(id) && store.findClip(id))) syncClips();
+    else onView();
     markArmed();
     markSelection();
     syncBounce();
