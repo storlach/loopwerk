@@ -75,6 +75,7 @@ Vorhanden:
 - `tools/push.sh` – Push mit Wiederholung bei Netzfehlern.
 - `npm run klangvergleich -- <vorher-ordner> <nachher-ordner>` – paart Hörproben über den Namen und zeigt Lautheit, Spitze, Tiefen/Mitten/Höhen und Breite vorher → nachher.
 - `tools/agenten.sh [--dateien]` – Stand aller Agent-Worktrees (Commits vor main, ungesicherte Dateien, letzte Änderung).
+- `tools/klang/` – Messskripte zum Klang: `anschlaege.cjs <wav|Sound> [--faktoren …]` zählt Anschläge und prüft ihre Lage nach der Tempo-Dehnung.
 - `tools/perf/` – Messskripte der Performance-Analyse (Laden, Bedienung, Arranger-Skalierung, Stillstand, Audio-Last, Speicher, Service Worker), siehe `tools/perf/README.md`.
 
 ## Fertig heißt
