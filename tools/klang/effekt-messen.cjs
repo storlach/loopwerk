@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Misst, was ein Effekt beim Einschalten mit dem Pegel macht (Lautheit, Spitze) und wie der Hall liegt (Nachhall zum
 // Direktsignal, Seite/Mitte, Korrelation, Tiefen, Flachheit, Schwerpunkt, Nachhallzeit). Offline-Rendering wie der Export.
-// Aufruf: node tools/klang/effekt-messen.cjs [--teil einschalten,hall] [--sounds id,id] [--json datei]
+// Aufruf: node tools/klang/effekt-messen.cjs [--teil einschalten,hall,echo] [--sounds id,id] [--json datei]
 // Beispiel: node tools/klang/effekt-messen.cjs --teil einschalten
 const fs = require('fs');
 const path = require('path');
@@ -11,20 +11,22 @@ const HELP = `Pegel und Raum der Effekte messen (Klanganalyse W3/K3).
 
   node tools/klang/effekt-messen.cjs [Optionen]
 
-  --teil einschalten,hall   was gemessen wird (Voreinstellung: beides)
+  --teil einschalten,hall,echo   was gemessen wird (Voreinstellung: alles)
   --sounds a,b,c            Bibliotheks-Sounds für "einschalten" (Voreinstellung: die vier der Klanganalyse)
   --json datei              Ergebnis zusätzlich als JSON schreiben
   --help                    diese Hilfe
 
 "einschalten": Lautheitsänderung in LU gegen trocken (Fader 1, ohne Limiter) für Kompressor, Verzerrer (alle Arten), Hall,
 Echo und die Effekt-Patches aus "Klang aus Beschreibung". "hall": Impulsantwort von Insert (Voreinstellung) und Bus
-(Send 50 %, Bus 80 %), Nachhall auf einer Fläche (chords-pad) als Abstand zum Direktsignal.
+(Send 50 %, Bus 80 %), Nachhall auf einer Fläche (chords-pad) als Abstand zum Direktsignal. "echo": Impulsantwort des
+Echos (Insert-Voreinstellung und Bus) nur nass – Seite/Mitte, Korrelation, Energie links zu rechts, Lage der ersten
+Wiederholungen je Kanal –, dazu die Lautheit mit Echo auf den Sounds gegen trocken.
 Exit 0 = gemessen (das Skript urteilt nicht), 1 = Bedien- oder Renderfehler.`;
 
 function fail(m) { console.error('Fehler: ' + m + '\n\n' + HELP); process.exit(1); }
 const a = process.argv.slice(2);
 if (a.includes('--help') || a.includes('-h')) { console.log(HELP); process.exit(0); }
-const o = { teil: ['einschalten', 'hall'], sounds: ['gen-house-groove', 'chords-pad', 'bass-prog', 'synth-arp-prog'], json: null };
+const o = { teil: ['einschalten', 'hall', 'echo'], sounds: ['gen-house-groove', 'chords-pad', 'bass-prog', 'synth-arp-prog'], json: null };
 for (let i = 0; i < a.length; i++) {
   const v = () => { const x = a[++i]; if (x == null || x.startsWith('--')) fail(`${a[i - 1]} braucht einen Wert`); return x; };
   if (a[i] === '--teil') o.teil = v().split(',');
@@ -32,7 +34,7 @@ for (let i = 0; i < a.length; i++) {
   else if (a[i] === '--json') o.json = path.resolve(v());
   else fail(`unbekanntes Argument ${a[i]}`);
 }
-if (o.teil.some((t) => !['einschalten', 'hall'].includes(t))) fail('--teil: einschalten und/oder hall');
+if (o.teil.some((t) => !['einschalten', 'hall', 'echo'].includes(t))) fail('--teil: einschalten, hall und/oder echo');
 
 (async () => {
   const app = await openApp({ fresh: true });
@@ -132,6 +134,42 @@ if (o.teil.some((t) => !['einschalten', 'hall'].includes(t))) fail('--teil: eins
         out.hall.Insert = { ...(await ir({}, false, 1)), ...wetOf(await pad(fxWith('hall', {}))) };
         out.hall['Bus (Send 50 %)'] = { ...(await ir({ size: 0.6, mix: 1 }, true, 0.4)), ...wetOf(await pad(null, { hall: 0.5 })) };
       }
+      if (o.teil.includes('echo')) {
+        out.echo = {};
+        // Impulsantwort nur nass: mono Impuls in der Mitte, 120 BPM (spb 0,5)
+        const eir = async (params, asBus) => {
+          const ctx = new OfflineAudioContext(2, sr * 4, sr);
+          const b = ctx.createBuffer(1, 1, sr); b.getChannelData(0)[0] = 1;
+          const s = ctx.createBufferSource(); s.buffer = b;
+          const g = ctx.createGain(); g.channelCount = 2; g.channelCountMode = 'explicit';
+          const u = FX.EFFECTS.find((e) => e.id === 'echo').create(ctx, { dry: !asBus });
+          u.set({ ...FX.defaultFx().echo, ...params }, null, 0.5, 0);
+          s.connect(g).connect(u.input); u.output.connect(ctx.destination); s.start(0);
+          const y = await ctx.startRendering();
+          const Lc = y.getChannelData(0).slice(), Rc = y.getChannelData(1).slice();
+          if (!asBus) { Lc[0] -= 1; Rc[0] -= 1; }
+          let el = 0, er = 0, m = 0, sd = 0, lr = 0;
+          for (let i = 0; i < Lc.length; i++) { el += Lc[i] ** 2; er += Rc[i] ** 2; m += ((Lc[i] + Rc[i]) / 2) ** 2; sd += ((Lc[i] - Rc[i]) / 2) ** 2; lr += Lc[i] * Rc[i]; }
+          // Erste drei Wiederholungen: Spitze je Kanal in einem Fenster um k · Zeit
+          const t = (FX.ECHO_TIMES.find((x) => x.id === (params.time ?? FX.defaultFx().echo.time))?.beats ?? 0.75) * 0.5;
+          const taps = [1, 2, 3].map((k) => {
+            const c = Math.round(k * t * sr); let pl = 0, pr = 0;
+            for (let i = c - 400; i < c + 1200; i++) { pl = Math.max(pl, Math.abs(Lc[i])); pr = Math.max(pr, Math.abs(Rc[i])); }
+            return `${k}: L ${r2(20 * Math.log10(pl + 1e-12))} / R ${r2(20 * Math.log10(pr + 1e-12))} dB`;
+          });
+          return { seiteMitteDb: r2(dB(sd / m)), korrelation: r2(lr / Math.sqrt(el * er + 1e-30)), linksZuRechtsDb: r2(dB(el / (er + 1e-30))), nassDb: r2(dB((el + er) / 2)), wiederholungen: taps.join(' · ') };
+        };
+        out.echo.Insert = await eir({}, false);
+        out.echo['Bus (Zeit 1/8d, 40 %)'] = await eir({ mix: 1, feedback: 0.4 }, true);
+        await library.ensureMany(o.sounds);
+        for (const sid of o.sounds) {
+          const dry = await renderProject(project(sid), library, { toBeat: 16, limiter: false, tailSeconds: 1 });
+          const wet = await renderProject(project(sid, fxWith('echo', {})), library, { toBeat: 16, limiter: false, tailSeconds: 1 });
+          const Lw = wet.getChannelData(0), Rw = wet.getChannelData(1);
+          let mt = 0, stt = 0; for (let i = 0; i < Lw.length; i++) { mt += (Lw[i] + Rw[i]) ** 2; stt += (Lw[i] - Rw[i]) ** 2; }
+          out.echo[`Insert auf ${sid}`] = { dLU: r2(lufs(wet) - lufs(dry)), breiteDb: r2(dB(stt / mt)) };
+        }
+      }
       return out;
     }, { o });
   } catch (e) {
@@ -148,6 +186,10 @@ if (o.teil.some((t) => !['einschalten', 'hall'].includes(t))) fail('--teil: eins
   if (res.hall) {
     console.log('\nHall');
     for (const [k, m] of Object.entries(res.hall)) console.log(`  ${k.padEnd(20)} ${Object.entries(m).map(([a2, b2]) => `${a2} ${b2}`).join(' · ')}`);
+  }
+  if (res.echo) {
+    console.log('\nEcho');
+    for (const [k, m] of Object.entries(res.echo)) console.log(`  ${k.padEnd(28)} ${Object.entries(m).map(([a2, b2]) => `${a2} ${b2}`).join(' · ')}`);
   }
   if (o.json) fs.writeFileSync(o.json, JSON.stringify(res, null, 1));
   if (app.errors.length) console.error('Konsolenfehler: ' + app.errors.slice(0, 3).join(' | '));

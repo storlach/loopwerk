@@ -455,27 +455,62 @@ export const EFFECTS = [
       mix: { label: 'Anteil', min: 0, max: 1, step: 0.01, default: 0.3, unit: '%' },
     },
     // dry: false = nur nass (Send-Bus): der Eingang liegt nicht auf dem Ausgang, der Anteil bleibt fest bei 1
+    // Ping-Pong für die Mitte: ½ · (L + R), Wiederholungen im Raster abwechselnd links (1., 3., …) und rechts (2., 4., …),
+    // je Kanal × √2 (jede Wiederholung liegt nur auf einer Seite: gleiche Energie wie ein Echo je Kanal). Die Seite
+    // ½ · (L − R) läuft durch ein gewöhnliches Echo (links +, rechts −) – die Stereobreite der Quelle bleibt im Echo.
+    // Je eine Höhendämpfung pro Wiederholung.
     create(ctx, { dry = true } = {}) {
       const input = ctx.createGain();
       const output = ctx.createGain();
-      const delay = ctx.createDelay(4);
-      const tone = ctx.createBiquadFilter();
-      tone.type = 'lowpass';
-      tone.frequency.value = 5000;
-      const fb = ctx.createGain();
+      const mono = ctx.createGain();
+      mono.channelCount = 1;
+      mono.channelCountMode = 'explicit';
+      const gain = (g) => { const n = ctx.createGain(); n.gain.value = g; return n; };
+      const tone = () => { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 5000; return f; };
+      const dL = ctx.createDelay(4);
+      const dR = ctx.createDelay(4);
+      const toneL = tone();
+      const toneR = tone();
+      const cross = ctx.createGain(); // links → rechts
+      const back = ctx.createGain(); // rechts → links
+      const merge = ctx.createChannelMerger(2);
       const wet = ctx.createGain();
       if (dry) input.connect(output);
-      input.connect(delay);
-      delay.connect(tone);
-      tone.connect(fb).connect(delay);
-      tone.connect(wet).connect(output);
+      input.connect(mono).connect(dL).connect(toneL);
+      toneL.connect(gain(Math.SQRT2)).connect(merge, 0, 0);
+      toneL.connect(cross).connect(dR).connect(toneR);
+      toneR.connect(gain(Math.SQRT2)).connect(merge, 0, 1);
+      toneR.connect(back).connect(dL);
+      // Seite: Mono-Quellen auf zwei gleiche Kanäle (Seite 0), dann ½ · (L − R)
+      const st = ctx.createGain();
+      st.channelCount = 2;
+      st.channelCountMode = 'explicit';
+      const split = ctx.createChannelSplitter(2);
+      const side = ctx.createGain();
+      side.channelCount = 1;
+      side.channelCountMode = 'explicit';
+      input.connect(st).connect(split);
+      split.connect(gain(0.5), 0).connect(side);
+      split.connect(gain(-0.5), 1).connect(side);
+      const dS = ctx.createDelay(4);
+      const toneS = tone();
+      const fbS = ctx.createGain();
+      side.connect(dS).connect(toneS).connect(fbS).connect(dS);
+      toneS.connect(merge, 0, 0);
+      toneS.connect(gain(-1)).connect(merge, 0, 1);
+      merge.connect(wet).connect(output);
       return {
         input, output,
         auto: { mix: { param: wet.gain, map: (v) => v } },
         set(p, t, spb, grid, skip) {
           const beats = ECHO_TIMES.find((x) => x.id === p.time)?.beats ?? 0.75;
-          ramp(delay.delayTime, Math.min(4, beats * spb), t);
-          ramp(fb.gain, p.feedback, t);
+          const time = Math.min(4, beats * spb);
+          ramp(dL.delayTime, time, t);
+          ramp(dR.delayTime, time, t);
+          ramp(dS.delayTime, time, t);
+          ramp(cross.gain, p.feedback, t);
+          ramp(back.gain, p.feedback, t);
+          ramp(fbS.gain, p.feedback, t);
           if (!skip?.mix) ramp(wet.gain, dry ? p.mix : 1, t);
         },
       };

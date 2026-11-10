@@ -1,6 +1,6 @@
 // Ehrliche Pegel (Klanganalyse 2026-11, W2/W3/K3): Schutz-Limiter ohne versteckte Anhebung mit echter Spitzengrenze,
 // Kompressor und Verzerrer pegelneutral beim Einschalten, Hall hörbar und breit. Seit 2026-11 gibt es davon nur eine
-// Fassung: alte Songs (mit oder ohne Feld `v`) klingen wie neue, `v` fällt beim Laden weg.
+// Fassung: alte Songs (mit oder ohne Feld `v`) klingen wie neue, `v` fällt beim Laden weg. Echo als Ping-Pong (breit).
 // node tests/effekt-pegel.test.cjs
 const { openApp, createChecker } = require('./harness.cjs');
 
@@ -413,6 +413,86 @@ function installPegel() {
     check('6 Wiedergabe: playbackDelay = Vorausschau des Spitzenbegrenzers', lat.play.kind === 'peak' && !lat.play.mastering && Math.abs(lat.play.delay - lat.play.want) < 1e-9
       && Math.abs(lat.play.club - lat.play.clubWant) < 1e-6 && Math.abs(lat.play.ab - lat.play.frames) < 1e-6, JSON.stringify(lat.play));
     check('6 Ohne Worklet-Modul: Rückfall auf den DynamicsCompressor, es klingt, Latenz gemessen', lat.fallback.kind === 'dc' && lat.fallback.peak > 0.1 && lat.fallback.latency > 0, JSON.stringify(lat.fallback));
+
+    // ---------- 7. Echo als Ping-Pong: breit, im Raster, so laut wie das frühere Mono-Echo ----------
+    const echo = await page.evaluate(async () => {
+      const { library, renderProject } = window.loopwerk;
+      const FX = await import('./src/effects.js');
+      const sr = 44100;
+      const spb = 0.5;
+      const time = 0.75 * spb; // 1/8 punktiert bei 120 BPM = 16537,5 Werte (die Verzögerung interpoliert)
+      const T = time * sr;
+      // Impulsantwort nur nass; mono = das frühere Echo (Verzögerung → Tiefpass 5 kHz → Rückkopplung) als Bezug
+      // stereo: links Impuls bei 0, rechts bei 10 ms (zwei unkorrelierte Kanäle, Seite ≠ 0)
+      const ir = async (mono, params, stereo = false) => {
+        const ctx = new OfflineAudioContext(2, sr * 4, sr);
+        const b = ctx.createBuffer(stereo ? 2 : 1, 1000, sr); b.getChannelData(0)[0] = 1; if (stereo) b.getChannelData(1)[441] = 1;
+        const s = ctx.createBufferSource(); s.buffer = b;
+        const g = ctx.createGain(); g.channelCount = 2; g.channelCountMode = 'explicit';
+        s.connect(g);
+        if (mono) {
+          // das frühere Echo rechnete je Kanal für sich
+          const d = ctx.createDelay(4); d.delayTime.value = time;
+          const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 5000;
+          const fb = ctx.createGain(); fb.gain.value = params.feedback;
+          g.connect(d).connect(f).connect(fb).connect(d);
+          f.connect(ctx.destination);
+        } else {
+          const u = FX.EFFECTS.find((e) => e.id === 'echo').create(ctx, { dry: false });
+          u.set({ ...FX.defaultFx().echo, ...params, mix: 1 }, null, spb, 0);
+          g.connect(u.input); u.output.connect(ctx.destination);
+        }
+        s.start(0);
+        const y = await ctx.startRendering();
+        return [y.getChannelData(0), y.getChannelData(1)];
+      };
+      const o = {};
+      for (const [name, params] of [['insert', { feedback: 0.35 }], ['bus', { feedback: 0.4 }], ['lang', { feedback: 0.85 }]]) {
+        const [L, R] = await ir(false, params);
+        const [mL, mR] = await ir(true, params);
+        let e = 0, em = 0, m = 0, sd = 0, lr = 0, ll = 0, rr = 0;
+        for (let i = 0; i < L.length; i++) {
+          e += L[i] ** 2 + R[i] ** 2; em += mL[i] ** 2 + mR[i] ** 2;
+          m += (L[i] + R[i]) ** 2; sd += (L[i] - R[i]) ** 2; lr += L[i] * R[i]; ll += L[i] ** 2; rr += R[i] ** 2;
+        }
+        // Wiederholung k: Spitze je Kanal hinter k · T. Chrome hängt in einer Rückkopplung mit DelayNode je Umlauf einen
+        // Block (128 Werte) an – das frühere Mono-Echo bei jeder Wiederholung, das Ping-Pong bei jeder zweiten.
+        const taps = [1, 2, 3, 4].map((k) => {
+          const at = (d) => { let p = 0, ix = 0; const c = Math.floor(k * T); for (let i = c - 64; i < c + 128 * k + 256; i++) if (Math.abs(d[i]) > p) { p = Math.abs(d[i]); ix = i; } return { p, off: ix - c }; };
+          const l = at(L), r = at(R), ml = at(mL);
+          const on = k % 2 ? l : r, off = k % 2 ? r : l;
+          return { side: k % 2 ? 'L' : 'R', offset: on.off, monoOffset: ml.off, otherDb: 20 * Math.log10(off.p / on.p + 1e-30), levelDb: 20 * Math.log10(on.p / (ml.p * Math.SQRT2)) };
+        });
+        o[name] = { energyDb: 10 * Math.log10(e / em), sideMidDb: 10 * Math.log10(sd / m), corr: lr / Math.sqrt(ll * rr), taps };
+      }
+      {
+        const [L, R] = await ir(false, { feedback: 0.35 }, true);
+        const [mL, mR] = await ir(true, { feedback: 0.35 }, true);
+        let e = 0, em = 0, sd = 0, sdm = 0;
+        for (let i = 0; i < L.length; i++) { e += L[i] ** 2 + R[i] ** 2; em += mL[i] ** 2 + mR[i] ** 2; sd += (L[i] - R[i]) ** 2; sdm += (mL[i] - mR[i]) ** 2; }
+        o.stereo = { energyDb: 10 * Math.log10(e / em), sideDb: 10 * Math.log10(sd / sdm) };
+      }
+      // Lautheit mit Echo-Voreinstellung (Anteil 30 %) auf den drei Testsignalen gegen trocken
+      o.lufs = {};
+      for (const sid of ['pegel-drums', 'pegel-pad', 'pegel-bass']) {
+        const fx = FX.defaultFx(); fx.echo = { ...fx.echo, on: true };
+        const opts = { toBeat: 4, limiter: false, tailSeconds: 1.5 };
+        o.lufs[sid] = (await window.__pg.lufs(await renderProject(window.__pg.project(sid, { fx }), library, opts))) - (await window.__pg.lufs(await renderProject(window.__pg.project(sid), library, opts)));
+      }
+      return o;
+    });
+    const eRows = (k) => `${k}: Energie ${echo[k].energyDb.toFixed(3)} dB, S/M ${echo[k].sideMidDb.toFixed(1)} dB, Korrelation ${echo[k].corr.toFixed(3)}`;
+    check('7 Echo nur nass: so viel Energie wie das frühere Mono-Echo (±0,1 dB; Voreinstellung, Bus, Rückkopplung 85 %)',
+      ['insert', 'bus', 'lang'].every((k) => Math.abs(echo[k].energyDb) <= 0.1), ['insert', 'bus', 'lang'].map(eRows).join('; '));
+    check('7 Stereo-Quelle (zwei unkorrelierte Kanäle): Energie wie das frühere Echo je Kanal (±0,1 dB), Seite mindestens so stark',
+      Math.abs(echo.stereo.energyDb) <= 0.1 && echo.stereo.sideDb >= -0.1, `Energie ${echo.stereo.energyDb.toFixed(3)} dB, Seite ${echo.stereo.sideDb.toFixed(2)} dB`);
+    check('7 Echo breit: Seite/Mitte ±1 dB um 0 (vorher −∞), Korrelation links/rechts unter 0,1', ['insert', 'bus', 'lang'].every((k) => Math.abs(echo[k].sideMidDb) <= 1 && Math.abs(echo[k].corr) < 0.1),
+      ['insert', 'bus', 'lang'].map(eRows).join('; '));
+    check('7 Ping-Pong: Wiederholungen 1–4 abwechselnd L, R, L, R, im Raster höchstens so spät wie das frühere Mono-Echo, Gegenkanal still (< −100 dB), Pegel je Wiederholung √2 · mono (±0,05 dB)',
+      ['insert', 'bus', 'lang'].every((k) => echo[k].taps.every((t, i) => t.side === (i % 2 ? 'R' : 'L') && t.offset >= 0 && t.offset <= t.monoOffset && t.otherDb < -100 && Math.abs(t.levelDb) <= 0.05)),
+      echo.insert.taps.map((t) => `${t.side} ${t.offset}/${t.monoOffset} Werte, Gegenkanal ${t.otherDb.toFixed(0)} dB, ${t.levelDb.toFixed(3)} dB`).join(' · '));
+    check('7 Echo-Voreinstellung: Lautheit gegen trocken höchstens ±1,5 LU (Drums / Fläche / Bass)', Object.values(echo.lufs).every((v) => Math.abs(v) <= 1.5),
+      Object.entries(echo.lufs).map(([k, v]) => `${k.slice(6)} ${v >= 0 ? '+' : ''}${v.toFixed(2)} LU`).join(', '));
 
     check('Keine Konsolenfehler', app.errors.length === 0, app.errors.slice(0, 3).join(' | '));
   } catch (err) {

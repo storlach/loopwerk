@@ -97,13 +97,16 @@ function installHelpers() {
       const busMute = await renderProject(S.echoProject({ busMute: true }), library, o);
       return {
         mute: await busPart({ mute: true }), solo: await busPart({ solo2: true }),
-        busMute: S.diff(dry, busMute), panR: await busPart({ pan: -1 }, 1), panL: await busPart({ pan: -1 }, 0),
+        busMute: S.diff(dry, busMute), panL: await busPart({ pan: -1 }, 0), panRL: await busPart({ pan: 1 }, 0),
       };
     });
     check('10 Spur stumm: Bus unter −120 dB', t10.mute < -120, `${t10.mute} dB`);
     check('10 Andere Spur solo: Bus unter −120 dB', t10.solo < -120, `${t10.solo} dB`);
     check('10 Bus stumm: nur das trockene Signal', t10.busMute < 1e-7, t10.busMute.toExponential(2));
-    check('10 Panorama −1: rechter Kanal des Busses unter −120 dB, links klingt er', t10.panR < -120 && t10.panL > -60, `rechts ${t10.panR} dB, links ${t10.panL.toFixed(1)} dB`);
+    // Vor dem Panorama klänge der Bus bei −1 und +1 gleich. Das Echo verteilt die Mitte als Ping-Pong (erste Wiederholung
+    // links), die Seite bleibt: links ist das Echo einer Quelle ganz links deutlich lauter als das einer Quelle ganz rechts.
+    check('10 Send hinter dem Panorama: Bus links bei Panorama −1 mindestens 10 dB lauter als bei +1', t10.panL > -60 && t10.panL - t10.panRL >= 10,
+      `links bei −1 ${t10.panL.toFixed(1)} dB, bei +1 ${t10.panRL.toFixed(1)} dB`);
 
     // ---------- 11. Hall-Bus ----------
     const t11 = await page.evaluate(async () => {
