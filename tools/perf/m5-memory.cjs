@@ -1,4 +1,4 @@
-// Speicher. Aufruf: node m5-memory.cjs <heap|sounds|undo|tempo|leaks|idb>
+// Speicher. Aufruf: node m5-memory.cjs <heap|sounds|stoebern|undo|tempo|leaks|idb>
 const { start, launch, newPage, stats, fmt, load, sleep } = require('./lib.cjs');
 const S = require('./scen.cjs');
 const part = process.argv[2] || 'heap';
@@ -86,6 +86,32 @@ async function open(browser, srv, path = '/', opts = {}) {
     console.log(`Alle Sounds einmal benutzt nach weiteren ${tAll} ms:`, JSON.stringify(a2), JSON.stringify(h2));
     const net = srv.log.filter((l) => /\.wav$/.test(l.p));
     console.log('Audio-Anfragen:', net.length, 'Dateien,', (net.reduce((a, l) => a + l.bytes, 0) / 1e6).toFixed(1), 'MB');
+    await ctx.close();
+  }
+
+  // Stöbern wie im Regal: alle Sounds nacheinander vorhören, danach Ruhe – wie viel Klangspeicher bleibt? Song noch vollständig?
+  if (part === 'stoebern') {
+    const { page, cdp, ctx } = await open(browser, srv, '/');
+    const a0 = await page.evaluate(audioBytes);
+    const t0 = Date.now();
+    const peak = await page.evaluate(async (fn) => {
+      const bytes = new Function('return (' + fn + ')')();
+      const { engine, library } = window.loopwerk;
+      let max = 0;
+      const ids = library.list().filter((s) => s.lazy).map((s) => s.id);
+      for (let i = 0; i < ids.length; i++) {
+        await engine.previewSample(ids[i]).catch(() => {});
+        engine.stopPreview();
+        if (i % 25 === 0) { await new Promise((r) => setTimeout(r, 3500)); max = Math.max(max, bytes().MB); }
+      }
+      return { n: ids.length, max };
+    }, audioBytes.toString());
+    const tAll = Date.now() - t0;
+    await sleep(4500);
+    const a1 = await page.evaluate(audioBytes); const h1 = await heap(cdp);
+    const song = await page.evaluate(() => { const { store, library } = window.loopwerk; const ids = store.project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)); return { clips: ids.length, ready: ids.filter((id) => library.get(id)?.buffer && !library.get(id).lazy).length }; });
+    console.log('Start:', JSON.stringify(a0));
+    console.log(`${peak.n} Sounds vorgehört in ${tAll} ms, höchster Stand zwischendurch ${peak.max} MB · danach:`, JSON.stringify(a1), JSON.stringify(h1), '· Song-Sounds geladen', `${song.ready}/${song.clips}`);
     await ctx.close();
   }
 

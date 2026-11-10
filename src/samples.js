@@ -1954,6 +1954,11 @@ async function shiftBuffer(buffer, semis, loop) {
   return b;
 }
 
+// Obergrenze für vorgehörte Sounds, die nicht im Song liegen (Analyse: Klänge am Handy bis 150 MB gut); die Grundausstattung
+// (rund 115 MB) passt darunter
+export const SOUND_CACHE_BYTES = 150e6;
+const TRIM_DELAY_MS = 3000;
+
 export class Library extends Emitter {
   constructor() {
     super();
@@ -1972,6 +1977,66 @@ export class Library extends Emitter {
     this._recipesJson = null; // zuletzt übernommene project.recipes (applyRecipes)
     this._recipeRun = Promise.resolve();
     this.materialColors = false; // Krachwerk: colorCat aus dem Material (Kiste und Song gleich gefärbt)
+    // Freigeben (trim): vorgehörte Katalog-Sounds und erzeugte Loops, die weder im Song liegen noch gerade klingen
+    // (inUse liefert die IDs, main.js), fallen über cacheLimit Bytes wieder weg – zuletzt benutzte bleiben
+    this.cacheLimit = SOUND_CACHE_BYTES;
+    this.inUse = null;
+    this._used = new Map(); // id → Zähler der letzten Benutzung
+    this._useTick = 0;
+    this._trimTimer = null;
+  }
+
+  // ---------- Speicher ----------
+
+  _touch(id) { this._used.set(id, ++this._useTick); }
+
+  // Lässt sich der Klang später genauso wieder laden bzw. erzeugen? Eigene Sounds, Patterns, Rezepte und Testsignale nicht.
+  _releasable(s) {
+    return !s.lazy && !!(s.def || s._load) && s.category !== 'own' && !s.make && !s.recipeKey && !s.cooked
+      && !this.pending.has(s.id) && !this._inflight.has(s);
+  }
+
+  // Bytes eines Sounds samt seiner Fassungen (gedehnt, andere Tonart)
+  soundBytes(s) {
+    const b = (x) => (x ? x.length * x.numberOfChannels * 4 : 0);
+    let n = b(s.buffer) + (s.orig && s.orig !== s.buffer ? b(s.orig) : 0);
+    for (const v of this.variants.values()) if (v.baseId === s.id) n += b(v.buffer);
+    for (const v of this.keyedVariants.values()) if (v.baseId === s.id) n += b(v.buffer);
+    return n;
+  }
+
+  _release(s) {
+    s.buffer = null;
+    if (s._load) s.orig = null;
+    s.lazy = true;
+    this.prepared.delete(s.id);
+    for (const [k, v] of this.variants) if (v.baseId === s.id) this.variants.delete(k);
+    for (const [k, v] of this.keyedVariants) if (v.baseId === s.id) this.keyedVariants.delete(k);
+  }
+
+  // Über der Obergrenze die am längsten nicht benutzten freigebbaren Sounds entladen; Rückgabe: wie viele
+  trim(limit = this.cacheLimit) {
+    clearTimeout(this._trimTimer);
+    this._trimTimer = null;
+    const pinned = new Set(this.inUse?.() ?? []);
+    const list = [...this.samples.values()].filter((x) => this._releasable(x) && !pinned.has(x.id));
+    let total = list.reduce((a, x) => a + this.soundBytes(x), 0);
+    if (total <= limit) return 0;
+    list.sort((a, b) => (this._used.get(a.id) ?? 0) - (this._used.get(b.id) ?? 0));
+    let n = 0;
+    for (const x of list) {
+      if (total <= limit) break;
+      total -= this.soundBytes(x);
+      this._release(x);
+      n++;
+    }
+    return n;
+  }
+
+  // Aufräumen in Ruhe: erst, wenn eine Weile nichts Neues geladen wurde (lädt jemand viele Sounds am Stück, bleiben sie da)
+  _trimSoon() {
+    clearTimeout(this._trimTimer);
+    this._trimTimer = setTimeout(() => this.trim(), TRIM_DELAY_MS);
   }
 
   // Klang, aus dem die Fassungen entstehen: gebackenes Rezept, sonst das Original
@@ -2292,6 +2357,7 @@ export class Library extends Emitter {
   async ensure(id) {
     const s = this.samples.get(id);
     if (!s) return s;
+    this._touch(id);
     if (!s.lazy) {
       // Nach einem Tempowechsel noch nicht angepasst (kommt sonst im Hintergrund dran): bei Gebrauch sofort –
       // jeder in einer eigenen Aufgabe, damit viele gleichzeitige Anfragen den Hauptthread nicht am Stück belegen
@@ -2311,6 +2377,7 @@ export class Library extends Emitter {
           if (this.prepared.get(id) !== this._tag(s, this.bpm)) await this._prepare(s, this.bpm);
           s.lazy = false;
           this.emit();
+          this._trimSoon();
         } finally {
           this.pending.delete(id);
         }

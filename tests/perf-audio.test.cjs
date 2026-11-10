@@ -223,9 +223,54 @@ async function masteringMeasure() {
   await app.close();
 }
 
+// Klänge freigeben: nach vielen vorgehörten Sounds bleibt der Speicher unter der Obergrenze, der Song bleibt vollständig
+async function soundCache() {
+  const app = await openApp();
+  const { page } = app;
+  try {
+    const r = await page.evaluate(async () => {
+      const { engine, library, store, renderProject } = window.loopwerk;
+      const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+      const songIds = new Set(store.project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)));
+      const rms = (b) => { let e = 0; const d = b.getChannelData(0); for (let i = 0; i < d.length; i++) e += d[i] * d[i]; return Math.sqrt(e / d.length); };
+      const opts = { toBeat: 16, limiter: false };
+      const before = rms(await renderProject(store.project, library, opts));
+      const limit = 20e6;
+      library.cacheLimit = limit;
+      const free = () => library.list().filter((s) => !songIds.has(s.id) && !s.lazy && (s.def || s._load) && s.category !== 'own');
+      const ids = library.list().filter((s) => !songIds.has(s.id) && (s.def || s._load) && s.category !== 'own').map((s) => s.id).slice(0, 60);
+      for (const id of ids) { await engine.previewSample(id).catch(() => {}); engine.stopPreview(); }
+      const last = ids[ids.length - 1];
+      await sleep(3600); // Aufräumen in Ruhe
+      const bytes = free().reduce((a, s) => a + library.soundBytes(s), 0);
+      const song = [...songIds].every((id) => library.get(id)?.buffer && !library.get(id).lazy);
+      const after = rms(await renderProject(store.project, library, opts));
+      // Freigegebener Sound lädt beim nächsten Vorhören wieder
+      const gone = ids.find((id) => library.get(id).lazy);
+      await engine.previewSample(gone);
+      const again = !!library.get(gone)?.buffer && engine.preview?.sampleId === gone;
+      engine.stopPreview();
+      await engine.play(0);
+      await sleep(600);
+      const voices = engine.voices.size;
+      engine.stop();
+      return { bytes, limit, song, before, after, lastLoaded: !library.get(last).lazy, released: ids.filter((id) => library.get(id).lazy).length, again, voices, tracks: store.project.tracks.filter((t) => t.clips.some((c) => c.startBeat < 1)).length };
+    });
+    check('Nach 60 vorgehörten Sounds: Speicher der freigebbaren Klänge unter der Obergrenze', r.bytes <= r.limit && r.released > 0, `${(r.bytes / 1e6).toFixed(1)} MB ≤ ${(r.limit / 1e6).toFixed(0)} MB, ${r.released} freigegeben`);
+    check('Zuletzt vorgehörter Sound bleibt geladen', r.lastLoaded);
+    check('Song-Sounds bleiben geladen, der Song klingt wie vorher', r.song && Math.abs(r.after - r.before) < 1e-4 * Math.max(1, r.before), `RMS ${r.before.toFixed(5)} → ${r.after.toFixed(5)}`);
+    check('Freigegebener Sound lädt beim Vorhören wieder', r.again);
+    check('Song spielt danach (Stimmen geplant)', r.voices >= r.tracks && r.voices > 0, `${r.voices} Stimmen, ${r.tracks} Spuren ab Schlag 0`);
+    check('Klänge freigeben: keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
+  } catch (e) {
+    check('Klänge freigeben: Ablauf ohne Ausnahme', false, e.stack);
+  }
+  await app.close();
+}
+
 (async () => {
   const only = process.env.PERF_AUDIO_ONLY ? process.env.PERF_AUDIO_ONLY.split(',') : null;
-  const parts = { scheduler, krachwerk, exportWorker, masteringMeasure };
+  const parts = { scheduler, krachwerk, exportWorker, masteringMeasure, soundCache };
   for (const [name, fn] of Object.entries(parts)) if (!only || only.includes(name)) await fn();
   finish();
 })();
