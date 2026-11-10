@@ -42,3 +42,8 @@ Jede Spur und die Summe haben heute ein festes Rack: `fx` ist ein Objekt mit ein
 - Ein Song aus einem Starter, der Effekte oder Sends setzt („Melodic Techno“), bekommt beim Erzeugen die neue Fassung (Hall-Bus etwa 2 dB lauter und wärmer); gespeicherte Songs nicht.
 - Wer eine Kopie einer Spur anlegt, kopiert `v` mit. Ältere App-Stände ignorieren das Feld und spielen dann Fassung 1.
 - Neue Fassungen später (`v: 3`) gehen genauso: alte Werte bleiben, neue entstehen nur beim Einschalten.
+
+## Nachtrag 2026-11 – Fassung 1 entfernt (Entscheidung Martin, 2026-11)
+- **Entscheidung:** Auf bestehende Songs muss keine Rücksicht genommen werden. Verzerrer, Kompressor, Hall und Hall-Bus klingen immer wie die frühere Fassung 2, für alte wie neue Projekte. Weg sind `FX_VERSION`, `BUS_VERSION`, `stampFx`, der alte Pegelausgleich des Verzerrers, die Kennlinie 1 + Stärke · 7 / Knie 6 / Ausgleich Stärke · 9 dB des Kompressors und die alte Impulsantwort (`hallImpulse` ist jetzt die frühere `hallImpulse2`).
+- Das Feld `v` wird nicht mehr geschrieben. Steht es in einer alten Datei (an `fx.*` einer Spur oder des Masters, an `project.buses.*`), verwirft `dropFxVersions` es still beim Laden (`Store.replace`, `Store.openSong`); ein Bus-Eintrag, der danach leer ist, fällt weg. Speichern schreibt es also nicht zurück.
+- **Folgen:** Alte Songs mit eingeschaltetem Kompressor oder Verzerrer werden 4–9 LU leiser, ihr Hall rund 6 dB lauter, breiter und ohne Tiefen. Nulltest Fassung 2 vorher/nachher (`tools/perf/render-null.cjs --szene alle-effekte`): −112,5 dB, im Rauschen der Faltung. `tests/effekt-pegel.test.cjs` Teil 1 prüft jetzt: altes Projekt mit `v: 1`, `v: 2` oder ohne `v` klingt wie neu eingeschaltet; der Bezug `tests/fixtures/fx-legacy.f32` ist neu erzeugt.

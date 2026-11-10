@@ -58,7 +58,7 @@ class LimiterProcessor extends AudioWorkletProcessor {
   }
 }
 
-// Gemessener Pegelausgleich (Verzerrer, Fassung 2): Eingang 0 = Bezug (trocken), Eingang 1 = Signal (verzerrt).
+// Gemessener Pegelausgleich (Verzerrer): Eingang 0 = Bezug (trocken), Eingang 1 = Signal (verzerrt).
 // Ausgang = Signal · √(Bezug / Signal), beide Leistungen K-gewichtet (wie LUFS) und zweimal geglättet (tau). Gleicht
 // nur den langsamen Pegel an; die Verdichtung innerhalb eines Schlags bleibt.
 const MATCH_EPS = 1e-10; // ≈ −100 dBFS: darunter kein Ausgleich nach oben

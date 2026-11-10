@@ -1,6 +1,6 @@
 // Wozu: Nulltest für Optimierungen – rendert das Beispiel-Arrangement offline (wie der Export) und schreibt die Abtastwerte
 // als Datei; --compare vergleicht zwei solche Dateien (größte Abweichung, Differenzpegel in dB, bitgleich ja/nein).
-// Aufruf: node tools/perf/render-null.cjs --out <datei.f32> [--szene beispiel|beispiel-ohne-master|hall-spuren] [--takte 8]
+// Aufruf: node tools/perf/render-null.cjs --out <datei.f32> [--szene beispiel|beispiel-ohne-master|hall-spuren|alle-effekte] [--takte 8]
 //         node tools/perf/render-null.cjs --compare <a.f32> <b.f32> [--grenze -100]
 // Beispiel: LW_ROOT=/tmp/vorher node tools/perf/render-null.cjs --out /tmp/a.f32 && node tools/perf/render-null.cjs --out /tmp/b.f32
 //           node tools/perf/render-null.cjs --compare /tmp/a.f32 /tmp/b.f32
@@ -9,7 +9,7 @@ const fs = require('fs');
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 if (args.includes('--help') || !args.length) {
-  console.log('node tools/perf/render-null.cjs --out <datei.f32> [--szene beispiel|beispiel-ohne-master|hall-spuren] [--takte 8]\nnode tools/perf/render-null.cjs --compare <a.f32> <b.f32> [--grenze -100]\nLW_ROOT=<ordner> rendert einen anderen Stand.');
+  console.log('node tools/perf/render-null.cjs --out <datei.f32> [--szene beispiel|beispiel-ohne-master|hall-spuren|alle-effekte] [--takte 8]\nnode tools/perf/render-null.cjs --compare <a.f32> <b.f32> [--grenze -100]\nLW_ROOT=<ordner> rendert einen anderen Stand.');
   process.exit(0);
 }
 
@@ -47,6 +47,16 @@ const { start, launch, newPage } = require('./lib.cjs');
     const { store, library, renderProject } = window.loopwerk;
     if (scene === 'beispiel-ohne-master') store.setMastering({ on: false });
     if (scene === 'hall-spuren') for (const t of store.project.tracks) store.setTrackFx(t.id, 'hall', { on: true });
+    // alle-effekte: Verzerrer (Warm, Amp Crunch, Hart im Wechsel), Kompressor und Hall auf jeder Spur, Kompressor im
+    // Master, dazu der Hall-Bus des Beispiels – deckt die Effekte ab, die früher eine Fassung `v` hatten
+    if (scene === 'alle-effekte') {
+      store.project.tracks.forEach((t, i) => {
+        store.setTrackFx(t.id, 'drive', { on: true, type: ['soft', 'amp-crunch', 'hard'][i % 3], mix: 0.5 });
+        store.setTrackFx(t.id, 'comp', { on: true });
+        store.setTrackFx(t.id, 'hall', { on: true });
+      });
+      store.setMasterFx('comp', { on: true, amount: 0.3 });
+    }
     await library.ensureProject(store.project);
     const buf = await renderProject(store.project, library, { toBeat: bars * store.project.beatsPerBar, tailSeconds: 1, compensate: true });
     const n = buf.length;

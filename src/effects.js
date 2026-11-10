@@ -108,32 +108,30 @@ export function driveCurve(type, drive) {
   return c;
 }
 
-// Fassung der Klangabstimmung (ADR 008, Nachtrag 2026-11). Fehlt `v` an einem Effekt (bzw. am Hall-Bus), klingt er wie vor November 2026
-// – so bleiben gespeicherte Songs gleich. Wer einen Effekt neu einschaltet, bekommt die aktuelle Fassung:
-// Verzerrer und Kompressor pegelneutral, Hall hörbar, breit, ohne Tiefen.
-export const FX_VERSION = { drive: 2, comp: 2, hall: 2 };
-export const BUS_VERSION = { hall: 2 };
-const isV2 = (p) => (p?.v ?? 1) >= 2;
-// Beim Ein- oder Ausschalten die Fassung festhalten (st wird verändert): neu eingeschaltet = aktuelle Fassung; ein
-// alter, eingeschalteter Effekt behält beim Ausschalten v: 1, damit Aus/Ein ihn nicht umstimmt.
-export function stampFx(id, st, wasOn) {
-  if (!FX_VERSION[id] || !st || st.v != null || !!st.on === !!wasOn) return;
-  st.v = st.on ? FX_VERSION[id] : 1;
+// Früher trugen Verzerrer, Kompressor, Hall und Hall-Bus eine Fassung `v` (ADR 005/008, Nachträge 2026-11). Es gibt nur
+// noch eine: Verzerrer und Kompressor pegelneutral, Hall hörbar, breit, ohne Tiefen. Ein `v` aus alten Dateien verwirft
+// das Laden (dropFxVersions, verändert das Projekt).
+export function dropFxVersions(project) {
+  const clean = (fx) => { if (fx && typeof fx === 'object') for (const st of Object.values(fx)) if (st && typeof st === 'object') delete st.v; };
+  for (const t of project?.tracks || []) clean(t?.fx);
+  clean(project?.master?.fx);
+  const buses = project?.buses;
+  if (buses && typeof buses === 'object') {
+    for (const [id, b] of Object.entries(buses)) {
+      if (!b || typeof b !== 'object' || !('v' in b)) continue;
+      delete b.v;
+      if (!Object.keys(b).length) delete buses[id];
+    }
+    if (!Object.keys(buses).length) delete project.buses;
+  }
+  return project;
 }
 
-// Pegelausgleich (Fassung 1): ein mittlerer Pegel (0,3) soll nach der Verzerrung etwa gleich laut bleiben
-function driveMakeup(type, drive) {
-  if (type === 'crush') return 1;
-  const c = driveCurve(type, drive);
-  const at = (x) => Math.abs(c[Math.round(((x + 1) / 2) * (c.length - 1))]);
-  return Math.pow(0.3 / Math.max(1e-6, (at(0.3) + at(-0.3)) / 2), 0.8);
-}
-
-// Pegelausgleich (Fassung 2): Effektivwert eines Sinus mit typischem Musikpegel (Spitze DRIVE_REF) vor und nach der
+// Pegelausgleich: Effektivwert eines Sinus mit typischem Musikpegel (Spitze DRIVE_REF) vor und nach der
 // Kennlinie gleich – gemessen über die Kurve statt an einem Punkt, so bleibt Einschalten etwa gleich laut
 const DRIVE_REF = 0.25;
 const makeupCache = new Map();
-function driveMakeup2(type, drive) {
+function driveMakeup(type, drive) {
   if (type === 'crush') return 1;
   const key = `${type}|${Math.round(drive * 100)}`;
   if (makeupCache.has(key)) return makeupCache.get(key);
@@ -155,7 +153,7 @@ function driveMakeup2(type, drive) {
 
 // Gemessener Ausgleich (Worklet `loopwerk-match`, src/dsp/fx-worklet.js): sig · √(Leistung ref / Leistung sig), beide
 // K-gewichtet wie LUFS und langsam geglättet. null, wenn das Worklet-Modul in diesem Kontext fehlt (dann bleibt der
-// feste Ausgleich driveMakeup2).
+// feste Ausgleich driveMakeup).
 function levelMatch(ctx, ref, sig) {
   let node;
   try {
@@ -168,8 +166,8 @@ function levelMatch(ctx, ref, sig) {
   return { output: node };
 }
 
-// Eingebaute Anhebung des DynamicsCompressor (Blink/WebKit, auch Firefox): (1 / Kennlinie bei 0 dBFS)^0,6. Fassung 2
-// des Kompressors nimmt sie heraus und setzt einen eigenen, kleineren Ausgleich (compMakeupDb).
+// Eingebaute Anhebung des DynamicsCompressor (Blink/WebKit, auch Firefox): (1 / Kennlinie bei 0 dBFS)^0,6. Der
+// Kompressor nimmt sie heraus und setzt einen eigenen, kleineren Ausgleich (compMakeupDb).
 export function dcMakeupDb(threshold, knee, ratio) {
   const lin = (db) => Math.pow(10, db / 20);
   const dB = (x) => 20 * Math.log10(Math.max(1e-30, x));
@@ -188,11 +186,11 @@ export function dcMakeupDb(threshold, knee, ratio) {
   const full = kdb > 0 ? dB(kneeCurve(1, k)) : dB(kneeCurve(kx, k)) - kdb / ratio;
   return -0.6 * full;
 }
-// Ausgleich der Fassung 2: ein Teil der Absenkung, die ein lauter Abschnitt (COMP_REF dBFS) erfährt
+// Ausgleich: ein Teil der Absenkung, die ein lauter Abschnitt (COMP_REF dBFS) erfährt
 const COMP_REF = -11.5;
 const COMP_SHARE = 0.6;
-const COMP2_SLOPE = 4; // Verhältnis 1 + Stärke · 4 (Fassung 1: · 7)
-const COMP2_KNEE = 12;
+const COMP_SLOPE = 4; // Verhältnis 1 + Stärke · 4
+const COMP_KNEE = 12;
 const compMakeupDb = (threshold, ratio) => Math.max(0, COMP_REF - threshold) * (1 - 1 / ratio) * COMP_SHARE;
 
 // Tieffrequenz-Oszillator, dessen Phase an Schlag 0 (grid) ausgerichtet ist. Neustart bei Tempo-/Rasteränderung.
@@ -259,23 +257,18 @@ export const EFFECTS = [
       tone.type = 'lowpass';
       tone.Q.value = 0.5;
       const post = ctx.createGain();
-      const wet = ctx.createGain();
       input.connect(dry).connect(output);
-      input.connect(shaper).connect(dc).connect(tone).connect(post).connect(wet).connect(output);
-      // Anteil als ein gemeinsamer Parameter (mix.offset): trocken = 1 − Anteil, nass = Anteil × Art-Weiche. Eine Kurve
-      // plant nur mix.offset; beide Zweige bleiben immer komplementär, auch beim Wechsel zwischen Verzerrer und Amp.
+      input.connect(shaper).connect(dc).connect(tone).connect(post);
+      // Anteil als ein gemeinsamer Parameter (mix.offset): trocken = 1 − Anteil, nass = Anteil. Eine Kurve plant nur
+      // mix.offset; beide Zweige bleiben immer komplementär, auch beim Wechsel zwischen Verzerrer und Amp.
       const mix = ctx.createConstantSource();
       mix.offset.value = 0;
       const inv = ctx.createGain();
       inv.gain.value = -1;
       dry.gain.value = 1;
-      wet.gain.value = 0;
-      const wetSel = ctx.createGain();
-      const aWetSel = ctx.createGain();
       mix.connect(inv).connect(dry.gain);
-      mix.connect(wetSel).connect(wet.gain);
       mix.start();
-      // Zweiter Zweig: Gitarren-Verstärker mit Box; je nach Art klingt genau einer der beiden Zweige
+      // Zweiter Zweig: Gitarren-Verstärker mit Box; je nach Art klingt genau einer der beiden Zweige (selN/selA)
       const biq = (type, f, q = 0.7, g = 0) => { const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; b.gain.value = g; return b; };
       const aIn = ctx.createGain();
       aIn.gain.value = AMP_IN;
@@ -290,31 +283,20 @@ export const EFFECTS = [
       const aCab = CAB_4X12.map(([t, f, q, g]) => biq(t, f, q, g));
       const aTone = biq('lowpass', 8000, 0.5);
       const aPost = ctx.createGain();
-      const aWet = ctx.createGain();
-      aWet.gain.value = 0;
-      mix.connect(aWetSel).connect(aWet.gain);
-      [input, aIn, aHp, aBoost, aShaper, aDc, aBass, aMid, aTreble, ...aCab, aTone, aPost, aWet, output].reduce((a, b) => a.connect(b));
-      // Fassung 2 (W3): eigener nasser Weg mit gemessenem Ausgleich (levelMatch) – entsteht erst, wenn er gebraucht wird
-      let v2 = null;
-      const ensureV2 = () => {
-        if (v2) return v2;
-        const selN = ctx.createGain();
-        const selA = ctx.createGain();
-        selN.gain.value = 0;
-        selA.gain.value = 0;
-        const shaped = ctx.createGain();
-        post.connect(selN).connect(shaped);
-        aPost.connect(selA).connect(shaped);
-        const match = levelMatch(ctx, input, shaped);
-        const wet2 = ctx.createGain();
-        wet2.gain.value = 0;
-        const gate = ctx.createGain();
-        gate.gain.value = 0;
-        mix.connect(gate).connect(wet2.gain);
-        (match?.output ?? shaped).connect(wet2).connect(output);
-        v2 = { selN, selA, gate, match };
-        return v2;
-      };
+      [input, aIn, aHp, aBoost, aShaper, aDc, aBass, aMid, aTreble, ...aCab, aTone, aPost].reduce((a, b) => a.connect(b));
+      // Nasser Weg (W3): gewählter Zweig → gemessener Ausgleich (levelMatch) → Anteil
+      const selN = ctx.createGain();
+      const selA = ctx.createGain();
+      selN.gain.value = 0;
+      selA.gain.value = 0;
+      const shaped = ctx.createGain();
+      post.connect(selN).connect(shaped);
+      aPost.connect(selA).connect(shaped);
+      const match = levelMatch(ctx, input, shaped);
+      const wet = ctx.createGain();
+      wet.gain.value = 0;
+      mix.connect(wet.gain);
+      (match?.output ?? shaped).connect(wet).connect(output);
       let shape = null;
       return {
         input, output,
@@ -322,13 +304,8 @@ export const EFFECTS = [
         dispose() { try { mix.stop(); } catch { /* schon gestoppt */ } mix.disconnect(); },
         set(p, t, spb, grid, skip) {
           const amp = isAmp(p.type);
-          const on2 = isV2(p);
-          if (on2 || v2) {
-            const n = ensureV2();
-            ramp(n.selN.gain, on2 && !amp ? 1 : 0, t);
-            ramp(n.selA.gain, on2 && amp ? 1 : 0, t);
-            ramp(n.gate.gain, on2 ? 1 : 0, t);
-          }
+          ramp(selN.gain, amp ? 0 : 1, t);
+          ramp(selA.gain, amp ? 1 : 0, t);
           const key = `${p.type}|${Math.round(p.drive * 100)}`;
           if (key !== shape) {
             shape = key;
@@ -346,11 +323,9 @@ export const EFFECTS = [
             ramp(aPost.gain, a.level, t);
             ramp(aTone.frequency, Math.min(toneHz(p.tone), 16000), t);
           } else {
-            ramp(post.gain, on2 ? driveMakeup2(p.type, p.drive) : driveMakeup(p.type, p.drive), t);
+            ramp(post.gain, driveMakeup(p.type, p.drive), t);
             ramp(tone.frequency, toneHz(p.tone), t);
           }
-          ramp(wetSel.gain, amp || on2 ? 0 : 1, t);
-          ramp(aWetSel.gain, amp && !on2 ? 1 : 0, t);
           if (!skip?.mix) ramp(mix.offset, p.mix, t);
         },
       };
@@ -420,26 +395,24 @@ export const EFFECTS = [
     },
     create(ctx) {
       const comp = ctx.createDynamicsCompressor();
-      comp.knee.value = 6;
+      comp.knee.value = COMP_KNEE;
       const makeup = ctx.createGain();
       comp.connect(makeup);
       return {
         input: comp, output: makeup,
         set(p, t) {
-          // Fassung 2: weicheres Knie und flachere Kennlinie (gleichmäßigere Absenkung über verschiedenes Material), die
-          // Anhebung des Browsers heraus, eigener Ausgleich nur für die Absenkung lauter Stellen – Einschalten bleibt
-          // etwa gleich laut, 0 dBFS bleibt unter 0 dBFS
-          const v2 = isV2(p);
+          // Weiches Knie und flache Kennlinie (gleichmäßige Absenkung über verschiedenes Material), die Anhebung des
+          // Browsers heraus, eigener Ausgleich nur für die Absenkung lauter Stellen – Einschalten bleibt etwa gleich
+          // laut, 0 dBFS bleibt unter 0 dBFS
           const thr = -p.amount * 30;
-          const ratio = 1 + p.amount * (v2 ? COMP2_SLOPE : 7);
-          const knee = v2 ? COMP2_KNEE : 6;
+          const ratio = 1 + p.amount * COMP_SLOPE;
           ramp(comp.threshold, thr, t);
           ramp(comp.ratio, ratio, t);
-          ramp(comp.knee, knee, t);
+          ramp(comp.knee, COMP_KNEE, t);
           ramp(comp.attack, p.attack / 1000, t);
           ramp(comp.release, p.release / 1000, t);
           // Automatischer Ausgleich je nach Stärke, dazu der eigene Pegel
-          const auto = v2 ? compMakeupDb(thr, ratio) - dcMakeupDb(thr, knee, ratio) : p.amount * 9;
+          const auto = compMakeupDb(thr, ratio) - dcMakeupDb(thr, COMP_KNEE, ratio);
           ramp(makeup.gain, Math.pow(10, (auto + p.gain) / 20), t);
         },
       };
@@ -518,9 +491,10 @@ export const EFFECTS = [
       const input = ctx.createGain();
       const output = ctx.createGain();
       const conv = ctx.createConvolver();
+      conv.normalize = false;
       const wet = ctx.createGain();
-      // Fassung 2: Impulsantwort mit fester Energie (normalize aus), Pegel über `scale` – als Insert ist der Anteil die
-      // Amplitude des Nachhalls zum Direktsignal, als Bus gilt HALL_BUS_GAIN
+      // Impulsantwort mit fester Energie (normalize aus), Pegel über `scale` – als Insert ist der Anteil die Amplitude
+      // des Nachhalls zum Direktsignal, als Bus gilt HALL_BUS_GAIN
       const scale = ctx.createGain();
       if (dry) input.connect(output);
       input.connect(conv).connect(scale).connect(wet).connect(output);
@@ -529,15 +503,12 @@ export const EFFECTS = [
         input, output,
         auto: { mix: { param: wet.gain, map: (v) => v } },
         set(p, t, spb, grid, skip) {
-          const v2 = isV2(p);
           if (!skip?.mix) ramp(wet.gain, dry ? p.mix : 1, t);
-          ramp(scale.gain, v2 ? (dry ? HALL_GAIN : HALL_BUS_GAIN) : 1, t);
+          ramp(scale.gain, dry ? HALL_GAIN : HALL_BUS_GAIN, t);
           const s = Math.round(p.size * 20) / 20; // Impulsantwort nur in 5-%-Schritten neu erzeugen
-          const key = `${v2 ? 2 : 1}|${s}`;
-          if (key !== size) {
-            size = key;
-            conv.normalize = !v2;
-            conv.buffer = v2 ? hallImpulse2(ctx.sampleRate, s) : hallImpulse(ctx.sampleRate, s);
+          if (s !== size) {
+            size = s;
+            conv.buffer = hallImpulse(ctx.sampleRate, s);
           }
         },
       };
@@ -564,37 +535,8 @@ function ramp(param, value, t) {
   else param.setTargetAtTime(value, t, 0.015);
 }
 
-// Künstliche Impulsantwort: Rauschen mit exponentiellem Abklingen, Höhen klingen schneller ab.
 const irCache = new Map();
-export function hallImpulse(sampleRate, size) {
-  const key = `${sampleRate}|${size}`;
-  if (irCache.has(key)) return irCache.get(key);
-  const decay = 0.5 + size * 3.5; // Sekunden bis −60 dB
-  const length = Math.round(sampleRate * (decay + 0.1));
-  const buf = new AudioBuffer({ numberOfChannels: 2, length, sampleRate });
-  for (let c = 0; c < 2; c++) {
-    const rand = mulberry32(17 + c);
-    const d = buf.getChannelData(c);
-    let lp = 0;
-    const pre = Math.round(sampleRate * 0.012); // kurze Vorverzögerung
-    for (let i = pre; i < length; i++) {
-      const t = (i - pre) / sampleRate;
-      const env = Math.pow(10, (-3 * t) / decay); // −60 dB nach `decay`
-      const damp = Math.min(0.95, 0.15 + t / decay); // zunehmende Dämpfung der Höhen
-      lp = lp * damp + (rand() * 2 - 1) * (1 - damp);
-      d[i] = lp * env;
-    }
-  }
-  // Energie normieren, damit „Anteil“ bei jeder Raumgröße ähnlich laut ist
-  let e = 0;
-  for (let c = 0; c < 2; c++) for (const v of buf.getChannelData(c)) e += v * v;
-  const g = 0.7 / Math.sqrt(e / 2 + 1e-12);
-  for (let c = 0; c < 2; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] *= g; }
-  irCache.set(key, buf);
-  return buf;
-}
-
-// Fassung 2 des Halls (K3): links und rechts unabhängiges Rauschen (breit, nicht metallisch), Vorverzögerung mit der
+// Impulsantwort des Halls (K3): links und rechts unabhängiges Rauschen (breit, nicht metallisch), Vorverzögerung mit der
 // Raumgröße, weicher Einsatz, wärmer (Höhen klingen von Anfang an schneller ab), Tiefen unter 200 Hz heraus (24 dB je
 // Oktave), damit der Hall nicht matscht. Energie je Kanal = 1, Pegel über HALL_GAIN: mit der Voreinstellung (Anteil 25 %)
 // liegt der Nachhall einer Fläche rund 12 dB unter dem Direktsignal (bei weißem Rauschen 16 dB – die Energie des Halls
@@ -603,8 +545,8 @@ export const HALL_HP = 200;
 const HALL_GAIN = 0.62;
 // Bus: Send 50 % bei Bus-Lautstärke 80 % klingt wie ein Insert mit Anteil 25 %
 const HALL_BUS_GAIN = (0.25 * HALL_GAIN) / (0.5 * 0.8);
-export function hallImpulse2(sampleRate, size) {
-  const key = `2|${sampleRate}|${size}`;
+export function hallImpulse(sampleRate, size) {
+  const key = `${sampleRate}|${size}`;
   if (irCache.has(key)) return irCache.get(key);
   const decay = 0.6 + size * 3.2; // Sekunden bis −60 dB
   const pre = Math.round(sampleRate * (0.008 + 0.017 * size));

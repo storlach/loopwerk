@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Misst, was ein Effekt beim Einschalten mit dem Pegel macht (Lautheit, Spitze) und wie der Hall liegt (Nachhall zum
 // Direktsignal, Seite/Mitte, Korrelation, Tiefen, Flachheit, Schwerpunkt, Nachhallzeit). Offline-Rendering wie der Export.
-// Aufruf: node tools/klang/effekt-messen.cjs [--teil einschalten,hall] [--fassung 1|2|beide] [--sounds id,id] [--json datei]
-// Beispiel: node tools/klang/effekt-messen.cjs --teil einschalten --fassung beide
+// Aufruf: node tools/klang/effekt-messen.cjs [--teil einschalten,hall] [--sounds id,id] [--json datei]
+// Beispiel: node tools/klang/effekt-messen.cjs --teil einschalten
 const fs = require('fs');
 const path = require('path');
 const { openApp } = require('../../tests/harness.cjs');
@@ -12,7 +12,6 @@ const HELP = `Pegel und Raum der Effekte messen (Klanganalyse W3/K3).
   node tools/klang/effekt-messen.cjs [Optionen]
 
   --teil einschalten,hall   was gemessen wird (Voreinstellung: beides)
-  --fassung 1|2|beide       Fassung der Klangabstimmung (ADR 008 Nachtrag): 1 = wie alte Songs, 2 = neu eingeschaltet
   --sounds a,b,c            Bibliotheks-Sounds für "einschalten" (Voreinstellung: die vier der Klanganalyse)
   --json datei              Ergebnis zusätzlich als JSON schreiben
   --help                    diese Hilfe
@@ -25,18 +24,15 @@ Exit 0 = gemessen (das Skript urteilt nicht), 1 = Bedien- oder Renderfehler.`;
 function fail(m) { console.error('Fehler: ' + m + '\n\n' + HELP); process.exit(1); }
 const a = process.argv.slice(2);
 if (a.includes('--help') || a.includes('-h')) { console.log(HELP); process.exit(0); }
-const o = { teil: ['einschalten', 'hall'], fassung: 'beide', sounds: ['gen-house-groove', 'chords-pad', 'bass-prog', 'synth-arp-prog'], json: null };
+const o = { teil: ['einschalten', 'hall'], sounds: ['gen-house-groove', 'chords-pad', 'bass-prog', 'synth-arp-prog'], json: null };
 for (let i = 0; i < a.length; i++) {
   const v = () => { const x = a[++i]; if (x == null || x.startsWith('--')) fail(`${a[i - 1]} braucht einen Wert`); return x; };
   if (a[i] === '--teil') o.teil = v().split(',');
-  else if (a[i] === '--fassung') o.fassung = v();
   else if (a[i] === '--sounds') o.sounds = v().split(',');
   else if (a[i] === '--json') o.json = path.resolve(v());
   else fail(`unbekanntes Argument ${a[i]}`);
 }
 if (o.teil.some((t) => !['einschalten', 'hall'].includes(t))) fail('--teil: einschalten und/oder hall');
-if (!['1', '2', 'beide'].includes(o.fassung)) fail('--fassung: 1, 2 oder beide');
-const fassungen = o.fassung === 'beide' ? [1, 2] : [Number(o.fassung)];
 
 (async () => {
   const app = await openApp({ fresh: true });
@@ -44,7 +40,7 @@ const fassungen = o.fassung === 'beide' ? [1, 2] : [Number(o.fassung)];
   page.setDefaultTimeout(0);
   let res;
   try {
-    res = await page.evaluate(async ({ o, fassungen }) => {
+    res = await page.evaluate(async ({ o }) => {
       const { library, renderProject } = window.loopwerk;
       const FX = await import('./src/effects.js');
       const L = await import('./src/dsp/loudness.js');
@@ -63,7 +59,7 @@ const fassungen = o.fassung === 'beide' ? [1, 2] : [Number(o.fassung)];
         if (fx) p.tracks[0].fx = fx;
         return p;
       };
-      const fxWith = (id, patch, v) => { const fx = FX.defaultFx(); fx[id] = { ...fx[id], on: true, ...patch }; if (v >= 2) fx[id].v = v; return fx; };
+      const fxWith = (id, patch) => { const fx = FX.defaultFx(); fx[id] = { ...fx[id], on: true, ...patch }; return fx; };
       if (o.teil.includes('einschalten')) {
         await library.ensureMany(o.sounds);
         const cases = {
@@ -78,11 +74,8 @@ const fassungen = o.fassung === 'beide' ? [1, 2] : [Number(o.fassung)];
           const l0 = lufs(dry), p0 = peakDb(dry);
           out.einschalten[sid] = { trocken: { lufs: r2(l0), spitze: r2(p0) } };
           for (const [name, [id, patch]] of Object.entries(cases)) {
-            for (const v of fassungen) {
-              if (v === 2 && !FX.FX_VERSION[id]) continue;
-              const b = await renderProject(project(sid, fxWith(id, patch, v)), library, { toBeat: 16, limiter: false, tailSeconds: 1 });
-              out.einschalten[sid][`${name}${FX.FX_VERSION[id] ? ` (F${v})` : ''}`] = { dLU: r2(lufs(b) - l0), dSpitze: r2(peakDb(b) - p0) };
-            }
+            const b = await renderProject(project(sid, fxWith(id, patch)), library, { toBeat: 16, limiter: false, tailSeconds: 1 });
+            out.einschalten[sid][name] = { dLU: r2(lufs(b) - l0), dSpitze: r2(peakDb(b) - p0) };
           }
         }
       }
@@ -123,9 +116,9 @@ const fassungen = o.fassung === 'beide' ? [1, 2] : [Number(o.fassung)];
             flachheit: r2(Math.exp(lg / n) / (ar / n)), schwerpunktHz: Math.round(cen / cw), rt60: t5 != null && t35 != null ? r2(2 * (t35 - t5)) : null };
         };
         await library.ensureMany(['chords-pad']);
-        const pad = async (fx, sends, busV) => {
+        const pad = async (fx, sends) => {
           const p = project('chords-pad', fx);
-          if (sends) { p.tracks[0].sends = sends; p.buses = { hall: { volume: 0.8, ...(busV >= 2 ? { v: busV } : {}) } }; }
+          if (sends) { p.tracks[0].sends = sends; p.buses = { hall: { volume: 0.8 } }; }
           return renderProject(p, library, { toBeat: 16, limiter: false, tailSeconds: 3 });
         };
         const dry = await pad(null);
@@ -136,14 +129,11 @@ const fassungen = o.fassung === 'beide' ? [1, 2] : [Number(o.fassung)];
           for (let i = 0; i < Lw.length; i++) { mt += (Lw[i] + Rw[i]) ** 2; stt += (Lw[i] - Rw[i]) ** 2; }
           return { flaecheNachhallDb: r2(dB(ew / ed)), flaecheBreite: Math.round(1000 * stt / (mt + stt)) / 1000 };
         };
-        for (const v of fassungen) {
-          const vv = v >= 2 ? { v } : {};
-          out.hall[`Insert F${v}`] = { ...(await ir({ ...vv }, false, 1)), ...wetOf(await pad(fxWith('hall', {}, v))) };
-          out.hall[`Bus F${v} (Send 50 %)`] = { ...(await ir({ size: 0.6, mix: 1, ...vv }, true, 0.4)), ...wetOf(await pad(null, { hall: 0.5 }, v)) };
-        }
+        out.hall.Insert = { ...(await ir({}, false, 1)), ...wetOf(await pad(fxWith('hall', {}))) };
+        out.hall['Bus (Send 50 %)'] = { ...(await ir({ size: 0.6, mix: 1 }, true, 0.4)), ...wetOf(await pad(null, { hall: 0.5 })) };
       }
       return out;
-    }, { o, fassungen });
+    }, { o });
   } catch (e) {
     console.error('Fehler beim Rendern: ' + (e.message || e).split('\n')[0]);
     await app.close();

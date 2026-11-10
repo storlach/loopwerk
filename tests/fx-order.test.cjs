@@ -1,5 +1,6 @@
 // Tests für die Effekt-Reihenfolge (2.14, ADR 008): node tests/fx-order.test.cjs [--ref] [--shots]
-// --ref schreibt die Referenz tests/fixtures/fx-legacy.f32 (nur mit dem Stand vor 2.14 erzeugen!).
+// --ref schreibt den Bezug tests/fixtures/fx-legacy.f32: Klang der Grundreihenfolge mit allen Effekten (zuletzt neu erzeugt,
+// als die frühere Fassung 1 der Effekte wegfiel, 2026-11). Nur neu erzeugen, wenn sich der Klang eines Effekts gewollt ändert.
 const path = require('path');
 const fs = require('fs');
 const { openApp, createChecker } = require('./harness.cjs');
@@ -10,7 +11,7 @@ const SHOT_DIR = process.env.SHOT_DIR || '.';
 const REF_PATH = path.join(__dirname, 'fixtures', 'fx-legacy.f32');
 const { check, finish } = createChecker();
 
-// Läuft im Browser: Demo-Projekt, alle sieben Spur-Effekte auf „Drums“, Master mit EQ und Hall; Schlag 16–24, 22,05 kHz.
+// Läuft im Browser: Demo-Projekt ohne fxOrder, alle sieben Spur-Effekte auf „Drums“, Master mit EQ und Hall; Schlag 16–24, 22,05 kHz.
 function renderLegacy() {
   return (async () => {
     const m = await import('./src/model.js');
@@ -75,7 +76,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
   const app = await openApp({ viewport: { width: 1440, height: 900 } });
   const { page } = app;
   try {
-    // ---------- 1. Null-Test alter Projekte ----------
+    // ---------- 1. Null-Test: Grundreihenfolge gegen den gespeicherten Klang ----------
     const now = new Float32Array(await page.evaluate(renderLegacy));
     if (REF) {
       fs.mkdirSync(path.dirname(REF_PATH), { recursive: true });
@@ -91,7 +92,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     // Rauschboden zwischen zwei Seitenladungen: −94 bis −110 dB (die synthetischen Loops schwanken minimal)
     // Grenze −80 dB: Der Bezug gegen sich selbst (zweimal frisch erzeugt) liegt bei −87 bis −90 dB, weil die Kette mit allen
     // sieben Effekten das Rauschen zwischen zwei Seitenladungen um etwa 45 dB anhebt. Ein echter Unterschied läge über −40 dB.
-    check('1 Null-Test: altes Projekt klingt wie vor 2.14 (Differenz < −80 dB)', ref.length === now.length && db(diff) < -80 && peak > 0.05,
+    check('1 Null-Test: Grundreihenfolge (Projekt ohne fxOrder, alle Effekte) klingt wie der gespeicherte Bezug (Differenz < −80 dB)', ref.length === now.length && db(diff) < -80 && peak > 0.05,
       `Differenz ${fmtDb(db(diff))}, Spitze ${peak.toFixed(3)}, Längen ${ref.length}/${now.length}`);
 
     await page.evaluate(installHelpers);
