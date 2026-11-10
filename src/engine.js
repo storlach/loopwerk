@@ -527,7 +527,8 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, 
 // Festhalten (ADR 011): onlyClips = nur diese Clips (Spur-Stumm und Solo zählen nicht, andere Clips verdecken weiter),
 // dry = Spuren ohne Effekte, Fader 1, Mitte, ohne Sends und Kurven. leadSeconds: Vorlauf vor fromBeat, in dem
 // Stimmen, die in fromBeat schon laufen, wie bei einem Loop-Sprung einblenden (gefaltet ergibt das den Loop-Klang).
-export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true, onlyClips = null, dry = false, leadSeconds = 0 } = {}) {
+// slices: nach jeder Spur dem Hauptthread eine Pause lassen (Hintergrund-Messung); signal: davor abbrechen (AbortError).
+export async function renderProject(project, library, { sampleRate = 44100, limiter = true, fromBeat = 0, toBeat, tailSeconds = 0, onProgress, compensate = false, mastering, analysis = false, monitor = null, pad = null, onlyTrack = null, master = true, onlyClips = null, dry = false, leadSeconds = 0, slices = false, signal = null } = {}) {
   if (onlyTrack != null || master === false || onlyClips || dry) project = renderView(project, { onlyTrack, master, onlyClips, dry });
   if (master === false) limiter = false;
   const only = onlyClips ? new Set(onlyClips) : null;
@@ -577,7 +578,12 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
     }
   }
   const audible = audibleMap(project);
+  const pause = async () => {
+    if (signal?.aborted) throw new DOMException('Rendern abgebrochen', 'AbortError');
+    if (slices) await new Promise((r) => setTimeout(r, 0));
+  };
   for (const track of project.tracks) {
+    await pause();
     const dest = mix.tracks.get(track.id).input;
     for (const clip of track.clips) {
       if (only && !only.has(clip.id)) continue;
@@ -588,6 +594,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
       }
     }
   }
+  await pause();
   if (onProgress) {
     for (let t = 2; t < duration; t += 2) {
       ctx.suspend(t).then(() => { onProgress(t / duration); ctx.resume(); });

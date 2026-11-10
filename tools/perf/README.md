@@ -5,7 +5,7 @@ Aus der Bestandsanalyse `docs/analyse/2026-11-performance.md`. Jede Verbesserung
 - `lib.cjs` – Server wie GitHub Pages (gzip, Cache-Kopfzeilen), Browser mit CPU- und Netz-Drossel. `LW_ROOT` wählt einen anderen Stand (z. B. einen Worktree).
 - `m1-load.cjs`, `m1b-firsttone.cjs`, `m2-startprofile.cjs` – Laden und Start
 - `m3-interact.cjs`, `m3b-playtrace.cjs`, `m3c-arranger-scale.cjs`, `m3d-idle.cjs`, `m3e-play-css.cjs` – Bedienung, Arranger-Skalierung, Stillstand, Licht
-- `m4-audio.cjs` – Scheduler, Audio-Last, Export
+- `m4-audio.cjs` – Scheduler, Audio-Last, Export (`export`: dazu „gleich wie Hauptthread“ und Prüfsummen eines festen Testsignals für den Bitgleich-Vergleich vorher/nachher)
 - `m5-memory.cjs`, `m8b-render-mem.cjs` – Speicher
 - `m6-sw.cjs [Teile A–D] [--netz 4g] [--runs N]`, `m6b-offline.cjs` – Service Worker, ohne Netz (Teil D braucht ein Zertifikat: `cert.pem`/`key.pem` in `tools/perf/`, z. B. `openssl req -x509 -newkey rsa:2048 -nodes -keyout tools/perf/key.pem -out tools/perf/cert.pem -days 30 -subj /CN=127.0.0.1`)
 - `m7-tests.cjs` – Dauer der Testkette

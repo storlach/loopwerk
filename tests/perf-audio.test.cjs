@@ -105,9 +105,67 @@ async function krachwerk() {
   server.close();
 }
 
+// MP3 und WAV im Worker: bitgleich zum alten Weg im Hauptthread, ohne lange Aufgabe
+async function exportWorker() {
+  const app = await openApp();
+  const { page } = app;
+  try {
+    const r = await page.evaluate(async () => {
+      const ex = await import('./src/export.js');
+      const { encodeWav } = await import('./src/wav.js');
+      const { crc32 } = await import('./src/zip.js');
+      const sha = async (blob) => [...new Uint8Array(await crypto.subtle.digest('SHA-1', await blob.arrayBuffer()))].map((x) => x.toString(16).padStart(2, '0')).join('').slice(0, 16);
+      const sig = (sec) => {
+        const sr = 44100; const n = sec * sr;
+        const b = new AudioBuffer({ numberOfChannels: 2, length: n, sampleRate: sr });
+        for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = 0.6 * Math.sin(2 * Math.PI * (220 + 110 * c) * i / sr) + 0.5 * Math.sin(i / 7000) * Math.sin(2 * Math.PI * 3000 * i / sr); }
+        return b;
+      };
+      const out = {};
+      // Prüfsumme des alten Encoders (Stand vor Teil 2, tools/perf/m4-audio.cjs export) für dasselbe Testsignal
+      const ten = sig(10);
+      out.mp3 = await sha(await ex.encodeMp3(ten));
+      out.mp3Page = await sha(await ex.encodeMp3(ten, { worker: false }));
+      const w = await ex.encodeWavJob(ten, { crc: true });
+      const ref = new Uint8Array(await encodeWav(ten).arrayBuffer());
+      out.wavSame = (await sha(w.blob)) === (await sha(new Blob([ref])));
+      out.crcOk = w.crc === crc32(ref);
+      out.peakOk = Math.abs(w.peak - ex.peakOf(ten)) < 1e-9;
+      // 60 s Audio im Worker: lange Aufgaben während des Kodierens
+      const long = sig(60);
+      await new Promise((res) => setTimeout(res, 100)); // die Aufgabe, die das Signal erzeugt hat, nicht mitzählen
+      const lts = [];
+      const obs = new PerformanceObserver((l) => { for (const e of l.getEntries()) lts.push(e.duration); });
+      obs.observe({ type: 'longtask' });
+      const t0 = performance.now();
+      let progress = 0;
+      await ex.encodeMp3(long, { onProgress: () => progress++ });
+      out.ms = performance.now() - t0;
+      await new Promise((res) => setTimeout(res, 50));
+      obs.disconnect();
+      out.ltMax = Math.max(0, ...lts);
+      out.progress = progress;
+      // Abbrechen
+      const ctl = new AbortController();
+      const p = ex.encodeMp3(long, { signal: ctl.signal });
+      setTimeout(() => ctl.abort(), 100);
+      out.abort = await p.then(() => 'fertig', (e) => e.code);
+      return out;
+    });
+    check('MP3 bitgleich zum alten Encoder (Prüfsumme Testsignal) und zum Weg im Hauptthread', r.mp3 === '7b073758dbfbac11' && r.mp3 === r.mp3Page, `${r.mp3} / ${r.mp3Page}`);
+    check('WAV im Worker: gleiche Bytes, Prüfsumme und Spitze wie im Hauptthread', r.wavSame && r.crcOk && r.peakOk, JSON.stringify({ wav: r.wavSame, crc: r.crcOk, peak: r.peakOk }));
+    check('MP3 (60 s Audio) im Worker: keine Aufgabe im Hauptthread über 250 ms, Fortschritt kommt', r.ltMax < 250 && r.progress > 3, `längste ${Math.round(r.ltMax)} ms, ${r.progress} Meldungen, ${Math.round(r.ms)} ms`);
+    check('MP3 abbrechen', r.abort === 'aborted', r.abort);
+    check('Export: keine Konsolenfehler', app.errors.length === 0, app.errors.join(' | '));
+  } catch (e) {
+    check('Export: Ablauf ohne Ausnahme', false, e.stack);
+  }
+  await app.close();
+}
+
 (async () => {
   const only = process.env.PERF_AUDIO_ONLY ? process.env.PERF_AUDIO_ONLY.split(',') : null;
-  const parts = { scheduler, krachwerk };
+  const parts = { scheduler, krachwerk, exportWorker };
   for (const [name, fn] of Object.entries(parts)) if (!only || only.includes(name)) await fn();
   finish();
 })();
