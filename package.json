@@ -11,6 +11,7 @@
     "shots": "node tools/shots.cjs",
     "hoerprobe": "node tools/hoerprobe.cjs",
     "messen": "node tools/messen.cjs",
-    "vorschau": "node tools/vorschau.cjs"
+    "vorschau": "node tools/vorschau.cjs",
+    "klangvergleich": "node tools/klangvergleich.cjs"
   }
 }

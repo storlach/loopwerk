@@ -19,6 +19,9 @@ Ein Feature wird immer als vollständige, benutzbare Scheibe gebaut – nie „e
 8. **Sichern** – Git-Commit und Skill `artifact-sync` (Veröffentlichen).
 9. **Rückmeldung an Martin** – was neu ist, wie man es ausprobiert, was getestet ist und was nur er mit den Ohren beurteilen kann.
 
+## Skript zuerst
+Vor jedem wiederkehrenden Handgriff in `tools/` nachsehen (Liste in `CLAUDE.md`, Abschnitt „Werkzeuge“). Fehlt eines und der Handgriff kommt zum zweiten Mal: Skript schreiben, ausführen, in die Liste eintragen. Agenten bekommen das im Auftrag mit und nennen neue Skripte im Bericht.
+
 ## Parallelisieren
 
 Unabhängige Teile (z. B. zwei Effekte, Export und Bibliothek) dürfen parallel in getrennten Worktrees laufen; eingefügt wird mit `tools/merge-agent.sh <branch> --tests …`. Modell- und Engine-Änderungen, die sich überschneiden, nie parallel.

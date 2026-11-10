@@ -59,7 +59,13 @@ Kleine Änderungen macht die Haupt-Session selbst. Agenten lohnen sich ab einer 
 - Persönliche Skills von Martin: `kritiker` (unabhängige Prüfung), `scout` (Skill-Review)
 
 ## Werkzeuge (`tools/`, je mit `--help`)
-Wiederkehrende Handgriffe laufen über Skripte, nicht von Hand:
+**Skript zuerst** (gilt für die Haupt-Session und jeden Agenten): Wiederkehrende Handgriffe laufen über Skripte, nicht von Hand.
+- Vor einem Handgriff nachsehen, ob es in `tools/` schon ein Skript dafür gibt, und es benutzen.
+- Wer denselben Handgriff zum zweiten Mal von Hand macht oder ein Wegwerf-Skript zum zweiten Mal schreibt (messen, vergleichen, prüfen, umformen, aufräumen), macht daraus ein Skript in `tools/`: Kopfzeilen mit Wozu, Aufruf, Beispiel; `--help`; verlässlicher Exit-Code; ohne neue Abhängigkeit. Dann ausführen, hier in die Liste eintragen und im Bericht nennen.
+- Messskripte für einen Befund gehören zum Ergebnis (wie `tools/perf/`), damit vorher und nachher mit demselben Skript gemessen wird.
+- Nicht ins Skript gehört, was Urteil braucht: Fehlersuche, Entwurf, Klang beurteilen.
+
+Vorhanden:
 - `npm test` (`tools/test.cjs`) – fährt die ganze Kette ohne Abbruch, wiederholt Ausfälle einmal (grün / wackelig / rot). `--only a,b`, `--repeat N name`. Die Kette steht in `tests/chain.txt` (ein Name je Zeile; neue Tests dort anhängen, `merge=union`).
 - `npm run regeln` – prüft die Regeln oben mechanisch (feste Farben, Editions-Abfragen in `src/ui`, Timer in der Engine, Katalog-Pflichtangaben, Tests in der Kette) gegen `tools/regeln-basis.json`.
 - `tools/merge-agent.sh <branch> [--tests a,b]` – Agent-Branch einfügen, testen, Worktree und Branch aufräumen; bleibt bei echten Konflikten stehen.
@@ -67,6 +73,9 @@ Wiederkehrende Handgriffe laufen über Skripte, nicht von Hand:
 - `npm run hoerprobe -- --starter <id|alle> | --beispiel | --projekt <datei>` – WAV zum Anhören (`--takte`, `--stil`); `npm run messen -- <wav…>` – Lautheit, Spitze, Bänder, Stereobreite (`--ziel`).
 - `npm run vorschau` – seit der letzten Veröffentlichung geänderte Dateien als `files`-Objekt; `--verify <ordner>` prüft veröffentlichte Stände gegen die Git-Historie; `--mark <n>` merkt den Stand (`tools/vorschau-stand.json`).
 - `tools/push.sh` – Push mit Wiederholung bei Netzfehlern.
+- `npm run klangvergleich -- <vorher-ordner> <nachher-ordner>` – paart Hörproben über den Namen und zeigt Lautheit, Spitze, Tiefen/Mitten/Höhen und Breite vorher → nachher.
+- `tools/agenten.sh [--dateien]` – Stand aller Agent-Worktrees (Commits vor main, ungesicherte Dateien, letzte Änderung).
+- `tools/perf/` – Messskripte der Performance-Analyse (Laden, Bedienung, Arranger-Skalierung, Stillstand, Audio-Last, Speicher, Service Worker), siehe `tools/perf/README.md`.
 
 ## Fertig heißt
 - `npm test` ohne Rot (alle Stufen: Timing samplegenau, Effekte, Export, UI-Interaktionen, keine Konsolenfehler) und `npm run regeln` ohne neue Verstöße.
