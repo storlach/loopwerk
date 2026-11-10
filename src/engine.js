@@ -516,6 +516,13 @@ function playSegment(ctx, dest, clip, sample, seg, fromBeat, toBeat, when, spb, 
   return startVoice(ctx, dest, sample.buffer, when, offset, stopAt, envelopeAutomation(clip, fromBeat, toBeat, when, spb), rate);
 }
 
+// Nächste Aufgabe der Ereignisschleife (ohne Zeitgeber): zwischen zwei Scheiben kommt die Oberfläche dran
+const nextTask = () => new Promise((resolve) => {
+  const ch = new MessageChannel();
+  ch.port1.onmessage = () => { ch.port1.close(); resolve(); };
+  ch.port2.postMessage(0);
+});
+
 // Rendert das Projekt offline (Tests, Export). Tonart- und Akkord-Fassungen werden vorher bereitgestellt. Bereich [fromBeat, toBeat] plus Ausklang in Sekunden;
 // onProgress(0…1) wird etwa alle 2 s Audio gemeldet.
 // compensate: Limiter-Verzögerung herausrechnen (für Export, damit Loops exakt am Dateianfang beginnen).
@@ -580,7 +587,7 @@ export async function renderProject(project, library, { sampleRate = 44100, limi
   const audible = audibleMap(project);
   const pause = async () => {
     if (signal?.aborted) throw new DOMException('Rendern abgebrochen', 'AbortError');
-    if (slices) await new Promise((r) => setTimeout(r, 0));
+    if (slices) await nextTask();
   };
   for (const track of project.tracks) {
     await pause();
