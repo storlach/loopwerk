@@ -54,7 +54,7 @@ const variant = Number(opt('--variante', 0));
       console.log(`\n${id}  (Mastering ${m.mastering.on ? m.mastering.style : 'aus'})`);
       console.log(`  Spuren: ${Object.entries(t).map(([k, v]) => `${k} ${v}`).join(' · ')}   D−B ${db}`);
       console.log(`  Fader: ${m.strips.map((s) => `${s.name} ${s.volume}`).join(' · ')}`);
-      console.log(`  Refrain: ${m.refrain.lufs} LUFS · <250 ${m.refrain.low} % · >2k ${m.refrain.hi2k} % · >4k ${m.refrain.hi4k} % · Breite ${m.refrain.width}`);
+      console.log(`  Refrain: ${m.refrain.lufs} LUFS · <250 ${m.refrain.low} % · >2k ${m.refrain.hi2k} % · >4k ${m.refrain.hi4k} % · Breite ${m.refrain.width} (über 250 Hz ${m.refrain.widthUp})`);
       console.log(`  Song ${m.range.song.map((b) => b / 4 + 1).join('–')}: ${Object.entries(m.song).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
       if (sends) console.log(`  Sends: ${sends}`);
     }

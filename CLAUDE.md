@@ -82,6 +82,8 @@ Vorhanden:
   - `anschlaege.cjs <wav|Sound> [--faktoren …]` – Anschläge zählen und ihre Lage nach der Tempo-Dehnung prüfen.
   - `rechenzeit.cjs <alter-stand> [<neuer-stand>]` – Rechenaufwand der synthetischen Bibliothek zweier Stände.
   - `druck-bezug.cjs [--muster …] [--write]` – Bezug `tests/fixtures/druck-old-patterns.json` erneuern, wenn sich Kit-Stimmen gewollt ändern.
+  - `pegel.cjs [--tabelle] [--streuung] [--teile lib,kits,klaenge]` – Lautheit je Sound, Kit und Melodie-Klang gegen das Ziel ihrer Rolle (ADR 013); `--tabelle` schreibt `src/levels-table.js` neu (nach jeder Änderung an Sounds, Kits oder Klängen).
+  - `mix.cjs [--starter a,b|alle] [--beispiel] [--stile …|keine]` – Mischung der Starter und des Beispiels: Spuren im Refrain, Drums minus Bass, Tiefen/Höhen, Breite, Song ohne Mastering und je Stil, Sends.
 - `tools/perf/` – Messskripte der Performance-Analyse (Laden, Bedienung, Arranger-Skalierung, Stillstand, Audio-Last, Speicher, Service Worker), siehe `tools/perf/README.md`; `kennzahlen.cjs [--vorher <ordner>]` misst die wichtigsten Kennzahlen der Oberfläche in einem Lauf (Stillstand, Abspielen und Zoom mit 448 Clips, Leinwand-Speicher).
 
 ## Fertig heißt

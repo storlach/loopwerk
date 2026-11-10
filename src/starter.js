@@ -35,13 +35,42 @@ const FORMS = {
   ambient: { drums: 'CD', perc: 'D', bass: 'VCBD', chords: 'IVCBDO', lead: 'VCBDO' },
 };
 const ROLES = [
-  { id: 'drums', name: 'Drums', volume: 0.85 },
-  { id: 'perc', name: 'Percussion', volume: 0.55 },
-  { id: 'bass', name: 'Bass', volume: 0.75 },
-  { id: 'chords', name: 'Akkorde', volume: 0.6 },
-  { id: 'lead', name: 'Melodie', volume: 0.5 },
-  { id: 'fx', name: 'FX', volume: 0.55 },
+  { id: 'drums', name: 'Drums' },
+  { id: 'perc', name: 'Percussion' },
+  { id: 'bass', name: 'Bass' },
+  { id: 'chords', name: 'Akkorde' },
+  { id: 'lead', name: 'Melodie' },
+  { id: 'fx', name: 'FX' },
 ];
+
+// Mischung je Rolle (ADR 013, Klanganalyse K1/K2/K3/W1). Die Sounds liegen nach Lautheit je Rolle (src/levels.js), die
+// Fader setzen das Verhältnis: Drums führen (Loop mit Kick, kein Hochpass), Bass trocken und mittig darunter, alles
+// andere mit Hochpass; Hats/Percussion heller und leicht seitlich; Raum über die Sends (nie auf Drums mit Kick und Bass).
+// hp: Hochpass (Hz), high: EQ-Höhen (dB), hall/echo: Send-Anteil, pan: Panorama. style: Mastering-Stil des Genres.
+const MIX_BASE = {
+  drums: { volume: 1, high: 2 },
+  perc: { volume: 0.7, hp: 400, high: 4, pan: -0.35, hall: 0.2 },
+  bass: { volume: 0.8 },
+  chords: { volume: 0.75, hp: 180, hall: 0.35, pan: -0.15 },
+  lead: { volume: 0.75, hp: 250, hall: 0.3, echo: 0.25, pan: 0.3 },
+  fx: { volume: 0.6, hp: 150, hall: 0.3 },
+};
+const MIX_GENRE = {
+  house: { style: 'loud' },
+  techno: { style: 'loud', drums: { volume: 1, high: 5 }, perc: { high: 6 }, chords: { high: 3 } },
+  hiphop: { style: 'balanced' },
+  lofi: { style: 'warm' },
+  pop: { style: 'bright' },
+  trap: { style: 'loud' },
+  ambient: { style: 'warm', drums: { volume: 0.75, high: 2 }, chords: { volume: 0.85, hp: 150, high: 3, hall: 0.5 }, lead: { volume: 0.8, high: 3, hall: 0.5, echo: 0.3 } },
+  rock: { style: 'balanced', drums: { volume: 1, high: 0 }, chords: { high: -3 }, lead: { high: -2 } },
+  breaks: { style: 'loud' },
+};
+export function starterMix(genreId) {
+  const g = MIX_GENRE[genreId] ?? {};
+  const roles = Object.fromEntries(Object.entries(MIX_BASE).map(([id, m]) => [id, { ...m, ...(g[id] || {}) }]));
+  return { style: g.style ?? 'balanced', roles };
+}
 
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
 
@@ -154,14 +183,15 @@ export function planStarter(genreId, library, { variant = 0, project = null, mod
       roleTrack[role.id] = true;
       actions.push({
         ...base, fromBar: r.from, toBar: r.to,
-        track: first ? 'neu' : role.id, as: role.id, name: role.name, volume: role.volume,
+        track: first ? 'neu' : role.id, as: role.id, name: role.name, volume: role.volume, ...(role.pan ? { pan: role.pan } : {}),
         ...(i === 0 && fadeIn ? { fadeInBars: fadeIn } : {}),
         ...(i === list.length - 1 && fadeOut && r.to === lastBar ? { fadeOutBars: fadeOut } : {}),
       });
     });
   };
   const used = [];
-  const R = Object.fromEntries(ROLES.map((r) => [r.id, r]));
+  const mix = starterMix(genre.id);
+  const R = Object.fromEntries(ROLES.map((r) => [r.id, { ...r, volume: mix.roles[r.id].volume, pan: mix.roles[r.id].pan }]));
 
   // Drums
   if (genre.drums === 'rock') {
@@ -201,6 +231,19 @@ export function planStarter(genreId, library, { variant = 0, project = null, mod
   fxAt.sort((a, b) => a.bar - b.bar).forEach((f, i) => actions.push({
     do: 'add', sound: f.sound, fromBar: f.bar, toBar: f.bar, track: i === 0 ? 'neu' : 'fx', as: 'fx', name: R.fx.name, volume: R.fx.volume,
   }));
+
+  // Mischung: Hochpass, Höhen, Sends je Rolle (nur Spuren, die es gibt); Mastering mit dem Stil des Genres
+  const present = new Set([...Object.keys(roleTrack), ...(fxAt.length ? ['fx'] : [])]);
+  for (const id of ROLES.map((r) => r.id)) {
+    if (!present.has(id)) continue;
+    const m = mix.roles[id];
+    const fx = {};
+    if (m.hp) fx.filter = { on: true, type: 'highpass', cutoff: cutoffFor(m.hp), reso: 0, lfo: 'off' };
+    if (m.high) fx.eq = { on: true, low: 0, mid: 0, high: m.high };
+    if (Object.keys(fx).length) actions.push({ do: 'fx', target: id, fx });
+    for (const bus of ['hall', 'echo']) if (m[bus] > 0) actions.push({ do: 'send', target: id, bus, amount: m[bus] });
+  }
+  if (mode === 'replace') actions.push({ do: 'mastering', on: true, style: mix.style });
 
   const summary = `${genre.label} · ${bpm} BPM${key ? ` · ${key}` : ''} · Takt ${appendAt}–${lastBar}: ${parts.map((p) => p[1]).join(' → ')}`;
   return { summary, actions, genre: genre.id, variant, sections: parts.map(([id, label]) => ({ id, label, ...at[id] })), progression: chordSeq, used };
@@ -280,7 +323,7 @@ function planMelodic(genre, library, { variant = 0, project = null, mode = 'repl
     type: 'drums', name: 'Techno-Kick', bars: 1, kit: 'druck', rows: { ...emptyRows(), kick: row([0, 4, 8, 12]) },
     kick: { ...KICK_VOICES.druck.defaults, pitch: kickPitchFor(tonic) },
   };
-  place('kick', 'Kick', 0.9, { do: 'pattern', id: 'kick', pattern: kick }, 'VCDO', { fadeOut: 4 });
+  place('kick', 'Kick', 0.8, { do: 'pattern', id: 'kick', pattern: kick }, 'VCDO', { fadeOut: 4 });
   // Hats und Clap: offene Hat auf dem Offbeat, leise Sechzehntel dazwischen, Clap auf 2 und 4
   const hats = {
     type: 'drums', name: 'Offbeat-Hats', bars: 1, kit: 'druck',
@@ -289,13 +332,13 @@ function planMelodic(genre, library, { variant = 0, project = null, mode = 'repl
       hat: row(v && rand() < 0.5 ? [3, 7, 11, 15] : [1, 3, 5, 7, 9, 11, 13, 15], 0.32), snare: row(v && rand() < 0.5 ? [7, 15] : [], 0.5),
     },
   };
-  place('drums', 'Drums', 0.62, { do: 'pattern', id: 'drums', pattern: hats }, 'IVCDO', { fadeOut: 4 });
+  place('drums', 'Drums', 0.55, { do: 'pattern', id: 'drums', pattern: hats }, 'IVCDO', { fadeOut: 4 });
   // Rollbass: drei Sechzehntel je Schlag, folgt den Akkorden (Vorlage auf Stufe i)
   const bass = { type: 'synth', name: 'Rollbass', bars: 1, preset: 'rollbass', notes: bassTemplateNotes(v && rand() < 0.4 ? 'offbeat' : 'roll', tonic, 1), follow: true };
-  place('bass', 'Bass', 0.72, { do: 'pattern', id: 'bass', pattern: bass }, 'IVCD');
+  place('bass', 'Bass', 0.86, { do: 'pattern', id: 'bass', pattern: bass }, 'IVCD');
   // Dunkle Fläche und Arp folgen den Akkorden
-  place('chords', 'Akkorde', 0.5, { do: 'accomp', id: 'chords', style: 'pad' }, 'IVCBDO', { fadeOut: 4 });
-  place('lead', 'Melodie', 0.42, { do: 'accomp', id: 'lead', style: 'arp' }, 'CBD', { fadeOut: 4 });
+  place('chords', 'Akkorde', 1, { do: 'accomp', id: 'chords', style: 'pad' }, 'IVCBDO', { fadeOut: 4 });
+  place('lead', 'Melodie', 0.23, { do: 'accomp', id: 'lead', style: 'arp' }, 'CBD', { fadeOut: 4 });
 
   // FX wie bei den anderen Starts: Riser vor den Drops, Crash auf Groove, Drops und Outro
   const fx = (re) => candidates(library, 'fx', [...genre.pool, 'pop'], (s) => (s.kind === 'oneshot' || s.oneShot) && re.test(s.name));
@@ -306,7 +349,7 @@ function planMelodic(genre, library, { variant = 0, project = null, mode = 'repl
   for (const p of ['C', 'D']) if (riser) fxAt.push({ sound: riser.id, bar: Math.max(at.I.from, at[p].from - barsOf(riser)) });
   for (const p of ['V', 'C', 'D', 'O']) if (crash) fxAt.push({ sound: crash.id, bar: at[p].from });
   fxAt.sort((a, b) => a.bar - b.bar).forEach((f, i) => actions.push({
-    do: 'add', sound: f.sound, fromBar: f.bar, toBar: f.bar, track: i === 0 ? 'neu' : 'fx', as: 'fx', name: 'FX', volume: 0.5,
+    do: 'add', sound: f.sound, fromBar: f.bar, toBar: f.bar, track: i === 0 ? 'neu' : 'fx', as: 'fx', name: 'FX', volume: 0.37,
   }));
 
   // Mischung: Hochpass auf allem außer Kick und Bass, Pumpen auf Fläche und Bass, Sends nur von Fläche und Arp
@@ -393,6 +436,7 @@ export function applyPlan(store, library, plan) {
       const patch = {};
       if (a.name) patch.name = String(a.name).slice(0, 32);
       if (a.volume >= 0 && a.volume <= 1) patch.volume = Math.round(a.volume * 100) / 100;
+      if (a.pan >= -1 && a.pan <= 1 && a.pan !== 0) patch.pan = Math.round(a.pan * 100) / 100;
       if (Object.keys(patch).length) store.setTrack(t.id, patch);
     }
     return t;

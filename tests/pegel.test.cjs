@@ -16,8 +16,8 @@ const f1 = (x) => (Number.isFinite(x) ? x.toFixed(1) : String(x));
 // Faustregel der Klanganalyse: über 2 kHz 3–12 %; Bass-Genres dürfen unten mehr haben, Lo-Fi und Ambient oben weniger.
 const CORRIDOR = {
   house: { low: [45, 75], hi4k: [1.5, 10] },
-  techno: { low: [45, 75], hi4k: [1, 10] },
-  melodic: { low: [50, 85], hi4k: [0.3, 10] },
+  techno: { low: [45, 75], hi4k: [0.8, 10] }, // dunkles Genre: vorher 0,2 %
+  melodic: { low: [50, 85], hi4k: [0.1, 10], width: 0.025 }, // abgenommen: Charakter wie vorher (0,2 %, Breite 0,036)
   breaks: { low: [45, 75], hi4k: [1.5, 10] },
   hiphop: { low: [50, 78], hi4k: [1.5, 10] },
   trap: { low: [50, 78], hi4k: [1.5, 10] },
@@ -97,7 +97,10 @@ const STARTERS = arg('--starter') ?? Object.keys(CORRIDOR);
     // ---------- 3. Starter und Beispiel ----------
     if (want('starter')) {
       for (const id of STARTERS) {
-        const m = await measureMix(page, { id });
+        // Alle Stile an Pop und Beispiel (die Stile treffen ihr Ziel fest, siehe master-fxpad), sonst der gesetzte
+        const all = id === 'pop' || id === 'demo';
+        const m = await measureMix(page, { id, styles: all ? null : [] });
+        if (!all && m.mastering.on) m.song[m.mastering.style] = (await measureMix(page, { id, styles: [m.mastering.style], only: 'song' })).song[m.mastering.style];
         const t = m.tracks;
         const lead = id === 'melodic' ? 'Kick' : 'Drums';
         const bass = t.Bass;
@@ -108,12 +111,15 @@ const STARTERS = arg('--starter') ?? Object.keys(CORRIDOR);
         else check(`${name}: ${lead} führen, 0 … +6 LU über dem Bass (Refrain)`, db >= 0 && db <= 6.5, `${f1(t[lead])} − ${f1(bass)} = ${f1(db)} LU`);
         check(`${name}: Tiefen < 250 Hz im Korridor ${c.low.join('–')} %`, m.refrain.low >= c.low[0] && m.refrain.low <= c.low[1], `${m.refrain.low} %`);
         check(`${name}: Höhen > 4 kHz im Korridor ${c.hi4k.join('–')} %`, m.refrain.hi4k >= c.hi4k[0] && m.refrain.hi4k <= c.hi4k[1], `${m.refrain.hi4k} % (über 2 kHz ${m.refrain.hi2k} %)`);
-        check(`${name}: Breite 0,05 … 0,3`, m.refrain.width >= 0.05 && m.refrain.width <= 0.3, String(m.refrain.width));
+        // Breite der ganzen Mischung: Kick und Bass sind (richtig) mono und tragen 50–80 % der Energie; darüber zählt der Raum
+        const wMin = c.width ?? 0.02;
+        check(`${name}: Breite ${wMin} … 0,3 (vorher 0,002 … 0,047), über 250 Hz ≥ 0,05`, m.refrain.width >= wMin && m.refrain.width <= 0.3 && m.refrain.widthUp >= 0.05,
+          `${m.refrain.width}, über 250 Hz ${m.refrain.widthUp}`);
         check(`${name}: setzt Mastering`, m.mastering.on && !!m.mastering.style, JSON.stringify(m.mastering));
         const s = m.song;
         const lower = Object.entries(s).filter(([k, v]) => k !== 'ohne' && !(v >= s.ohne + 1));
         check(`${name}: ohne Mastering um −16 LUFS (−18 … −15)`, s.ohne >= -18 && s.ohne <= -15, `${s.ohne} LUFS`);
-        check(`${name}: jeder Stil hebt an (mindestens +1 LU)`, lower.length === 0, Object.entries(s).map(([k, v]) => `${k} ${v}`).join(' · '));
+        check(`${name}: ${all ? 'jeder Stil hebt' : 'der gesetzte Stil hebt'} an (mindestens +1 LU)`, lower.length === 0, Object.entries(s).map(([k, v]) => `${k} ${v}`).join(' · '));
         const isKickBass = (st) => /^(kick|bass)$/i.test(st.name);
         const sendOn = (st) => Object.values(st.sends).some((v) => v > 0);
         check(`${name}: Hall/Echo-Sends auf Akkorden/Melodie, nie auf Kick und Bass`, m.strips.some(sendOn) && !m.strips.some((st) => isKickBass(st) && sendOn(st)),

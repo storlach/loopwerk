@@ -49,8 +49,27 @@ export function createDemoProject() {
   put(5, 'synth-lead', 12, 4);
   put(6, 'fx-riser', 2, 2);
   put(6, 'fx-crash', 4, 1);
-  p.tracks[3].volume = 0.65;
-  p.tracks[4].volume = 0.6;
+  // Mischung wie die Starter (ADR 013): Drums führen, Bass trocken in der Mitte, sonst Hochpass, Hats heller und seitlich,
+  // Raum über die Sends, Mastering an
+  const hp = (hz) => ({ on: true, type: 'highpass', cutoff: Math.round((Math.log2(hz / 40) / 8.81) * 1000) / 1000, reso: 0, lfo: 'off' });
+  const mix = [
+    { volume: 1, fx: { eq: { on: true, low: 0, mid: 0, high: 2 } } },
+    { volume: 0.7, pan: -0.35, fx: { filter: hp(400), eq: { on: true, low: 0, mid: 0, high: 4 } }, sends: { hall: 0.2 } },
+    { volume: 0.8 },
+    { volume: 0.75, pan: -0.15, fx: { filter: hp(180) }, sends: { hall: 0.35 } },
+    { volume: 0.7, pan: 0.3, fx: { filter: hp(250) }, sends: { hall: 0.3, echo: 0.25 } },
+    { volume: 0.75, pan: 0.1, fx: { filter: hp(250) }, sends: { hall: 0.3 } },
+    { volume: 0.6, fx: { filter: hp(150) }, sends: { hall: 0.3 } },
+  ];
+  mix.forEach((m, i) => {
+    const t = p.tracks[i];
+    t.volume = m.volume;
+    if (m.pan) t.pan = m.pan;
+    if (m.fx) t.fx = withFx(m.fx);
+    if (m.sends) t.sends = { ...m.sends };
+  });
+  p.buses = { hall: { v: BUS_VERSION.hall } };
+  p.master = { volume: 0.85, fx: null, mastering: { on: true, style: 'balanced' } };
   return p;
 }
 

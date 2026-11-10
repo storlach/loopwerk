@@ -78,8 +78,8 @@ async function measureAll(page, { parts = ['lib', 'kits', 'klaenge'], ids = '' }
 // Refrain so, wie er klingt (Mastering wie gesetzt): Lautheit, Anteil unter 250 Hz / über 2 kHz / über 4 kHz, Breite
 // (Seite/(Mitte+Seite)); dazu der Song-Abschnitt `song` ohne Mastering und mit jedem Stil (wie der Export).
 // Ergebnis auch: Mastering-Einstellung, Sends und Effekte je Spur (für die Prüfung „nie auf Kick und Bass“).
-async function measureMix(page, { id, variant = 0, styles = null, song = 'VC' } = {}) {
-  return page.evaluate(async ({ id, variant, styles, song }) => {
+async function measureMix(page, { id, variant = 0, styles = null, song = 'VC', only = null } = {}) {
+  return page.evaluate(async ({ id, variant, styles, song, only }) => {
     const M = await import('./src/model.js');
     const S = await import('./src/starter.js');
     const E = await import('./src/export.js');
@@ -108,6 +108,12 @@ async function measureMix(page, { id, variant = 0, styles = null, song = 'VC' } 
     const exportRange = async (p, b0, b1, style) => { const q = withStyle(p, style); q.loop = { ...(q.loop || {}), startBeat: b0, endBeat: b1 }; return decode((await E.exportSong(q, library, { format: 'wav', range: 'loop', tail: false })).blob); };
     const lufs = (b) => Lo.integratedLoudness([b.getChannelData(0), b.getChannelData(1)], b.sampleRate);
     const r1 = (x) => Math.round(x * 10) / 10;
+    const [s0, s1] = sec(song.split(''));
+    if (only === 'song') {
+      const o = {};
+      for (const st of styles) o[st] = r1(lufs(await exportRange(p0, s0, s1, st)));
+      return { song: o };
+    }
     // Spuren im Refrain, ohne Limiter und ohne Mastering
     const tracks = {};
     const dry = withStyle(p0, null);
@@ -121,7 +127,7 @@ async function measureMix(page, { id, variant = 0, styles = null, song = 'VC' } 
     const N = 4096, sr = ref.sampleRate, win = F.hann(N);
     const l = ref.getChannelData(0), r = ref.getChannelData(1);
     const re = new Float64Array(N), im = new Float64Array(N), re2 = new Float64Array(N), im2 = new Float64Array(N);
-    let tot = 0, low = 0, hi2 = 0, hi4 = 0, mid = 0, side = 0;
+    let tot = 0, low = 0, hi2 = 0, hi4 = 0, mid = 0, side = 0, midU = 0, sideU = 0;
     for (let s0 = 0; s0 + N <= l.length; s0 += N / 2) {
       for (let i = 0; i < N; i++) { const x = l[s0 + i], y = r[s0 + i]; re[i] = 0.5 * (x + y) * win[i]; im[i] = 0; re2[i] = 0.5 * (x - y) * win[i]; im2[i] = 0; }
       F.fft(re, im); F.fft(re2, im2);
@@ -129,18 +135,17 @@ async function measureMix(page, { id, variant = 0, styles = null, song = 'VC' } 
         const f = (k * sr) / N; if (f < 30) continue;
         const pm = re[k] * re[k] + im[k] * im[k], ps = re2[k] * re2[k] + im2[k] * im2[k], e = pm + ps;
         tot += e; mid += pm; side += ps;
-        if (f < 250) low += e; if (f >= 2000) hi2 += e; if (f >= 4000) hi4 += e;
+        if (f < 250) low += e; else { midU += pm; sideU += ps; } if (f >= 2000) hi2 += e; if (f >= 4000) hi4 += e;
       }
     }
     const pc = (x) => r1((100 * x) / tot);
-    const refrain = { lufs: r1(lufs(ref)), low: pc(low), hi2k: pc(hi2), hi4k: pc(hi4), width: Math.round((1000 * side) / (mid + side)) / 1000 };
+    const refrain = { lufs: r1(lufs(ref)), low: pc(low), hi2k: pc(hi2), hi4k: pc(hi4), width: Math.round((1000 * side) / (mid + side)) / 1000, widthUp: Math.round((1000 * sideU) / (midU + sideU)) / 1000 };
     // Song-Abschnitt ohne Mastering und mit jedem Stil
-    const [s0, s1] = sec(song.split(''));
     const out = { ohne: r1(lufs(await exportRange(p0, s0, s1, null))) };
     for (const st of styles ?? MC.MASTER_STYLES.map((x) => x.id)) out[st] = r1(lufs(await exportRange(p0, s0, s1, st)));
     const strips = p0.tracks.filter((t) => t.clips.length).map((t) => ({ name: t.name, volume: t.volume, sends: t.sends ?? {}, fx: Object.fromEntries(Object.entries(t.fx || {}).filter(([, v]) => v?.on).map(([k, v]) => [k, v])) }));
     return { tracks, refrain, song: out, mastering: set, strips, range: { refrain: [c0, c1], song: [s0, s1] } };
-  }, { id, variant, styles, song });
+  }, { id, variant, styles, song, only });
 }
 
 module.exports = { measureAll, measureMix, BEAT, MELODY, CHORDS };
