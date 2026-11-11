@@ -74,6 +74,14 @@ Zahlen: Funktionen heute am Loopwerk-Desktop.
 
 9. **Clip öffnen (Martin, 2026-11-11):** Doppelklick auf den Clip öffnet den Editor als Overlay, das einfliegt und sich wieder schließen lässt.
 
+## Martins Skizze (2026-11-11)
+
+Bild: `skizze-martin-1.webp` („schneller Frankenstein“, zeigt die Richtung). Was sie über die Entscheidungen hinaus zeigt:
+
+- Die Reiter sitzen als Knöpfe **oben rechts im Deck**: File · Assets · Effekte · FX Pad. Die Leiste darunter ist eine schwebende Karte über dem rechten Rand des Arrangers.
+- Der Clip-Editor ist eine Karte in der Mitte mit ✕ und „Übernehmen“: links Wellenform und Werkzeuge, rechts Clip-Lautstärke, Ein-/Ausblenden, Geschwindigkeit, Tonhöhe, Autotune.
+- Abweichungen von den Entscheidungen oben, noch zu klären: vier Reiter mit „Effekte“ und „FX Pad“ statt „Mixer“; Tempo und Tonart stehen noch im Deck.
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
