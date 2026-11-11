@@ -76,11 +76,12 @@ Zahlen: Funktionen heute am Loopwerk-Desktop.
 
 ## Martins Skizze (2026-11-11)
 
-Bild: `skizze-martin-1.webp` („schneller Frankenstein“, zeigt die Richtung). Was sie über die Entscheidungen hinaus zeigt:
+Bild: `skizze-martin-1.webp`. **Gilt rein optisch, nicht inhaltlich** (Martin): Inhalt und Benennung der Reiter richten sich nach den Entscheidungen oben, nicht nach der Skizze. Was optisch daraus gilt:
 
-- Die Reiter sitzen als Knöpfe **oben rechts im Deck**: File · Assets · Effekte · FX Pad. Die Leiste darunter ist eine schwebende Karte über dem rechten Rand des Arrangers.
-- Der Clip-Editor ist eine Karte in der Mitte mit ✕ und „Übernehmen“: links Wellenform und Werkzeuge, rechts Clip-Lautstärke, Ein-/Ausblenden, Geschwindigkeit, Tonhöhe, Autotune.
-- Abweichungen von den Entscheidungen oben, noch zu klären: vier Reiter mit „Effekte“ und „FX Pad“ statt „Mixer“; Tempo und Tonart stehen noch im Deck.
+- Die Reiter sitzen als Knöpfe **oben rechts im Deck**; der gewählte ist hell hinterlegt.
+- Die Leiste darunter ist eine **schwebende Karte** mit runden Ecken über dem rechten Rand des Arrangers, mit Überschrift und Unterreitern (Suchen · Erstellen).
+- Der Clip-Editor ist eine **Karte in der Mitte** mit ✕ und einem Hauptknopf, zweispaltig: links Wellenform und Werkzeuge, rechts die Regler.
+- Großzügige Abstände, wenige Rahmen, Abschnitte mit kleinen Überschriften in Versalien.
 
 ## Technischer Rahmen
 
