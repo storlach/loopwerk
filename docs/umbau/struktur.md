@@ -83,6 +83,11 @@ Bild: `skizze-martin-1.webp`. **Gilt rein optisch, nicht inhaltlich** (Martin): 
 - Der Clip-Editor ist eine **Karte in der Mitte** mit ✕ und einem Hauptknopf, zweispaltig: links Wellenform und Werkzeuge, rechts die Regler.
 - Großzügige Abstände, wenige Rahmen, Abschnitte mit kleinen Überschriften in Versalien.
 
+### Mixer (Skizzen 2 und 3, ebenfalls nur Beispiele für Anordnung und Layout)
+
+- `skizze-martin-2-mixer.webp`: Der Mixer steht **rechts neben den Spuren, Zeile für Zeile auf Höhe der jeweiligen Spur**. Je Zeile: Kurzinfo zu den Effekten („Keine Effekte“), Anteil zu Hall und Echo, Lautstärke mit dB-Wert, M und S, darunter die Pegelanzeige. Über die Effekt-Kurzinfo kommt man zu den Effekten dieser Spur.
+- `skizze-martin-3-summe.webp`: Die Einstellungen der Summe als schwebende Karte mit Abschnitten: Mastering (Schalter, Messwerte, Stil), Busse (Hall, Echo), Master (Lautstärke, Effekte).
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
