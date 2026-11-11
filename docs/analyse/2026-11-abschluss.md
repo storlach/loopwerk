@@ -51,7 +51,7 @@ Die Takte 1–16 sind Intro und Strophe; im Refrain liegen die Tiefen niedriger 
 Drei echte Fehler behoben: Der Tipp zur Mehrfachauswahl erscheint am Handy, Ziehen aus dem Regal beendet das Einsetzen, das Clip-Menü bleibt bei 360 px im Bild.
 
 ### Werkzeuge
-Regel „Skript zuerst“ in `CLAUDE.md`; neue Rolle `performance-engineer`; 22 Skripte in `tools/`, `tools/klang/`, `tools/perf/` (Liste in `CLAUDE.md`). Die Testkette (73 Tests) läuft ohne Abbruch und wiederholt Ausfälle selbst.
+Regel „Skript zuerst“ in `CLAUDE.md`; neue Rolle `performance-engineer`; 49 Skripte: 16 in `tools/`, 7 in `tools/klang/`, 26 Messskripte in `tools/perf/` (Liste in `CLAUDE.md`). Die Testkette (73 Tests) läuft ohne Abbruch und wiederholt Ausfälle selbst.
 
 ## 2. Hörproben
 Erzeugt mit `npm run hoerprobe`; neu rendern: `node tools/hoerprobe.cjs --starter alle --takte 1-16 --stil wie-gesetzt --out <ordner>`.
