@@ -1,6 +1,6 @@
 # Bestandsanalyse November 2026: Abschluss
 
-Stand: Vorschau 110. Die vier Berichte liegen daneben: `2026-11-klang.md`, `2026-11-performance.md`, `2026-11-bedienung.md`, `2026-11-konzept.md`.
+Stand: Vorschau 111. Die vier Berichte liegen daneben: `2026-11-klang.md`, `2026-11-performance.md`, `2026-11-bedienung.md`, `2026-11-konzept.md`.
 
 **Maßstab:** Jemand ohne Vorkenntnisse macht im Browser, am Handy wie am Rechner, in wenigen Minuten einen Song, der druckvoll und fertig klingt; in Krachwerk dasselbe nur mit Selbstgemachtem.
 
@@ -107,5 +107,5 @@ Der Befund „160 von 166 Loops sind synthetisch, deshalb dünn“ aus dem Konze
 - **Amen Break bei −40 %:** 2 von 12 leisen Zwischenschlägen sitzen 12–15 ms daneben; Drum-Loops werden beim Verlangsamen 1–2 dB leiser.
 - **Play 1,5 s nach dem Start** in einem Messfall 236 statt 153 ms, Ursache ungeklärt.
 - **Speicher je Offline-Rendern:** Chrome hinterlässt 3–6 MB je Lauf (Worklet-Modul); gemildert durch weniger Messläufe.
-- **Wackelige Tests unter Last:** `ambient`, `perf-ui`, `tempo-fast`, `automation`, `v17` (Zeitgrenzen). `v20` ist behoben (Testfehler, kein App-Fehler).
+- **Wackelige Tests unter Last:** `ambient`, `perf-ui`, `automation`, `v17` (Zeitgrenzen). `tempo-fast` war ein echter Befund: Die Mastering-Messung startete mitten im Tempowechsel und blockierte 50–58 ms; sie wartet jetzt, bis der Wechsel fertig ist (6 von 6 Läufen grün). `v20` ist behoben (Testfehler, kein App-Fehler).
 - **`effekt-pegel` Teil 5** vergleicht die Starter nicht mehr mit gespeicherten Bezugswerten, nur noch mit dem Rückfall-Limiter.
