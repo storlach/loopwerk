@@ -67,11 +67,15 @@ export function mountMasteringAnalysis({ store, engine, library, delay = 1200, s
       if (engine.monitor?.ab) engine.setMonitor(abLevels(an));
     }
   };
-  async function run() {
+  // wait: ausdrücklich verlangte Messung (now) wartet das Halten ab, statt sich neu einzureihen
+  async function run(wait = false) {
     timer = null;
+    if (!masteringOf(store.project).on) return;
+    if (hold?.()) {
+      if (!wait) { schedule(400); return; }
+      while (hold()) await new Promise((r) => { setTimeout(r, 100); });
+    }
     const project = store.project;
-    if (!masteringOf(project).on) return;
-    if (hold?.()) { schedule(400); return; }
     const key = keyOf(project, library);
     if (key === state.key) return;
     if (memo.has(key)) { apply(key, memo.get(key)); emit(); return; }
@@ -118,7 +122,7 @@ export function mountMasteringAnalysis({ store, engine, library, delay = 1200, s
   return {
     state,
     on(fn) { state.listeners.add(fn); },
-    async now() { clearTimeout(timer); if (running) await running.done; return run(); },
+    async now() { clearTimeout(timer); if (running) await running.done; return run(true); },
     // A/B-Vergleich: null → A → B → A …; ende() setzt zurück auf normal
     toggleAB() {
       const cur = engine.monitor?.ab ?? null;
