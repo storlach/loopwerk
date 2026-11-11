@@ -72,7 +72,7 @@ Zahlen: Funktionen heute am Loopwerk-Desktop.
 
 8. **Werkzeuge für das gewählte Element (Martin, 2026-11-11):** Teilen, Kopieren und Löschen stehen in der Kopfzeile über den Spuren, neben Raster und Tempo, und zwar nur, solange ein Element aktiv ist. Dort ist auch der Platz für **Schneiden**; das wird später eine neue Funktion (nicht Teil des Umbaus).
 
-Noch zu klären, wenn Scheibe 4 ansteht: Was heißt „Clip öffnen“ genau (Doppelklick wie heute der Editor?).
+9. **Clip öffnen (Martin, 2026-11-11):** Doppelklick auf den Clip öffnet den Editor als Overlay, das einfliegt und sich wieder schließen lässt.
 
 ## Technischer Rahmen
 
