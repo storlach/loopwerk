@@ -786,7 +786,7 @@ async function boot() {
   const linkImport = mountLinkImport({ ui, importer, engine, own, store, arranger, shelf });
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountSoundState({ store, engine, library, ui, arranger });
-  const mastering = mountMasteringAnalysis({ store, engine, library });
+  const mastering = mountMasteringAnalysis({ store, engine, library, hold: () => tempo.busy });
   mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering });
   const fxpad = mountFxPad({ root: document.getElementById('fxpad'), store, engine, ui });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');

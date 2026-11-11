@@ -50,7 +50,9 @@ const MEMO = 8; // zuletzt gemessene Stände (Rückgängig/Wiederholen ohne neue
 // Hintergrund-Analyse für die Wiedergabe. state: { busy, analysis, error, runs }. Entprellt (delay nach der letzten
 // Änderung), rendert in Scheiben, rechnet im Worker und bricht bei einer neuen Änderung ab; bis zum neuen Ergebnis bleiben
 // die alten Verstärkungen in Kraft. Nach dem App-Start wartet sie zusätzlich startDelay, damit Start und erster Ton frei sind.
-export function mountMasteringAnalysis({ store, engine, library, delay = 1200, startDelay = 2500 }) {
+// hold(): solange wahr, wartet die Messung (z. B. während ein Tempowechsel die Sounds neu vorbereitet – vorher wäre sie
+// verfrüht und blockierte den Hauptthread mitten im Wechsel).
+export function mountMasteringAnalysis({ store, engine, library, delay = 1200, startDelay = 2500, hold = null }) {
   const state = { busy: false, analysis: null, key: null, runs: 0, listeners: new Set() };
   const memo = new Map();
   let timer = null;
@@ -69,6 +71,7 @@ export function mountMasteringAnalysis({ store, engine, library, delay = 1200, s
     timer = null;
     const project = store.project;
     if (!masteringOf(project).on) return;
+    if (hold?.()) { schedule(400); return; }
     const key = keyOf(project, library);
     if (key === state.key) return;
     if (memo.has(key)) { apply(key, memo.get(key)); emit(); return; }
