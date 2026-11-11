@@ -2,6 +2,9 @@
 
 Loop-basierter Music Maker im Browser, angelehnt an Magix Music Maker (ca. 2000). Ziel: niedrigschwellig Musik aus Loops bauen, später eigene Aufnahmen und Bearbeitung. Wächst in Stufen, siehe `docs/ROADMAP.md`.
 
+## Laufende Arbeit
+- **Umbau der Oberfläche (Test, Branch `umbau`):** Auftrag, Regeln, Rückweg und erste Schritte stehen in `docs/umbau/uebergabe.md`. Zuerst lesen, wenn es um die Oberfläche geht. `main` und die bestehende Vorschau bleiben davon unberührt.
+
 ## Technik
 - Reine ES-Module ohne Build-Schritt, Web Audio API. `index.html` hat bewusst kein `<!doctype>`/`<head>`: die Artifact-Veröffentlichung ergänzt das Gerüst (lokal macht das `tests/serve.cjs`).
 - `src/model.js` – Projektmodell + `Store` (alle Änderungen über Aktionen → Undo/Redo). Positionen immer in Schlägen. Überlappende Clips bleiben erhalten; es klingt der obere (`clip.z`, `audibleRanges`).
