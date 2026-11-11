@@ -79,7 +79,7 @@ export function mountMasteringAnalysis({ store, engine, library, delay = 1200, s
     const key = keyOf(project, library);
     if (key === state.key) return;
     if (memo.has(key)) { apply(key, memo.get(key)); emit(); return; }
-    if (running) { await running.done; return run(); }
+    if (running) { await running.done; return run(wait); }
     const ctl = new AbortController();
     let finish;
     running = { key, ctl, done: new Promise((r) => { finish = r; }) };
