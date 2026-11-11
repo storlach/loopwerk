@@ -77,6 +77,7 @@ Vorhanden:
 - `npm run hoerprobe -- --starter <id|alle> | --beispiel | --projekt <datei>` – WAV zum Anhören (`--takte`, `--stil`); `npm run messen -- <wav…>` – Lautheit, Spitze, Bänder, Stereobreite (`--ziel`).
 - `npm run vorschau` – seit der letzten Veröffentlichung geänderte Dateien als `files`-Objekt; `--verify <ordner>` prüft veröffentlichte Stände gegen die Git-Historie; `--mark <n>` merkt den Stand (`tools/vorschau-stand.json`).
 - `tools/push.sh` – Push mit Wiederholung bei Netzfehlern.
+- `npm run funktionen` (`tools/funktionen.cjs`) – Funktionsliste der Oberfläche (`docs/umbau/funktionen.md` und `.json`): jede Bedienfunktion mit Kennung, Beschriftung und Ort je Edition und Gerät, dazu Tastenkürzel und Gesten. `--vergleich <vorher.json>` zeigt, was fehlt, neu ist oder umgezogen ist (Exit 1, wenn etwas fehlt). Dauert rund 4 Minuten.
 - `npm run klangvergleich -- <vorher-ordner> <nachher-ordner>` – paart Hörproben über den Namen und zeigt Lautheit, Spitze, Tiefen/Mitten/Höhen und Breite vorher → nachher.
 - `tools/bisect-test.sh <guter-commit> <testname>` – findet in einem Wegwerf-Worktree den Commit, seit dem ein Test rot ist. Vorher mit `node tools/test.cjs --repeat 6 <name>` prüfen, ob der Test überhaupt verlässlich ist; bei Wacklern ist das Ergebnis Zufall.
 - `tools/agenten.sh [--dateien]` – Stand aller Agent-Worktrees (Commits vor main, ungesicherte Dateien, letzte Änderung).

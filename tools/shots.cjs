@@ -240,4 +240,6 @@ async function main() {
   process.exit(!geschrieben.length || fehler.length ? 1 : 0);
 }
 
-main().catch((e) => { console.error('Fehler: ' + e.message); process.exit(1); });
+// Als Modul (tools/funktionen.cjs): dieselben Szenen ohne Bilder
+module.exports = { SZENE, ABLAUF, GERAETE, EDITIONEN, ruhe, ersterClip };
+if (require.main === module) main().catch((e) => { console.error('Fehler: ' + e.message); process.exit(1); });

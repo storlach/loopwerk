@@ -33,6 +33,11 @@ Es ist ein **Test**: entweder in einer Kopie oder so, dass man ohne Aufwand zur�
 5. In Scheiben umbauen (ein Bereich je Scheibe). Nach jeder Scheibe: Funktionsvergleich, betroffene Tests (`node tools/test.cjs --only …`), `npm run regeln`, Bilder (`npm run shots -- --out … --szene …`, Desktop und Handy), Vorschau aktualisieren, Martin sieht es an.
 6. Erst nach Martins Ja die nächste Scheibe. Die ganze Testkette einmal am Ende jeder größeren Etappe.
 
+## Stand
+- 2026-11-11: Branch `umbau` angelegt. `tools/funktionen.cjs` gebaut und gelaufen: 477 Funktionen (Loopwerk Desktop 280 erreichbar, Handy 186; Krachwerk Desktop 250, Handy 168). Ausgangsstand: `docs/umbau/funktionen.json` (Stand `main` 5b9b359); zwei Läufe hintereinander ergeben denselben Stand. Für den Nachweis nach einer Scheibe: `node tools/funktionen.cjs --out <ordner>/funktionen --vergleich docs/umbau/funktionen.json`.
+- Grenzen der Liste: „versteckt“ heißt, das Element war in keinem geprüften Zustand zu sehen. Das trifft auch Funktionen, die nur in besonderen Lagen erscheinen (Take-Clip, eigener Sound mit Tempo, laufende Aufnahme, Tipps, „Aus dem Netz holen“). Für den Vergleich vorher/nachher ist das unschädlich, weil beide Läufe dieselben Zustände prüfen.
+- Die offenen Fragen unten sind gestellt, aber noch nicht beantwortet.
+
 ## Offene Fragen an Martin (noch nicht beantwortet)
 1. **Umfang:** nur Loopwerk oder auch Krachwerk? Desktop und Handy gleichzeitig oder ein Gerät zuerst?
 2. **Was stört konkret?** Zwei, drei Stellen, an denen es sich unnötig komplex anfühlt.
