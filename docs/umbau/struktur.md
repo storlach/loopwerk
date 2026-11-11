@@ -23,7 +23,7 @@ Stand: 2026-11-11. **Aufteilung und Entscheidungen von Martin bestätigt**; die 
 │ Deck: ▶  ●  Loop  Klick  │ Takt │ Rückgängig/Wiederholen       │
 ├───────────────────────────────────────────┬──────────────────┤
 │                                           │ Datei│Sounds│Mixer│
-│  Kopfzeile: Raster · Tempo                ├──────────────────┤
+│  Kopfzeile: Raster · Tempo · [Teilen …]   ├──────────────────┤
 │                                           │                  │
 │  Arranger (Spuren über die ganze Breite)  │  Inhalt des      │
 │  Clip öffnen → Overlay zum Schließen      │  gewählten       │
@@ -70,7 +70,9 @@ Zahlen: Funktionen heute am Loopwerk-Desktop.
 6. **Assistent:** zuerst „Neuer Song“ (Song-Starter), „+ Neu“ bei den Sounds, Exportieren.
 7. **Wörter:** eigene Scheibe am Ende, Liste alt → neu zur Abnahme.
 
-Noch zu klären, wenn Scheibe 4 ansteht: Was heißt „Clip öffnen“ genau (Doppelklick wie heute der Editor?) und wo liegen dann Teilen, Kopie, Löschen.
+8. **Werkzeuge für das gewählte Element (Martin, 2026-11-11):** Teilen, Kopieren und Löschen stehen in der Kopfzeile über den Spuren, neben Raster und Tempo, und zwar nur, solange ein Element aktiv ist. Dort ist auch der Platz für **Schneiden**; das wird später eine neue Funktion (nicht Teil des Umbaus).
+
+Noch zu klären, wenn Scheibe 4 ansteht: Was heißt „Clip öffnen“ genau (Doppelklick wie heute der Editor?).
 
 ## Technischer Rahmen
 
@@ -82,7 +84,7 @@ Noch zu klären, wenn Scheibe 4 ansteht: Was heißt „Clip öffnen“ genau (Do
 2. Reiter Datei ordnen, Song-Starter und Export hinein.
 3. Mixer senkrecht, Spur-Effekte darunter; Inspektor Spur entfällt.
 4. Clip: Overlay beim Öffnen; Inspektor Clip entfällt.
-5. Kopfzeile: Zoom-Knöpfe raus, Tempo hinein; Deck ausdünnen.
+5. Kopfzeile: Zoom-Knöpfe raus, Tempo hinein, Teilen/Kopieren/Löschen bei aktivem Element; Deck ausdünnen.
 6. Handy nachziehen.
 7. Wörter.
 
