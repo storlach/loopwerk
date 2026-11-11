@@ -36,7 +36,7 @@ Es ist ein **Test**: entweder in einer Kopie oder so, dass man ohne Aufwand zur�
 ## Stand
 - 2026-11-11: Branch `umbau` angelegt. `tools/funktionen.cjs` gebaut und gelaufen: 477 Funktionen (Loopwerk Desktop 280 erreichbar, Handy 186; Krachwerk Desktop 250, Handy 168). Ausgangsstand: `docs/umbau/funktionen.json` (Stand `main` 5b9b359); zwei Läufe hintereinander ergeben denselben Stand. Für den Nachweis nach einer Scheibe: `node tools/funktionen.cjs --out <ordner>/funktionen --vergleich docs/umbau/funktionen.json`.
 - Grenzen der Liste: „versteckt“ heißt, das Element war in keinem geprüften Zustand zu sehen. Das trifft auch Funktionen, die nur in besonderen Lagen erscheinen (Take-Clip, eigener Sound mit Tempo, laufende Aufnahme, Tipps, „Aus dem Netz holen“). Für den Vergleich vorher/nachher ist das unschädlich, weil beide Läufe dieselben Zustände prüfen.
-- 2026-11-11: Martin hat Umfang (nur Loopwerk) und Richtung genannt: rechte Leiste mit Reitern Datei, Assets, Mixer. Festgehalten als Entwurf in `docs/umbau/struktur.md`, mit sieben Rückfragen; noch nicht bestätigt.
+- 2026-11-11: Martin hat Umfang (nur Loopwerk) und Richtung genannt: rechte Leiste mit Reitern Datei, Assets, Mixer. Die sieben Rückfragen sind beantwortet, die Ziel-Struktur steht bestätigt in `docs/umbau/struktur.md`. Nächster Schritt: Scheibe 1 (rechte Leiste mit drei Reitern).
 
 ## Offene Fragen an Martin (noch nicht beantwortet)
 1. **Umfang:** nur Loopwerk oder auch Krachwerk? Desktop und Handy gleichzeitig oder ein Gerät zuerst?

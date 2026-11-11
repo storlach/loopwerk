@@ -1,6 +1,6 @@
 # Umbau: Ziel-Struktur
 
-Stand: 2026-11-11, **Entwurf, von Martin noch nicht bestätigt.** Grundlage: Martins Vorgaben unten und die Funktionsliste (`funktionen.md`). Gebaut wird erst, was hier als bestätigt markiert ist.
+Stand: 2026-11-11. **Aufteilung und Entscheidungen von Martin bestätigt**; die Tabelle „Wohin jeder Bereich geht“ gilt mit den Entscheidungen unten. Grundlage: Martins Vorgaben unten und die Funktionsliste (`funktionen.md`). Gebaut wird erst, was hier als bestätigt markiert ist.
 
 ## Martins Vorgaben (2026-11-11)
 
@@ -20,13 +20,13 @@ Stand: 2026-11-11, **Entwurf, von Martin noch nicht bestätigt.** Grundlage: Mar
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ Deck: ▶  ●  Loop  Klick  │ Takt · Tempo │ Rückgängig/Wiederh. │
+│ Deck: ▶  ●  Loop  Klick  │ Takt │ Rückgängig/Wiederholen       │
 ├───────────────────────────────────────────┬──────────────────┤
 │                                           │ Datei│Sounds│Mixer│
-│  Arranger (Spuren über die ganze Breite)  ├──────────────────┤
+│  Kopfzeile: Raster · Tempo                ├──────────────────┤
 │                                           │                  │
-│  Clip gewählt → Leiste am Clip:           │  Inhalt des      │
-│  Teilen · Kopie · Löschen · Bearbeiten    │  gewählten       │
+│  Arranger (Spuren über die ganze Breite)  │  Inhalt des      │
+│  Clip öffnen → Overlay zum Schließen      │  gewählten       │
 │                                           │  Reiters         │
 ├───────────────────────────────────────────┤                  │
 │ Fach unten nur bei Bedarf: Editor         │                  │
@@ -60,23 +60,29 @@ Zahlen: Funktionen heute am Loopwerk-Desktop.
 | Arranger-Leiste (Raster, Zoom) | 5 | bleibt | – |
 | Fachleiste (Mixer, FX-Pad, Editor, Kürzel) | 4 | entfällt; Kürzel und Gesten nach **Datei** → „Hilfe“ | – |
 
-## Offene Fragen
+## Entscheidungen (Martin, 2026-11-11, bestätigt)
 
-1. **Sounds rechts:** Entfällt das Regal links ganz, sodass der Arranger die volle Breite bekommt? (Entwurf: ja.)
-2. **Clip-Einstellungen:** eigener vierter Reiter „Clip“, der nur bei gewähltem Clip erscheint, oder eine kleine Leiste direkt am Clip? (Entwurf: Leiste am Clip für Teilen, Kopie, Löschen, Bearbeiten; die Regler als Reiter „Clip“.)
-3. **Mixer senkrecht:** eine Zeile je Spur mit Lautstärke, M, S; Antippen klappt die Effekte dieser Spur auf. Bleibt die Lautstärke zusätzlich im Spurkopf? (Entwurf: nein, nur M und S.)
-4. **Tempo und Tonart:** nur im Reiter Datei oder Tempo weiter im Deck? (Entwurf: Tempo bleibt im Deck, weil man es ständig braucht; Tonart nach Datei.)
-5. **Handy:** erst Desktop fertig, dann dieselben drei Reiter als Fächer am Handy? (Entwurf: ja.)
-6. **Assistent:** wo zuerst? (Entwurf: „Neuer Song“ mit den Song-Startern, „+ Neu“ bei den Sounds, Exportieren.)
-7. **Wörter:** eigene Scheibe am Ende, mit einer Liste alt → neu zur Abnahme. Vorschläge vorab: „Assets“ → „Sounds“, „Mastering“ → „Feinschliff“, „Panorama“ → „Links/Rechts“, „Send“ → „Hall-Anteil“/„Echo-Anteil“, ein Wort „Bearbeiten“ statt der sieben Editor-Namen.
+1. **Sounds rechts:** Das Regal links entfällt, die Spuren bekommen die volle Breite.
+2. **Clip:** kein Reiter und keine Leiste am Clip. Wer einen Clip öffnet, bekommt dessen Inhalt in einem **Overlay, das man wieder schließt**. Nirgends ein eigener Knopf dafür.
+3. **Lautstärke je Spur:** bleibt zusätzlich im Spurkopf. Die Doppelung ist gewollt.
+4. **Kopfzeile über den Spuren:** Die Zoom-Knöpfe (`#zoom-in`, `#zoom-out`, `#zoomy-in`, `#zoomy-out`) **entfallen**; Zoomen geht mit zwei Fingern, den Rollbalken-Enden und Strg/Alt+Mausrad. Das ist die einzige bewusste Ausnahme von „keine Funktion geht verloren“. Übrig bleibt das Raster, **das Tempo kommt dazu**.
+5. **Geräte:** erst nur Desktop. Handy bleibt bis dahin, wie es ist.
+6. **Assistent:** zuerst „Neuer Song“ (Song-Starter), „+ Neu“ bei den Sounds, Exportieren.
+7. **Wörter:** eigene Scheibe am Ende, Liste alt → neu zur Abnahme.
+
+Noch zu klären, wenn Scheibe 4 ansteht: Was heißt „Clip öffnen“ genau (Doppelklick wie heute der Editor?) und wo liegen dann Teilen, Kopie, Löschen.
+
+## Technischer Rahmen
+
+- Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
 
 ## Reihenfolge der Scheiben (Entwurf)
 
 1. Rechte Leiste mit drei Reitern; Inhalt zuerst unverändert umgehängt (Datei = Projekt-Menü + Song, Sounds = Regal, Mixer = heutiger Mixer).
 2. Reiter Datei ordnen, Song-Starter und Export hinein.
 3. Mixer senkrecht, Spur-Effekte darunter; Inspektor Spur entfällt.
-4. Clip: nur noch Clip-Einstellungen, nur bei Auswahl.
-5. Deck und Spurkopf ausdünnen.
+4. Clip: Overlay beim Öffnen; Inspektor Clip entfällt.
+5. Kopfzeile: Zoom-Knöpfe raus, Tempo hinein; Deck ausdünnen.
 6. Handy nachziehen.
 7. Wörter.
 
