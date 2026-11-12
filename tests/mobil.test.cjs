@@ -336,9 +336,9 @@ const { check, finish } = createChecker();
     await page.setViewportSize({ width: 1400, height: 820 });
     await page.waitForTimeout(150);
     const desk = await page.evaluate(() => ({
-      // Desktop-Plätze: Transport im Deck, Zoom in der Arranger-Leiste, Speichern im Reiter Datei, Mixer im Reiter Mixer (Layout „reiter“, Umbau Scheibe 1)
+      // Desktop-Plätze: Transport im Deck, Zoom in der Arranger-Leiste, Speichern im Reiter Datei, FX-Pad im Kopf der Mixer-Spalte (Layout „reiter“, Umbau Scheibe 3; „Mixer“-Knopf entfällt)
       back: ['rec-btn', 'metro-btn'].every((id) => document.getElementById(id).closest('.deck')) && !!document.getElementById('zoom-in').closest('.arr-bar')
-        && !!document.getElementById('save-btn').closest('#side-datei-liste') && !!document.getElementById('mixer-btn').closest('#side-mixer') && getComputedStyle(document.getElementById('tab-sounds')).display === 'none',
+        && !!document.getElementById('save-btn').closest('#side-datei-liste') && !!document.getElementById('fxpad-btn').closest('#mix-head') && getComputedStyle(document.getElementById('tab-sounds')).display === 'none',
       tabs: getComputedStyle(document.getElementById('tabbar')).display,
       shelf: getComputedStyle(document.querySelector('.shelf')).display,
       dock: window.loopwerk.ui.dock,

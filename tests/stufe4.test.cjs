@@ -116,14 +116,14 @@ const { check, finish } = createChecker();
 
     // ---------- Mixer bedienen ----------
     await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createDemoProject()); });
-    await page.click('#mixer-btn');
-    const visible = await page.locator('#mixer').isVisible();
-    const stripCount = await page.locator('#mixer .strip').count();
+    await page.click('#side-tab-mixer'); // Layout „reiter“: Reiter Mixer = Zeilen neben den Spuren
+    const visible = await page.locator('.mix-slot .strip').first().isVisible();
+    const stripCount = await page.locator('.mix-slot .strip, .mix-bus .strip').count();
     // 8 Spuren + Master + zwei Rückkanäle (Hall-Bus, Echo-Bus, 2.14)
-    check('Mixer öffnet mit Kanalzug je Spur plus Master und zwei Rückkanälen', visible && stripCount === 11 && await page.locator('#mixer .strip-bus').count() === 2, `${stripCount} Kanalzüge`);
+    check('Mixer öffnet mit Kanalzug je Spur plus Master und zwei Rückkanälen', visible && stripCount === 11 && await page.locator('.mix-bus .strip-bus').count() === 2, `${stripCount} Kanalzüge`);
 
     // Desktop: Klick auf „keine Effekte“ zeigt die Spur im Inspektor; dort liegen die Effekte
-    await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').click();
+    await page.locator('.mix-slot .strip[data-strip-id="t1"] .strip-sum').click();
     const insp = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, title: document.querySelector('#insp .insp-sec:not([hidden]) .insp-title')?.textContent }));
     check('Effekte des gewählten Kanals stehen im Inspektor', insp.mode === 'track' && insp.title.includes('Drums'), JSON.stringify(insp));
     await page.click('#fx-hall-on');
@@ -131,7 +131,7 @@ const { check, finish } = createChecker();
     check('Hall-Schalter schaltet Hall ein', hallOn === true);
     // Das Beispiel hat seit ADR 013 auf den Drums schon den EQ an: der Hall kommt dazu
     const fxOn = await page.evaluate(() => Object.values(window.loopwerk.store.track('t1').fx).filter((x) => x?.on).length);
-    const sum = await page.locator('#mixer .strip[data-strip-id="t1"] .strip-sum').textContent();
+    const sum = await page.locator('.mix-slot .strip[data-strip-id="t1"] .strip-sum').textContent();
     check('Kanalzug zählt die Effekte (mit Hall)', sum === (fxOn === 1 ? '1 Effekt' : `${fxOn} Effekte`) && fxOn >= 1, `${sum}, an: ${fxOn}`);
 
     await page.locator('#fx-hall-mix').fill('0.6');

@@ -26,9 +26,18 @@ export function mountMixcol({ ui, store, mixer, side }) {
   // Was die Auswahl gerade zeigt: Spur, Summe (nichts gewählt) oder nichts davon (Clip gewählt)
   const kindNow = () => (ui.selectedClipId ? null : ui.selectedTrackId ? 'spur' : 'summe');
 
+  // data-mixcard = offen (Art), data-mixkind = Inhalt der Karte; er bleibt, bis die Karte ausgeblendet ist (CSS-Übergang, 0,3 s)
+  let clearKind = 0;
   function paint() {
-    if (!kind) { delete app.dataset.mixcard; return; }
+    if (!kind) {
+      delete app.dataset.mixcard;
+      clearTimeout(clearKind);
+      clearKind = setTimeout(() => { if (!kind) delete app.dataset.mixkind; }, 450);
+      return;
+    }
+    clearTimeout(clearKind);
     app.dataset.mixcard = kind;
+    app.dataset.mixkind = kind;
     const t = kind === 'spur' ? store.track(ui.selectedTrackId) : null;
     title.textContent = kind === 'spur' ? t?.name ?? '' : 'Summe';
     sideEl.setAttribute('aria-label', kind === 'spur' ? `Spur ${t?.name ?? ''}` : 'Summe');

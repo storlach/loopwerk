@@ -149,7 +149,8 @@ const SZENE = {
     await ruhe(page);
     await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
     await wait(page, 1000);
-    if (await page.evaluate(() => window.loopwerk.ui.dock) !== 'mixer') return 'Mixer ging nicht auf';
+    // Layout „reiter“ (Desktop): „Mixer öffnen“ zeigt den Reiter Mixer (Spalte neben den Spuren) statt eines Fachs
+    if (!(await page.evaluate(() => window.loopwerk.ui.dock === 'mixer' || (!!window.loopwerk.mixcol && document.getElementById('app').dataset.side === 'mixer')))) return 'Mixer ging nicht auf';
     return null;
   },
   async mastering(page, ed, dev) {
@@ -157,7 +158,7 @@ const SZENE = {
     await page.evaluate(() => window.loopwerk.store.setMastering({ on: true, style: 'club' }));
     // Song-Einstellungen: Desktop = Inspektor ohne Auswahl, Handy = Song-Fach
     if (dev.startsWith('handy')) await page.evaluate(() => window.loopwerk.ui.setDock('song'));
-    else await page.evaluate(() => window.loopwerk.side?.show('datei', { save: false })); // Layout „reiter“: Song-Abschnitt im Reiter Datei
+    else await page.evaluate(() => { const lw = window.loopwerk; if (lw.mixcol) { lw.side.show('mixer', { save: false }); lw.mixer.select('__master'); } else lw.side?.show('datei', { save: false }); }); // Layout „reiter“: Mastering in der Summen-Karte über der Mixer-Spalte
     await wait(page, 1000);
     const sichtbar = await page.evaluate(() => { const n = [...document.querySelectorAll('#insp-mst, #song-mst')].find((x) => x.getClientRects().length); return !!n && n.getClientRects().length > 0; });
     return sichtbar ? null : 'Mastering liegt hier nicht in Inspektor/Song-Fach (nur im Export-Fach)';

@@ -3672,7 +3672,7 @@
   .side, .side-tabs { display: none; }
   .deck-bar { display: contents; }
   @media (min-width: 761px) {
-    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; --bar-h: 60px; }
+    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; --side-r: calc(var(--side-gap) + var(--zbar-r)); --bar-h: 60px; } /* --side-r: Abstand der Karte vom Fensterrand, lässt den senkrechten Rollbalken frei */
     #app[data-layout="reiter"], #app[data-layout="reiter"].dock-open {
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas: "deck" "arr" "bar";
@@ -3705,7 +3705,7 @@
     #app[data-layout="reiter"] .deck-bar .spacer { flex: 1 1 0; min-width: 0; }
     #app[data-layout="reiter"] .deck-bar > * { flex: none; }
     #app[data-layout="reiter"] .deck-bar > .spacer { flex: 1 1 0; }
-    #app[data-layout="reiter"] .deck-right { flex: none; width: var(--side-w); margin: 0 var(--side-gap) 0 0; padding: 0 14px; box-sizing: border-box; gap: 0; }
+    #app[data-layout="reiter"] .deck-right { flex: none; width: var(--side-w); margin: 0 var(--side-r) 0 0; padding: 0 14px; box-sizing: border-box; gap: 0; }
     #app[data-layout="reiter"] .deck-right > :is(.deck-sep, .deck-file, .deck-edit) { display: none; }
     /* Reiter in der Kartenbreite: rechteckig, Versalien, der gewählte hell; derselbe Platz mit offener und zugeklappter Karte */
     #app[data-layout="reiter"] .side-tabs { display: flex; flex: 1 1 auto; gap: 8px; margin: 0; }
@@ -3719,18 +3719,24 @@
     /* Karte (Skizze 4): beginnt oben auf Höhe der Kopfzeile und umschließt die Reiter; der Inhalt beginnt darunter */
     #app[data-layout="reiter"] .side {
       grid-area: 1 / 1 / 3 / 2; justify-self: end; align-self: stretch; position: relative; z-index: 25;
-      width: var(--side-w); box-sizing: border-box; margin: 0 var(--side-gap) calc(var(--zbar-b) + var(--side-gap) + 6px) 0; padding-top: calc(var(--bar-h) + 4px);
+      width: var(--side-w); box-sizing: border-box; margin: 0 var(--side-r) calc(var(--zbar-b) + var(--side-gap) + 6px) 0; padding-top: calc(var(--bar-h) + 4px);
       display: flex; flex-direction: column; min-height: 0; overflow: hidden;
       background: var(--sheet-bg); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--card-shadow);
       -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
     }
-    #app[data-layout="reiter"][data-side="zu"] .side { display: none; }
-    /* Der Arranger bekommt rechts Reserve in Kartenbreite (Ende des Songs unter der Karte hervorholen), der senkrechte Rollbalken rückt neben die Karte;
-       Fächer (Mixer, Editoren) enden links der Karte */
+    /* Ein- und Ausblenden: von oben, über Übergänge (Deckkraft, Verschiebung); zu = unsichtbar und nicht erreichbar (visibility), bleibt aber bis zum Ende des Übergangs im Baum.
+       Zu ist die Karte bei data-side="zu" und im Reiter Mixer, solange keine Karte der Spalte offen ist (data-mixcard). */
+    #app[data-layout="reiter"] .side { opacity: 1; transform: none; visibility: visible; transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s; }
+    #app[data-layout="reiter"]:is([data-side="zu"], [data-side="mixer"]:not([data-mixcard])) .side {
+      opacity: 0; transform: translateY(-18px); visibility: hidden; pointer-events: none;
+      transition: opacity 0.26s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+    }
+    @media (prefers-reduced-motion: reduce) { #app[data-layout="reiter"] .side { transform: none !important; } }
+    /* Der Arranger bekommt rechts Reserve in Kartenbreite (Ende des Songs unter der Karte hervorholen); die Spuren laufen hinter der Karte weiter,
+       der senkrechte Rollbalken bleibt am Fensterrand (die Karte sitzt innen, --side-r); Fächer (Mixer, Editoren) enden links der Karte */
     #app[data-layout="reiter"]:not([data-side="zu"]) .arr-scroll { padding-right: calc(var(--side-w) + var(--side-gap)); }
-    #app[data-layout="reiter"]:not([data-side="zu"]) .zbar-y { right: calc(var(--side-w) + var(--side-gap) * 2); }
-    #app[data-layout="reiter"]:not([data-side="zu"]) .follow-chip { right: calc(var(--zbar-r) + var(--side-w) + var(--side-gap) * 2 + 14px); }
-    #app[data-layout="reiter"]:not([data-side="zu"]) .dock:not(#export) { margin-right: calc(var(--side-w) + var(--side-gap) * 2); }
+    #app[data-layout="reiter"]:not([data-side="zu"]) .follow-chip { right: calc(var(--side-r) + var(--side-w) + var(--side-gap) + 14px); }
+    #app[data-layout="reiter"]:not([data-side="zu"]) .dock:not(#export) { margin-right: calc(var(--side-r) + var(--side-w) + var(--side-gap)); }
 
     /* Regal und Inspektor verlieren ihren eigenen Rahmen: die Karte ist der Rahmen; der Inspektor rollt in sich (unter den Reitern) */
     #app[data-layout="reiter"] .side .insp, #app[data-layout="reiter"] .side .shelf {
@@ -3743,9 +3749,9 @@
     #app[data-layout="reiter"] .side-sounds { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
     #app[data-layout="reiter"] .side-sounds > .shelf { flex: 1 1 0; min-height: 0; }
     /* Sounds: ein gewählter Clip steht oben (höchstens die halbe Leiste, rollt selbst), das Regal darunter bleibt zum Ziehen erreichbar */
-    #app[data-layout="reiter"][data-side="sounds"] .side .insp { flex: 0 1 auto; max-height: 50%; }
-    #app[data-layout="reiter"][data-side="sounds"] .side-sounds { min-height: 240px; }
-    #app[data-layout="reiter"][data-side="sounds"] .side .insp[data-mode="clip"] { border-bottom: 1px solid var(--line); }
+    #app[data-layout="reiter"][data-tab="sounds"] .side .insp { flex: 0 1 auto; max-height: 50%; }
+    #app[data-layout="reiter"][data-tab="sounds"] .side-sounds { min-height: 240px; }
+    #app[data-layout="reiter"][data-tab="sounds"] .side .insp[data-mode="clip"] { border-bottom: 1px solid var(--line); }
     #app[data-layout="reiter"] .side .shelf-list { flex: 1 1 auto; min-height: 0; }
     #app[data-layout="reiter"] .side .left-tabs { padding: 10px 12px 0; }
     #app[data-layout="reiter"] .side .shelf-head { border-top: 0; }
@@ -3753,11 +3759,11 @@
     #app[data-layout="reiter"] .create-panel > h3.create-sec[data-surface="starter"] { display: none; }
 
     /* Welcher Reiter zeigt was */
-    #app[data-layout="reiter"]:not([data-side="sounds"]) .side-sounds { display: none; }
-    #app[data-layout="reiter"][data-side="sounds"] .side .insp > :not(.insp-clip) { display: none; }
-    #app[data-layout="reiter"][data-side="datei"] .insp-for-mixer { display: none; }
-    #app[data-layout="reiter"][data-side="mixer"] :is(.side-datei, .side-datei-neu, .side-datei-liste, .side-datei-foot, .insp-for-datei) { display: none; }
-    #app[data-layout="reiter"][data-side="mixer"] .insp-song:not(:has(.insp-for-mixer:not([hidden]))) { display: none; }
+    #app[data-layout="reiter"]:not([data-tab="sounds"]) .side-sounds { display: none; }
+    #app[data-layout="reiter"][data-tab="sounds"] .side .insp > :not(.insp-clip) { display: none; }
+    #app[data-layout="reiter"][data-tab="datei"] .insp-for-mixer { display: none; }
+    #app[data-layout="reiter"][data-tab="mixer"] :is(.side-datei, .side-datei-neu, .side-datei-liste, .side-datei-foot, .insp-for-datei) { display: none; }
+    #app[data-layout="reiter"][data-tab="mixer"] .insp-song:not(:has(.insp-for-mixer:not([hidden]))) { display: none; }
 
     /* Reiter Datei (Skizze 4): Songname als Überschrift, Tempo · Tonart · Länge · Master, Mastering, „Neuer Song“, dann die ruhige Befehlsliste */
     #app[data-layout="reiter"] .side-datei { display: block; padding: 6px 18px 0; }
@@ -3802,12 +3808,12 @@
     }
 
     /* Export-Klappfeld: neben der Karte statt über ihr */
-    #app[data-layout="reiter"]:not([data-side="zu"]) #export.dock { right: calc(var(--side-w) + var(--side-gap) * 2); }
+    #app[data-layout="reiter"]:not([data-side="zu"]) #export.dock { right: calc(var(--side-r) + var(--side-w) + var(--side-gap)); }
   }
   /* ---------- Layout „reiter“, Scheiben 4 und 5: Clip-Editor als Karte in der Mitte, Kopfzeile über den Spuren, Fachleiste entfällt ---------- */
   @media (min-width: 761px) {
     /* Die Karte rechts zeigt bei gewähltem Clip nichts mehr: seine Einstellungen stehen im Clip-Editor (Doppelklick auf den Clip) */
-    #app[data-layout="reiter"][data-side="sounds"] .side .insp { display: none; }
+    #app[data-layout="reiter"][data-tab="sounds"] .side .insp { display: none; }
     #app[data-layout="reiter"] :is(#edit-btn, #editor-tab) { display: none; }
     /* Fachleiste: nur „Tastenkürzel“ blieb übrig und wohnt jetzt in der Befehlsliste des Reiters Datei; Mixer und FX-Pad stehen im Reiter Mixer */
     #app[data-layout="reiter"] #tabbar { display: none; }
@@ -3916,13 +3922,20 @@
     /* Reiter Mixer: keine Karte, sondern die Spalte rechts neben den Spuren (jede Spur ihre Zeile auf ihrer Höhe); der Arranger rollt davor aus */
     #app[data-layout="reiter"][data-side="mixer"] { --mix-w: var(--side-w); }
     #app[data-layout="reiter"][data-side="mixer"] .arr-scroll { padding-right: 0; }
-    #app[data-layout="reiter"] :is(.mix-slot, .mix-head, .mix-bus) { display: none; }
-    #app[data-layout="reiter"][data-side="mixer"] :is(.mix-slot, .mix-head, .mix-bus) {
-      display: flex; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--mix-w); width: var(--mix-w); min-width: 0; box-sizing: border-box; overflow: hidden;
+    /* Die Plätze sind immer da (feste Breite); zu = unsichtbar, nicht erreichbar und nach oben verschoben, auf = sichtbar. Der Platz im Rollbereich (--mix-w) folgt sofort. */
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-head, .mix-bus) {
+      display: flex; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--side-w); width: var(--side-w); margin-left: calc(var(--mix-w, 0px) - var(--side-w)); min-width: 0; box-sizing: border-box; overflow: hidden;
       background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 1px 0 0 var(--line);
+      opacity: 0; transform: translateY(-14px); visibility: hidden; pointer-events: none;
+      transition: opacity 0.26s ease, transform 0.3s ease, visibility 0s linear 0.3s;
     }
-    #app[data-layout="reiter"][data-side="mixer"] .mix-head { z-index: 5; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); }
-    #app[data-layout="reiter"][data-side="mixer"] .mix-head .corner-label { font: 600 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    #app[data-layout="reiter"][data-side="mixer"] :is(.mix-slot, .mix-head, .mix-bus) {
+      opacity: 1; transform: none; visibility: visible; pointer-events: auto;
+      transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s;
+    }
+    @media (prefers-reduced-motion: reduce) { #app[data-layout="reiter"] :is(.mix-slot, .mix-head, .mix-bus) { transform: none; } }
+    #app[data-layout="reiter"] .mix-head { z-index: 5; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); }
+    #app[data-layout="reiter"] .mix-head .corner-label { font: 600 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
     #app[data-layout="reiter"] .mix-head .tab {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: none; height: 22px; min-width: 0; padding: 0 10px;
       background: transparent; color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: none; cursor: pointer;
@@ -3933,13 +3946,19 @@
     #app[data-layout="reiter"] .mix-head .tab[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--bg); }
     #app[data-layout="reiter"] .mix-head .tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     /* Zeilen ohne Kanalzug (Gruppen, Kurven) behalten die Breite der Spalte */
-    #app[data-layout="reiter"][data-side="mixer"] :is(.group-row, .auto-row)::after {
-      content: ""; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--mix-w); box-sizing: border-box;
+    #app[data-layout="reiter"] :is(.group-row, .auto-row)::after {
+      content: ""; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--side-w); margin-left: calc(var(--mix-w, 0px) - var(--side-w)); box-sizing: border-box;
       background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); box-shadow: inset 1px 0 0 var(--line);
+      opacity: 0; transform: translateY(-14px); visibility: hidden; pointer-events: none;
+      transition: opacity 0.26s ease, transform 0.3s ease, visibility 0s linear 0.3s;
     }
-    #app[data-layout="reiter"][data-side="mixer"] .track-row.selected .mix-slot { box-shadow: inset 1px 0 0 var(--line), inset -2px 0 0 var(--ink); }
-    #app[data-layout="reiter"][data-side="mixer"] .track-row.silent .mix-slot .strip > * { opacity: 0.55; }
-    #app[data-layout="reiter"][data-side="mixer"] .mix-bus { flex-direction: column; align-self: stretch; margin-left: auto; padding-bottom: 8px; }
+    #app[data-layout="reiter"][data-side="mixer"] :is(.group-row, .auto-row)::after {
+      opacity: 1; transform: none; visibility: visible;
+      transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s;
+    }
+    #app[data-layout="reiter"] .track-row.selected .mix-slot { box-shadow: inset 1px 0 0 var(--line), inset -2px 0 0 var(--ink); }
+    #app[data-layout="reiter"] .track-row.silent .mix-slot .strip > * { opacity: 0.55; }
+    #app[data-layout="reiter"] .mix-bus { flex-direction: column; align-self: stretch; padding-bottom: 8px; }
 
     /* Kanalzug als Zeile: oben Kurzinfo und Regler (Hall, Echo, Panorama), unten Lautstärke mit Wert, M, S; Pegel als dünner Streifen am unteren Rand */
     #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip {
@@ -3961,8 +3980,8 @@
     #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
     #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum.on { background: transparent; border: 0; color: var(--ink); }
     #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-    #app[data-layout="reiter"] .mix-slot .strip-sends { display: flex; flex: none; justify-content: flex-start; gap: 14px; margin-right: 4px; }
-    #app[data-layout="reiter"] .mix-slot .strip-send { display: flex; flex-direction: row; align-items: center; gap: 9px; }
+    #app[data-layout="reiter"] .mix-slot .strip-sends { display: flex; flex: none; justify-content: flex-start; gap: 12px; margin-right: 6px; }
+    #app[data-layout="reiter"] .mix-slot .strip-send { display: flex; flex-direction: row; align-items: center; gap: 12px; margin-left: 4px; }
     #app[data-layout="reiter"] .mix-slot :is(.strip-send, .strip-pan-wrap) .knob { width: 22px; height: 22px; }
     #app[data-layout="reiter"] .mix-slot :is(.strip-send, .strip-pan-wrap) .knob-ind { top: 3px; height: 7px; transform-origin: 50% 8px; }
     #app[data-layout="reiter"] .mix-slot .strip-pan-wrap { flex: none; margin-right: 4px; }
@@ -3975,7 +3994,7 @@
     #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-ms .tbtn { width: 24px; height: 20px; }
     /* Summe und Busse: eine Zeile je Kanal, Name über der Kurzinfo */
     #app[data-layout="reiter"] .mix-bus .strip { flex: none; height: 40px; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); }
-    #app[data-layout="reiter"] .mix-bus .strip-l1 { display: grid; grid-template-rows: auto auto; align-items: center; gap: 0; width: 104px; flex: none; height: auto; }
+    #app[data-layout="reiter"] .mix-bus .strip-l1 { display: grid; grid-template-rows: auto auto; align-items: center; gap: 0; width: 122px; flex: none; height: auto; }
     #app[data-layout="reiter"] .mix-bus .strip-l1 .strip-sum { height: 14px; font-size: 9px; line-height: 14px; flex: none; }
     #app[data-layout="reiter"] .mix-bus .strip-name {
       display: block; height: 14px; padding: 0 2px; text-align: left; font: 600 11px/14px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink);
@@ -3994,20 +4013,37 @@
     #app[data-layout="reiter"] .arr-grid.rh-tiny .mix-slot .strip-meter { bottom: 1px; }
 
     /* Karte über der Spalte (mixcol.js): Spur-Karte und Summe teilen sich die Leiste; ohne offene Karte bleibt sie weg */
-    #app[data-layout="reiter"][data-side="mixer"]:not([data-mixcard]) .side { display: none; }
-    #app[data-layout="reiter"][data-mixcard="spur"] :is(.insp-song, .insp-clip) { display: none; }
-    #app[data-layout="reiter"][data-mixcard="summe"] :is(.insp-track, .insp-clip) { display: none; }
-    #app[data-layout="reiter"] .side .insp-track > .insp-head, #app[data-layout="reiter"] .side .insp-track .insp-link { display: none; }
+    #app[data-layout="reiter"][data-tab="mixer"][data-mixkind="spur"] :is(.insp-song, .insp-clip) { display: none; }
+    #app[data-layout="reiter"][data-tab="mixer"][data-mixkind="summe"] :is(.insp-track, .insp-clip) { display: none; }
+    #app[data-layout="reiter"] .side .insp-track > .insp-head, #app[data-layout="reiter"] .side .insp-track .insp-link:not(.fx-order-reset) { display: none; }
     #app[data-layout="reiter"] .mixcard-head { display: none; }
-    #app[data-layout="reiter"][data-side="mixer"][data-mixcard] .mixcard-head {
+    #app[data-layout="reiter"][data-tab="mixer"][data-mixkind] .mixcard-head {
       order: -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; padding: 6px 12px 6px 18px;
     }
     #app[data-layout="reiter"] .mixcard-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 300 24px/1.2 var(--font-display); letter-spacing: -0.02em; }
     #app[data-layout="reiter"] .mixcard-close { flex: none; }
     #app[data-layout="reiter"] .side .insp-track { border-bottom: 0; padding-top: 6px; }
-    #app[data-layout="reiter"] .insp-grp-buses, #app[data-layout="reiter"] .insp-grp-master { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 12px; }
-    #app[data-layout="reiter"] .insp-grp-master { margin-top: 12px; }
-    #app[data-layout="reiter"] .insp-grp-buses > .insp-sub, #app[data-layout="reiter"] .insp-grp-master > .insp-sub { margin-bottom: 6px; }
+  }
+
+  /* Finger (Tablet mit Desktop-Layout): der senkrechte Rollbalken hat eine 44 px breite Trefferfläche am Fensterrand (die Hälfte ragt in den Arranger); die Karte rückt
+     daran vorbei. Die Mixer-Zeilen werden einzeilig mit 44-px-Flächen (Kurzinfo, Lautstärke, M, S); Panorama und Sends stehen in der Karte der Spur. */
+  @media (min-width: 761px) and (hover: none) and (pointer: coarse) {
+    #app[data-layout="reiter"] { --side-r: calc(var(--zbar-r) * 2 + 6px); }
+    #app[data-layout="reiter"] .mix-slot .strip { flex-direction: row; align-items: center; gap: 8px; padding: 0 26px 0 10px; }
+    #app[data-layout="reiter"] .mix-slot :is(.strip-l1, .strip-l2) { display: contents; }
+    #app[data-layout="reiter"] .mix-slot :is(.strip-sends, .strip-pan-wrap, .strip-value) { display: none; }
+    #app[data-layout="reiter"] .mix-slot .strip-sum { flex: 1 1 0; height: 44px; line-height: 44px; }
+    #app[data-layout="reiter"] .mix-slot .strip-fader-row { flex: 1.2 1 0; height: 44px; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-fader-row { touch-action: none; }
+    #app[data-layout="reiter"] .mix-slot .strip-fader { height: 44px; }
+    #app[data-layout="reiter"] .mix-slot .strip-ms .tbtn, #app[data-layout="reiter"] .mix-bus .strip-ms .tbtn { width: 44px; height: 44px; }
+    #app[data-layout="reiter"] .mix-bus .strip { height: 52px; padding: 0 26px 0 10px; }
+    #app[data-layout="reiter"] .mix-bus .strip-fader { height: 44px; }
+    #app[data-layout="reiter"] .mix-bus .strip-fader-row { height: 44px; }
+    #app[data-layout="reiter"] .mix-bus .strip-l1 { position: relative; height: 46px; align-self: center; grid-template-rows: 23px 23px; }
+    #app[data-layout="reiter"] .mix-bus .strip-name { grid-area: 1 / 1 / 3 / 2; height: 46px; align-self: stretch; padding-top: 6px; box-sizing: border-box; }
+    #app[data-layout="reiter"] .mix-bus .strip-sum { grid-area: 2 / 1; align-self: end; margin-bottom: 5px; pointer-events: none; z-index: 1; }
+    #app[data-layout="reiter"] .mix-head .tab { height: 44px; margin: -8px 0; }
   }
 </style>
 

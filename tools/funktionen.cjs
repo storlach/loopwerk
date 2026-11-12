@@ -67,7 +67,8 @@ function sammeln() {
   const ORTE = [
     ['#clip-overlay .insp-sec.insp-clip', 'Clip-Editor (Overlay), Clip-Einstellungen'], ['#clip-overlay #editor', 'Clip-Editor (Overlay)'], ['#clip-overlay #pattern', 'Clip-Editor (Overlay, Beat/Melodie)'], ['#clip-overlay', 'Clip-Editor (Overlay)'],
     ['#arr-bar-tools', 'Kopfzeile über den Spuren'], ['.arr-bar .lcd-song', 'Kopfzeile über den Spuren'],
-    ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Deck (Reiter rechts)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-neu', 'Reiter Datei'], ['#side-datei-liste', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
+    ['.mix-slot', 'Mixer-Zeile neben der Spur'], ['#mix-bus', 'Mixer-Zeile Summe/Busse'], ['#mix-head', 'Kopf der Mixer-Spalte'], ['#side .mixcard-head', 'Karte Mixer (Kopf)'], ['#side .insp-track', 'Karte Spur (Effekte)'], ['#side .insp-for-mixer', 'Karte Summe'],
+    ['.side .insp-for-datei', 'Reiter Datei'], ['.side-tabs', 'Deck (Reiter rechts)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-neu', 'Reiter Datei'], ['#side-datei-liste', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
     ['#project-menu', 'Projekt-Menü'], ['#rec-pop', 'Aufnahme-Feld am ●'], ['#keys-pop', 'Kürzel- und Gesten-Liste'],
     ['#link-pop', 'Feld „Aus dem Netz holen“'], ['.track-menu', 'Spur-Menü ⋯'], ['.chord-pop', 'Akkord-Feld'], ['.key-pop', 'Tonart-Feld'],
     ['.auto-keys', 'Kurven-Feld'], ['.tip', 'Tipp'], ['#hint', 'Einblender'], ['#clip-float', 'Werkzeug am Clip'], ['#clipbar', 'Clipleiste'],
@@ -226,7 +227,16 @@ function zustaende(S) {
         const t = lw.store.project.tracks[0];
         try { const { EFFECT_IDS } = await import('./src/effects.js'); for (const fx of EFFECT_IDS) lw.store.setTrackFx(t.id, fx, { on: true }); } catch { /* dann ohne Regler */ }
         lw.ui.selectTrack(t.id);
+        if (lw.mixcol && innerWidth > 760) lw.mixer.select(t.id); // Layout „reiter“: Effekt-Karte der Spur über der Mixer-Spalte
       });
+      await page.waitForTimeout(700);
+      return null;
+    },
+    // Layout „reiter“: Summen-Karte (Mastering, Busse, Master) über der Mixer-Spalte
+    async 'summen-karte'(page) {
+      if (!(await page.evaluate(() => !!window.loopwerk.mixcol && innerWidth > 760))) return 'Summen-Karte gibt es nur im Layout „reiter“';
+      await S.ruhe(page);
+      await page.evaluate(() => { const lw = window.loopwerk; lw.side.show('mixer', { save: false }); lw.mixer.select('__master'); });
       await page.waitForTimeout(700);
       return null;
     },
@@ -248,7 +258,7 @@ function zustaende(S) {
     'song-fach': dock('song'),
   };
 }
-const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie', 'nach-erstellen'];
+const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'summen-karte', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie', 'nach-erstellen'];
 
 async function messen(o) {
   const { chromium } = require('playwright');

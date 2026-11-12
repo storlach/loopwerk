@@ -279,7 +279,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
       const { store, ui } = window.loopwerk;
       const F = window.__fx;
       store.replace(F.project({ drive: { on: true }, filter: { on: true } }, {}, [F.clip('c1', 'test-sine', 0, 8)]));
-      ui.selectTrack('t1');
+      window.loopwerk.mixer.select('t1'); // Layout „reiter“: Karte der Spur über der Mixer-Spalte (Effekt-Kurzinfo)
     });
     await page.waitForSelector('#insp .insp-track:not([hidden]) .fxl');
     await page.waitForTimeout(500); // Inspektor fertig eingeblendet
@@ -291,7 +291,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
         order: t.fxOrder ?? null, on: Object.fromEntries(Object.entries(t.fx || {}).map(([k, v]) => [k, !!v.on])),
         dom: sec ? [...sec.querySelectorAll('.fxl-item .fxl-name')].map((n) => n.textContent) : [],
         reset: vis(document.getElementById('insp-fx-reset')), hint: document.getElementById('hint')?.textContent || '',
-        strip: [...document.querySelectorAll('#mixer-strips .strip[data-strip-id="t1"] .fx-toggle')].map((b) => b.textContent),
+        strip: [...document.querySelectorAll('.strip[data-strip-id="t1"] .fx-toggle')].map((b) => b.textContent),
         steps: window.loopwerk.store.undoStack.length,
       };
     });
@@ -334,7 +334,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     check('7 Alt+↓ verschiebt den Verzerrer hinter den EQ, Fokus bleibt', JSON.stringify(u.order?.slice(0, 3)) === '["filter","eq","drive"]' && u.dom[2] === 'Verzerrer' && focusKept === 'fx-drive-on', `${JSON.stringify(u.order)} Fokus ${focusKept}`);
     // Mixer-Schalter folgen der Liste
     await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
-    await page.waitForSelector('#mixer:not([hidden]) .strip');
+    await page.waitForSelector('.mix-slot .strip');
     u = await ui();
     check('7 Mixer-Schalter folgen der Reihenfolge', JSON.stringify(u.strip.slice(0, 3)) === '["Filter","EQ","Zerr"]', JSON.stringify(u.strip));
     await page.evaluate(() => window.loopwerk.ui.setDock(null));
@@ -343,7 +343,7 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     u = await ui();
     check('7 „Reihenfolge zurücksetzen“: Grundreihenfolge, Link verschwindet', u.order === null && u.dom[0] === 'Verzerrer' && u.reset === false, JSON.stringify(u.dom));
     // Master: Song-Ansicht, Alt+↑ am Hall
-    await page.evaluate(() => { window.loopwerk.ui.selectTrack(null); window.loopwerk.ui.select(null); });
+    await page.evaluate(() => { window.loopwerk.mixer.select('__master'); }); // Summen-Karte
     await page.waitForSelector('#insp .insp-grp-master .fxl');
     await page.focus('#fx-hall-on');
     await page.keyboard.press('Alt+ArrowUp');

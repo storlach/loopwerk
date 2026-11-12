@@ -335,7 +335,9 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     }, t);
     check('Mixer: Panorama mit Kurve gesperrt, Fader frei, Anzeige = Kurve an der Marke', mx.lock && mx.dis && mx.dim && !mx.fader && Math.abs(mx.value - (await page.evaluate(() => window.loopwerk.engine.positionBeat)) / 4 + 1) < 0.02, JSON.stringify(mx));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'auto-pan-mixer.png') });
-    await page.click(`#mixer .strip-pan-wrap .auto-lock`);
+    await page.evaluate(() => window.loopwerk.mixcol.close()); // die Karte der Spur (aus dem Inspektor-Teil) liegt über der Spalte: erst zu
+    await page.waitForTimeout(450);
+    await page.click(`.mix-slot .strip-pan-wrap .auto-lock`);
     check('Mixer: Klick auf den gesperrten Regler öffnet die Kurvenzeile mit Panorama', await page.evaluate(() => document.querySelector('.auto-row')?.dataset.key === 'pan'));
     await page.evaluate(() => window.loopwerk.ui.setDock(null));
     // Spur-Menü „Kurve löschen“ gilt für den gewählten Parameter; der Regler bekommt seinen alten Wert zurück

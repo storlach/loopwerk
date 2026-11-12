@@ -97,6 +97,7 @@ export function mountSide({ ui }) {
   let closed = false;
   try { const v = localStorage.getItem(key); if (TABS.some((t) => t.id === v)) current = v; else if (v === 'zu') closed = true; } catch { /* Voreinstellung */ }
   function apply(save) {
+    app.dataset.tab = current; // gewählter Reiter, auch bei zugeklappter Karte (der Inhalt bleibt, solange sie ausblendet)
     app.dataset.side = closed ? 'zu' : current;
     for (const [tid, b] of btns) { const on = !closed && tid === current; b.setAttribute('aria-selected', String(on)); b.tabIndex = on || (closed && tid === current) ? 0 : -1; }
     if (save) { try { localStorage.setItem(key, closed ? 'zu' : current); } catch { /* egal */ } }

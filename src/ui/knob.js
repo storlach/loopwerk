@@ -4,21 +4,22 @@ import { clamp, el } from '../util.js';
 
 // Ziehen ändert einen Regler relativ – kein Sprung an die Antippstelle. Am Handy zählt nur senkrechtes Ziehen;
 // waagrechtes Wischen bleibt dem Browser (touch-action: pan-x) und scrollt die Kanäle.
-export function relativeDrag(handle, input, { span, touchOnly = false }) {
+export function relativeDrag(handle, input, { span, touchOnly = false, horizontal = () => false }) {
   handle.addEventListener('pointerdown', (e) => {
     if (touchOnly && e.pointerType !== 'touch') return; // Maus am Fader: wie gewohnt
     if (e.button !== 0) return;
     const min = Number(input.min);
     const max = Number(input.max);
-    const y0 = e.clientY;
+    const hor = horizontal(); // waagrechter Fader (Zeile neben den Spuren): nach rechts ziehen = lauter
+    const y0 = hor ? e.clientX : e.clientY;
     const v0 = Number(input.value);
     let active = false;
     const move = (ev) => {
       if (ev.pointerId !== e.pointerId) return;
-      const dy = ev.clientY - y0;
+      const dy = (hor ? ev.clientX : ev.clientY) - y0;
       if (!active && Math.abs(dy) < 4) return;
       active = true;
-      const v = clamp(v0 - (dy / span()) * (max - min), min, max);
+      const v = clamp(v0 + (hor ? 1 : -1) * (dy / span()) * (max - min), min, max);
       input.value = String(v);
       input.dispatchEvent(new Event('input', { bubbles: true }));
     };

@@ -68,16 +68,16 @@ const { check, finish } = createChecker();
       && insp.x > arr.x + arr.w / 2 && insp.r <= arr.r && insp.y < arr.y && insp.b <= arr.b && shelf.b <= insp.b + 1, JSON.stringify({ bar, arr, shelf: shelf.b, insp }));
     const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none' && b.getClientRects().length).map((b) => b.id));
     // Layout „reiter“: Mixer und FX-Pad liegen im Reiter Mixer der rechten Leiste, „Tastenkürzel“ in der Befehlsliste von Datei; Editor-Reiter entfällt
-    check('Desktop: keine Fachleiste; Mixer und FX-Pad im Reiter Mixer, Tastenkürzel in Datei', JSON.stringify(tabs) === '[]' && await page.evaluate(() => ['mixer-btn', 'fxpad-btn'].every((id) => document.getElementById(id).closest('#side-mixer')) && !!document.getElementById('keys-btn').closest('#side-datei-liste')), JSON.stringify(tabs));
+    check('Desktop: keine Fachleiste; FX-Pad im Kopf der Mixer-Spalte (kein Mixer-Knopf), Tastenkürzel in Datei', JSON.stringify(tabs) === '[]' && await page.evaluate(() => document.getElementById('fxpad-btn').closest('#mix-head') && !document.getElementById('mixer-btn').offsetParent && !!document.getElementById('keys-btn').closest('#side-datei-liste')), JSON.stringify(tabs));
     check('Desktop: kein Hinweistext, solange es nichts zu melden gibt', !(await visible('#hint')));
-    await page.click('#mixer-btn');
+    await page.click('#fxpad-btn');
     await page.waitForTimeout(550);
-    const mx = await rect('#mixer');
-    const tab = await rect('#mixer-btn');
+    const mx = await rect('#fxpad');
+    const tab = await rect('#fxpad-btn');
     // Layout „reiter“: der Knopf sitzt in der rechten Leiste; die Schublade liegt wie bisher unten über dem Arranger
     // Umbau Scheibe 1b: der Knopf liegt in der Karte rechts; die Schublade endet links davon
     const card = await rect('#side');
-    check('Desktop: Mixer-Schublade sitzt unten im Arranger, ihr Knopf in der Karte; die Schublade verdeckt die Karte nicht', Math.abs(mx.b - arr.b) < 2 && tab.x >= card.x && tab.r <= card.r && mx.r <= card.x + 1, JSON.stringify({ mx, tab, card }));
+    check('Desktop: FX-Pad-Schublade sitzt unten im Arranger, ihr Knopf im Kopf der Mixer-Spalte; die Schublade verdeckt die Spalte nicht', Math.abs(mx.b - arr.b) < 2 && tab.x > arr.x + arr.w / 2 && tab.r <= arr.r && mx.r <= card.x + 1, JSON.stringify({ mx, tab, card }));
     check('Desktop: Schublade öffnet in der Mitte', Math.abs(mx.h / arr.h - 0.5) < 0.02, `${mx.h} / ${arr.h}`);
     // Einblender: erscheint mit einer Meldung, verschwindet von selbst
     await page.evaluate(() => window.loopwerk.ui.flash('Clip geteilt.'));
@@ -86,49 +86,31 @@ const { check, finish } = createChecker();
     check('Einblender erscheint über der Leiste, mittig über dem Arranger', await visible('#hint') && toast.b <= arr.b && Math.abs((toast.x + toast.w / 2) - (arr.x + arr.w / 2)) < 2, JSON.stringify(toast));
     await page.waitForTimeout(3700);
     check('Einblender verschwindet wieder', !(await visible('#hint')));
-    await page.click('#mixer-btn');
+    await page.click('#fxpad-btn');
     await page.waitForTimeout(450);
-    // Wechsel Mixer ↔ FX-Pad: die neue Schublade fährt sichtbar von unten herein, über der alten; die alte springt nicht
-    // (Umbau Scheibe 4: der Editor ist keine Schublade mehr, sondern eine Karte in der Mitte)
-    const docks = ['#mixer', '#fxpad'];
-    await page.click('#mixer-btn');
+    // (Der Wechsel zwischen zwei Schubladen am Desktop entfällt: seit Umbau Scheibe 3 gibt es dort nur noch das FX-Pad als Fach; der Wechsel Sounds → Mixer am Handy steht in v18.)
+    await page.click('#fxpad-btn');
     await rest(page);
-    for (const btn of ['#fxpad-btn', '#mixer-btn']) {
-      const from = `#${await page.evaluate(() => window.loopwerk.ui.dock)}`;
-      const a0 = await rect(from);
-      await startFrames(page, docks);
-      await page.click(btn);
-      await rest(page);
-      const rows = await stopFrames(page);
-      const to = `#${await page.evaluate(() => window.loopwerk.ui.dock)}`;
-      const fA = motion(rows, from);
-      const fB = motion(rows, to);
-      const both = rows.filter((r) => r[from] && r[to]);
-      const ok = to !== from && fB.first.vis <= 1 && fB.moving >= 6 && fB.peak <= 62 && both.length > 3 && both.every((r) => r[to].z > r[from].z)
-        && fA.pts.every((p) => Math.abs(p.top - a0.y) <= 1) && Math.abs((await rect(to)).h / arr.h - 0.5) < 0.02;
-      check(`Desktop: Wechsel ${from} → ${to} fährt sichtbar herein (über der alten, die liegen bleibt)`, ok,
-        JSON.stringify({ first: fB.first, moving: fB.moving, peak: fB.peak, both: both.length, oldTops: [fA.first?.top, fA.last?.top, a0.y] }));
-    }
     // Reduzierte Bewegung: kurz, aber sichtbar (kein Aufploppen). Dauer aus den Klassenwechseln, unabhängig von der Last
     await page.emulateMedia({ reducedMotion: 'reduce' });
     for (const what of ['schließt', 'öffnet']) {
       await page.evaluate(() => {
-        const m = document.getElementById('mixer');
+        const m = document.getElementById('fxpad');
         window.__cls = [];
         window.__mo = new MutationObserver(() => window.__cls.push({ t: performance.now(), on: m.classList.contains('entering') || m.classList.contains('leaving') }));
         window.__mo.observe(m, { attributes: true, attributeFilter: ['class'] });
       });
-      await startFrames(page, ['#mixer']);
-      await page.click('#mixer-btn');
+      await startFrames(page, ['#fxpad']);
+      await page.click('#fxpad-btn');
       await rest(page);
-      const f = motion(await stopFrames(page), '#mixer');
+      const f = motion(await stopFrames(page), '#fxpad');
       const ms = await page.evaluate(() => { window.__mo.disconnect(); const a = window.__cls.find((x) => x.on); const b = a && window.__cls.find((x) => x.t > a.t && !x.on); return a && b ? Math.round(b.t - a.t) : -1; });
       const dist = Math.abs(f.last.vis - f.first.vis);
-      check(`Reduzierte Bewegung: Mixer ${what} kurz, aber sichtbar (150–600 ms, kein Bild > 30 % des Wegs)`, ms >= 150 && ms <= 600 && f.moving >= 3 && f.peak <= dist * 0.3,
+      check(`Reduzierte Bewegung: FX-Pad ${what} kurz, aber sichtbar (150–600 ms, kein Bild > 30 % des Wegs)`, ms >= 150 && ms <= 600 && f.moving >= 3 && f.peak <= dist * 0.3,
         JSON.stringify({ ms, moving: f.moving, peak: f.peak, dist: Math.round(dist) }));
     }
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.click('#mixer-btn');
+    await page.click('#fxpad-btn');
     await rest(page);
     const link = await page.evaluate(() => [...document.querySelectorAll('link[rel="icon"]')].map((l) => l.getAttribute('href')));
     const res = await page.request.get(new URL('assets/icons/favicon.svg', app.url).href);

@@ -73,9 +73,9 @@ const { check, finish } = createChecker();
     // ---------- Grundaufteilung ----------
     const deck = await rect('.deck');
     const lay = await page.evaluate(() => ({
-      insp: !!document.getElementById('side').offsetParent, bar: getComputedStyle(document.getElementById('tabbar')).display,
+      insp: getComputedStyle(document.getElementById('side')).visibility !== 'hidden', bar: getComputedStyle(document.getElementById('tabbar')).display,
       tabs: getComputedStyle(document.getElementById('tab-sounds')).display, overflow: document.documentElement.scrollWidth - innerWidth,
-      mixerInBar: !!document.getElementById('mixer-btn').closest('#side-mixer'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
+      mixerInBar: !!document.getElementById('fxpad-btn').closest('#mix-head'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
       saveInMenu: !!document.getElementById('save-btn').closest('#side-datei-liste'), exportInDeck: !!document.getElementById('export-btn').closest('#side-datei-liste'),
       menuName: document.getElementById('project-menu-name').textContent,
     }));
@@ -146,54 +146,57 @@ const { check, finish } = createChecker();
     await page.keyboard.press('Control+z');
 
     // ---------- Schubladen ----------
+    await page.evaluate(() => window.loopwerk.mixcol?.close()); // die Summen-Karte (Master-Effekte oben) liegt über der Mixer-Spalte: erst zu
+    await page.waitForTimeout(500);
+    // Layout „reiter“ (Umbau Scheibe 3): das Fach „Mixer“ entfällt, die Schubladen-Mechanik (Haltepunkte, Feder, Esc) zeigt das FX-Pad (Knopf im Kopf der Mixer-Spalte)
     let cdp = await page.context().newCDPSession(page);
     const gripAt = async (sel) => { const g = await rect(`${sel} > .sheet-grip`); return { x: g.x + g.w / 2, y: g.y + 9 }; };
     // Ziehen am Griff mit der Maus: langsam (am Ende ruhig halten) oder als Schubs (kurz und schnell)
     const mdrag = async (sel, dy, steps, slow) => { const g = await gripAt(sel); await gesture(cdp, 'mouse', g.x, g.y, ramp(dy, steps), 16, slow ? 160 : 0); };
     const visH = async (sel) => { const r = await rect(sel); return (await rect('.arranger')).b - r.y; };
-    await startFrames(page, ['#mixer']);
-    await page.click('#mixer-btn');
+    await startFrames(page, ['#fxpad']);
+    await page.click('#fxpad-btn');
     await page.waitForTimeout(40);
-    const entering = await page.evaluate(() => document.getElementById('mixer').classList.contains('entering'));
+    const entering = await page.evaluate(() => document.getElementById('fxpad').classList.contains('entering'));
     check('Schublade fährt animiert herein', entering);
     await rest(page);
-    const fOpen = motion(await stopFrames(page), '#mixer');
-    const dk = await rect('#mixer');
+    const fOpen = motion(await stopFrames(page), '#fxpad');
+    const dk = await rect('#fxpad');
     const ar = await rect('.arranger');
-    check('Mixer liegt als Schublade über dem Arranger', Math.abs(dk.b - ar.b) < 2 && dk.h < ar.h && Math.abs(ar.h - arr0.h) < 1, JSON.stringify({ dk, ar }));
+    check('FX-Pad liegt als Schublade über dem Arranger', Math.abs(dk.b - ar.b) < 2 && dk.h < ar.h && Math.abs(ar.h - arr0.h) < 1, JSON.stringify({ dk, ar }));
     check('Schublade öffnet in der Mitte (50 %)', Math.abs(dk.h / ar.h - 0.5) < 0.02, `${dk.h} / ${ar.h}`);
     check('Öffnen: startet unter dem Rand und gleitet ohne Sprung herein (Feder, ≤ 62 px je Bild, Tempo ändert sich ≤ 55 px)',
       fOpen.first.vis <= 1 && fOpen.moving >= 6 && fOpen.ms >= 250 && fOpen.peak <= 62 && fOpen.jerk <= 55, JSON.stringify({ first: fOpen.first, moving: fOpen.moving, ms: fOpen.ms, peak: fOpen.peak, jerk: fOpen.jerk }));
-    const shadow = await page.evaluate(() => getComputedStyle(document.getElementById('mixer')).boxShadow);
-    check('Schublade hat Griff und Schatten', shadow !== 'none' && await page.locator('#mixer > .sheet-grip').isVisible(), shadow);
+    const shadow = await page.evaluate(() => getComputedStyle(document.getElementById('fxpad')).boxShadow);
+    check('Schublade hat Griff und Schatten', shadow !== 'none' && await page.locator('#fxpad > .sheet-grip').isVisible(), shadow);
     const pad1 = await page.evaluate(() => getComputedStyle(document.querySelector('.arr-grid')).paddingBottom);
     check('Arranger lässt unten Platz zum Scrollen', parseFloat(pad1) >= dk.h - 2, pad1);
     // Langsam nach oben ziehen: rastet am nächsten Haltepunkt (oben, 100 %) ein, animiert
-    await startFrames(page, ['#mixer']);
-    await mdrag('#mixer', -ar.h * 0.3, 10, true);
+    await startFrames(page, ['#fxpad']);
+    await mdrag('#fxpad', -ar.h * 0.3, 10, true);
     await rest(page);
-    const fUp = motion(await stopFrames(page), '#mixer');
-    const dk2 = await rect('#mixer');
+    const fUp = motion(await stopFrames(page), '#fxpad');
+    const dk2 = await rect('#fxpad');
     check('Aufziehen rastet oben ein (100 %)', Math.abs(dk2.h / ar.h - 1) < 0.02, `${dk.h} → ${dk2.h} / ${ar.h}`);
     const followed = fUp.pts.filter((p) => p.drag).every((p, i, a) => i === 0 || p.vis >= a[i - 1].vis - 0.5);
     check('Beim Ziehen folgt die Schublade dem Zeiger, danach gleitet sie weich ein', followed && fUp.jerk <= 30, JSON.stringify({ jerk: fUp.jerk, peak: fUp.peak }));
-    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide.mixer === 1));
+    check('Höhe wird gemerkt', await page.evaluate(() => JSON.parse(localStorage.getItem('loopwerk.sheetH')).wide.fxpad === 1));
     // Kurzer Schubs nach unten: eine Stufe tiefer (Mitte), nicht zu
-    await mdrag('#mixer', 40, 2, false);
+    await mdrag('#fxpad', 40, 2, false);
     await page.waitForTimeout(80);
-    const moving = await visH('#mixer');
+    const moving = await visH('#fxpad');
     await rest(page);
-    const dk3 = await rect('#mixer');
-    check('Schubs nach unten rastet in der Mitte ein', Math.abs(dk3.h / ar.h - 0.5) < 0.02 && await page.evaluate(() => window.loopwerk.ui.dock === 'mixer'), `${dk3.h} / ${ar.h}`);
+    const dk3 = await rect('#fxpad');
+    check('Schubs nach unten rastet in der Mitte ein', Math.abs(dk3.h / ar.h - 0.5) < 0.02 && await page.evaluate(() => window.loopwerk.ui.dock === 'fxpad'), `${dk3.h} / ${ar.h}`);
     check('Einrasten ist animiert (Zwischenhöhe)', moving < dk2.h - 5 && moving > dk3.h + 5, `${dk2.h} → ${moving} → ${dk3.h}`);
     // Kurzer Schubs nach oben: eine Stufe höher
-    await mdrag('#mixer', -40, 2, false);
+    await mdrag('#fxpad', -40, 2, false);
     await rest(page);
-    check('Schubs nach oben rastet oben ein', Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02);
+    check('Schubs nach oben rastet oben ein', Math.abs((await rect('#fxpad')).h / ar.h - 1) < 0.02);
     // Unterbrechen: Schubs nach unten, nach 100 ms am Griff greifen – keine Sprünge, folgt 1:1
-    await mdrag('#mixer', 40, 2, false);
+    await mdrag('#fxpad', 40, 2, false);
     const grab = await page.evaluate(() => new Promise((res) => setTimeout(() => requestAnimationFrame(() => {
-      const s = document.getElementById('mixer');
+      const s = document.getElementById('fxpad');
       const g = s.querySelector('.sheet-grip').getBoundingClientRect();
       const ev = (type, y, n = window) => n.dispatchEvent(new PointerEvent(type, { clientX: g.x + 30, clientY: y, button: 0, buttons: 1, pointerId: 9, pointerType: 'mouse', isPrimary: true, bubbles: true, cancelable: true }));
       const before = s.getBoundingClientRect().top;
@@ -209,56 +212,56 @@ const { check, finish } = createChecker();
     }), 100)));
     check('Laufende Bewegung lässt sich greifen: kein Sprung, folgt dem Zeiger 1:1', grab.wasMoving && Math.abs(grab.held - grab.before) < 1 && Math.abs(grab.moved - (grab.before - 30)) < 1, JSON.stringify(grab));
     await rest(page);
-    await mdrag('#mixer', -40, 2, false);
+    await mdrag('#fxpad', -40, 2, false);
     await rest(page);
     // Gummiband: über oben hinaus ziehen dehnt nur wenig, danach zurück auf 100 %
-    await startFrames(page, ['#mixer']);
-    await mdrag('#mixer', -300, 15, true);
+    await startFrames(page, ['#fxpad']);
+    await mdrag('#fxpad', -300, 15, true);
     await rest(page);
-    const fRub = motion(await stopFrames(page), '#mixer');
+    const fRub = motion(await stopFrames(page), '#fxpad');
     const over = Math.max(...fRub.pts.map((p) => p.vis)) - ar.h;
-    check('Gummiband über oben: dehnt sich wenig (10–75 px) und federt zurück', over > 10 && over <= 75 && Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02, `${Math.round(over)} px`);
+    check('Gummiband über oben: dehnt sich wenig (10–75 px) und federt zurück', over > 10 && over <= 75 && Math.abs((await rect('#fxpad')).h / ar.h - 1) < 0.02, `${Math.round(over)} px`);
     // Langsam fast ganz herunter ziehen: zu – und zwar sichtbar hinausgleitend (Klassenwechsel mitschreiben, unabhängig von der Last)
     await page.evaluate(() => {
-      const m = document.getElementById('mixer');
+      const m = document.getElementById('fxpad');
       window.__leave = [];
       window.__mo = new MutationObserver(() => window.__leave.push({ t: performance.now(), leaving: m.classList.contains('leaving'), shown: getComputedStyle(m).display !== 'none' }));
       window.__mo.observe(m, { attributes: true, attributeFilter: ['class'] });
     });
-    await startFrames(page, ['#mixer']);
-    await mdrag('#mixer', ar.h * 0.85, 10, true);
+    await startFrames(page, ['#fxpad']);
+    await mdrag('#fxpad', ar.h * 0.85, 10, true);
     await page.waitForTimeout(60);
     check('Nach unten ziehen schließt die Schublade', await page.evaluate(() => window.loopwerk.ui.dock === null));
     await rest(page);
-    const fShut = motion(await stopFrames(page), '#mixer');
+    const fShut = motion(await stopFrames(page), '#fxpad');
     const lv = await page.evaluate(() => { window.__mo.disconnect(); const a = window.__leave.find((x) => x.leaving && x.shown); const b = a && window.__leave.find((x) => x.t > a.t && !x.leaving); return a && b ? { ms: Math.round(b.t - a.t) } : null; });
     const afterRelease = fShut.pts.filter((p, i) => i > 0 && !p.drag && p.top > fShut.pts[i - 1].top + 0.5).length;
     check('Schließen ist animiert (verschwindet nicht sofort)', lv && lv.ms >= 100 && afterRelease >= 2, JSON.stringify({ lv, afterRelease }));
-    check('Nach der Animation ist die Schublade weg', await page.evaluate(() => getComputedStyle(document.getElementById('mixer')).display === 'none'));
+    check('Nach der Animation ist die Schublade weg', await page.evaluate(() => getComputedStyle(document.getElementById('fxpad')).display === 'none'));
     // Mit dem Knopf öffnen und schließen: ebenfalls animiert, öffnet am gemerkten Haltepunkt
-    await page.click('#mixer-btn');
+    await page.click('#fxpad-btn');
     await rest(page);
-    check('Öffnet am gemerkten Haltepunkt', Math.abs((await rect('#mixer')).h / ar.h - 1) < 0.02);
-    await startFrames(page, ['#mixer']);
-    await page.click('#mixer-btn');
+    check('Öffnet am gemerkten Haltepunkt', Math.abs((await rect('#fxpad')).h / ar.h - 1) < 0.02);
+    await startFrames(page, ['#fxpad']);
+    await page.click('#fxpad-btn');
     await page.waitForTimeout(40);
-    check('Schließen per Knopf ist animiert', await page.evaluate(() => document.getElementById('mixer').classList.contains('leaving')));
+    check('Schließen per Knopf ist animiert', await page.evaluate(() => document.getElementById('fxpad').classList.contains('leaving')));
     await rest(page);
-    const fClose = motion(await stopFrames(page), '#mixer');
+    const fClose = motion(await stopFrames(page), '#fxpad');
     // Mindestens 5 bewegte Bilder bei 60 Bildern/s; auf einer langsamen Maschine (größere Bildabstände) entsprechend weniger
     const gaps = fClose.pts.slice(1).map((p, i) => p.t - fClose.pts[i].t).filter((g) => g > 0).sort((a, b) => a - b);
     const dtm = gaps[Math.floor(gaps.length / 2)] || 16.7;
     const need = Math.min(5, Math.max(3, Math.floor(240 / dtm)));
     check('Schließen per Knopf: gleitet ganz hinaus, ohne Sprung', fClose.moving >= need && fClose.last.vis <= -30 && fClose.jerk <= 60, JSON.stringify({ moving: fClose.moving, need, dtm: Math.round(dtm), last: fClose.last, peak: fClose.peak, jerk: fClose.jerk }));
-    await page.click('#mixer-btn');
+    await page.click('#fxpad-btn');
     await page.keyboard.press('Escape');
     check('Esc schließt das Fach', await page.evaluate(() => window.loopwerk.ui.dock === null));
     await rest(page);
 
     // Mixer → Inspektor
-    await page.click('#mixer-btn');
-    await page.locator('#mixer .strip[data-strip-id="t2"] .strip-sum').click();
-    check('Mixer: „keine Effekte“ zeigt die Spur im Inspektor', await mode() === 'track' && await page.evaluate(() => window.loopwerk.ui.selectedTrackId) === 't2');
+    await page.click('#side-tab-mixer');
+    await page.locator('.mix-slot .strip[data-strip-id="t2"] .strip-sum').click();
+    check('Mixer: „keine Effekte“ öffnet die Karte der Spur', await mode() === 'track' && await page.evaluate(() => window.loopwerk.ui.selectedTrackId) === 't2');
     await page.keyboard.press('Escape');
 
     // ---------- Erstellen ----------

@@ -103,17 +103,17 @@ function installHelpers() {
       store.replace(S.project([S.track('t1', {}, [S.clip('c1', 'test-sine', 0, 8)]), S.track('t2', {}, [S.clip('c2', 'test-sine', 0, 8)])]));
       ui.setDock('mixer');
     });
-    await page.waitForSelector('#mixer:not([hidden]) .strip-bus');
+    await page.waitForSelector('.mix-bus .strip-bus', { state: 'visible' }); // Layout „reiter“: Zeilen neben den Spuren statt Fach
     await page.waitForTimeout(400);
     const layout = await page.evaluate(() => {
-      const ids = [...document.querySelectorAll('#mixer-strips > .strip')].map((s) => s.dataset.stripId);
-      const idle = [...document.querySelectorAll('#mixer-strips .strip-bus')].map((s) => s.classList.contains('idle'));
+      const ids = [...document.querySelectorAll('.mix-slot .strip, .mix-bus .strip')].map((s) => s.dataset.stripId);
+      const idle = [...document.querySelectorAll('.mix-bus .strip-bus')].map((s) => s.classList.contains('idle'));
       const s1 = document.querySelector('.strip[data-strip-id="t1"] .strip-sends');
       const labels = [...document.querySelectorAll('.strip[data-strip-id="t1"] .strip-send-label')].map((n) => n.textContent);
-      const ctl = (id) => !!document.querySelector(`#mixer-strips .strip[data-strip-id="${id}"]`);
+      const ctl = (id) => !!document.querySelector(`.strip[data-strip-id="${id}"]`);
       return { ids, idle, sends: !!s1 && getComputedStyle(s1).display !== 'none', labels, busHasPan: !!document.querySelector('.strip-bus .strip-pan'), busHasSolo: !!document.querySelector('.strip-bus .tbtn-solo'), trackHasSendIn: ctl('t1') };
     });
-    check('17 Mixer: Rückkanäle „Hall-Bus“ und „Echo-Bus“ zwischen den Spuren und dem Master', JSON.stringify(layout.ids) === '["t1","t2","__bus:hall","__bus:echo","__master"]', JSON.stringify(layout.ids));
+    check('17 Mixer: Zeile je Spur, darunter Summe, „Hall-Bus“ und „Echo-Bus“', JSON.stringify(layout.ids) === '["t1","t2","__master","__bus:hall","__bus:echo"]', JSON.stringify(layout.ids));
     check('17 Mixer: ohne Send sind beide Rückkanäle gedimmt', layout.idle.length === 2 && layout.idle.every(Boolean), JSON.stringify(layout.idle));
     check('17 Mixer: Kanalzug hat „→H“ und „→E“, Rückkanal weder Panorama noch Solo', layout.sends && layout.labels.join() === '→H,→E' && !layout.busHasPan && !layout.busHasSolo, JSON.stringify(layout));
 
@@ -125,7 +125,7 @@ function installHelpers() {
     await page.mouse.up();
     const rd = () => page.evaluate(() => {
       const st = window.loopwerk.store;
-      return { sends: st.project.tracks[0].sends ?? null, buses: st.project.buses ?? null, idle: [...document.querySelectorAll('#mixer-strips .strip-bus')].map((s) => s.classList.contains('idle')), on: document.querySelector('.strip[data-strip-id="t1"] .strip-send:first-child').classList.contains('on') };
+      return { sends: st.project.tracks[0].sends ?? null, buses: st.project.buses ?? null, idle: [...document.querySelectorAll('.mix-bus .strip-bus')].map((s) => s.classList.contains('idle')), on: document.querySelector('.strip[data-strip-id="t1"] .strip-send:first-child').classList.contains('on') };
     });
     let r = await rd();
     check('17 Mixer: „→H“ ziehen setzt track.sends.hall; Hall-Bus ist nicht mehr gedimmt, Echo-Bus schon', r.sends?.hall > 0.2 && r.sends.hall < 0.6 && r.idle[0] === false && r.idle[1] === true && r.on, JSON.stringify(r));
@@ -143,22 +143,22 @@ function installHelpers() {
 
     // Fader und Stumm des Rückkanals
     await page.evaluate(() => { const n = document.getElementById('fader-bus-echo'); n.value = '0.5'; n.dispatchEvent(new Event('input', { bubbles: true })); });
-    await page.click('#mixer-strips .strip[data-strip-id="__bus:echo"] .tbtn-mute');
+    await page.click('.mix-bus .strip[data-strip-id="__bus:echo"] .tbtn-mute');
     r = await rd();
     check('17 Mixer: Fader des Rückkanals setzt buses.echo.volume, M schaltet buses.echo.mute', r.buses?.echo?.volume === 0.5 && r.buses.echo.mute === true, JSON.stringify(r.buses));
     const mutedUi = await page.evaluate(() => document.querySelector('.strip[data-strip-id="__bus:echo"] .tbtn-mute').getAttribute('aria-pressed'));
     check('17 Mixer: M zeigt den Zustand (aria-pressed)', mutedUi === 'true', mutedUi);
 
-    // Name: öffnet den Inspektor „Song“ beim Block „Busse“
+    // Name: öffnet die Summen-Karte beim Block „Busse“
     await page.evaluate(() => { window.loopwerk.ui.selectTrack('t1'); });
-    await page.click('#mixer-strips .strip[data-strip-id="__bus:echo"] .strip-name');
+    await page.click('.mix-bus .strip[data-strip-id="__bus:echo"] .strip-name');
     await page.waitForTimeout(300);
     const insp = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, box: !!document.getElementById('insp-bus-echo')?.offsetParent, hint: document.getElementById('hint-text')?.textContent || '' }));
     check('17 Mixer: Klick auf den Namen zeigt Inspektor „Song“ mit dem Block des Busses', insp.mode === 'song' && insp.box, JSON.stringify(insp));
     // Ohne Send zeigt der Block nichts – dann sagt es der Einblender
     await page.evaluate(() => { window.loopwerk.store.setSend('t2', 'echo', 0); });
     await page.evaluate(() => window.loopwerk.ui.selectTrack('t1'));
-    await page.click('#mixer-strips .strip[data-strip-id="__bus:echo"] .strip-name');
+    await page.click('.mix-bus .strip[data-strip-id="__bus:echo"] .strip-name');
     await page.waitForTimeout(200);
     const flash = await page.evaluate(() => document.getElementById('hint-text')?.textContent || '');
     check('17 Mixer: Name eines ungenutzten Rückkanals meldet „Noch sendet keine Spur …“', /Noch sendet keine Spur zum Echo-Bus/.test(flash), flash);

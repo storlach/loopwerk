@@ -316,20 +316,21 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await page.tap('#undo-btn');
 
     // ---------- Mixer ----------
-    await page.tap('#mixer-btn');
-    await page.waitForTimeout(600);
-    const fader = await box('#mixer .strip[data-strip-id="t3"] .strip-fader-row');
+    // Layout „reiter“ (Umbau Scheibe 3): Mixer = Zeilen neben den Spuren, waagrechte Fader (nach links ziehen = leiser)
+    await page.evaluate(() => { window.loopwerk.mixcol.close(); window.loopwerk.side.show('mixer'); });
+    await page.waitForTimeout(700);
+    const fader = await box('.mix-slot .strip[data-strip-id="t3"] .strip-fader-row');
     const fv0 = await page.evaluate(() => window.loopwerk.store.track('t3').volume);
-    await swipe(fader.x + fader.width / 2, fader.y + fader.height / 2, 0, 40);
+    await swipe(fader.x + fader.width / 2, fader.y + fader.height / 2, -40, 0);
     const fv1 = await page.evaluate(() => window.loopwerk.store.track('t3').volume);
     check('Mixer: Fader mit dem Finger ziehen', fv1 < fv0, `${fv0} → ${fv1}`);
-    await page.tap('#mixer .strip[data-strip-id="t3"] .tbtn-mute');
+    await page.tap('.mix-slot .strip[data-strip-id="t3"] .tbtn-mute');
     check('Mixer: Stumm antippen', await page.evaluate(() => window.loopwerk.store.track('t3').mute));
     await shot('mixer');
     await targets('Mixer');
     await page.tap('#undo-btn');
     await page.tap('#undo-btn');
-    await page.tap('#mixer-btn');
+    await page.evaluate(() => window.loopwerk.side.show('sounds')); // zurück zum Regal
     await page.waitForTimeout(500);
 
     // ---------- Melodie: Piano-Roll ----------
@@ -427,8 +428,8 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
 
     // ---------- Schieberegler: zweimal antippen setzt den Grundwert ----------
     const t0 = order0[0];
-    await page.evaluate((id) => { window.loopwerk.store.setTrackFx(id, 'echo', { on: true, mix: 0.9 }); window.loopwerk.ui.selectTrack?.(id); }, t0);
-    await page.waitForTimeout(300);
+    await page.evaluate((id) => { window.loopwerk.store.setTrackFx(id, 'echo', { on: true, mix: 0.9 }); window.loopwerk.mixer.select(id); }, t0); // Layout „reiter“: Karte der Spur
+    await page.waitForTimeout(700);
     await page.waitForTimeout(300);
     const pb = await page.evaluate(() => {
       const n = [...document.querySelectorAll('#insp .fx-param input[type="range"]')].find((x) => x.offsetParent && Math.abs(Number(x.value) - 0.9) < 1e-6);

@@ -363,8 +363,8 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
     check('Latenzausgleich der Aufnahme kennt die längere Club-Kette', Math.abs(rt.delay - rt.want) < 1e-9, JSON.stringify({ delay: rt.delay, want: rt.want }));
     check('Wiedergabe mit Club läuft (Position wandert)', rt.beat > 0.5, `Schlag ${rt.beat}`);
 
-    // ---------- Bedienung Desktop: Inspektor „Song“ und Export-Klappfeld ----------
-    await page.evaluate(() => { const { store, ui } = window.loopwerk; store.setMastering({ on: true, style: 'balanced' }); ui.select(null); ui.selectTrack(null); window.loopwerk.side?.show('datei', { save: false }); }); // Layout „reiter“: Mastering liegt im Reiter Datei
+    // ---------- Bedienung Desktop: Summen-Karte (Mastering) und Export-Klappfeld ----------
+    await page.evaluate(() => { const { store, ui } = window.loopwerk; store.setMastering({ on: true, style: 'balanced' }); ui.select(null); ui.selectTrack(null); window.loopwerk.side?.show('mixer', { save: false }); window.loopwerk.mixer.select('__master'); }); // Mastering liegt in der Summen-Karte über der Mixer-Spalte // Layout „reiter“: Mastering liegt im Reiter Datei
     await page.waitForTimeout(300);
     const desk = await page.evaluate(chipFit, 'insp-mst');
     check('Desktop Inspektor: fünf Stil-Chips, „Club“ als fünfter, Tooltip „Club · Ziel −8 LUFS“',

@@ -11,6 +11,8 @@ const { check, finish } = createChecker();
   const app = await openApp({ viewport: { width: 1440, height: 900 } });
   const { page } = app;
   const lw = (fn, arg) => page.evaluate(fn, arg);
+  // sichtbar = nicht ausgeblendet (die Karte und die Spalte bleiben beim Ausblenden im Baum, visibility: hidden nach dem Übergang)
+  const shown = (sel) => lw((q) => { const n = document.querySelector(q); return !!n && getComputedStyle(n).visibility !== 'hidden' && n.getClientRects().length > 0; }, sel);
   // Versatz zwischen Spur und Mixer-Zeile (Oberkante, Höhe) für alle sichtbaren Spuren
   const offsets = () => lw(() => {
     const out = [];
@@ -40,7 +42,7 @@ const { check, finish } = createChecker();
       mixerBtn: !!document.getElementById('mixer-btn').offsetParent, dock: !!document.getElementById('mixer').offsetParent,
       fxpadIn: !!document.getElementById('fxpad-btn').closest('#mix-head') && !!document.getElementById('fxpad-btn').offsetParent,
       busRows: [...document.querySelectorAll('#mix-bus .strip')].map((s) => s.dataset.stripId),
-      hint: !!document.querySelector('.side-mixer-hint'), sideShown: !!document.getElementById('side').offsetParent,
+      hint: !!document.querySelector('.side-mixer-hint'), sideShown: getComputedStyle(document.getElementById('side')).visibility !== 'hidden',
       n: document.querySelectorAll('.mix-slot .strip').length, tracks: window.loopwerk.store.project.tracks.length,
     }));
     check('Kein Mixer-Fach und kein „Mixer“-Knopf, keine Karte ohne Klick', !base.mixerBtn && !base.dock && !base.sideShown && !base.hint, JSON.stringify(base));
@@ -107,11 +109,11 @@ const { check, finish } = createChecker();
     check('Spur wählen (Spurkopf) hebt die Zeile hervor und öffnet die Karte nicht', await (async () => {
       await page.click(`.track-row:has(.lane[data-track-id="${tid}"]) .track-head .track-name`);
       await page.waitForTimeout(250);
-      return lw((id) => ({ card: !!document.getElementById('side').offsetParent, sel: document.querySelector(`.mix-slot[data-track-id="${id}"] .strip`).classList.contains('selected'), tab: document.getElementById('app').dataset.side }), tid).then((r) => (r.sel && !r.card && r.tab === 'mixer') || (console.log(JSON.stringify(r)), false));
+      return lw((id) => ({ card: getComputedStyle(document.getElementById('side')).visibility !== 'hidden', sel: document.querySelector(`.mix-slot[data-track-id="${id}"] .strip`).classList.contains('selected'), tab: document.getElementById('app').dataset.side }), tid).then((r) => (r.sel && !r.card && r.tab === 'mixer') || (console.log(JSON.stringify(r)), false));
     })());
     await page.click(`.mix-slot[data-track-id="${tid}"] .strip-sum`);
     await page.waitForTimeout(300);
-    const card = await lw(() => ({ shown: !!document.getElementById('side').offsetParent, title: document.getElementById('mixcard-title').textContent, mode: document.getElementById('app').dataset.mixcard, fx: !!document.getElementById('fx-eq-on')?.offsetParent, vol: !!document.getElementById('insp-vol')?.offsetParent, pan: !!document.getElementById('insp-pan')?.offsetParent, sends: !!document.getElementById('insp-send-hall')?.offsetParent && !!document.getElementById('insp-send-echo')?.offsetParent, order: !!document.getElementById('fx-eq-on')?.closest('.fxl')?.querySelector('.fxl-head [class*="grip"], .fxl-head .grip'), arm: !!document.querySelector('#side .insp-track [id*="arm"], #side .insp-track .rec-arm-row'), mst: !!document.getElementById('insp-mst-on')?.offsetParent }));
+    const card = await lw(() => ({ shown: getComputedStyle(document.getElementById('side')).visibility !== 'hidden', title: document.getElementById('mixcard-title').textContent, mode: document.getElementById('app').dataset.mixcard, fx: !!document.getElementById('fx-eq-on')?.offsetParent, vol: !!document.getElementById('insp-vol')?.offsetParent, pan: !!document.getElementById('insp-pan')?.offsetParent, sends: !!document.getElementById('insp-send-hall')?.offsetParent && !!document.getElementById('insp-send-echo')?.offsetParent, order: !!document.getElementById('fx-eq-on')?.closest('.fxl')?.querySelector('.fxl-head [class*="grip"], .fxl-head .grip'), arm: !!document.querySelector('#side .insp-track [id*="arm"], #side .insp-track .rec-arm-row'), mst: !!document.getElementById('insp-mst-on')?.offsetParent }));
     check('Klick auf die Kurzinfo öffnet die Karte der Spur: Titel = Spurname, Effekte, Lautstärke, Panorama, Sends', card.shown && card.title === tname && card.mode === 'spur' && card.fx && card.vol && card.pan && card.sends && !card.mst, JSON.stringify(card));
     // Ausgangslage: EQ aus (das Beispiel schaltet ihn bei manchen Spuren ein), dann in der Karte einschalten
     await lw((id) => window.loopwerk.store.setTrackFx(id, 'eq', { on: false }), tid);
@@ -130,12 +132,16 @@ const { check, finish } = createChecker();
     await page.waitForTimeout(250);
     check('Andere Spur wählen (Spurkopf): die offene Karte zeigt deren Spur', await lw((n) => document.getElementById('mixcard-title').textContent === n, await lw((id) => window.loopwerk.store.track(id).name, tid2)));
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(200);
-    check('Esc schließt die Karte (die Spalte bleibt)', await lw(() => !document.getElementById('side').offsetParent && !!document.querySelector('.mix-slot .strip').offsetParent && !document.getElementById('app').dataset.mixcard));
+    await page.waitForTimeout(120);
+    const mid = await lw(() => { const c = getComputedStyle(document.getElementById('side')); return { vis: c.visibility, op: Number(c.opacity), inDom: !!document.getElementById('side').offsetParent, tr: c.transitionProperty }; });
+    check('Karte blendet aus: bleibt während des Übergangs im Baum (sichtbar, durchscheinend), Übergang über Deckkraft und Verschiebung', mid.vis === 'visible' && mid.op < 1 && mid.inDom && /opacity/.test(mid.tr) && /transform/.test(mid.tr), JSON.stringify(mid));
+    await page.waitForTimeout(450);
+    check('Esc schließt die Karte (die Spalte bleibt); danach unsichtbar und nicht erreichbar', await lw(() => getComputedStyle(document.getElementById('side')).visibility === 'hidden' && getComputedStyle(document.getElementById('side')).pointerEvents === 'none' && getComputedStyle(document.querySelector('.mix-slot')).visibility === 'visible' && !document.getElementById('app').dataset.mixcard && !document.getElementById('app').dataset.mixkind));
     await page.click(`.mix-slot[data-track-id="${tid}"] .strip-sum`);
     await page.waitForTimeout(200);
     await page.click('#mixcard-close');
-    check('✕ schließt die Karte', await lw(() => !document.getElementById('side').offsetParent));
+    await page.waitForTimeout(450);
+    check('✕ schließt die Karte', !(await shown('#side')));
 
     // ---------- Karte: Summe ----------
     await page.click('#mix-bus .strip[data-strip-id="__master"] .strip-sum');
@@ -182,12 +188,18 @@ const { check, finish } = createChecker();
     // Reiter Sounds: Spalte weg, der ganze Arranger ist frei; die Pegel ruhen
     await page.click('#side-tab-sounds');
     await page.waitForTimeout(250);
-    const free = await lw(() => ({ slot: !!document.querySelector('.mix-slot').offsetParent, w: Math.round(document.querySelector('.arr-grid').getBoundingClientRect().width), reserve: getComputedStyle(document.getElementById('arr-scroll')).paddingRight }));
+    await page.waitForTimeout(450);
+    const free = await lw(() => ({ slot: getComputedStyle(document.querySelector('.mix-slot')).visibility !== 'hidden', w: Math.round(document.querySelector('.arr-grid').getBoundingClientRect().width), reserve: getComputedStyle(document.getElementById('arr-scroll')).paddingRight }));
     check('Ohne Mixer-Reiter keine Spalte', !free.slot, JSON.stringify(free));
+    // Karte offen (Sounds): der senkrechte Rollbalken bleibt am Fensterrand und frei, die Spuren laufen hinter der Karte weiter
+    const geo = await lw(() => { const side = document.getElementById('side').getBoundingClientRect(); const z = document.querySelector('.zbar-y').getBoundingClientRect(); const lane = document.querySelector('.lane').getBoundingClientRect(); return { sideRight: Math.round(side.right), zLeft: Math.round(z.left), zRight: Math.round(z.right), win: innerWidth, laneRight: Math.round(lane.right), sideLeft: Math.round(side.left) }; });
+    check('Rollbalken bleibt rechts am Fensterrand, die Karte sitzt links davon', geo.zRight >= geo.win - 14 && geo.sideRight <= geo.zLeft, JSON.stringify(geo));
+    check('Spuren laufen hinter der Karte weiter (Spurfläche reicht unter die Karte)', geo.laneRight > geo.sideLeft, JSON.stringify(geo));
     await page.click('#side-tab-sounds'); // Karte zu
     await page.waitForTimeout(250);
-    const closed = await lw(() => ({ slot: !!document.querySelector('.mix-slot').offsetParent, pad: getComputedStyle(document.getElementById('arr-scroll')).paddingRight, mix: getComputedStyle(document.getElementById('app')).getPropertyValue('--mix-w').trim() }));
-    check('Karte zu: kein Rand, keine Spalte, der ganze Arranger ist frei', !closed.slot && closed.pad === '0px', JSON.stringify(closed));
+    await page.waitForTimeout(450);
+    const closed = await lw(() => ({ slot: getComputedStyle(document.querySelector('.mix-slot')).visibility !== 'hidden', side: getComputedStyle(document.getElementById('side')).visibility !== 'hidden', pad: getComputedStyle(document.getElementById('arr-scroll')).paddingRight, mix: getComputedStyle(document.getElementById('app')).getPropertyValue('--mix-w').trim() }));
+    check('Karte zu: kein Rand, keine Spalte, der ganze Arranger ist frei', !closed.slot && !closed.side && closed.pad === '0px', JSON.stringify(closed));
   } catch (e) {
     check('Test lief ohne Ausnahme', false, e.stack || e.message);
   }

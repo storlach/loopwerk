@@ -142,7 +142,7 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
     faderRow.append(fader, meter);
     // Finger: relativ ziehen auf der ganzen Fader-Zeile, Wischen zur Seite scrollt
     faderRow.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') e.preventDefault(); });
-    relativeDrag(faderRow, fader, { span: () => fader.getBoundingClientRect().height || 120, touchOnly: true });
+    relativeDrag(faderRow, fader, { span: () => (column() ? fader.getBoundingClientRect().width : fader.getBoundingClientRect().height) || 120, touchOnly: true, horizontal: column });
     const value = el('div', 'strip-value');
     const ms = el('div', 'strip-ms');
     let mute = null;

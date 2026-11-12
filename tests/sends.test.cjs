@@ -244,7 +244,7 @@ function installHelpers() {
       const { store, ui } = window.loopwerk;
       const S = window.__sd;
       store.replace(S.project([S.track('t1', { fx: { filter: { on: true } } }, [S.clip('c1', 'test-sine', 0, 8)]), S.track('t2', {}, [S.clip('c2', 'test-click', 0, 4)])]));
-      ui.selectTrack('t1');
+      window.loopwerk.mixer.select('t1'); // Layout „reiter“: Karte der Spur über der Mixer-Spalte
     });
     await page.waitForSelector('#insp-send-hall');
     await page.waitForTimeout(500);
@@ -277,7 +277,7 @@ function installHelpers() {
       await page.screenshot({ path: path.join(SHOT_DIR, 'buses-track-desktop.png') });
     }
     // Song: Block „Busse“ unter den Master-Effekten – erst, wenn eine Spur zum Bus sendet
-    await page.evaluate(() => { window.loopwerk.ui.selectTrack(null); window.loopwerk.ui.select(null); });
+    await page.evaluate(() => { window.loopwerk.mixer.select('__master'); }); // Summen-Karte
     await page.waitForSelector('#insp .insp-grp-master');
     const shown = () => page.evaluate(() => ({ grp: !document.getElementById('insp-buses').hidden, hall: !document.getElementById('insp-bus-hall').hidden, echo: !document.getElementById('insp-bus-echo').hidden }));
     const onlyEcho = await shown();
@@ -289,7 +289,7 @@ function installHelpers() {
       JSON.stringify({ none, onlyEcho, both }));
     await page.waitForSelector('#insp .insp-grp-buses:not([hidden])');
     const order = await page.evaluate(() => [...document.querySelectorAll('#insp .insp-sec:not([hidden]) > .insp-grp')].map((g) => [...g.classList].find((c) => c.startsWith('insp-grp-') || c === 'insp-mst')));
-    check('17 Song: Block „Busse“ direkt nach dem Master-Block', order.indexOf('insp-grp-buses') === order.indexOf('insp-grp-master') + 1, JSON.stringify(order));
+    check('17 Summen-Karte: Block „Busse“ direkt vor dem Master-Block (Skizze 3: Mastering · Busse · Master)', order.indexOf('insp-grp-buses') === order.indexOf('insp-grp-master') - 1, JSON.stringify(order));
     await setRange('#insp-bus-hall-volume', 0.5);
     await setRange('#insp-bus-hall-size', 0.3);
     await setRange('#insp-bus-echo-volume', 0.6);
@@ -302,9 +302,9 @@ function installHelpers() {
       const g = document.querySelector('.insp-grp-buses');
       const m = document.querySelector('.insp-grp-master');
       const cs = getComputedStyle(g);
-      return { line: cs.borderTopStyle, pad: cs.paddingTop, mt: cs.marginTop, below: g.getBoundingClientRect().top >= m.getBoundingClientRect().bottom };
+      return { line: cs.borderTopStyle, pad: cs.paddingTop, mt: cs.marginTop, below: g.getBoundingClientRect().bottom <= m.getBoundingClientRect().top }; // Summen-Karte (Skizze 3): Mastering · Busse · Master
     });
-    check('17 Block „Busse“ mit Trennlinie und gleichem Abstand wie die anderen Blöcke', busGeom.line === 'solid' && busGeom.pad === '18px' && busGeom.mt === '10px' && busGeom.below, JSON.stringify(busGeom));
+    check('17 Block „Busse“ mit Trennlinie und gleichem Abstand wie die anderen Blöcke, über dem Master', busGeom.line === 'solid' && busGeom.pad === '18px' && busGeom.mt === '10px' && busGeom.below, JSON.stringify(busGeom));
     if (SHOTS) {
       await page.evaluate(() => document.querySelector('.insp-grp-buses').scrollIntoView({ block: 'center', behavior: 'instant' }));
       await page.screenshot({ path: path.join(SHOT_DIR, 'buses-song-desktop.png') });
