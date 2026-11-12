@@ -1,5 +1,5 @@
 // Vorschau (Artifact) vorbereiten: geänderte Dateien seit der letzten Veröffentlichung, Stände gegen die Historie prüfen.
-// Aufruf: node tools/vorschau.cjs [--since <commit>] | --verify <ordner> | --mark <nummer>
+// Aufruf: node tools/vorschau.cjs [--since <commit>] | --alle | --verify <ordner> | --mark <nummer>   [--stand <name>]
 // Beispiel: node tools/vorschau.cjs --since HEAD~5   (JSON für `files` auf stdout, Hinweis für Menschen auf stderr)
 const fs = require('fs');
 const path = require('path');
@@ -15,6 +15,9 @@ const HELP = `Vorschau vorbereiten
   node tools/vorschau.cjs --since <c>     dasselbe ab Commit <c> (nötig, solange kein Stand gemerkt ist)
   node tools/vorschau.cjs --verify <dir>  Dateien in <dir> (mit Pfad, z. B. <dir>/src/x.js) gegen die Git-Historie prüfen
   node tools/vorschau.cjs --mark <n>      HEAD als Vorschau <n> merken (tools/vorschau-stand.json, einchecken)
+  node tools/vorschau.cjs --alle          alle Dateien (erste Veröffentlichung eines neuen Artifacts)
+  --stand <name>                          eigener Stand für eine zweite Vorschau: tools/vorschau-stand-<name>.json
+                                          (z. B. --stand umbau für die Umbau-Vorschau; gilt für Liste und --mark)
 
 Ausgabe der Liste: JSON-Objekt { "src/a.js": "src/a.js", ... } auf stdout (gelöscht = null, ohne index.html),
 eine Zeile für Menschen auf stderr. Exit: 0 gut · 1 --verify fand Dateien außerhalb der Historie · 2 Bedienfehler.`;
@@ -26,7 +29,9 @@ function git(args, opts = {}) {
 const gitText = (args) => git(args).toString('utf8');
 
 // Der letzte veröffentlichte Stand steht in tools/vorschau-stand.json (Tags kommen in dieser Umgebung nicht aufs Remote)
-const STAND = path.join(ROOT, 'tools', 'vorschau-stand.json');
+const standName = (() => { const i = process.argv.indexOf('--stand'); return i >= 0 ? process.argv[i + 1] : ''; })();
+if (standName && !/^[a-z0-9-]+$/.test(standName)) die('--stand braucht einen Namen aus Kleinbuchstaben, Ziffern, Bindestrich');
+const STAND = path.join(ROOT, 'tools', standName ? `vorschau-stand-${standName}.json` : 'vorschau-stand.json');
 function latestStand() {
   try { const j = JSON.parse(fs.readFileSync(STAND, 'utf8')); return j.commit ? j : null; } catch { return null; }
 }
@@ -88,21 +93,28 @@ function mark(n) {
   if (!/^\d+$/.test(n || '')) die('--mark braucht eine Nummer');
   const commit = gitText(['rev-parse', 'HEAD']).trim();
   fs.writeFileSync(STAND, JSON.stringify({ nummer: Number(n), commit, datum: new Date().toISOString().slice(0, 10) }, null, 2) + '\n');
-  console.log(`Vorschau ${n} gemerkt: ${commit.slice(0, 7)} (tools/vorschau-stand.json – mit dem nächsten Commit einchecken).`);
+  console.log(`Vorschau ${n} gemerkt: ${commit.slice(0, 7)} (${path.relative(ROOT, STAND)} – mit dem nächsten Commit einchecken).`);
 }
 
 function main() {
   const a = process.argv.slice(2);
   if (a.includes('--help') || a.includes('-h')) { console.log(HELP); return; }
   const val = (flag) => { const i = a.indexOf(flag); if (i < 0) return undefined; if (!a[i + 1]) die(`${flag} braucht einen Wert`); return a[i + 1]; };
-  for (const x of a) if (x.startsWith('--') && !['--since', '--verify', '--mark'].includes(x)) die(`Unbekannte Option ${x}`);
+  for (const x of a) if (x.startsWith('--') && !['--since', '--verify', '--mark', '--stand', '--alle'].includes(x)) die(`Unbekannte Option ${x}`);
   if (a.includes('--verify')) return verify(path.resolve(val('--verify')));
   if (a.includes('--mark')) return mark(val('--mark'));
+  if (a.includes('--alle')) {
+    const files = {};
+    for (const p of gitText(['ls-files', '--', ...PATHS]).split('\n').filter(Boolean)) if (p !== 'index.html') files[p] = p;
+    console.log(JSON.stringify(files, null, 2));
+    console.error(`${Object.keys(files).length} Dateien (alle), dazu index.html als Seite.`);
+    return;
+  }
   let since = val('--since');
   let label = since;
   if (!since) {
     const st = latestStand();
-    if (!st) die('Noch kein Stand gemerkt (tools/vorschau-stand.json). Bitte --since <commit> angeben; danach mit --mark <n> merken.');
+    if (!st) die(`Noch kein Stand gemerkt (${path.relative(ROOT, STAND)}). Bitte --since <commit> oder --alle angeben; danach mit --mark <n> merken.`);
     since = st.commit;
     label = `Vorschau ${st.nummer}`;
   }
