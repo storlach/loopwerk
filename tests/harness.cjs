@@ -11,6 +11,7 @@ async function openApp({ viewport = { width: 1400, height: 820 }, args = [], has
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', ...args] });
   const page = await browser.newPage({ viewport, hasTouch, isMobile: hasTouch, deviceScaleFactor });
   const errors = [];
+  wrapSide(page);
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   if (!fresh) await legacyStart(page);
@@ -24,6 +25,47 @@ async function openApp({ viewport = { width: 1400, height: 820 }, args = [], has
     page, browser, url, errors,
     async close() { await browser.close(); server.close(); },
   };
+}
+
+// Layout „reiter“ (Loopwerk, Desktop): Bedienelemente liegen in der rechten Leiste je nach Reiter (Datei · Sounds · Mixer).
+// Wie ein Mensch den Reiter anklickt, bevor er den Knopf bedient: page.click & Co. wählen vorher den Reiter, in dem das Element liegt.
+// Nur für Selektoren als Text; ohne Leiste (Krachwerk, Handy) tut es nichts.
+async function revealSide(page, sel) {
+  if (typeof sel !== 'string') return;
+  try {
+    await page.evaluate((s) => {
+      const side = document.getElementById('side');
+      if (!side || !side.getClientRects().length) return;
+      let n = null;
+      try { n = document.querySelector(s); } catch { return; }
+      if (!n) return;
+      const tab = n.closest('.side-sounds') ? 'sounds' : n.closest('.insp-for-mixer, #side-mixer') ? 'mixer' : n.closest('.insp-for-datei, #side-datei, #side-datei-foot') ? 'datei' : null;
+      if (tab && document.getElementById('app').dataset.side !== tab) document.getElementById(`side-tab-${tab}`).click();
+    }, sel);
+  } catch { /* Seite lädt gerade */ }
+}
+const AKTIONEN = ['click', 'dblclick', 'fill', 'selectOption', 'check', 'uncheck', 'hover', 'press', 'type', 'focus', 'tap'];
+// Locator-Ketten (page.locator(a).filter(…).locator(b).click()): der Wurzel-Selektor entscheidet über den Reiter
+function wrapLocator(page, loc, root) {
+  return new Proxy(loc, {
+    get(t, p) {
+      const v = t[p];
+      if (typeof v !== 'function') return v;
+      return (...a) => {
+        if (AKTIONEN.includes(p)) return revealSide(page, root).then(() => v.apply(t, a));
+        const r = v.apply(t, a);
+        return r && typeof r === 'object' && typeof r.filter === 'function' && typeof r.click === 'function' ? wrapLocator(page, r, root) : r;
+      };
+    },
+  });
+}
+function wrapSide(page) {
+  const loc = page.locator.bind(page);
+  page.locator = (sel, ...rest) => wrapLocator(page, loc(sel, ...rest), sel);
+  for (const m of ['click', 'dblclick', 'fill', 'selectOption', 'check', 'uncheck', 'hover', 'press', 'type', 'focus', 'tap', 'dragAndDrop']) {
+    const orig = page[m].bind(page);
+    page[m] = async (sel, ...rest) => { await revealSide(page, sel); return orig(sel, ...rest); };
+  }
 }
 
 // Wie früher starten: Regal-Gruppe „Drums“ offen, Tonart- und Akkordzeile sichtbar (für Tests mit eigenem Browser)
@@ -139,4 +181,5 @@ function readSaved(file) {
   return { ...json, ownSounds: man.sounds, zip: { manifest: man, entries } };
 }
 
-module.exports = { legacyStart, openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx, readZipFile, readSaved };
+module.exports = {
+  revealSide, legacyStart, openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx, readZipFile, readSaved };

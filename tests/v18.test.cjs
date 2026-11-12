@@ -75,26 +75,25 @@ const { check, finish } = createChecker();
     const lay = await page.evaluate(() => ({
       insp: !!document.getElementById('insp').offsetParent, bar: getComputedStyle(document.getElementById('tabbar')).display,
       tabs: getComputedStyle(document.getElementById('tab-sounds')).display, overflow: document.documentElement.scrollWidth - innerWidth,
-      mixerInBar: !!document.getElementById('mixer-btn').closest('#tabbar'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
-      saveInMenu: !!document.getElementById('save-btn').closest('#project-menu'), exportInDeck: !!document.getElementById('export-btn').closest('.deck'),
+      mixerInBar: !!document.getElementById('mixer-btn').closest('#side-mixer'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
+      saveInMenu: !!document.getElementById('save-btn').closest('#side-datei'), exportInDeck: !!document.getElementById('export-btn').closest('#side-datei'),
       menuName: document.getElementById('project-menu-name').textContent,
     }));
     check('Deck in einer Zeile (≤ 64 px)', deck.h <= 64, `${deck.h} px`);
     check('Inspektor rechts, Fachleiste unten ohne Handy-Reiter, kein Querscrollen', lay.insp && lay.bar === 'flex' && lay.tabs === 'none' && lay.overflow <= 0, JSON.stringify(lay));
     check('Knöpfe an ihren neuen Plätzen', lay.mixerInBar && lay.zoomInBar && lay.saveInMenu && lay.exportInDeck && lay.menuName === 'Beispiel-Arrangement', JSON.stringify(lay));
 
-    // Projekt-Menü
-    await page.click('#project-menu-btn');
-    check('Projekt-Menü öffnet mit Name, Öffnen, Speichern, Beispiel, Leeren, Tipps', await page.evaluate(() => ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).offsetParent && document.getElementById(id).closest('#project-menu'))));
-    await page.keyboard.press('Escape');
-    check('Esc schließt das Menü', await page.locator('#project-menu').isHidden());
+    // Reiter Datei (Layout „reiter“ ersetzt das Projekt-Menü; der Knopf im Deck entfällt)
+    await page.click('#side-tab-datei');
+    check('Reiter Datei zeigt Name, Öffnen, Speichern, Beispiel, Leeren, Tipps', await page.evaluate(() => ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).offsetParent && document.getElementById(id).closest('#side-datei, #side-datei-foot'))));
+    check('Der Menü-Knopf im Deck entfällt', await page.locator('#project-menu-btn').isHidden());
 
     // Export als Klappfeld: Arranger bleibt gleich groß
     const arr0 = await rect('.arranger');
     await page.click('#export-btn');
     const ex = await rect('#export');
     const arr1 = await rect('.arranger');
-    check('Export öffnet als Klappfeld unter dem Knopf, Arranger unverändert', ex && ex.y < deck.b + 20 && ex.r > 1300 && arr1.h === arr0.h, JSON.stringify({ ex, arr0: arr0.h, arr1: arr1.h }));
+    check('Export öffnet als Klappfeld unter dem Knopf, Arranger unverändert', ex && ex.y < deck.b + 20 && ex.r > 1000 && arr1.h === arr0.h, JSON.stringify({ ex, arr0: arr0.h, arr1: arr1.h }));
     // Daneben klicken: in die leere Spur 8 (ein Clip würde ausgewählt)
     const empty = await rect('.lane[data-track-id="t8"]');
     await page.mouse.click(empty.x + 20, empty.y + empty.h / 2);
@@ -265,6 +264,8 @@ const { check, finish } = createChecker();
     check('Editor-Reiter schließt den offenen Editor', await page.evaluate(() => window.loopwerk.ui.dock === null));
     // Karte auf eine Spur ziehen (erst wenn die Schublade weg ist – sie nimmt die Ansicht beim Schließen mit zurück)
     await page.waitForTimeout(700);
+    // Layout „reiter“: mit gewähltem Clip steht dessen Abschnitt über dem Regal – die Karte erst in Sicht rollen
+    await page.locator('.ccard[data-create="melody"]').scrollIntoViewIfNeeded();
     const card = await rect('.ccard[data-create="melody"]');
     const t8 = await rect('.lane[data-track-id="t8"]');
     const ppb = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
@@ -394,10 +395,9 @@ const { check, finish } = createChecker();
     // ---------- Kleinerer Laptop: Inspektor eingeklappt ----------
     app = await openApp({ viewport: { width: 1280, height: 720 } });
     page = app.page;
-    const small = await page.evaluate(() => ({ w: document.getElementById('insp').getBoundingClientRect().width, overflow: document.documentElement.scrollWidth - innerWidth }));
-    await page.click('.insp-toggle');
-    const open = await page.evaluate(() => ({ w: document.getElementById('insp').getBoundingClientRect().width, mode: document.getElementById('insp').dataset.mode }));
-    check('1280 px: Inspektor eingeklappt (44 px), klappt auf', small.w <= 46 && small.overflow <= 0 && open.w >= 290, JSON.stringify({ small, open }));
+    // Layout „reiter“: die rechte Leiste ist auch am kleineren Laptop immer offen (kein Einklappen, kein Knopf „Eigenschaften“)
+    const small = await page.evaluate(() => ({ w: document.getElementById('side').getBoundingClientRect().width, overflow: document.documentElement.scrollWidth - innerWidth, toggle: !!document.querySelector('.insp-toggle')?.offsetParent }));
+    check('1280 px: rechte Leiste immer offen (≥ 290 px), kein Einklapp-Knopf, kein Querscrollen', small.w >= 290 && small.overflow <= 0 && !small.toggle, JSON.stringify(small));
     check('Keine Fehler in der Konsole (1280)', app.errors.length === 0, app.errors.join(' | '));
     await app.close();
 

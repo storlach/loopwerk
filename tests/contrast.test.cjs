@@ -94,8 +94,11 @@ async function session(opts, steps) {
     ['Desktop Export', ev(() => window.loopwerk.ui.setDock('export'))],
     ['Desktop Export mit Mastering', ev(() => window.loopwerk.store.setMastering({ on: true }))],
     ['Desktop FX-Pad', ev(() => window.loopwerk.ui.setDock('fxpad'))],
-    ['Desktop Song mit Mastering', ev(() => { const { ui } = window.loopwerk; ui.setDock(null); ui.select(null); ui.selectTrack(null); })],
-    ['Desktop Projekt-Menü', async (page) => { await page.evaluate(() => window.loopwerk.ui.setDock(null)); await page.click('#project-menu-btn'); }],
+    ['Desktop Song mit Mastering', ev(() => { const { ui, side } = window.loopwerk; ui.setDock(null); ui.select(null); ui.selectTrack(null); side.show('datei', { save: false }); })],
+    // Layout „reiter“: die Reiter der rechten Leiste ersetzen das Projekt-Menü
+    ['Desktop Reiter Datei', async (page) => { await page.evaluate(() => { const { ui, side } = window.loopwerk; ui.setDock(null); side.show('datei', { save: false }); }); }],
+    ['Desktop Reiter Mixer', ev(() => { const { ui, side, store } = window.loopwerk; ui.setDock(null); ui.selectTrack(store.project.tracks[0].id); side.show('mixer', { save: false }); })],
+    ['Desktop Reiter Sounds', ev(() => { const { ui, side } = window.loopwerk; ui.selectTrack(null); side.show('sounds', { save: false }); })],
   ]);
   await session({ viewport: { width: 1180, height: 820 }, hasTouch: true }, [
     ['Tablet Start', async () => {}],

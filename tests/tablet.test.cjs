@@ -111,7 +111,16 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     check('„Fertig“ beendet das Einsetzen', !(await lw()).armed);
     // Ziehen aus dem Regal auf eine Spur
     const item2 = await box('#library .loop-item >> nth=1');
-    await swipe(item2.x + 40, item2.y + item2.height / 2, lane8.x + 500 - item2.x - 40, lane8.y + lane8.height / 2 - item2.y - item2.height / 2, { steps: 20 });
+    // Layout „reiter“: das Regal steht rechts, die Spur liegt links oben. Ein Finger zieht erst zur Seite (wie ein Mensch, der den Sound
+    // „aus der Leiste herauszieht“) und dann zur Spur; ein rein senkrechter Anfang würde die Liste (touch-action: pan-y) rollen.
+    {
+      const x0 = item2.x + 40, y0 = item2.y + item2.height / 2, x1 = lane8.x + 500, y1 = lane8.y + lane8.height / 2;
+      await T('touchStart', [{ x: x0, y: y0 }]);
+      for (let i = 1; i <= 10; i++) { await T('touchMove', [{ x: x0 + ((x1 - x0) * i) / 10, y: y0 }]); await page.waitForTimeout(16); }
+      for (let i = 1; i <= 10; i++) { await T('touchMove', [{ x: x1, y: y0 + ((y1 - y0) * i) / 10 }]); await page.waitForTimeout(16); }
+      await T('touchEnd', []);
+      await page.waitForTimeout(250);
+    }
     s = await lw();
     check('Sound mit dem Finger auf eine Spur ziehen', s.tracks[1].some((c) => c.sampleId === 'drums-break'), JSON.stringify(s.tracks[1].map((c) => c.sampleId)));
 
@@ -297,13 +306,12 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
 
     // ---------- Inspektor (eingeklappt) ----------
     await page.evaluate(() => window.loopwerk.ui.selectTrack('t2'));
-    await page.tap('.insp-toggle');
+    // Layout „reiter“: eine gewählte Spur schaltet die rechte Leiste auf „Mixer“; es gibt keinen Einklapp-Knopf mehr
     await page.waitForTimeout(200);
     await page.tap('#fx-hall-on');
     check('Inspektor: Effekt per Antippen einschalten', await page.evaluate(() => window.loopwerk.store.track('t2').fx.hall.on === true));
     await page.evaluate(() => document.getElementById('insp-pan').scrollIntoView({ block: 'center' })); // Spur-Abschnitt hat jetzt eine Kopfzeile: Regler erst in die Mitte rollen
     await targets('Inspektor mit Effekt');
-    await page.tap('.insp-toggle');
     await page.tap('#undo-btn');
 
     // ---------- Mixer ----------
@@ -371,11 +379,11 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await targets('Erstellen');
     await page.tap('#ltab-sounds');
     await page.evaluate(() => window.loopwerk.engine.setPosition(8));
-    await page.tap('#project-menu-btn');
-    check('Projekt-Menü öffnet per Antippen', await page.locator('#project-menu').isVisible());
-    await targets('Projekt-Menü');
+    // Layout „reiter“: der Reiter Datei ersetzt das Projekt-Menü
+    await page.tap('#side-tab-datei');
+    check('Reiter Datei öffnet per Antippen', await page.locator('#save-btn').isVisible() && await page.locator('#project-name').isVisible());
+    await targets('Reiter Datei');
     await shot('projektmenue');
-    await page.tap('#project-menu-btn');
     await page.tap('#export-btn');
     await page.waitForTimeout(300);
     check('Export öffnet per Antippen', (await lw()).dock === 'export' && await page.locator('#ex-go').isVisible());
@@ -388,6 +396,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await page.tap('#keys-btn');
 
     // ---------- Tipps in Fingersprache ----------
+    await page.tap('#side-tab-sounds'); // Layout „reiter“: der Tipp zeigt auf Sounds im Regal, der Reiter muss offen sein
     await page.evaluate(() => { window.loopwerk.tips.reset(); window.loopwerk.tips.enable(); });
     await page.waitForTimeout(700);
     const tip = await page.evaluate(() => ({ id: window.loopwerk.tips.current, text: document.querySelector('.tip-text').textContent }));
@@ -418,7 +427,6 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     const t0 = order0[0];
     await page.evaluate((id) => { window.loopwerk.store.setTrackFx(id, 'echo', { on: true, mix: 0.9 }); window.loopwerk.ui.selectTrack?.(id); }, t0);
     await page.waitForTimeout(300);
-    if (!(await page.evaluate(() => document.getElementById('app').classList.contains('insp-open')))) await page.tap('.insp-toggle');
     await page.waitForTimeout(300);
     const pb = await page.evaluate(() => {
       const n = [...document.querySelectorAll('#insp .fx-param input[type="range"]')].find((x) => x.offsetParent && Math.abs(Number(x.value) - 0.9) < 1e-6);

@@ -65,6 +65,7 @@ function sammeln() {
   const CONTROLS = 'button, input:not([type=hidden]):not([type=file]), select, textarea, a[href], [role=button], [role=slider], [role=tab], [role=option], [role=menuitem], [role=switch], [role=checkbox], [draggable=true]:not(.clip), [contenteditable=true]';
   // innerster Treffer gewinnt
   const ORTE = [
+    ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Seitenleiste (Reiter)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-foot', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
     ['#project-menu', 'Projekt-Menü'], ['#rec-pop', 'Aufnahme-Feld am ●'], ['#keys-pop', 'Kürzel- und Gesten-Liste'],
     ['#link-pop', 'Feld „Aus dem Netz holen“'], ['.track-menu', 'Spur-Menü ⋯'], ['.chord-pop', 'Akkord-Feld'], ['.key-pop', 'Tonart-Feld'],
     ['.auto-keys', 'Kurven-Feld'], ['.tip', 'Tipp'], ['#hint', 'Einblender'], ['#clip-float', 'Werkzeug am Clip'], ['#clipbar', 'Clipleiste'],
@@ -74,7 +75,7 @@ function sammeln() {
     ['#arr-pills', 'Pillen über den Spuren'], ['#arr-bar', 'Arranger-Leiste'], ['.track-head', 'Spurkopf'], ['.ruler', 'Lineal'], ['#arr-wrap', 'Arranger'],
     ['#mixer', 'Fach Mixer'], ['#editor', 'Fach Editor (Sample-Editor)'], ['#pattern', 'Fach Editor (Beat/Melodie)'], ['#export', 'Fach Export'],
     ['#fxpad', 'Fach FX-Pad'], ['#tempo', 'Fach Tempo'], ['#song', 'Fach Song'], ['#werkbank', 'Werkbank'], ['#tabbar', 'Fachleiste'],
-    ['.shelf', 'Regal'], ['.deck', 'Deck'], ['.arranger', 'Arranger'],
+    ['.side-sounds > .shelf', 'Reiter Sounds'], ['.shelf', 'Regal'], ['.deck', 'Deck'], ['.arranger', 'Arranger'],
   ];
   // Wiederholte Dinge (je Spur, je Sound, je Schritt): eine Funktion, nicht hundert
   const REIHE = '[data-sample-id], [data-clip-id], [data-track-id], [data-strip-id], .track-head, .track-row, .loop-row, .fxl-item, .pat-row, .pat-cell, .pad, .take-row';
@@ -145,7 +146,7 @@ function sammeln() {
     }
     const s = sicht(el);
     // Aufklapper: was das Skript von sich aus öffnet (zugeklappte Bereiche, nicht gewählte Reiter)
-    const auf = !!s && !el.disabled && !el.closest('.deck, #tabbar, .track-head, .loop-row, .ltab, #hint, .tip') && (el.getAttribute('aria-expanded') === 'false' || (el.getAttribute('role') === 'tab' && el.getAttribute('aria-selected') === 'false') || el.matches('#pat-sing-btn, #cb-levels, #select-btn'));
+    const auf = !!s && !el.disabled && !el.closest('.deck, #tabbar, .track-head, .loop-row, .ltab, .side-tabs, #hint, .tip') && (el.getAttribute('aria-expanded') === 'false' || (el.getAttribute('role') === 'tab' && el.getAttribute('aria-selected') === 'false') || el.matches('#pat-sing-btn, #cb-levels, #select-btn'));
     if (auf && !el.dataset.fnAuf) el.dataset.fnAuf = String(window.__fnAuf = (window.__fnAuf || 0) + 1);
     out.push({ kennung, text, title, aria, feld, art, ort, pfad: pfad.join(' > '), sicht: s, aus: !!el.disabled, auf: auf ? el.dataset.fnAuf : null });
   }
@@ -175,6 +176,12 @@ function zustaende(S) {
   const feld = (sel, was) => async (page) => {
     await S.ruhe(page);
     if (!(await klick(page, sel))) return `${was}: Knopf hier nicht zu sehen`;
+    await page.waitForTimeout(600);
+    return null;
+  };
+  const reiter = (id) => async (page) => {
+    await S.ruhe(page);
+    if (!(await klick(page, `#side-tab-${id}`))) return 'nur Aufräumen';
     await page.waitForTimeout(600);
     return null;
   };
@@ -208,13 +215,17 @@ function zustaende(S) {
       await page.waitForTimeout(700);
       return null;
     },
+    // Layout „reiter“ (nur Loopwerk-Desktop): je Reiter ein Zustand; anderswo gibt es die Reiter nicht
+    'reiter-datei': reiter('datei'),
+    'reiter-mixer': reiter('mixer'),
+    'reiter-sounds': reiter('sounds'),
     'spur-menue': feld('.track-head .tbtn-menu', 'Spur-Menü'),
     fxpad: dock('fxpad'),
     tempo: dock('tempo'),
     'song-fach': dock('song'),
   };
 }
-const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'clip', 'spur', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie'];
+const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie'];
 
 async function messen(o) {
   const { chromium } = require('playwright');

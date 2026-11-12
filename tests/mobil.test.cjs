@@ -336,9 +336,9 @@ const { check, finish } = createChecker();
     await page.setViewportSize({ width: 1400, height: 820 });
     await page.waitForTimeout(150);
     const desk = await page.evaluate(() => ({
-      // Desktop-Plätze: Transport im Deck, Zoom in der Arranger-Leiste, Speichern im Projekt-Menü, Mixer in der Leiste unten
+      // Desktop-Plätze: Transport im Deck, Zoom in der Arranger-Leiste, Speichern im Reiter Datei, Mixer im Reiter Mixer (Layout „reiter“, Umbau Scheibe 1)
       back: ['rec-btn', 'metro-btn'].every((id) => document.getElementById(id).closest('.deck')) && !!document.getElementById('zoom-in').closest('.arr-bar')
-        && !!document.getElementById('save-btn').closest('#project-menu') && !!document.getElementById('mixer-btn').closest('#tabbar') && getComputedStyle(document.getElementById('tab-sounds')).display === 'none',
+        && !!document.getElementById('save-btn').closest('#side-datei') && !!document.getElementById('mixer-btn').closest('#side-mixer') && getComputedStyle(document.getElementById('tab-sounds')).display === 'none',
       tabs: getComputedStyle(document.getElementById('tabbar')).display,
       shelf: getComputedStyle(document.querySelector('.shelf')).display,
       dock: window.loopwerk.ui.dock,
@@ -353,11 +353,13 @@ const { check, finish } = createChecker();
     const groups = await page.evaluate(() => {
       const right = [...document.querySelector('.deck-right').children].map((n) => n.id || n.className).join(',');
       const file = [...document.querySelector('.deck-file').querySelectorAll('#project-menu-btn, #export-btn')].map((n) => n.id).join(',');
+      const datei = ['export-btn', 'open-btn', 'save-btn'].every((id) => document.getElementById(id).closest('#side-datei'));
       const seps = [...document.querySelectorAll('.deck .deck-sep')].filter((n) => n.offsetParent).length;
-      return { right, file, seps, start: ['demo-btn', 'new-btn'].every((id) => document.getElementById(id).closest('#project-menu-start')) };
+      return { right, file, seps, datei, start: ['demo-btn', 'new-btn'].every((id) => document.getElementById(id).closest('#side-datei-act')) };
     });
-    check('Desktop: Deck-Gruppen (Rückgängig | Projekt + Export, Beispiel/Leeren im Menü abgesetzt)',
-      groups.right === 'deck-edit,deck-sep,deck-file' && groups.file === 'project-menu-btn,export-btn' && groups.seps === 4 && groups.start, JSON.stringify(groups));
+    // Layout „reiter“: Export und Projekt-Knöpfe liegen im Reiter Datei, im Deck bleibt nur der (unsichtbare) Menü-Knopf
+    check('Desktop: Deck-Gruppen (Rückgängig | Datei-Knöpfe im Reiter Datei)',
+      groups.right === 'deck-edit,deck-sep,deck-file' && groups.file === 'project-menu-btn' && groups.seps === 4 && groups.datei && groups.start, JSON.stringify(groups));
     for (const w of [1100, 1200, 1280, 1440, 1536, 900]) {
       await page.setViewportSize({ width: w, height: 820 });
       await page.waitForTimeout(80);

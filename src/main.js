@@ -14,6 +14,7 @@ import { mountTransport } from './ui/transport.js';
 import { mountProjectIO } from './ui/project-io.js';
 import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
+import { mountSide } from './ui/side.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountSoundBench } from './ui/sound-bench.js';
 import { mountCreate } from './ui/create.js';
@@ -59,7 +60,7 @@ const STORAGE_KEY = lsKey('loopwerk.project.v1');
 // Edition (ADR 007): Kennzeichen am Wurzelelement, abgeschaltete Flächen ausblenden – vor allem anderen
 {
   const app = document.getElementById('app');
-  if (app) { app.dataset.edition = EDITION.id; app.dataset.density = EDITION.density; }
+  if (app) { app.dataset.edition = EDITION.id; app.dataset.density = EDITION.density; app.dataset.layout = EDITION.layout; }
   applySurfaces(EDITION.surfaces);
   if (!EDITION.catalogs) clearInstruments();
 }
@@ -794,11 +795,13 @@ async function boot() {
   mountHints({ root: document.getElementById('hint'), ui, library, store, engine });
   mountMasteringControls(document.getElementById('song-mst-slot'), { store, engine, analysis: mastering, prefix: 'song-mst' });
   // Handy, Fach „Song“: Summe ein- oder ausblenden (zwei Tipps); danach macht das Fach der Summen-Zeile Platz
+  const reiter = EDITION.layout === 'reiter';
   const inspector = mountInspector({
-    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering, recArm, recorder, bounce,
+    root: document.getElementById('insp'), store, ui, library, tools, engine, mastering, recArm, recorder, bounce, reiter,
     // Krachwerk: Sound-Werkbank statt Clip-Abschnitt, Spur nur bei eigener Wahl, nur aktive Effekte (Spec Scheibe 2a §6)
     ...(EDITION.workbench === 'sound' ? { clipPanel: (box, deps) => mountSoundBench(box, { ...deps, own }), trackOnClip: false, fxCompact: true } : {}),
   });
+  const side = reiter ? mountSide({ ui, store }) : null;
   const layout = mountLayout({
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
@@ -976,7 +979,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

@@ -126,6 +126,7 @@
 <link rel="modulepreload" href="src/bounce.js">
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
+<link rel="modulepreload" href="src/ui/side.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
 <link rel="modulepreload" href="src/ui/fx-order.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
@@ -3658,6 +3659,98 @@
     #editor .ed-info { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
     #editor .ed-info:empty { display: none; }
     #editor .ed-more { min-height: 44px; }
+  }
+  /* ---------- Layout „reiter“ (Loopwerk, nur Desktop): rechte Leiste mit Reitern Datei · Sounds · Mixer ----------
+     Die linke Spalte (Regal) entfällt; das Regal zieht in die Leiste. Nur Tokens aus :root. Krachwerk und Handy bleiben unberührt. */
+  .side { display: none; }
+  @media (min-width: 761px) {
+    #app[data-layout="reiter"] { --side-w: 336px; }
+    #app[data-layout="reiter"], #app[data-layout="reiter"].dock-open {
+      grid-template-columns: minmax(0, 1fr) var(--side-w);
+      grid-template-areas: "deck deck" "arr side" "bar side";
+    }
+    #app[data-layout="reiter"] .project-menu-btn { display: none; }
+    #app[data-layout="reiter"] .side {
+      grid-area: side; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    }
+    #app[data-layout="reiter"] .side-tabs {
+      position: sticky; top: 0; z-index: 3; flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px 12px 0;
+      background: var(--lane); border-bottom: 1px solid var(--line);
+    }
+    #app[data-layout="reiter"] .side-tab {
+      height: 36px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; color: var(--muted);
+      font: 600 12px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    #app[data-layout="reiter"] .side-tab:hover { color: var(--ink); }
+    #app[data-layout="reiter"] .side-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--amber); }
+    #app[data-layout="reiter"] .side-tab:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+
+    /* Regal und Inspektor verlieren ihren eigenen Rahmen: die Leiste ist der Rahmen */
+    #app[data-layout="reiter"] .side .insp, #app[data-layout="reiter"] .side .shelf {
+      grid-area: auto; background: transparent; border: 0; border-radius: 0; box-shadow: none; position: static; width: auto; overflow: visible; flex: none;
+    }
+    #app[data-layout="reiter"] .side .insp > .insp-toggle { display: none; }
+    #app[data-layout="reiter"] .side .insp > .insp-sec:last-of-type { border-bottom: 0; }
+    #app[data-layout="reiter"] .side-sounds { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    #app[data-layout="reiter"] .side-sounds > .shelf { flex: 1 1 0; min-height: 0; }
+    /* Sounds: ein gewählter Clip steht oben (höchstens die halbe Leiste, rollt selbst), das Regal darunter bleibt zum Ziehen erreichbar */
+    #app[data-layout="reiter"][data-side="sounds"] .side { overflow-y: hidden; }
+    #app[data-layout="reiter"][data-side="sounds"] .side .insp { flex: 0 1 auto; max-height: 50%; overflow-y: auto; overscroll-behavior: contain; }
+    #app[data-layout="reiter"][data-side="sounds"] .side-sounds { min-height: 240px; }
+    #app[data-layout="reiter"] .side .shelf-list { flex: 1 1 auto; min-height: 0; }
+    #app[data-layout="reiter"] .side .left-tabs { padding: 10px 12px 0; }
+    #app[data-layout="reiter"] .side .shelf-head { border-top: 0; }
+
+    /* Welcher Reiter zeigt was */
+    #app[data-layout="reiter"]:not([data-side="sounds"]) .side-sounds { display: none; }
+    #app[data-layout="reiter"][data-side="sounds"] .side .insp > :not(.insp-clip) { display: none; }
+    #app[data-layout="reiter"][data-side="datei"] :is(.side-mixer, .insp-for-mixer) { display: none; }
+    #app[data-layout="reiter"][data-side="mixer"] :is(.side-datei, .side-datei-foot, .insp-for-datei) { display: none; }
+    #app[data-layout="reiter"][data-side="mixer"] .insp-song:not(:has(.insp-for-mixer:not([hidden]))) { display: none; }
+    #app[data-layout="reiter"] .side-mixer-hint { display: none; margin: 0; padding: 0 14px 12px; font-size: 12px; color: var(--muted); }
+    #app[data-layout="reiter"] .insp:is([data-mode="song"], [data-mode="sound"]) .side-mixer-hint { display: block; }
+
+    /* Reiter Datei: Name, Öffnen/Speichern/Beispiel/Leeren, Exportieren, dann der Song-Abschnitt, ganz unten Tipps und Info */
+    #app[data-layout="reiter"] .side-datei { display: grid; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    #app[data-layout="reiter"] .side-datei:not(:has(*)) { display: none; }
+    #app[data-layout="reiter"] .side-datei .project-name {
+      width: 100%; background: var(--lane); color: var(--ink); border: 1px solid var(--line);
+    }
+    #app[data-layout="reiter"] .side-datei-act { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    #app[data-layout="reiter"] .side-datei-act .key, #app[data-layout="reiter"] .side-datei-export .key, #app[data-layout="reiter"] .side-mixer-docks .tab {
+      width: 100%; height: 34px; min-width: 0; padding: 0 8px; justify-content: center;
+      background: var(--lane); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: none; cursor: pointer;
+      font: 600 12px/1 var(--font-body); letter-spacing: 0; text-transform: none;
+    }
+    #app[data-layout="reiter"] .side-datei-act .key:hover, #app[data-layout="reiter"] .side-mixer-docks .tab:hover:not(:disabled) { background: var(--panel); }
+    #app[data-layout="reiter"] .side-datei-act .key.confirm { background: var(--meter-hot); color: var(--ink); }
+    #app[data-layout="reiter"] .side-datei-export .key { border-color: var(--amber); color: var(--amber); }
+    #app[data-layout="reiter"] .side-datei-export .key[aria-pressed="true"] { background: var(--amber); color: var(--deck); }
+    #app[data-layout="reiter"] .side-datei-foot { display: grid; gap: 6px; padding: 10px 14px 14px; border-top: 1px solid var(--line); }
+    #app[data-layout="reiter"] .side-datei-foot:not(:has(*)) { display: none; }
+    #app[data-layout="reiter"] .side-datei-foot .pop-about { margin: 0; }
+    #app[data-layout="reiter"] .side-datei-foot #tips-reset {
+      justify-self: start; padding: 0; border: 0; background: none; color: var(--amber); cursor: pointer; font: 600 12px/1.3 var(--font-body);
+    }
+
+    /* Reiter Mixer: die beiden Fach-Knöpfe nebeneinander */
+    #app[data-layout="reiter"] .side-mixer { display: grid; gap: 10px; padding: 12px 0 0; }
+    #app[data-layout="reiter"] .side-mixer-docks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 14px; }
+    #app[data-layout="reiter"] .side-mixer-docks .tab { display: inline-flex; align-items: center; gap: 6px; max-width: none; }
+    #app[data-layout="reiter"] .side-mixer-docks .tab svg { width: 14px; height: 14px; }
+    #app[data-layout="reiter"] .side-mixer-docks .tab[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); box-shadow: none; }
+
+    /* Finger: Tippflächen mindestens 44 px */
+    @media (pointer: coarse) {
+      #app[data-layout="reiter"] .side-tab { height: 44px; }
+      #app[data-layout="reiter"] .side-datei-act .key, #app[data-layout="reiter"] .side-datei-export .key, #app[data-layout="reiter"] .side-mixer-docks .tab,
+      #app[data-layout="reiter"] .side-datei .project-name { height: 44px; min-height: 44px; }
+      #app[data-layout="reiter"] .side-datei-foot #tips-reset { min-height: 44px; }
+    }
+
+    /* Export-Klappfeld: neben der Leiste statt über ihr */
+    #app[data-layout="reiter"] #export.dock { right: calc(var(--side-w) + 16px); }
   }
 </style>
 

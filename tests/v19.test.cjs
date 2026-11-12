@@ -60,16 +60,18 @@ const { check, finish } = createChecker();
     const bar = await rect('#tabbar');
     const arr = await rect('.arranger');
     const shelf = await rect('.shelf');
-    const insp = await rect('#insp');
+    const insp = await rect('#side'); // Layout „reiter“: die rechte Leiste (Reiter) ersetzt Regal links und Inspektor
     check('Desktop: Fachleiste genau unter dem Arranger, nicht unter den Seitenspalten', Math.abs(bar.x - arr.x) < 1 && Math.abs(bar.w - arr.w) < 1 && Math.abs(bar.y - arr.b) < 2 && shelf.b > bar.y && insp.b > bar.y, JSON.stringify({ bar, arr, shelf: shelf.b, insp: insp.b }));
     const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
-    check('Desktop: Reiter Mixer, FX-Pad und Editor (Sounds stehen links)', JSON.stringify(tabs) === '["mixer-btn","fxpad-btn","editor-tab"]', JSON.stringify(tabs));
+    // Layout „reiter“: Mixer und FX-Pad liegen im Reiter Mixer der rechten Leiste, die Fachleiste behält Editor und Kürzel
+    check('Desktop: Fachleiste zeigt Editor; Mixer und FX-Pad im Reiter Mixer', JSON.stringify(tabs) === '["editor-tab"]' && await page.evaluate(() => ['mixer-btn', 'fxpad-btn'].every((id) => document.getElementById(id).closest('#side-mixer'))), JSON.stringify(tabs));
     check('Desktop: kein Hinweistext, solange es nichts zu melden gibt', !(await visible('#hint')));
     await page.click('#mixer-btn');
     await page.waitForTimeout(550);
     const mx = await rect('#mixer');
     const tab = await rect('#mixer-btn');
-    check('Desktop: Mixer-Reiter hängt direkt unter seiner Schublade', Math.abs(mx.b - tab.y) < 2 && tab.x >= mx.x && tab.r <= mx.r, JSON.stringify({ mx, tab }));
+    // Layout „reiter“: der Knopf sitzt in der rechten Leiste; die Schublade liegt wie bisher unten über dem Arranger
+    check('Desktop: Mixer-Schublade sitzt unten im Arranger, ihr Knopf in der rechten Leiste', Math.abs(mx.b - bar.y) < 2 && tab.x >= arr.r, JSON.stringify({ mx, tab }));
     check('Desktop: Schublade öffnet in der Mitte', Math.abs(mx.h / arr.h - 0.5) < 0.02, `${mx.h} / ${arr.h}`);
     // Einblender: erscheint mit einer Meldung, verschwindet von selbst
     await page.evaluate(() => window.loopwerk.ui.flash('Clip geteilt.'));

@@ -6,7 +6,7 @@ export const EDITIONS = {
   full: {
     id: 'full', title: 'Loopwerk', db: 'loopwerk', keyPrefix: 'loopwerk.',
     catalogs: true, demo: true, tracks: 8, bpm: 120, record: 'song', keepUnknownClips: false,
-    pwa: false, density: 'full', surfaces: {}, twins: {}, shelfGroups: null,
+    pwa: false, density: 'full', layout: 'reiter', surfaces: {}, twins: {}, shelfGroups: null,
     workbench: null, materialColors: false, grainWave: false, brandMark: null,
     // Speichern als JSON mit eingebetteten Sounds; Öffnen nimmt auch ZIP (Sicherung, Song-ZIP; ADR 012). Kein Block „Werkstatt“
     songFile: 'json', storagePanel: false,
@@ -19,7 +19,7 @@ export const EDITIONS = {
     id: 'make', title: 'Krachwerk', db: 'loopwerk-make', keyPrefix: 'loopwerk.make.', padsKey: 'loopwerk.make.pads.v1',
     // Keine mitgelieferten Samples; Synth-Kits sind Klangerzeuger und bleiben
     catalogs: false, demo: false, synthKits: ['elektro', 'techno'], tracks: 2, bpm: 90, record: 'sound',
-    keepUnknownClips: true, pwa: true, density: 'calm',
+    keepUnknownClips: true, pwa: true, density: 'calm', layout: 'klassisch',
     // „selbst gemacht“ mittel (Martin, 02.11.2026): ohne Loops, Begleitautomatik, KI-Erzeugung, Link/Tab
     // 2b: der Sample-Editor fällt weg, jede ed-…-Funktion hat unten einen Zwilling in der Werkbank
     // recArm (2.13 C): Spuren scharf schalten und Eingang je Spur aus – eine Aufnahme, ein Klang; die Geräteauswahl bleibt

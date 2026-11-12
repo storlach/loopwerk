@@ -68,6 +68,7 @@ async function ruhe(page) {
     ui.setDock(null);
     ui.select(null);
     ui.selectTrack(null);
+    window.loopwerk.side?.show('sounds', { save: false }); // Layout „reiter“: Grundstellung der Leiste
   });
   await wait(page, 500);
 }
@@ -156,6 +157,7 @@ const SZENE = {
     await page.evaluate(() => window.loopwerk.store.setMastering({ on: true, style: 'club' }));
     // Song-Einstellungen: Desktop = Inspektor ohne Auswahl, Handy = Song-Fach
     if (dev.startsWith('handy')) await page.evaluate(() => window.loopwerk.ui.setDock('song'));
+    else await page.evaluate(() => window.loopwerk.side?.show('datei', { save: false })); // Layout „reiter“: Song-Abschnitt im Reiter Datei
     await wait(page, 1000);
     const sichtbar = await page.evaluate(() => { const n = [...document.querySelectorAll('#insp-mst, #song-mst')].find((x) => x.getClientRects().length); return !!n && n.getClientRects().length > 0; });
     return sichtbar ? null : 'Mastering liegt hier nicht in Inspektor/Song-Fach (nur im Export-Fach)';

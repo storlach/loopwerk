@@ -46,9 +46,11 @@ function fxSummary(e, f) {
 
 // Optionen (Krachwerk, Spec Scheibe 2a §6): clipPanel(container, deps) ersetzt den Clip-Abschnitt (Sound-Werkbank);
 // trackOnClip: false = die Spur zeigt sich nur bei eigener Spurwahl; fxCompact = nur eingeschaltete Effekte und „+ Effekt“
+// reiter (Layout „reiter“, Desktop): der Song-Abschnitt ist immer da und zeigt immer seine Werte (Tab „Datei“), die Master-Lautstärke
+// hat eine eigene Zeile; Spur-Abschnitt nur mit gewählter Spur oder Clip. side.js verteilt die Teile auf die Reiter (Klassen insp-for-datei/-mixer).
 // recArm (2.13 C): Schalter ● Scharf und Eingang je Spur, nur bei gewählter Spur; null = aus (Krachwerk)
 // bounce (Krachwerk 3d): „Festhalten“ neben dem Spurnamen, „mit Effekten“ in den Feinheiten; null = aus
-export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, recArm = null, recorder = null, bounce = null }) {
+export function mountInspector({ root, store, ui, library, tools, engine, mastering, clipPanel = null, trackOnClip = true, fxCompact = false, recArm = null, recorder = null, bounce = null, reiter = false }) {
   const app = document.getElementById('app');
   root.innerHTML = '';
 
@@ -162,7 +164,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   void clipGroup;
 
   // ---------- Spur ----------
-  const trackSec = el('section', 'insp-sec insp-track');
+  const trackSec = el('section', 'insp-sec insp-track insp-for-mixer');
   trackSec.setAttribute('aria-label', 'Spur-Einstellungen');
   const trackHead = el('header', 'insp-head');
   const trackTitle = el('h2', 'insp-title');
@@ -360,8 +362,8 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   syncIds();
 
   // ---------- Song ----------
-  const songSec = el('section', 'insp-sec');
-  songSec.append(el('span', 'insp-kind', 'Song'));
+  const songSec = el('section', 'insp-sec insp-song');
+  songSec.append(el('span', 'insp-kind insp-for-datei', 'Song'));
   const songTitle = el('h2', 'insp-title');
   const songName = el('span');
   songTitle.append(songName);
@@ -402,6 +404,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   }
   const songTools = el('div', 'insp-song-tools'); // Klick (Metronom) in „calm“: layout.js bringt den Knopf hierher
   songTools.id = 'insp-song-tools';
+  // Master-Lautstärke (nur Layout „reiter“): eigene Zeile im Song-Abschnitt, damit sie neben einer gewählten Spur steht
+  const mvol = reiter ? slider('Master-Lautstärke', 'insp-master-vol', 0, 1, 0.01) : null;
+  mvol?.input.addEventListener('input', () => store.setMaster({ volume: Number(mvol.input.value) }, 'master-vol'));
   const lenRow = el('label', 'insp-row');
   const lenOut = el('output');
   const lenIn = document.createElement('input');
@@ -413,12 +418,15 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   // Song-Leiste in Blöcken nach dem Signalweg: Song · Master (Lautstärke, Effekte) · Busse · Mastering
   const grp = (cls) => el('div', `insp-grp ${cls}`);
   const songGrp = grp('insp-grp-song');
-  songGrp.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools);
+  songGrp.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, ...(mvol ? [mvol.row] : []), songTools);
+  songGrp.classList.add('insp-for-datei');
   const masterGrp = grp('insp-grp-master');
   masterGrp.append(masterSub);
+  masterGrp.classList.add('insp-for-mixer');
   // Busse: Rückkanal-Lautstärke und Effekt-Einstellungen (der einzige Ort dafür am Desktop)
   const busGrp = grp('insp-grp-buses');
   busGrp.id = 'insp-buses';
+  busGrp.classList.add('insp-for-mixer');
   busGrp.append(el('p', 'insp-sub', 'Busse'));
   const busCtl = [];
   const busBoxes = new Map();
@@ -454,16 +462,40 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     }
     busGrp.append(box);
   }
-  const mstSlot = grp('insp-mst');
+  const mstSlot = grp('insp-mst insp-for-datei');
   // Platz am Ende der Song-Werkbank (Krachwerk: Block „Werkstatt“, storage-panel.js); leer unsichtbar
   const endSlot = el('div', 'insp-end');
   endSlot.id = 'insp-song-end';
+  endSlot.classList.add('insp-for-datei');
   songSec.append(songGrp, masterGrp, busGrp, mstSlot, endSlot);
   if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
-  const hintSec = el('p', 'insp-empty', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
+  const hintSec = el('p', 'insp-empty insp-hint', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
 
   root.append(clipSec, trackSec, songSec, hintSec);
+
+  // Werte des Song-Abschnitts (Name, Tempo, Länge, Tonartwechsel, Master-Lautstärke, Busse)
+  function renderSong() {
+    songName.textContent = store.project.name || 'Song';
+    renderKeyChanges();
+    tval.textContent = String(store.project.bpm);
+    if (document.activeElement !== lenIn) lenIn.value = String(store.project.lengthBars);
+    lenOut.textContent = `${store.project.lengthBars} Takte`;
+    if (mvol) {
+      const m = masterOf(store.project);
+      if (document.activeElement !== mvol.input) mvol.input.value = String(m.volume);
+      mvol.out.textContent = formatDb(m.volume);
+    }
+    // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)
+    const used = (id) => busUsed(store.project, id);
+    for (const [id, box] of busBoxes) box.hidden = !used(id);
+    busGrp.hidden = ![...busBoxes.values()].some((box) => !box.hidden);
+    for (const c of busCtl) {
+      const v = busOf(store.project, c.b.id)[c.key];
+      if (document.activeElement !== c.input) c.input.value = String(v);
+      if (c.out) c.out.textContent = c.key === 'volume' ? formatDb(v) : formatParam(c.def, v);
+    }
+  }
 
   // ---------- Anzeige ----------
   function render() {
@@ -474,8 +506,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     const mode = found ? 'clip' : track ? 'track' : benchId ? 'sound' : 'song';
     clipSec.hidden = mode !== 'clip' && mode !== 'sound';
     trackSec.hidden = mode === 'song' || mode === 'sound' || (mode === 'clip' && !trackOnClip);
-    songSec.hidden = mode !== 'song';
-    hintSec.hidden = mode !== 'song';
+    songSec.hidden = !reiter && mode !== 'song';
+    hintSec.hidden = reiter || mode !== 'song';
+    if (reiter) masterGrp.hidden = mode !== 'song'; // Summen-Effekte teilen sich die Liste mit der Spur
     root.dataset.mode = mode;
     if (calm) {
       if (mode !== 'song') pinned = false;
@@ -559,26 +592,16 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     } else {
       trackId = MASTER;
       volLabel.textContent = 'Master-Lautstärke';
-      songName.textContent = store.project.name || 'Song';
-      renderKeyChanges();
-      tval.textContent = String(store.project.bpm);
-      if (document.activeElement !== lenIn) lenIn.value = String(store.project.lengthBars);
-      lenOut.textContent = `${store.project.lengthBars} Takte`;
-      // Master-Lautstärke und Master-Effekte unter „Master“
+      // Master-Lautstärke und Master-Effekte unter „Master“ (Layout „reiter“: die Lautstärke hat eine eigene Zeile im Song-Abschnitt)
       const m = masterOf(store.project);
-      if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl, fxReset.node);
-      if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
-      vol.out.textContent = formatDb(m.volume);
-      // Ein Bus zeigt seine Einstellungen, sobald eine Spur zu ihm sendet (vorher kommt nichts hinzu)
-      const used = (id) => busUsed(store.project, id);
-      for (const [id, box] of busBoxes) box.hidden = !used(id);
-      busGrp.hidden = ![...busBoxes.values()].some((box) => !box.hidden);
-      for (const c of busCtl) {
-        const v = busOf(store.project, c.b.id)[c.key];
-        if (document.activeElement !== c.input) c.input.value = String(v);
-        if (c.out) c.out.textContent = c.key === 'volume' ? formatDb(v) : formatParam(c.def, v);
+      if (reiter) { if (fxl.parentElement !== masterGrp) masterGrp.append(fxl, fxReset.node); }
+      else {
+        if (vol.row.parentElement !== masterGrp) masterGrp.append(vol.row, fxl, fxReset.node);
+        if (document.activeElement !== vol.input) vol.input.value = String(m.volume);
+        vol.out.textContent = formatDb(m.volume);
       }
     }
+    if (reiter || mode === 'song') renderSong();
     if ((mode === 'clip' || mode === 'track') && vol.row.parentElement !== trackSec) { trackSec.insertBefore(vol.row, panBox); }
 
     const fx = fxOf();

@@ -1134,6 +1134,7 @@ async function seedPadWall() {
       await pg.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
       await pg.evaluate(() => window.loopwerk.library.catalogReady);
       await scene(pg, 'clip');
+      await pg.evaluate(() => window.loopwerk.side?.show('mixer', { save: false })); // Layout „reiter“: Spur-Abschnitt im Reiter Mixer
       const lw2 = await pg.evaluate(() => ({ speed: !!document.getElementById('insp-speed')?.offsetParent, tabs: document.querySelectorAll('.wb-tabs').length, track: !!document.querySelector('.insp-track')?.offsetParent }));
       check('Loopwerk: bei gewähltem Clip #insp-speed da, kein .wb-tabs, Spur-Abschnitt wie bisher', lw2.speed && lw2.tabs === 0 && lw2.track && errs.length === 0, JSON.stringify(lw2) + errs.join('|'));
       await pg.click('#edit-btn');

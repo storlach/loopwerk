@@ -84,6 +84,8 @@ async function inspectorTest() {
   const { page } = app;
   try {
     await page.evaluate(() => { const { store, ui } = window.loopwerk; const t = store.project.tracks.find((x) => x.clips.length); ui.select(t.clips[0].id); });
+    // Layout „reiter“: der Spur-Abschnitt liegt im Reiter Mixer, der Clip-Abschnitt steht über jedem Reiter
+    await page.click('#side-tab-mixer');
     await page.waitForTimeout(250);
     const d = await page.evaluate(() => {
       const { store, ui, library } = window.loopwerk;

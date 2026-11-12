@@ -20,13 +20,14 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('undo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
   place($('redo-btn'), { wide: $('deck-edit'), narrow: $('deck-undo') });
   // Song: Name oben, Speichern und Exportieren als Hauptknöpfe, der Rest als ruhige Textzeile
-  place($('project-name'), { wide: $('project-menu-body'), narrow: $('song-name') });
-  place($('open-btn'), { wide: $('project-menu-body'), narrow: $('song-links') });
-  place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main') });
-  place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main') });
-  place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
-  place($('tips-reset'), { narrow: $('song-links') });
-  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links') });
+  place($('project-name'), { wide: $('project-menu-body'), narrow: $('song-name'), reiter: $('side-datei-name') });
+  place($('open-btn'), { wide: $('project-menu-body'), narrow: $('song-links'), reiter: $('side-datei-act') });
+  place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main'), reiter: $('side-datei-act') });
+  place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main'), reiter: $('side-datei-export') });
+  place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-act') });
+  place($('tips-reset'), { narrow: $('song-links'), reiter: $('side-datei-foot') });
+  place($('pop-about'), { reiter: $('side-datei-foot') });
+  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-act') });
   place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
   place($('shelf-find'), { narrow: $('shelf-sticky') });
@@ -34,8 +35,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Dichte „calm“: Daumenleiste am Handy (Kiste · ▶ · ● · Werkbank), Mischen und FX-Pad im Fach „Song“, „+ Neu“ neben der Suche
   place($('play-btn'), { calm: { narrow: $('tabbar') } });
   place($('rec-btn'), { calm: { narrow: $('tabbar') } });
-  place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
-  place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
+  place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('side-mixer-docks') });
+  place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('side-mixer-docks') });
   place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') } }); // Tastenkürzel: Song-Werkbank
   place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
 
