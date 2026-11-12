@@ -1,4 +1,5 @@
-// Rechte Leiste mit drei Reitern (Layout „reiter“, nur Desktop): Datei · Sounds · Mixer.
+// Schwebende Karte rechts mit drei Reitern (Layout „reiter“, nur Desktop): Datei · Sounds · Mixer. Die Reiter-Knöpfe sitzen im Deck;
+// ein Klick auf den gewählten Reiter klappt die Karte zu (data-side="zu").
 // Dieselben Bausteine wie vorher, nur umgehängt: Sounds = das Regal (.shelf), Datei = Projekt-Knöpfe + Song-Abschnitt des Inspektors,
 // Mixer = Spur-Abschnitt, Summe und Busse des Inspektors + Knöpfe für Mixer-Fach und FX-Pad. Ein gewählter Clip zeigt seinen
 // Abschnitt oberhalb des Reiter-Inhalts (Übergang). Aussehen: CSS in index.html unter #app[data-layout="reiter"].
@@ -24,7 +25,7 @@ export function mountSide({ ui }) {
   // ---------- Gerüst ----------
   const side = el('aside', 'side', 'side');
   side.setAttribute('aria-label', 'Seitenleiste');
-  const tabs = el('div', 'side-tabs');
+  const tabs = el('div', 'side-tabs', 'side-tabs'); // sitzt rechts im Deck (neben Rückgängig/Wiederholen), nicht in der Karte
   tabs.setAttribute('role', 'tablist');
   tabs.setAttribute('aria-label', 'Seitenleiste');
   const btns = new Map();
@@ -34,20 +35,21 @@ export function mountSide({ ui }) {
     b.textContent = t.label;
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-controls', t.id === 'sounds' ? 'side-sounds' : 'insp');
-    b.addEventListener('click', () => show(t.id));
+    b.addEventListener('click', () => (app.dataset.side === t.id ? close() : show(t.id))); // gewählter Reiter: Karte zu
     btns.set(t.id, b);
     tabs.append(b);
   }
   tabs.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    const i = TABS.findIndex((t) => t.id === app.dataset.side) + (e.key === 'ArrowRight' ? 1 : -1);
+    const i = TABS.findIndex((t) => t.id === current) + (e.key === 'ArrowRight' ? 1 : -1);
     const next = TABS[(i + TABS.length) % TABS.length];
     show(next.id);
     btns.get(next.id).focus();
   });
   const sounds = el('div', 'side-sounds', 'side-sounds'); // nimmt das Regal auf
-  side.append(tabs, sounds);
+  side.append(sounds);
   insp.before(side);
+  (document.querySelector('header.deck .deck-right') || side).append(tabs);
 
   // Teile des Reiters „Datei“ und „Mixer“ liegen im Inspektor-Abschnitt (Song bzw. Spur); die Plätze der umgehängten Knöpfe
   const datei = el('div', 'side-datei', 'side-datei');
@@ -68,16 +70,27 @@ export function mountSide({ ui }) {
   insp.append(foot);
 
   // ---------- Reiter ----------
-  let current = DEFAULT;
-  try { const v = localStorage.getItem(key); if (TABS.some((t) => t.id === v)) current = v; } catch { /* Voreinstellung */ }
+  let current = DEFAULT; // zuletzt gewählter Reiter (auch bei zugeklappter Karte)
+  let closed = false;
+  try { const v = localStorage.getItem(key); if (TABS.some((t) => t.id === v)) current = v; else if (v === 'zu') closed = true; } catch { /* Voreinstellung */ }
+  function apply(save) {
+    app.dataset.side = closed ? 'zu' : current;
+    for (const [tid, b] of btns) { const on = !closed && tid === current; b.setAttribute('aria-selected', String(on)); b.tabIndex = on || (closed && tid === current) ? 0 : -1; }
+    if (save) { try { localStorage.setItem(key, closed ? 'zu' : current); } catch { /* egal */ } }
+  }
   function show(id, { save = true } = {}) {
     if (!TABS.some((t) => t.id === id)) return;
-    current = id;
-    app.dataset.side = id;
-    for (const [tid, b] of btns) { b.setAttribute('aria-selected', String(tid === id)); b.tabIndex = tid === id ? 0 : -1; }
-    if (save) { try { localStorage.setItem(key, id); } catch { /* egal */ } }
+    current = id; closed = false;
+    apply(save);
   }
-  show(current, { save: false });
+  // Karte zuklappen; gibt true zurück, wenn sie offen war
+  function close({ save = true } = {}) {
+    if (closed) return false;
+    closed = true;
+    apply(save);
+    return true;
+  }
+  apply(false);
 
   // Eine Spur gewählt (Klick auf den Spurkopf): die Leiste wechselt auf „Mixer“
   let lastTrack = ui.selectedTrackId ?? null;
@@ -92,12 +105,12 @@ export function mountSide({ ui }) {
   const home = document.createComment('regal');
   shelf.before(home);
   const put = () => {
-    if (narrow.matches) { home.after(shelf); side.after(insp); } else { sounds.append(shelf); tabs.after(insp); }
+    if (narrow.matches) { home.after(shelf); side.after(insp); } else { sounds.append(shelf); side.prepend(insp); }
   };
   put();
   narrow.addEventListener('change', put);
   // Die schmale Laptop-Ansicht klappt den Inspektor sonst zu; hier ist er Teil der Leiste
   app.classList.add('insp-open');
 
-  return { show, get current() { return current; } };
+  return { show, close, get open() { return !closed; }, get current() { return current; } };
 }

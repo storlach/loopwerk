@@ -65,7 +65,7 @@ function sammeln() {
   const CONTROLS = 'button, input:not([type=hidden]):not([type=file]), select, textarea, a[href], [role=button], [role=slider], [role=tab], [role=option], [role=menuitem], [role=switch], [role=checkbox], [draggable=true]:not(.clip), [contenteditable=true]';
   // innerster Treffer gewinnt
   const ORTE = [
-    ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Seitenleiste (Reiter)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-foot', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
+    ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Deck (Reiter rechts)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-foot', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
     ['#project-menu', 'Projekt-Menü'], ['#rec-pop', 'Aufnahme-Feld am ●'], ['#keys-pop', 'Kürzel- und Gesten-Liste'],
     ['#link-pop', 'Feld „Aus dem Netz holen“'], ['.track-menu', 'Spur-Menü ⋯'], ['.chord-pop', 'Akkord-Feld'], ['.key-pop', 'Tonart-Feld'],
     ['.auto-keys', 'Kurven-Feld'], ['.tip', 'Tipp'], ['#hint', 'Einblender'], ['#clip-float', 'Werkzeug am Clip'], ['#clipbar', 'Clipleiste'],
@@ -107,7 +107,8 @@ function sammeln() {
   const sicht = (el) => {
     if (!rendered(el)) return null;
     const r = el.getBoundingClientRect();
-    if (imBild(r)) return treffer(el) ? 'sichtbar' : null;
+    // in der Karte (#side) kann ein Bedienelement im Bild liegen, aber vom Rand des rollenden Bereichs abgeschnitten sein: dann zählt das Rollen
+    if (imBild(r)) { if (treffer(el)) return 'sichtbar'; if (!el.closest('.side')) return null; }
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
       const cs = getComputedStyle(p);
       const rollt = /(auto|scroll)/.test(cs.overflowX + cs.overflowY) && (p.scrollHeight > p.clientHeight + 1 || p.scrollWidth > p.clientWidth + 1);
@@ -181,7 +182,9 @@ function zustaende(S) {
   };
   const reiter = (id) => async (page) => {
     await S.ruhe(page);
-    if (!(await klick(page, `#side-tab-${id}`))) return 'nur Aufräumen';
+    // ein Klick auf den gewählten Reiter klappt die Karte zu: nur klicken, wenn er nicht gewählt ist
+    const da = await page.evaluate((i) => { const b = document.getElementById(`side-tab-${i}`); if (!b || !b.getClientRects().length) return false; if (b.getAttribute('aria-selected') !== 'true') b.click(); return true; }, id);
+    if (!da) return 'nur Aufräumen';
     await page.waitForTimeout(600);
     return null;
   };

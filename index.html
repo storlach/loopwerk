@@ -251,6 +251,7 @@
     --lcd-label: #9898A1;
     --sheet-bg: #1A1B1F;
     --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -10px 26px rgb(0 0 0 / 0.5);
+    --card-shadow: 0 14px 44px rgb(0 0 0 / 0.45); /* schwebende Karte (Layout „reiter“) */
     --led-off: #2A2A30;
     --knob-hi: transparent;
     --knob-lo: transparent;
@@ -3660,35 +3661,45 @@
     #editor .ed-info:empty { display: none; }
     #editor .ed-more { min-height: 44px; }
   }
-  /* ---------- Layout „reiter“ (Loopwerk, nur Desktop): rechte Leiste mit Reitern Datei · Sounds · Mixer ----------
-     Die linke Spalte (Regal) entfällt; das Regal zieht in die Leiste. Nur Tokens aus :root. Krachwerk und Handy bleiben unberührt. */
-  .side { display: none; }
+  /* ---------- Layout „reiter“ (Loopwerk, nur Desktop): Reiter Datei · Sounds · Mixer als Knöpfe im Deck, darunter eine schwebende Karte ----------
+     Der Arranger läuft über die ganze Breite; die Karte (#side) liegt über seinem rechten Teil, endet über dem Rollbalken und rollt in sich.
+     Die linke Spalte (Regal) entfällt; das Regal zieht in die Karte. Nur Tokens aus :root. Krachwerk und Handy bleiben unberührt. */
+  .side, .side-tabs { display: none; }
   @media (min-width: 761px) {
-    #app[data-layout="reiter"] { --side-w: 336px; }
+    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; }
     #app[data-layout="reiter"], #app[data-layout="reiter"].dock-open {
-      grid-template-columns: minmax(0, 1fr) var(--side-w);
-      grid-template-areas: "deck deck" "arr side" "bar side";
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "deck" "arr" "bar";
     }
     #app[data-layout="reiter"] .project-menu-btn { display: none; }
-    #app[data-layout="reiter"] .side {
-      grid-area: side; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-    }
-    #app[data-layout="reiter"] .side-tabs {
-      position: sticky; top: 0; z-index: 3; flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px 12px 0;
-      background: var(--lane); border-bottom: 1px solid var(--line);
-    }
+    /* Reiter-Knöpfe im Deck, rechts von Rückgängig/Wiederholen: rechteckig, Versalien, der gewählte hell */
+    #app[data-layout="reiter"] .side-tabs { display: flex; gap: 8px; margin-left: 4px; }
     #app[data-layout="reiter"] .side-tab {
-      height: 36px; border: 0; border-bottom: 2px solid transparent; background: transparent; cursor: pointer; color: var(--muted);
+      height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--deck-2); color: var(--ink); cursor: pointer;
       font: 600 12px/1 var(--font-display); letter-spacing: 0.1em; text-transform: uppercase;
     }
-    #app[data-layout="reiter"] .side-tab:hover { color: var(--ink); }
-    #app[data-layout="reiter"] .side-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--amber); }
-    #app[data-layout="reiter"] .side-tab:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+    #app[data-layout="reiter"] .side-tab:hover { border-color: var(--amber-dim); }
+    #app[data-layout="reiter"] .side-tab[aria-selected="true"] { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+    #app[data-layout="reiter"] .side-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    /* Karte */
+    #app[data-layout="reiter"] .side {
+      grid-area: arr; justify-self: end; align-self: stretch; position: relative; z-index: 25;
+      width: var(--side-w); box-sizing: border-box; margin: var(--side-gap) var(--side-gap) calc(var(--zbar-b) + var(--side-gap) + 6px) 0;
+      display: flex; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+      background: var(--sheet-bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--card-shadow);
+      -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+    }
+    #app[data-layout="reiter"][data-side="zu"] .side { display: none; }
+    /* Der Arranger bekommt rechts Reserve in Kartenbreite (Ende des Songs unter der Karte hervorholen), der senkrechte Rollbalken rückt neben die Karte;
+       Fächer (Mixer, Editoren) enden links der Karte */
+    #app[data-layout="reiter"]:not([data-side="zu"]) .arr-scroll { padding-right: calc(var(--side-w) + var(--side-gap)); }
+    #app[data-layout="reiter"]:not([data-side="zu"]) .zbar-y { right: calc(var(--side-w) + var(--side-gap) * 2); }
+    #app[data-layout="reiter"]:not([data-side="zu"]) .dock:not(#export) { margin-right: calc(var(--side-w) + var(--side-gap) * 2); }
 
     /* Regal und Inspektor verlieren ihren eigenen Rahmen: die Leiste ist der Rahmen */
     #app[data-layout="reiter"] .side .insp, #app[data-layout="reiter"] .side .shelf {
       grid-area: auto; background: transparent; border: 0; border-radius: 0; box-shadow: none; position: static; width: auto; overflow: visible; flex: none;
+      -webkit-backdrop-filter: none; backdrop-filter: none; /* die Karte weichzeichnet schon */
     }
     #app[data-layout="reiter"] .side .insp > .insp-toggle { display: none; }
     #app[data-layout="reiter"] .side .insp > .insp-sec:last-of-type { border-bottom: 0; }
@@ -3698,6 +3709,7 @@
     #app[data-layout="reiter"][data-side="sounds"] .side { overflow-y: hidden; }
     #app[data-layout="reiter"][data-side="sounds"] .side .insp { flex: 0 1 auto; max-height: 50%; overflow-y: auto; overscroll-behavior: contain; }
     #app[data-layout="reiter"][data-side="sounds"] .side-sounds { min-height: 240px; }
+    #app[data-layout="reiter"][data-side="sounds"] .side .insp[data-mode="clip"] { border-bottom: 1px solid var(--line); }
     #app[data-layout="reiter"] .side .shelf-list { flex: 1 1 auto; min-height: 0; }
     #app[data-layout="reiter"] .side .left-tabs { padding: 10px 12px 0; }
     #app[data-layout="reiter"] .side .shelf-head { border-top: 0; }
@@ -3726,7 +3738,7 @@
     #app[data-layout="reiter"] .side-datei-act .key:hover, #app[data-layout="reiter"] .side-mixer-docks .tab:hover:not(:disabled) { background: var(--panel); }
     #app[data-layout="reiter"] .side-datei-act .key.confirm { background: var(--meter-hot); color: var(--ink); }
     #app[data-layout="reiter"] .side-datei-export .key { border-color: var(--amber); color: var(--amber); }
-    #app[data-layout="reiter"] .side-datei-export .key[aria-pressed="true"] { background: var(--amber); color: var(--deck); }
+    #app[data-layout="reiter"] .side-datei-export .key[aria-pressed="true"] { background: var(--amber); color: var(--bg); }
     #app[data-layout="reiter"] .side-datei-foot { display: grid; gap: 6px; padding: 10px 14px 14px; border-top: 1px solid var(--line); }
     #app[data-layout="reiter"] .side-datei-foot:not(:has(*)) { display: none; }
     #app[data-layout="reiter"] .side-datei-foot .pop-about { margin: 0; }
@@ -3749,8 +3761,8 @@
       #app[data-layout="reiter"] .side-datei-foot #tips-reset { min-height: 44px; }
     }
 
-    /* Export-Klappfeld: neben der Leiste statt über ihr */
-    #app[data-layout="reiter"] #export.dock { right: calc(var(--side-w) + 16px); }
+    /* Export-Klappfeld: neben der Karte statt über ihr */
+    #app[data-layout="reiter"]:not([data-side="zu"]) #export.dock { right: calc(var(--side-w) + var(--side-gap) * 2); }
   }
 </style>
 
