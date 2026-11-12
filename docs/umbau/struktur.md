@@ -111,6 +111,12 @@ Bewusst entfallene Bedienelemente am Loopwerk-Desktop (Ersatz in Klammern): `#pr
 - **Die Spuren laufen hinter der Karte einfach weiter;** die Karte wird nur darübergelegt.
 - **Der Clip-Editor bleibt von unten** (Martin): Nur die Karten rechts kommen von oben, das Editor-Overlay fliegt weiter von unten ein.
 
+### Stand nach Scheibe 3 (2026-11-12)
+
+Gebaut: Reiter Mixer = Spalte rechts neben den Spuren, jede Spur mit ihrer Zeile auf gleicher Höhe (Effekt-Kurzinfo, Hall-/Echo-Anteil, Panorama, Lautstärke, M, S, Pegel), darunter Summe, Hall-Bus, Echo-Bus. Klick auf die Kurzinfo öffnet die Karte der Spur (Effekte, Reihenfolge, Panorama, Sends, Scharf) bzw. der Summe (Mastering · Busse · Master). Mastering und Master-Lautstärke sind aus dem Reiter Datei dorthin gezogen. Das Mixer-Fach unten und `#mixer-btn` entfallen.
+
+Zusätzlich entfallen (noch zu bestätigen): der Link „Alle Spuren im Mixer vergleichen →“ (sein Ziel gibt es nicht mehr) und der Spurname als Knopf im Kanalzug (der Name steht im Spurkopf, die Kurzinfo öffnet die Karte).
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
