@@ -88,6 +88,14 @@ Bild: `skizze-martin-1.webp`. **Gilt rein optisch, nicht inhaltlich** (Martin): 
 - `skizze-martin-2-mixer.webp`: Der Mixer steht **rechts neben den Spuren, Zeile für Zeile auf Höhe der jeweiligen Spur**. Je Zeile: Kurzinfo zu den Effekten („Keine Effekte“), Anteil zu Hall und Echo, Lautstärke mit dB-Wert, M und S, darunter die Pegelanzeige. Über die Effekt-Kurzinfo kommt man zu den Effekten dieser Spur.
 - `skizze-martin-3-summe.webp`: Die Einstellungen der Summe als schwebende Karte mit Abschnitten: Mastering (Schalter, Messwerte, Stil), Busse (Hall, Echo), Master (Lautstärke, Effekte).
 
+### Abnahme Scheibe 1/1b und Vorgaben für Kopfzeile und Karte (Martin, 2026-11-12)
+
+- Abgenommen: Reiter im Deck, schwebende Karte, Zuklappen. „Spur wählen öffnet Mixer“ passt. Dass die Karte den rechten Teil der Spuren verdeckt, passt.
+- **Karte bis oben** (`skizze-martin-4-karte-datei.png`): Die Karte beginnt am oberen Fensterrand und umschließt die Reiter; ihr Inhalt hat oben so viel Abstand, dass die Reiter darüber Platz haben. Ist die Karte zu, stehen die Reiter allein oben rechts.
+- **Kopfzeile** (`skizze-martin-5-kopfzeile.png`): Logo links frei auf dem Hintergrund, daneben das Deck als eigene abgerundete Leiste (Transport, Takt/Schlag/Zeit, Tempo, Tonart, Master, Rückgängig/Wiederholen), rechts davon die Reiter in der Karte.
+- **Reiter Datei, Anordnung** (Skizze 4): oben der Songname als Überschrift, darunter Tempo, Tonart, Länge; dann eine ruhige Liste: Öffnen, Speichern · Beispiel, Leeren · Tipps wieder zeigen · Info-Zeile.
+- Wie immer: nur Anordnung und Layout, Farben und Benennungen aus dem Bestand.
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
