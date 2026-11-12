@@ -65,7 +65,7 @@ function sammeln() {
   const CONTROLS = 'button, input:not([type=hidden]):not([type=file]), select, textarea, a[href], [role=button], [role=slider], [role=tab], [role=option], [role=menuitem], [role=switch], [role=checkbox], [draggable=true]:not(.clip), [contenteditable=true]';
   // innerster Treffer gewinnt
   const ORTE = [
-    ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Deck (Reiter rechts)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-foot', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
+    ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Deck (Reiter rechts)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-neu', 'Reiter Datei'], ['#side-datei-liste', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
     ['#project-menu', 'Projekt-Menü'], ['#rec-pop', 'Aufnahme-Feld am ●'], ['#keys-pop', 'Kürzel- und Gesten-Liste'],
     ['#link-pop', 'Feld „Aus dem Netz holen“'], ['.track-menu', 'Spur-Menü ⋯'], ['.chord-pop', 'Akkord-Feld'], ['.key-pop', 'Tonart-Feld'],
     ['.auto-keys', 'Kurven-Feld'], ['.tip', 'Tipp'], ['#hint', 'Einblender'], ['#clip-float', 'Werkzeug am Clip'], ['#clipbar', 'Clipleiste'],
