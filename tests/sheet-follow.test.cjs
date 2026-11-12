@@ -15,7 +15,7 @@ const trace = (page, dock) => page.evaluate((d) => new Promise((res) => {
 const distinct = (tr) => tr.filter((v, i, a) => i === 0 || v !== a[i - 1]);
 
 (async () => {
-  for (const vp of [{ width: 390, height: 844, touch: true, dock: 'sounds', name: 'Handy' }, { width: 1400, height: 820, touch: false, dock: 'mixer', name: 'Desktop' }]) {
+  for (const vp of [{ width: 390, height: 844, touch: true, dock: 'sounds', name: 'Handy' }, { width: 1400, height: 820, touch: false, dock: 'fxpad', name: 'Desktop' }]) {
     const app = await openApp({ viewport: { width: vp.width, height: vp.height }, hasTouch: vp.touch });
     const { page } = app;
     try {
