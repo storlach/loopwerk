@@ -1465,6 +1465,10 @@
   }
   .strip-sum.on { border-style: solid; border-color: var(--amber); background: color-mix(in srgb, var(--amber) 22%, var(--lane)); color: var(--ink); }
   .strip-master { position: sticky; right: 0; z-index: 1; box-shadow: -6px 0 12px var(--panel); }
+  /* Hüllen für die zwei Zeilen des Kanalzugs in der Spalte neben den Spuren (Layout „reiter“); im Fach unten unsichtbar, die Rückkanäle zeigen dort nur den Namen */
+  .strip-l1, .strip-l2 { display: contents; }
+  .mix-slot, .mix-head, .mix-bus { display: none; } /* Plätze der Mixer-Zeilen neben den Spuren: nur im Layout „reiter“ am Desktop (Reiter Mixer) */
+  .strip-bus .strip-sum { display: none; }
 
   /* ---------- Schmale Bildschirme: kompaktes Deck, Arranger, ein Fach, Leiste unten ---------- */
   @media (max-width: 760px) {
@@ -3751,11 +3755,9 @@
     /* Welcher Reiter zeigt was */
     #app[data-layout="reiter"]:not([data-side="sounds"]) .side-sounds { display: none; }
     #app[data-layout="reiter"][data-side="sounds"] .side .insp > :not(.insp-clip) { display: none; }
-    #app[data-layout="reiter"][data-side="datei"] :is(.side-mixer, .insp-for-mixer) { display: none; }
-    #app[data-layout="reiter"][data-side="mixer"] :is(.side-datei, .side-datei-neu, .side-datei-liste, .insp-for-datei) { display: none; }
+    #app[data-layout="reiter"][data-side="datei"] .insp-for-mixer { display: none; }
+    #app[data-layout="reiter"][data-side="mixer"] :is(.side-datei, .side-datei-neu, .side-datei-liste, .side-datei-foot, .insp-for-datei) { display: none; }
     #app[data-layout="reiter"][data-side="mixer"] .insp-song:not(:has(.insp-for-mixer:not([hidden]))) { display: none; }
-    #app[data-layout="reiter"] .side-mixer-hint { display: none; margin: 0; padding: 0 14px 12px; font-size: 12px; color: var(--muted); }
-    #app[data-layout="reiter"] .insp:is([data-mode="song"], [data-mode="sound"]) .side-mixer-hint { display: block; }
 
     /* Reiter Datei (Skizze 4): Songname als Überschrift, Tempo · Tonart · Länge · Master, Mastering, „Neuer Song“, dann die ruhige Befehlsliste */
     #app[data-layout="reiter"] .side-datei { display: block; padding: 6px 18px 0; }
@@ -3769,7 +3771,7 @@
     /* der Name steht nur einmal im Reiter: Kennzeile und Überschrift des Song-Abschnitts entfallen */
     #app[data-layout="reiter"] .insp-song > .insp-kind, #app[data-layout="reiter"] .insp-grp-song > .insp-title { display: none; }
     #app[data-layout="reiter"] .side .insp-song { border-bottom: 0; padding-top: 8px; }
-    #app[data-layout="reiter"] .side .insp-song .insp-mst { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+    #app[data-layout="reiter"] .side .insp-song .insp-mst { padding-top: 4px; }
     #app[data-layout="reiter"] .side-datei-neu { display: grid; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--line); }
     #app[data-layout="reiter"] .side-datei-neu:not(:has(#starter)) { display: none; }
     #app[data-layout="reiter"] .side-datei-neu h3 { margin: 0; }
@@ -3788,25 +3790,15 @@
     #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     #app[data-layout="reiter"] .side-datei-liste .key.confirm { background: var(--meter-hot); color: var(--ink); }
     #app[data-layout="reiter"] .side-datei-liste .key[aria-pressed="true"] { background: var(--amber); color: var(--bg); }
-    #app[data-layout="reiter"] .side-datei-foot .pop-about { margin: 0; padding: 6px 10px 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
-
-    /* Reiter Mixer: die beiden Fach-Knöpfe nebeneinander */
-    #app[data-layout="reiter"] .side-mixer { display: grid; gap: 10px; padding: 12px 0 0; }
-    #app[data-layout="reiter"] .side-mixer-docks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 14px; }
-    #app[data-layout="reiter"] .side-mixer-docks .tab {
-      display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: none; width: 100%; height: 34px; min-width: 0; padding: 0 8px;
-      background: var(--lane); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: none; cursor: pointer;
-      font: 600 12px/1 var(--font-body); letter-spacing: 0; text-transform: none;
-    }
-    #app[data-layout="reiter"] .side-mixer-docks .tab:hover:not(:disabled) { background: var(--panel); }
-    #app[data-layout="reiter"] .side-mixer-docks .tab svg { width: 14px; height: 14px; }
-    #app[data-layout="reiter"] .side-mixer-docks .tab[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); box-shadow: none; }
+    #app[data-layout="reiter"] .side-datei-foot { padding: 4px 28px 16px; border-top: 1px solid var(--line); }
+    #app[data-layout="reiter"] .side-datei-foot:not(:has(*)) { display: none; }
+    #app[data-layout="reiter"] .side-datei-foot .pop-about { margin: 0; padding: 10px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
 
     /* Finger: Tippflächen mindestens 44 px */
     @media (pointer: coarse) {
       #app[data-layout="reiter"] .side-tab { height: 44px; }
       #app[data-layout="reiter"] .side-datei .project-name { min-height: 44px; }
-      #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item, .tabbar-end > .tab-keys), #app[data-layout="reiter"] .side-mixer-docks .tab { height: 44px; min-height: 44px; }
+      #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item, .tabbar-end > .tab-keys) { height: 44px; min-height: 44px; }
     }
 
     /* Export-Klappfeld: neben der Karte statt über ihr */
@@ -3918,6 +3910,104 @@
     /* Ohne gewählten Clip bleibt die Spalte leer: dann bekommt der Editor die ganze Breite */
     #app[data-layout="reiter"] #clip-overlay #pattern:has(.insp-clip[hidden]) { grid-template-columns: minmax(0, 1fr); }
     #app[data-layout="reiter"] #clip-overlay #editor:has(.insp-clip[hidden]) { grid-template-columns: minmax(0, 1fr); }
+  }
+  /* ---------- Layout „reiter“, Scheibe 3: Mixer als Zeilen neben den Spuren, Karte für Effekte und Summe ---------- */
+  @media (min-width: 761px) {
+    /* Reiter Mixer: keine Karte, sondern die Spalte rechts neben den Spuren (jede Spur ihre Zeile auf ihrer Höhe); der Arranger rollt davor aus */
+    #app[data-layout="reiter"][data-side="mixer"] { --mix-w: var(--side-w); }
+    #app[data-layout="reiter"][data-side="mixer"] .arr-scroll { padding-right: 0; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-head, .mix-bus) { display: none; }
+    #app[data-layout="reiter"][data-side="mixer"] :is(.mix-slot, .mix-head, .mix-bus) {
+      display: flex; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--mix-w); width: var(--mix-w); min-width: 0; box-sizing: border-box; overflow: hidden;
+      background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 1px 0 0 var(--line);
+    }
+    #app[data-layout="reiter"][data-side="mixer"] .mix-head { z-index: 5; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); }
+    #app[data-layout="reiter"][data-side="mixer"] .mix-head .corner-label { font: 600 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    #app[data-layout="reiter"] .mix-head .tab {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px; max-width: none; height: 22px; min-width: 0; padding: 0 10px;
+      background: transparent; color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: none; cursor: pointer;
+      font: 600 11px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    #app[data-layout="reiter"] .mix-head .tab:hover:not(:disabled) { border-color: var(--amber-dim); }
+    #app[data-layout="reiter"] .mix-head .tab svg { width: 12px; height: 12px; }
+    #app[data-layout="reiter"] .mix-head .tab[aria-pressed="true"] { background: var(--amber); border-color: var(--amber); color: var(--bg); }
+    #app[data-layout="reiter"] .mix-head .tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    /* Zeilen ohne Kanalzug (Gruppen, Kurven) behalten die Breite der Spalte */
+    #app[data-layout="reiter"][data-side="mixer"] :is(.group-row, .auto-row)::after {
+      content: ""; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--mix-w); box-sizing: border-box;
+      background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); box-shadow: inset 1px 0 0 var(--line);
+    }
+    #app[data-layout="reiter"][data-side="mixer"] .track-row.selected .mix-slot { box-shadow: inset 1px 0 0 var(--line), inset -2px 0 0 var(--ink); }
+    #app[data-layout="reiter"][data-side="mixer"] .track-row.silent .mix-slot .strip > * { opacity: 0.55; }
+    #app[data-layout="reiter"][data-side="mixer"] .mix-bus { flex-direction: column; align-self: stretch; margin-left: auto; padding-bottom: 8px; }
+
+    /* Kanalzug als Zeile: oben Kurzinfo und Regler (Hall, Echo, Panorama), unten Lautstärke mit Wert, M, S; Pegel als dünner Streifen am unteren Rand */
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip {
+      position: relative; flex: 1 1 auto; width: auto; min-width: 0; margin: 0; padding: 4px 10px 6px; gap: 3px; justify-content: center;
+      background: transparent; border: 0; border-radius: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip.selected { background: color-mix(in srgb, var(--ink) 5%, transparent); box-shadow: inset 2px 0 0 var(--ink); }
+    #app[data-layout="reiter"] .mix-bus .strip.strip-master::before { display: none; }
+    #app[data-layout="reiter"] .mix-bus .strip.strip-master, #app[data-layout="reiter"] .mix-bus .strip.strip-bus { position: relative; right: auto; margin: 0; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-l1, #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-l2 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #app[data-layout="reiter"] .mix-slot .strip-l1 { height: 24px; }
+    #app[data-layout="reiter"] .mix-slot .strip-l2 { height: 20px; }
+    #app[data-layout="reiter"] .mix-slot :is(.strip-name, .strip-fx) { display: none; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum {
+      display: block; flex: 1 1 0; min-width: 0; height: 22px; min-height: 0; padding: 0 2px; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+      text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+      font: 500 10px/22px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+    }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum.on { background: transparent; border: 0; color: var(--ink); }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-sum:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+    #app[data-layout="reiter"] .mix-slot .strip-sends { display: flex; flex: none; justify-content: flex-start; gap: 14px; margin-right: 4px; }
+    #app[data-layout="reiter"] .mix-slot .strip-send { display: flex; flex-direction: row; align-items: center; gap: 9px; }
+    #app[data-layout="reiter"] .mix-slot :is(.strip-send, .strip-pan-wrap) .knob { width: 22px; height: 22px; }
+    #app[data-layout="reiter"] .mix-slot :is(.strip-send, .strip-pan-wrap) .knob-ind { top: 3px; height: 7px; transform-origin: 50% 8px; }
+    #app[data-layout="reiter"] .mix-slot .strip-pan-wrap { flex: none; margin-right: 4px; }
+    #app[data-layout="reiter"] .mix-slot .strip-send-label { font-size: 9px; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-fader-row { flex: 1 1 0; min-width: 0; min-height: 0; height: 18px; display: flex; align-items: center; gap: 0; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-fader { writing-mode: horizontal-tb; direction: ltr; width: 100%; height: 18px; margin: 0; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-meter { position: absolute; left: 10px; right: 10px; bottom: 2px; width: auto; height: 3px; border-radius: 1px; pointer-events: none; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-value { flex: none; width: 52px; text-align: right; font: 400 10px/1 var(--font-mono); }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-ms { flex: none; gap: 4px; min-height: 0; }
+    #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip-ms .tbtn { width: 24px; height: 20px; }
+    /* Summe und Busse: eine Zeile je Kanal, Name über der Kurzinfo */
+    #app[data-layout="reiter"] .mix-bus .strip { flex: none; height: 40px; flex-direction: row; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); }
+    #app[data-layout="reiter"] .mix-bus .strip-l1 { display: grid; grid-template-rows: auto auto; align-items: center; gap: 0; width: 104px; flex: none; height: auto; }
+    #app[data-layout="reiter"] .mix-bus .strip-l1 .strip-sum { height: 14px; font-size: 9px; line-height: 14px; flex: none; }
+    #app[data-layout="reiter"] .mix-bus .strip-name {
+      display: block; height: 14px; padding: 0 2px; text-align: left; font: 600 11px/14px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink);
+    }
+    #app[data-layout="reiter"] .mix-bus .strip-l2 { flex: 1 1 0; height: 20px; }
+    #app[data-layout="reiter"] .mix-bus .strip.idle > * { opacity: 0.5; }
+    /* Niedrige Spuren: eine Zeile (Kurzinfo, Lautstärke, Wert, M, S); Panorama und Sends entfallen; ganz niedrig auch der Wert */
+    #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot .strip { flex-direction: row; align-items: center; gap: 8px; padding: 0 10px; }
+    #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot :is(.strip-l1, .strip-l2) { display: contents; }
+    #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot :is(.strip-sends, .strip-pan-wrap) { display: none; }
+    #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot .strip-sum { flex: 1 1 0; }
+    #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot .strip-fader-row { flex: 1.3 1 0; }
+    #app[data-layout="reiter"] .arr-grid.rh-tiny .mix-slot .strip-value { display: none; }
+    #app[data-layout="reiter"] .arr-grid.rh-tiny .mix-slot .strip-ms .tbtn { height: 16px; width: 22px; }
+    #app[data-layout="reiter"] .arr-grid.rh-tiny .mix-slot .strip-fader-row, #app[data-layout="reiter"] .arr-grid.rh-tiny .mix-slot .strip-fader { height: 14px; }
+    #app[data-layout="reiter"] .arr-grid.rh-tiny .mix-slot .strip-meter { bottom: 1px; }
+
+    /* Karte über der Spalte (mixcol.js): Spur-Karte und Summe teilen sich die Leiste; ohne offene Karte bleibt sie weg */
+    #app[data-layout="reiter"][data-side="mixer"]:not([data-mixcard]) .side { display: none; }
+    #app[data-layout="reiter"][data-mixcard="spur"] :is(.insp-song, .insp-clip) { display: none; }
+    #app[data-layout="reiter"][data-mixcard="summe"] :is(.insp-track, .insp-clip) { display: none; }
+    #app[data-layout="reiter"] .side .insp-track > .insp-head, #app[data-layout="reiter"] .side .insp-track .insp-link { display: none; }
+    #app[data-layout="reiter"] .mixcard-head { display: none; }
+    #app[data-layout="reiter"][data-side="mixer"][data-mixcard] .mixcard-head {
+      order: -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; padding: 6px 12px 6px 18px;
+    }
+    #app[data-layout="reiter"] .mixcard-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 300 24px/1.2 var(--font-display); letter-spacing: -0.02em; }
+    #app[data-layout="reiter"] .mixcard-close { flex: none; }
+    #app[data-layout="reiter"] .side .insp-track { border-bottom: 0; padding-top: 6px; }
+    #app[data-layout="reiter"] .insp-grp-buses, #app[data-layout="reiter"] .insp-grp-master { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 12px; }
+    #app[data-layout="reiter"] .insp-grp-master { margin-top: 12px; }
+    #app[data-layout="reiter"] .insp-grp-buses > .insp-sub, #app[data-layout="reiter"] .insp-grp-master > .insp-sub { margin-bottom: 6px; }
   }
 </style>
 

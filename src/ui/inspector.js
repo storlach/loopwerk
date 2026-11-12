@@ -420,10 +420,10 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   // Song-Leiste in Blöcken nach dem Signalweg: Song · Master (Lautstärke, Effekte) · Busse · Mastering
   const grp = (cls) => el('div', `insp-grp ${cls}`);
   const songGrp = grp('insp-grp-song');
-  songGrp.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, ...(mvol ? [mvol.row] : []), songTools);
+  songGrp.append(songTitle, el('span', 'insp-kind', 'Tempo (BPM)'), tempoRow, keyNote, keyChg, lenRow, songTools);
   songGrp.classList.add('insp-for-datei');
   const masterGrp = grp('insp-grp-master');
-  masterGrp.append(masterSub);
+  masterGrp.append(masterSub, ...(mvol ? [mvol.row] : [])); // Layout „reiter“: Master-Lautstärke gehört zur Summen-Karte (mixcol.js)
   masterGrp.classList.add('insp-for-mixer');
   // Busse: Rückkanal-Lautstärke und Effekt-Einstellungen (der einzige Ort dafür am Desktop)
   const busGrp = grp('insp-grp-buses');
@@ -464,12 +464,14 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
     }
     busGrp.append(box);
   }
-  const mstSlot = grp('insp-mst insp-for-datei');
+  const mstSlot = grp(reiter ? 'insp-mst insp-for-mixer' : 'insp-mst insp-for-datei'); // reiter: Mastering in der Summen-Karte
   // Platz am Ende der Song-Werkbank (Krachwerk: Block „Werkstatt“, storage-panel.js); leer unsichtbar
   const endSlot = el('div', 'insp-end');
   endSlot.id = 'insp-song-end';
   endSlot.classList.add('insp-for-datei');
-  songSec.append(songGrp, masterGrp, busGrp, mstSlot, endSlot);
+  // Layout „reiter“: Reihenfolge der Summen-Karte Mastering · Busse · Master
+  if (reiter) songSec.append(songGrp, mstSlot, busGrp, masterGrp, endSlot);
+  else songSec.append(songGrp, masterGrp, busGrp, mstSlot, endSlot);
   if (mastering) mountMasteringControls(mstSlot, { store, engine, analysis: mastering, prefix: 'insp-mst' });
 
   const hintSec = el('p', 'insp-empty insp-hint', 'Klick auf einen Clip oder einen Spurnamen zeigt hier seine Einstellungen. Klick ins Leere zeigt den Song.');
@@ -577,7 +579,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
         r.out.textContent = sendText(v);
         r.row.classList.toggle('on', v > 0);
       }
-      mixerLink.hidden = fxCompact; // Stufe 3: „Mischen“ steht im Song-Fach
+      mixerLink.hidden = fxCompact || reiter; // Stufe 3: „Mischen“ steht im Song-Fach
       recRows?.update(mode === 'track' ? track : null);
       if (bounceBtn) {
         const p = bounce.progress;

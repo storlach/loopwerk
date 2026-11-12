@@ -27,8 +27,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main'), reiter: $('side-datei-act') });
   place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main'), reiter: $('side-datei-export') });
   place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-start') });
-  place($('tips-reset'), { narrow: $('song-links'), reiter: $('side-datei-foot') });
-  place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') }, reiter: $('side-datei-foot') }); // Tastenkürzel: Song-Werkbank bzw. Befehlsliste in Datei
+  place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') }, reiter: $('side-datei-help') }); // Tastenkürzel: Song-Werkbank bzw. Befehlsliste in Datei
+  place($('tips-reset'), { narrow: $('song-links'), reiter: $('side-datei-help') });
   place($('pop-about'), { reiter: $('side-datei-foot') });
   place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-start') });
   place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
@@ -38,8 +38,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Dichte „calm“: Daumenleiste am Handy (Kiste · ▶ · ● · Werkbank), Mischen und FX-Pad im Fach „Song“, „+ Neu“ neben der Suche
   place($('play-btn'), { calm: { narrow: $('tabbar') } });
   place($('rec-btn'), { calm: { narrow: $('tabbar') } });
-  place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('side-mixer-docks') });
-  place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('side-mixer-docks') });
+  place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } }); // Layout „reiter“: kein Fach, die Zeilen neben den Spuren sind der Mixer
+  place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('mix-head') }); // Layout „reiter“: Kopf der Mixer-Spalte
   place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------

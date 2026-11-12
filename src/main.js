@@ -16,6 +16,7 @@ import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
 import { mountSide } from './ui/side.js';
 import { mountOverlay } from './ui/overlay.js';
+import { mountMixcol } from './ui/mixcol.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountSoundBench } from './ui/sound-bench.js';
 import { mountCreate } from './ui/create.js';
@@ -675,7 +676,7 @@ async function boot() {
   // Ruhige Dichte (Krachwerk) schaltet Tonart und Akkorde über das Song-Fach, nicht über den Schalter im Arranger
   // Festhalten (Krachwerk 3d): Etikett im Loop-Band, Werkzeug ab 2 Clips, Spur-Werkbank, Taste F; null = aus (Loopwerk)
   const bounce = EDITION.bounce ? mountBounce({ store, engine, library, own, ui }) : null;
-  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm', recArm, bounce });
+  const arranger = mountArranger({ root: document.getElementById('arr-scroll'), store, engine, library, ui, grainWave: EDITION.grainWave, harmonyToggle: EDITION.density !== 'calm', recArm, bounce, rowSlots: EDITION.layout === 'reiter' });
   mountZoomBars({ root: document.getElementById('arr-scroll'), arranger, ui });
   const shelf = mountLibrary({
     root: document.getElementById('library'), library, store, engine, ui, arranger, groupBy: EDITION.shelfGroups,
@@ -705,7 +706,7 @@ async function boot() {
   // Werkzeug am Clip: „Festhalten“ ab 2 Clips (nur mit Festhalten), „Stumm aus“ bei stummen Clips (ein Rückgängig-Schritt)
   if (bounce) tools.bounce = (opts = {}) => bounce.run({ scope: 'selection', clipIds: ui.selectedIds(), withFx: true, ...opts });
   tools.unmute = () => store.setClipMute(ui.selectedIds(), false);
-  const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui });
+  const mixer = mountMixer({ root: document.getElementById('mixer'), store, engine, ui, arranger });
   const editor = mountEditor({ root: document.getElementById('editor'), store, engine, library, ui, own });
   const patternEditor = mountPatternEditor({ root: document.getElementById('pattern'), store, engine, library, ui, kits: EDITION.synthKits ?? null });
   // Wird der Clip des offenen Editors gelöscht, schließt sich der Editor (Pattern: sobald kein Clip es mehr spielt)
@@ -803,6 +804,7 @@ async function boot() {
     ...(EDITION.workbench === 'sound' ? { clipPanel: (box, deps) => mountSoundBench(box, { ...deps, own }), trackOnClip: false, fxCompact: true } : {}),
   });
   const side = reiter ? mountSide({ ui, store }) : null;
+  const mixcol = side ? mountMixcol({ ui, store, mixer, side }) : null;
   const layout = mountLayout({
     store, ui, library,
     editName: (dock) => (dock === 'pattern' ? store.project.patterns?.[patternEditor.id]?.name : editor.state?.src?.name),
@@ -920,6 +922,7 @@ async function boot() {
       if (arranger.cancelScissors()) return;
       if (ui.selecting) { ui.setSelecting(false); return; }
       if (ui.dock) { ui.setDock(null); return; }
+      if (mixcol?.close()) return; // Layout „reiter“: Karte der Mixer-Spalte zu
       // Layout „reiter“: ist sonst nichts offen, was Esc schließt (Auswahl, Fach, aufgeklappte Felder, Tipp), klappt die Karte zu
       if (side && !ui.armedSampleId && !ui.selectedClipId && !ui.selectedTrackId && !ui.multi?.length && !ui.benchSoundId && !document.querySelector('[aria-expanded="true"]:not(.side-tab), .tip:not([hidden])') && side.close()) return;
       ui.arm(null);
@@ -985,7 +988,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, overlay, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, mixcol, overlay, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

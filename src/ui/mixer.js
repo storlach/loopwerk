@@ -1,5 +1,8 @@
 // Mixer: ein Kanalzug pro Spur plus Master. Fader, Panorama, Mute/Solo, Effekt-Zusammenfassung, Pegel.
 // Effekte des gewählten Kanals: am Desktop im Inspektor, am Handy als eigene Seite im Mixer (mit Zurück).
+// Layout „reiter“ (Desktop): kein Fach unten; dieselben Kanalzüge hängen als Zeilen neben den Spuren, jede in dem Platz (.mix-slot), den der
+// Arranger ihrer Spur gibt (Höhe, Rollen, Umsortieren, Gruppen laufen damit mit); Summe und Busse in .mix-bus unter den Spuren.
+// Ein Klick auf die Effekt-Kurzinfo öffnet die Karte (mixcol.js, hooks.open).
 
 import { EFFECTS, EFFECT_IDS, withFx, fxOrderOf, BUSES, busDef, busOf, busParamDef, sendOf } from '../effects.js';
 import { applyOrder, gripEl, mountFxDrag, orderText, resetLink } from './fx-order.js';
@@ -26,8 +29,14 @@ export const formatParam = (p, v) => {
   return String(v);
 };
 
-export function mountMixer({ root, store, engine, ui }) {
+export function mountMixer({ root, store, engine, ui, arranger = null }) {
+  const app = document.getElementById('app');
   const stripsEl = root.querySelector('#mixer-strips');
+  // Spalte neben den Spuren (Layout „reiter“, Desktop) statt Fach; hooks setzt mixcol.js (Karte öffnen, Reiter zeigen)
+  const column = () => !!arranger?.mixHead && !narrow.matches;
+  const colShown = () => app.dataset.side === 'mixer';
+  const live = () => (column() ? colShown() : !root.hidden);
+  const hooks = { open: null, show: null };
   const detailEl = root.querySelector('#mixer-detail');
   const strips = new Map();
   // Pegel: Maße je Leinwand vom ResizeObserver, Farben einmal gelesen
@@ -47,6 +56,12 @@ export function mountMixer({ root, store, engine, ui }) {
 
   const fxOf = (id) => (id === MASTER ? withFx(masterOf(store.project).fx) : withFx(store.track(id)?.fx));
   const setFx = (id, fxId, patch, key) => (id === MASTER ? store.setMasterFx(fxId, patch, key) : store.setTrackFx(id, fxId, patch, key));
+  const labelOf = (id) => (id === MASTER ? 'Summe' : nameOf(id));
+  // Kurzinfo eines Rückkanals: seine ein, zwei wichtigsten Werte
+  const busSummary = (bk) => {
+    const cfg = busOf(store.project, bk);
+    return busDef(bk).params.slice(0, 2).map((k) => { const p = busParamDef(bk, k); return p.options ? p.options.find((o) => o.id === cfg[k])?.label ?? cfg[k] : formatParam(p, cfg[k]); }).join(' · ');
+  };
   const nameOf = (id) => (id === MASTER ? 'Master' : busKey(id) ? busDef(busKey(id))?.label ?? '' : store.track(id)?.name ?? '');
   // Besitzer der Kurven eines Kanals (Master: Summen-Kurven, Ziel 'master')
   const ownerOf = (id) => (id === MASTER ? masterOf(store.project) : store.track(id));
@@ -150,28 +165,49 @@ export function mountMixer({ root, store, engine, ui }) {
       solo.addEventListener('click', () => store.setTrack(id, { solo: !store.track(id).solo }));
       ms.append(mute, solo);
     }
-    if (bk) strip.append(name);
-    else strip.append(name, sum, fxBtns);
-    if (sends.length) strip.append(sendsEl);
-    if (pan) strip.append(knob.wrap);
-    strip.append(faderRow, value, ms);
+    // Zwei Zeilen (oben Kurzinfo und Regler, unten Fader, Wert, M/S); im Fach unten sind die Hüllen unsichtbar (display: contents)
+    const l1 = el('div', 'strip-l1');
+    const l2 = el('div', 'strip-l2');
+    l1.append(name, sum);
+    if (!bk) l1.append(fxBtns);
+    if (sends.length) l1.append(sendsEl);
+    if (pan) l1.append(knob.wrap);
+    l2.append(faderRow, value, ms);
+    strip.append(l1, l2);
     const s = { strip, name, sum, fxBtns, fxMap, pan, knob, lock, locked: false, sends, fader, meter, value, mute, solo, peak: 0 };
     strips.set(id, s);
     return s;
   }
 
+  // Hervorgehobene Zeile: am Desktop die gewählte Spur (oder die Spur des gewählten Clips), bei offener Summen-Karte die Summe bzw. der Bus
+  const highlighted = () => {
+    if (narrow.matches) return selected;
+    if (ui.selectedClipId) return store.findClip(ui.selectedClipId)?.track.id ?? null;
+    if (ui.selectedTrackId) return ui.selectedTrackId;
+    return app.dataset.mixcard === 'summe' ? (selected === MASTER || busKey(selected) ? selected : MASTER) : null;
+  };
+  function markSelection() {
+    const t = highlighted();
+    for (const [id, s] of strips) s.strip.classList.toggle('selected', t === id);
+  }
+
   function sync() {
-    if (root.hidden) return;
+    if (!live()) return;
+    const col = column();
     const ids = [...store.project.tracks.map((t) => t.id), ...BUSES.map((b) => BUS_PREFIX + b.id), MASTER];
     for (const [id, s] of strips) if (!ids.includes(id)) { s.strip.remove(); meterSize.unobserve(s.meter); strips.delete(id); }
     ids.forEach((id, i) => {
       const s = strips.get(id) || makeStrip(id);
-      if (stripsEl.children[i] !== s.strip) stripsEl.insertBefore(s.strip, stripsEl.children[i] || null);
+      if (col) {
+        // Spalte: Spuren in den Platz ihrer Zeile, Summe und Busse unter die Spuren (Summe, Hall, Echo)
+        const host = id === MASTER || busKey(id) ? arranger.mixBus : arranger.rowSlot(id);
+        if (host && s.strip.parentElement !== host) host.append(s.strip);
+      } else if (stripsEl.children[i] !== s.strip) stripsEl.insertBefore(s.strip, stripsEl.children[i] || null);
       const bk = busKey(id);
       if (bk) { syncBusStrip(s, id, bk); return; }
       const fx = fxOf(id);
-      s.name.textContent = nameOf(id);
-      s.strip.classList.toggle('selected', selected === id);
+      s.name.textContent = col ? labelOf(id) : nameOf(id);
+      s.strip.classList.toggle('selected', highlighted() === id);
       for (const [fxId, b] of s.fxMap) b.setAttribute('aria-pressed', String(fx[fxId].on));
       applyOrder(s.fxBtns, fxOrderOf(ownerOf(id)), (fxId) => s.fxMap.get(fxId));
       const nOn = EFFECTS.filter((e) => fx[e.id].on).length;
@@ -201,7 +237,12 @@ export function mountMixer({ root, store, engine, ui }) {
         }
       }
     });
+    if (col && arranger.mixBus) {
+      const order = [MASTER, ...BUSES.map((b) => BUS_PREFIX + b.id)].map((id) => strips.get(id)?.strip).filter(Boolean);
+      order.forEach((n, i) => { if (arranger.mixBus.children[i] !== n) arranger.mixBus.insertBefore(n, arranger.mixBus.children[i] || null); });
+    }
     if (selected && !ids.includes(selected)) selected = null;
+    markSelection();
     renderDetail();
   }
 
@@ -218,6 +259,9 @@ export function mountMixer({ root, store, engine, ui }) {
   function syncBusStrip(s, id, bk) {
     const cfg = busOf(store.project, bk);
     s.name.textContent = nameOf(id);
+    const info = busSummary(bk);
+    if (s.sum.textContent !== info) s.sum.textContent = info;
+    s.sum.classList.toggle('on', busUsed(store.project, bk));
     s.strip.classList.toggle('idle', !busUsed(store.project, bk));
     if (document.activeElement !== s.fader) s.fader.value = String(cfg.volume);
     s.fader.setAttribute('aria-label', `Lautstärke ${nameOf(id)}`);
@@ -239,8 +283,8 @@ export function mountMixer({ root, store, engine, ui }) {
     selected = id;
     const bk = busKey(id);
     if (!narrow.matches) {
-      if (bk) { ui.select(null); ui.selectTrack?.(null); showBusSettings(bk); }
-      else if (id === MASTER) { ui.select(null); ui.selectTrack?.(null); } else ui.selectTrack?.(id);
+      if (bk) { ui.select(null); ui.selectTrack?.(null); if (column()) hooks.open?.(id); showBusSettings(bk); }
+      else if (id === MASTER) { ui.select(null); ui.selectTrack?.(null); if (column()) hooks.open?.(id); } else { ui.selectTrack?.(id); if (column()) hooks.open?.(id); }
     }
     sync();
   }
@@ -476,7 +520,7 @@ export function mountMixer({ root, store, engine, ui }) {
   // ---------- Pegel ----------
 
   function drawMeters() {
-    if (!root.hidden) {
+    if (live()) {
       for (const [id, s] of strips) {
         const level = id === MASTER ? engine.peakLevel() : busKey(id) ? engine.busPeak(busKey(id)) : engine.trackPeak(id);
         const db = level > 0 ? 20 * Math.log10(level) : -60;
@@ -487,7 +531,7 @@ export function mountMixer({ root, store, engine, ui }) {
         if (!meterSeen.has(c)) { meterSeen.add(c); meterSize.observe(c); }
         const box = meterBox.get(c);
         const key = box && `${s.peak}|${box.w}|${box.h}`;
-        if (box && s.drawn !== key) {
+        if (box && box.w > 0 && s.drawn !== key) { // Leinwand ohne Fläche (Zeile in eingeklappter Gruppe) bleibt ungezeichnet
           s.drawn = key;
           const dpr = window.devicePixelRatio || 1;
           const { w, h } = box;
@@ -497,9 +541,9 @@ export function mountMixer({ root, store, engine, ui }) {
           meterColors ??= ((css) => Object.fromEntries(['--meter-off', '--meter-hot', '--meter-warm', '--meter-ok'].map((k) => [k, css.getPropertyValue(k).trim()])))(getComputedStyle(c));
           g.fillStyle = meterColors['--meter-off'];
           g.fillRect(0, 0, w, h);
-          const top = h * (1 - s.peak);
           g.fillStyle = meterColors[s.peak > 0.92 ? '--meter-hot' : s.peak > 0.75 ? '--meter-warm' : '--meter-ok'];
-          g.fillRect(0, top, w, h - top);
+          if (w > h * 2) g.fillRect(0, 0, w * s.peak, h); // Zeile neben den Spuren: Streifen füllt von links
+          else { const top = h * (1 - s.peak); g.fillRect(0, top, w, h - top); }
         }
         if (s.locked) { const t = store.track(id); if (t) showPan(s, t); }
         for (const sd of s.sends || []) if (sd.locked) { const t = store.track(id); if (t) showSend(sd, t); }
@@ -516,9 +560,12 @@ export function mountMixer({ root, store, engine, ui }) {
   requestAnimationFrame(drawMeters);
 
   function setOpen(open) {
+    if (column()) { if (open) hooks.show?.(); return; }
     ui.setDock(open ? 'mixer' : ui.dock === 'mixer' ? null : ui.dock);
   }
   ui.on(() => {
+    // Spalte statt Fach: „Mixer öffnen“ (ui.setDock('mixer')) zeigt den Reiter Mixer
+    if (column() && ui.dock === 'mixer') { ui.setDock(null); hooks.show?.(); return; }
     const show = ui.dock === 'mixer';
     document.getElementById('mixer-btn').setAttribute('aria-pressed', String(show));
     if (root.hidden === !show) return;
@@ -529,11 +576,12 @@ export function mountMixer({ root, store, engine, ui }) {
   });
   document.getElementById('mixer-btn').addEventListener('click', () => setOpen(ui.dock !== 'mixer'));
   store.on(sync);
-  ui.on(() => {
-    // Auswahl im Arranger/Inspektor im Mixer markieren
-    const t = !narrow.matches ? (ui.selectedTrackId || (ui.selectedClipId && store.findClip(ui.selectedClipId)?.track.id) || null) : selected;
-    for (const [id, s] of strips) s.strip.classList.toggle('selected', t === id);
-  });
+  ui.on(markSelection); // Auswahl im Arranger/Inspektor im Mixer markieren
   narrow.addEventListener('change', () => { detailFor = null; sync(); });
-  return { setOpen, select, MASTER };
+  if (arranger) {
+    // Zeilen und Spalte: nach jedem Aufbau der Spuren und beim Wechsel des Reiters nachziehen
+    document.getElementById('arr-scroll')?.addEventListener('arr-layout', () => { if (column() && colShown()) sync(); });
+    new MutationObserver(() => { if (column() && colShown()) { sync(); markSelection(); } }).observe(app, { attributes: true, attributeFilter: ['data-side', 'data-mixcard'] });
+  }
+  return { setOpen, select, MASTER, hooks };
 }

@@ -1,7 +1,8 @@
 // Schwebende Karte rechts mit drei Reitern (Layout „reiter“, nur Desktop): Datei · Sounds · Mixer. Die Reiter-Knöpfe sitzen im Deck;
 // ein Klick auf den gewählten Reiter klappt die Karte zu (data-side="zu").
 // Dieselben Bausteine wie vorher, nur umgehängt: Sounds = das Regal (.shelf), Datei = Projekt-Knöpfe + Song-Abschnitt des Inspektors,
-// Mixer = Spur-Abschnitt, Summe und Busse des Inspektors + Knöpfe für Mixer-Fach und FX-Pad. Ein gewählter Clip zeigt hier nichts:
+// Mixer = keine Karte, sondern die Spalte neben den Spuren (mixer.js, Zeilen auf Höhe der Spuren); die Karte erscheint erst über der Spalte,
+// wenn eine Zeile sie öffnet (mixcol.js: Spur-Abschnitt bzw. Summe aus dem Inspektor). Ein gewählter Clip zeigt hier nichts:
 // seine Einstellungen stehen im Clip-Editor (overlay.js), Teilen/Duplizieren/Löschen in der Kopfzeile über den Spuren (#arr-bar-tools),
 // „Tastenkürzel“ in der Befehlsliste von Datei. Aussehen: CSS in index.html unter #app[data-layout="reiter"].
 // Am Handy (≤ 760 px) bleibt alles am alten Platz; die Leiste wird dort nicht gezeigt.
@@ -84,19 +85,12 @@ export function mountSide({ ui }) {
   const liste = el('div', 'side-datei-liste', 'side-datei-liste');
   liste.setAttribute('role', 'group');
   liste.setAttribute('aria-label', 'Datei');
-  for (const id of ['side-datei-act', 'side-datei-export', 'side-datei-start', 'side-datei-foot']) liste.append(el('div', id, id));
-  const mixer = el('div', 'side-mixer', 'side-mixer');
-  mixer.setAttribute('aria-label', 'Mixer');
-  mixer.append(el('div', 'side-mixer-docks', 'side-mixer-docks'));
-  const hint = el('p', 'side-mixer-hint', 'side-mixer-hint');
-  hint.textContent = 'Wähle eine Spur, dann stehen hier ihre Effekte, das Panorama und die Sends.';
-  mixer.append(hint);
-  const clipSec = insp.querySelector('.insp-clip');
-  const trackSec = insp.querySelector('.insp-track');
+  for (const id of ['side-datei-act', 'side-datei-export', 'side-datei-start', 'side-datei-help']) liste.append(el('div', id, id));
+  const foot = el('div', 'side-datei-foot', 'side-datei-foot'); // Info-Zeile ganz unten
   const songSec = insp.querySelector('.insp-song');
-  (trackSec || songSec).before(mixer);
   songSec.before(datei);
-  insp.append(neu, liste);
+  // Reihenfolge in Datei: Name · Tempo, Tonart, Länge (Song-Abschnitt) · Befehle · Neuer Song · Info
+  insp.append(liste, neu, foot);
 
   // ---------- Reiter ----------
   let current = DEFAULT; // zuletzt gewählter Reiter (auch bei zugeklappter Karte)

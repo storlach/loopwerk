@@ -34,13 +34,22 @@ async function revealSide(page, sel) {
   if (typeof sel !== 'string') return;
   try {
     await page.evaluate((s) => {
-      const side = document.getElementById('side');
-      if (!side || !side.getClientRects().length) return;
+      const app = document.getElementById('app');
+      if (!document.getElementById('side') || app.dataset.layout !== 'reiter' || matchMedia('(max-width: 760px)').matches) return;
       let n = null;
       try { n = document.querySelector(s); } catch { return; }
       if (!n) return;
-      const tab = n.closest('.side-sounds') ? 'sounds' : n.closest('.insp-for-mixer, #side-mixer') ? 'mixer' : n.closest('.insp-for-datei, #side-datei, #side-datei-neu, #side-datei-liste') ? 'datei' : null;
-      if (tab && document.getElementById('app').dataset.side !== tab) document.getElementById(`side-tab-${tab}`).click();
+      // Mixer (Scheibe 3): Spur-Einstellungen und Summe liegen in der Karte über der Mixer-Spalte; wie ein Mensch öffnet sie die Zeile (Effekt-Kurzinfo)
+      const sumPart = n.closest('.insp-grp-master, .insp-grp-buses, .insp-mst');
+      const trackPart = n.closest('.insp-track');
+      const lw = window.loopwerk;
+      const tab = n.closest('.side-sounds') ? 'sounds' : n.closest('.mix-slot, .mix-bus, #mix-head') || sumPart || trackPart || n.closest('.insp-for-mixer') ? 'mixer' : n.closest('.insp-for-datei, #side-datei, #side-datei-neu, #side-datei-liste, #side-datei-foot') ? 'datei' : null;
+      if (tab && app.dataset.side !== tab) document.getElementById(`side-tab-${tab}`).click();
+      if (sumPart && app.dataset.mixcard !== 'summe') lw.mixer.select('__master');
+      else if (trackPart && !sumPart && app.dataset.mixcard !== 'spur') {
+        const id = lw.ui.selectedTrackId || (lw.ui.selectedClipId && lw.store.findClip(lw.ui.selectedClipId)?.track.id);
+        if (id) lw.mixer.select(id);
+      }
     }, sel);
   } catch { /* Seite lädt gerade */ }
 }

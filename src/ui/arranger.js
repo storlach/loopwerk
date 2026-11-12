@@ -50,7 +50,9 @@ const canvasDpr = () => Math.min(TOUCH ? 2 : 4, window.devicePixelRatio || 1);
 
 // recArm (2.13 C): { toggle(trackId) } – Spur-Menü „Für Aufnahme scharf“ und roter Punkt im Spurkopf; null = aus
 // bounce (Krachwerk 3d): { run, progress, on } – Etikett „Festhalten“ im Loop-Band; null = aus
-export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true, recArm = null, bounce = null }) {
+// rowSlots (Layout „reiter“): jede Spur bekommt rechts einen leeren Platz (.mix-slot) für ihre Mixer-Zeile (mixer.js), dazu Kopf (.mix-head, im Lineal)
+// und Platz für Summe und Busse unter den Spuren (.mix-bus); sie wachsen mit der Zeile (Höhe, Rollen, Umsortieren) und sind sonst unsichtbar
+export function mountArranger({ root, store, engine, library, ui, grainWave = false, harmonyToggle = true, recArm = null, bounce = null, rowSlots = false }) {
   root.innerHTML = '';
   // Roh → geformt (Krachwerk): ein Sound ohne Klang-Rezept zeichnet seine Welle als Korn (Punkte), mit Rezept als Linie
   const shaped = (id) => !grainWave || !!recipeKey(store.project.recipes?.[id]);
@@ -119,6 +121,9 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     bounceBtn.querySelector('.bounce-txt').textContent = p != null ? 'hält fest …' : 'Festhalten';
   }
   rulerRow.append(corner, ruler);
+  const mixHead = rowSlots ? el('div', 'mix-head') : null;
+  if (mixHead) mixHead.id = 'mix-head';
+  if (mixHead) { mixHead.append(el('span', 'corner-label', 'Mixer')); rulerRow.append(mixHead); }
   const rowsEl = el('div', 'rows');
   const addRow = el('div', 'add-row');
   const addBtn = el('button', 'add-track', '+ Spur');
@@ -133,6 +138,9 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   sumBtn.setAttribute('aria-expanded', 'false');
   sumBtn.addEventListener('click', () => autoLanes.toggle('master'));
   addRow.append(addBtn, sumBtn);
+  const mixBus = rowSlots ? el('div', 'mix-bus') : null;
+  if (mixBus) mixBus.id = 'mix-bus';
+  if (mixBus) addRow.append(mixBus);
   const loopShade = el('div', 'loop-shade');
   const playhead = el('div', 'playhead');
   // Griff der Abspielmarke im Lineal: ziehen setzt die Wiedergabeposition
@@ -221,7 +229,10 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     head.append(top, btns);
     const lane = el('div', 'lane');
     lane.dataset.trackId = track.id;
+    const mix = rowSlots ? el('div', 'mix-slot') : null;
+    if (mix) mix.dataset.trackId = track.id;
     row.append(head, lane);
+    if (mix) row.append(mix);
 
     mute.addEventListener('click', () => { const t = store.track(track.id); store.setTrack(t.id, { mute: !t.mute }); });
     solo.addEventListener('click', () => { const t = store.track(track.id); store.setTrack(t.id, { solo: !t.solo }); });
@@ -237,7 +248,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     // Klick auf den Spurkopf zeigt die Spur im Inspektor (Lautstärke, Panorama, Effekte)
     head.addEventListener('click', (e) => { if (!e.target.closest('button, input, .knob')) ui.selectTrack?.(track.id); });
 
-    const r = { row, head, name, dot, top, menuBtn, mute, solo, chev, vol, volKnob, lane };
+    const r = { row, head, name, dot, top, menuBtn, mute, solo, chev, vol, volKnob, lane, mix };
     rows.set(track.id, r);
     return r;
   }
@@ -1039,7 +1050,9 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     grid.classList.toggle('rh-tiny', rh < cssPx('--rh-one', 30));
     grid.classList.toggle('ch-low', rh < 44);
     grid.classList.toggle('ch-tiny', rh < 30);
-    grid.style.width = headW() + totalBeats(p) * ppb() + 'px';
+    // Layout „reiter“: rechts Platz für die Mixer-Spalte (--mix-w, sonst 0), damit das Ende des Songs davor ausrollt
+    const gw = headW() + totalBeats(p) * ppb();
+    grid.style.width = rowSlots ? `calc(${gw}px + var(--mix-w, 0px))` : gw + 'px';
     renderRuler();
     keyRow.render();
     chordRow.render();
@@ -1079,7 +1092,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   let viewW = root.clientWidth;
   // Freier Rand rechts (padding-right, z. B. unter der schwebenden Karte im Layout „reiter“): dort liegt kein Song-Inhalt zum Bedienen,
   // aber der Rollbereich ist um ihn größer – Rollbalken, „einpassen“ und Folgen rechnen mit der Breite davor
-  const rightReserve = () => parseFloat(getComputedStyle(root).paddingRight) || 0;
+  const rightReserve = () => { const cs = getComputedStyle(root); return (parseFloat(cs.paddingRight) || 0) + (rowSlots ? parseFloat(cs.getPropertyValue('--mix-w')) || 0 : 0); };
   let reserve = 0;
   let phGripW = null; // Breite des Griffs (CSS, je Gerät): einmal gemessen
   new ResizeObserver(() => {
@@ -1793,5 +1806,5 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     markSelection();
     syncBounce();
   });
-  return { render, autoLanes, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
+  return { render, rowSlot: (id) => rows.get(id)?.mix ?? null, mixHead, mixBus, autoLanes, setPlayhead, dropTargetAt, clearDropPreview, select, zoom, zoomTo, zoomY, zoomYTo, setView: applyZoom, metrics, rowHeight: rowH, nudge, armScissors, cancelScissors, revealClip, viewAnchor, followView, chordRow, get scissors() { return !!scissors; } };
 }
