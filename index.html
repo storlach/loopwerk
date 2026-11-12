@@ -899,8 +899,8 @@
   .strip-send-label { font: 600 9px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--muted); }
   .strip-send.on .strip-send-label { color: var(--ink); }
   .strip:not(.strip-bus) + .strip-bus { margin-left: 14px; }
-  .strip-bus.idle > * { opacity: 0.45; }
-  .strip-bus.idle:hover > *, .strip-bus.idle:focus-within > * { opacity: 0.85; }
+  .strip-bus.idle :is(.strip-l1, .strip-l2) > * { opacity: 0.45; }
+  .strip-bus.idle:hover :is(.strip-l1, .strip-l2) > *, .strip-bus.idle:focus-within :is(.strip-l1, .strip-l2) > * { opacity: 0.85; }
   .fx-bus-card .fx-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .fx-cards.fx-bus-page { grid-template-columns: minmax(0, 1fr); }
   .mixer-detail { border-left: 1px solid var(--line); padding: 10px 14px; overflow: auto; min-width: 0; }
@@ -3957,7 +3957,7 @@
       transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s;
     }
     #app[data-layout="reiter"] .track-row.selected .mix-slot { box-shadow: inset 1px 0 0 var(--line), inset -2px 0 0 var(--ink); }
-    #app[data-layout="reiter"] .track-row.silent .mix-slot .strip > * { opacity: 0.55; }
+    #app[data-layout="reiter"] .track-row.silent .mix-slot .strip :is(.strip-l1, .strip-l2) > * { opacity: 0.55; }
     #app[data-layout="reiter"] .mix-bus { flex-direction: column; align-self: stretch; margin-left: auto; padding-bottom: 8px; }
 
     /* Kanalzug als Zeile: oben Kurzinfo und Regler (Hall, Echo, Panorama), unten Lautstärke mit Wert, M, S; Pegel als dünner Streifen am unteren Rand */
@@ -4000,7 +4000,7 @@
       display: block; height: 14px; padding: 0 2px; text-align: left; font: 600 11px/14px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink);
     }
     #app[data-layout="reiter"] .mix-bus .strip-l2 { flex: 1 1 0; height: 20px; }
-    #app[data-layout="reiter"] .mix-bus .strip.idle > * { opacity: 0.5; }
+    #app[data-layout="reiter"] .mix-bus .strip.idle :is(.strip-l1, .strip-l2) > * { opacity: 0.5; }
     /* Niedrige Spuren: eine Zeile (Kurzinfo, Lautstärke, Wert, M, S); Panorama und Sends entfallen; ganz niedrig auch der Wert */
     #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot .strip { flex-direction: row; align-items: center; gap: 8px; padding: 0 10px; }
     #app[data-layout="reiter"] .arr-grid.rh-one .mix-slot :is(.strip-l1, .strip-l2) { display: contents; }
