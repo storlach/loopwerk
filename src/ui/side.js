@@ -49,13 +49,41 @@ export function mountSide({ ui }) {
   const sounds = el('div', 'side-sounds', 'side-sounds'); // nimmt das Regal auf
   side.append(sounds);
   insp.before(side);
-  (document.querySelector('header.deck .deck-right') || side).append(tabs);
+  // Kopfzeile: Logo frei, daneben das Deck als eigene Leiste (.deck-bar), rechts die Reiter. Die Leiste fasst alles zwischen Logo und .deck-right
+  // zusammen; wo sie keine eigene Fläche hat (Handy), ist sie unsichtbar (display: contents)
+  const deckEl = document.querySelector('header.deck');
+  const deckRight = deckEl?.querySelector('.deck-right');
+  const bar = el('div', 'deck-bar', 'deck-bar');
+  if (deckEl && deckRight) {
+    const brand = deckEl.querySelector('.brand');
+    for (let n = brand?.nextSibling; n && n !== deckRight;) { const nx = n.nextSibling; bar.append(n); n = nx; }
+    deckRight.before(bar);
+    // Rückgängig/Wiederholen gehören am Desktop in die Leiste (am Handy bleiben sie im Deck-Rest)
+    const edit = document.getElementById('deck-edit');
+    if (edit) {
+      const home = document.createComment('deck-edit');
+      edit.before(home);
+      const mv = () => (narrow.matches ? home.after(edit) : bar.append(edit));
+      mv();
+      narrow.addEventListener('change', mv);
+    }
+    deckRight.prepend(tabs);
+  } else side.append(tabs);
 
   // Teile des Reiters „Datei“ und „Mixer“ liegen im Inspektor-Abschnitt (Song bzw. Spur); die Plätze der umgehängten Knöpfe
   const datei = el('div', 'side-datei', 'side-datei');
   datei.setAttribute('aria-label', 'Datei');
-  for (const [id, cls] of [['side-datei-name', 'side-datei-name'], ['side-datei-act', 'side-datei-act'], ['side-datei-export', 'side-datei-export']]) datei.append(el('div', cls, id));
-  const foot = el('div', 'side-datei-foot', 'side-datei-foot');
+  datei.append(el('div', 'side-datei-name', 'side-datei-name')); // Songname als Überschrift
+  // Darunter (nach dem Song-Abschnitt): „Neuer Song“ mit dem Song-Starter, dann die ruhige Befehlsliste
+  const neu = el('section', 'side-datei-neu', 'side-datei-neu');
+  neu.setAttribute('data-surface', 'starter');
+  const neuH = el('h3', 'create-sec', null);
+  neuH.textContent = 'Neuer Song';
+  neu.append(neuH);
+  const liste = el('div', 'side-datei-liste', 'side-datei-liste');
+  liste.setAttribute('role', 'group');
+  liste.setAttribute('aria-label', 'Datei');
+  for (const id of ['side-datei-act', 'side-datei-export', 'side-datei-start', 'side-datei-foot']) liste.append(el('div', id, id));
   const mixer = el('div', 'side-mixer', 'side-mixer');
   mixer.setAttribute('aria-label', 'Mixer');
   mixer.append(el('div', 'side-mixer-docks', 'side-mixer-docks'));
@@ -67,7 +95,7 @@ export function mountSide({ ui }) {
   const songSec = insp.querySelector('.insp-song');
   (trackSec || songSec).before(mixer);
   songSec.before(datei);
-  insp.append(foot);
+  insp.append(neu, liste);
 
   // ---------- Reiter ----------
   let current = DEFAULT; // zuletzt gewählter Reiter (auch bei zugeklappter Karte)
@@ -112,5 +140,18 @@ export function mountSide({ ui }) {
   // Die schmale Laptop-Ansicht klappt den Inspektor sonst zu; hier ist er Teil der Leiste
   app.classList.add('insp-open');
 
-  return { show, close, get open() { return !closed; }, get current() { return current; } };
+  // Der Song-Starter zieht aus dem Erstellen-Fach in den Reiter Datei (wird nach mountStarter aufgerufen); „busy“ folgt dem Fach
+  function takeStarter() {
+    const box = document.getElementById('starter');
+    const panel = document.getElementById('create-panel');
+    if (!box || !panel) return;
+    const home = document.createComment('starter');
+    box.before(home);
+    const mv = () => (narrow.matches ? home.after(box) : neu.append(box)); // Handy: zurück ins Fach „Erstellen“
+    mv();
+    narrow.addEventListener('change', mv);
+    new MutationObserver(() => neu.classList.toggle('busy', panel.classList.contains('busy'))).observe(panel, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  return { show, close, takeStarter, get open() { return !closed; }, get current() { return current; } };
 }

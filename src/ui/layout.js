@@ -24,10 +24,10 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('open-btn'), { wide: $('project-menu-body'), narrow: $('song-links'), reiter: $('side-datei-act') });
   place($('save-btn'), { wide: $('project-menu-body'), narrow: $('song-main'), reiter: $('side-datei-act') });
   place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main'), reiter: $('side-datei-export') });
-  place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-act') });
+  place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-start') });
   place($('tips-reset'), { narrow: $('song-links'), reiter: $('side-datei-foot') });
   place($('pop-about'), { reiter: $('side-datei-foot') });
-  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-act') });
+  place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-start') });
   place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
   // Am Handy scrollt das ganze Regal: die Suche sitzt dann in einer eigenen, klebenden Zeile
   place($('shelf-find'), { narrow: $('shelf-sticky') });

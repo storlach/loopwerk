@@ -841,6 +841,7 @@ async function boot() {
     ui.flash(res.done.length ? 'Begleitung folgt jetzt dem Akkord-Streifen – Akkord antippen zum Ändern.' : 'Keine freie Spur für die Begleitung.');
   }
   const starter = mountStarter({ root: document.getElementById('create-panel'), store, library, ui, onAccomp: accompany });
+  side?.takeStarter();
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
