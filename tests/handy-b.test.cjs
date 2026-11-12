@@ -185,7 +185,7 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
       pills: !!document.getElementById('arr-pills').offsetParent,
       undo: !!document.getElementById('undo-btn').closest('#deck-edit'), redo: !!document.getElementById('redo-btn').closest('#deck-edit'),
       snap: !!document.getElementById('snap-sel').closest('#arr-bar-view'), loop: !!document.getElementById('loop-btn').closest('.deck'), metro: !!document.getElementById('metro-btn').closest('.deck'),
-      menu: ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).closest('#side-datei, #side-datei-foot')), /* Layout „reiter“: Projekt-Knöpfe im Reiter Datei */ tips: getComputedStyle(document.querySelector('#tips-reset .lbl-short')).display + '/' + getComputedStyle(document.querySelector('#tips-reset .lbl-long')).display,
+      menu: ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).closest('#side-datei, #side-datei-liste')), /* Layout „reiter“: Projekt-Knöpfe im Reiter Datei */ tips: getComputedStyle(document.querySelector('#tips-reset .lbl-short')).display + '/' + getComputedStyle(document.querySelector('#tips-reset .lbl-long')).display,
     }));
     check('Desktop unverändert: Pillen unsichtbar, alle Knöpfe an ihrem alten Platz', !d.pills && d.undo && d.redo && d.snap && d.loop && d.metro && d.menu && d.tips === 'none/inline', JSON.stringify(d));
     check('Keine Fehler in der Konsole (Desktop)', desk.errors.length === 0, desk.errors.join(' | '));

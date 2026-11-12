@@ -3667,7 +3667,7 @@
   .side, .side-tabs { display: none; }
   .deck-bar { display: contents; }
   @media (min-width: 761px) {
-    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; --bar-h: 64px; }
+    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; --bar-h: 60px; }
     #app[data-layout="reiter"], #app[data-layout="reiter"].dock-open {
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas: "deck" "arr" "bar";
@@ -3782,6 +3782,7 @@
       background: transparent; color: var(--ink); border: 0; border-radius: var(--radius); box-shadow: none; cursor: pointer;
       font: 500 13px/1 var(--font-body); letter-spacing: 0; text-transform: none;
     }
+    #app[data-layout="reiter"] .side-datei-liste .pop-item { display: block; line-height: 36px; }
     #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item):hover { background: var(--lane); filter: none; }
     #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     #app[data-layout="reiter"] .side-datei-liste .key.confirm { background: var(--meter-hot); color: var(--ink); }
@@ -3803,6 +3804,7 @@
     /* Finger: Tippflächen mindestens 44 px */
     @media (pointer: coarse) {
       #app[data-layout="reiter"] .side-tab { height: 44px; }
+      #app[data-layout="reiter"] .side-datei .project-name { min-height: 44px; }
       #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item), #app[data-layout="reiter"] .side-mixer-docks .tab { height: 44px; min-height: 44px; }
     }
 

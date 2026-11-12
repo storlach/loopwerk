@@ -76,7 +76,7 @@ const { check, finish } = createChecker();
       insp: !!document.getElementById('insp').offsetParent, bar: getComputedStyle(document.getElementById('tabbar')).display,
       tabs: getComputedStyle(document.getElementById('tab-sounds')).display, overflow: document.documentElement.scrollWidth - innerWidth,
       mixerInBar: !!document.getElementById('mixer-btn').closest('#side-mixer'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
-      saveInMenu: !!document.getElementById('save-btn').closest('#side-datei'), exportInDeck: !!document.getElementById('export-btn').closest('#side-datei'),
+      saveInMenu: !!document.getElementById('save-btn').closest('#side-datei-liste'), exportInDeck: !!document.getElementById('export-btn').closest('#side-datei-liste'),
       menuName: document.getElementById('project-menu-name').textContent,
     }));
     check('Deck in einer Zeile (≤ 64 px)', deck.h <= 64, `${deck.h} px`);
@@ -85,7 +85,7 @@ const { check, finish } = createChecker();
 
     // Reiter Datei (Layout „reiter“ ersetzt das Projekt-Menü; der Knopf im Deck entfällt)
     await page.click('#side-tab-datei');
-    check('Reiter Datei zeigt Name, Öffnen, Speichern, Beispiel, Leeren, Tipps', await page.evaluate(() => ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).offsetParent && document.getElementById(id).closest('#side-datei, #side-datei-foot'))));
+    check('Reiter Datei zeigt Name, Öffnen, Speichern, Beispiel, Leeren, Tipps', await page.evaluate(() => ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).offsetParent && document.getElementById(id).closest('#side-datei, #side-datei-liste'))));
     check('Der Menü-Knopf im Deck entfällt', await page.locator('#project-menu-btn').isHidden());
 
     // Export als Klappfeld: Arranger bleibt gleich groß

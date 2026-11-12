@@ -39,7 +39,7 @@ async function revealSide(page, sel) {
       let n = null;
       try { n = document.querySelector(s); } catch { return; }
       if (!n) return;
-      const tab = n.closest('.side-sounds') ? 'sounds' : n.closest('.insp-for-mixer, #side-mixer') ? 'mixer' : n.closest('.insp-for-datei, #side-datei, #side-datei-foot') ? 'datei' : null;
+      const tab = n.closest('.side-sounds') ? 'sounds' : n.closest('.insp-for-mixer, #side-mixer') ? 'mixer' : n.closest('.insp-for-datei, #side-datei, #side-datei-neu, #side-datei-liste') ? 'datei' : null;
       if (tab && document.getElementById('app').dataset.side !== tab) document.getElementById(`side-tab-${tab}`).click();
     }, sel);
   } catch { /* Seite lädt gerade */ }

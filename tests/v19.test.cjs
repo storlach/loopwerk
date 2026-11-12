@@ -61,9 +61,9 @@ const { check, finish } = createChecker();
     const arr = await rect('.arranger');
     const shelf = await rect('.shelf');
     const insp = await rect('#side'); // Layout „reiter“: die rechte Leiste (Reiter) ersetzt Regal links und Inspektor
-    // Umbau Scheibe 1b: Der Arranger läuft über die ganze Breite, die Karte (#side, mit dem Regal) schwebt innerhalb davon
+    // Umbau Scheibe 1b: Der Arranger läuft über die ganze Breite, die Karte (#side, mit dem Regal) schwebt innerhalb davon; ab 1c beginnt sie oben auf Höhe der Kopfzeile (umschließt die Reiter), also über dem Arranger
     check('Desktop: Fachleiste genau unter dem Arranger; Karte schwebt über seinem rechten Teil', Math.abs(bar.x - arr.x) < 1 && Math.abs(bar.w - arr.w) < 1 && Math.abs(bar.y - arr.b) < 2
-      && insp.x > arr.x + arr.w / 2 && insp.r <= arr.r && insp.y >= arr.y && insp.b <= arr.b && shelf.b <= insp.b + 1, JSON.stringify({ bar, arr, shelf: shelf.b, insp }));
+      && insp.x > arr.x + arr.w / 2 && insp.r <= arr.r && insp.y < arr.y && insp.b <= arr.b && shelf.b <= insp.b + 1, JSON.stringify({ bar, arr, shelf: shelf.b, insp }));
     const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
     // Layout „reiter“: Mixer und FX-Pad liegen im Reiter Mixer der rechten Leiste, die Fachleiste behält Editor und Kürzel
     check('Desktop: Fachleiste zeigt Editor; Mixer und FX-Pad im Reiter Mixer', JSON.stringify(tabs) === '["editor-tab"]' && await page.evaluate(() => ['mixer-btn', 'fxpad-btn'].every((id) => document.getElementById(id).closest('#side-mixer'))), JSON.stringify(tabs));

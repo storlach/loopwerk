@@ -401,10 +401,10 @@ function pitchFn() {
       const where = await page.evaluate(() => {
         const dock = document.getElementById('starter').closest('.dock');
         if (dock) window.loopwerk.ui.setDock(dock.id);
-        else if (!matchMedia('(max-width: 760px)').matches) document.getElementById('ltab-create')?.click();
+        else if (!matchMedia('(max-width: 760px)').matches) { const t = document.getElementById('side-tab-datei'); if (t?.getClientRects().length) t.click(); else document.getElementById('ltab-create')?.click(); } // Layout „reiter“: der Song-Starter liegt im Reiter Datei
         else return null;
         document.getElementById('starter').scrollIntoView({ block: 'center' });
-        return dock?.id ?? 'create';
+        return dock?.id ?? (document.getElementById('starter').closest('#side-datei-neu') ? 'datei' : 'create');
       });
       if (where) {
         await page.waitForTimeout(500);
