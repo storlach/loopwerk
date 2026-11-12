@@ -91,7 +91,13 @@ const { check, finish } = createChecker();
     // Live: 10 Sechzehntel nacheinander → 10 Schritte; ein gleichzeitiger Doppelschlag bleibt einer
     await clickR(page, '#pat-clear');
     await page.click('#pat-live');
-    await page.evaluate(() => new Promise((r) => { const lp = window.loopwerk.patternEditor.looper; const go = () => (window.loopwerk.engine.ctx.currentTime > lp.t0 + 0.2 ? r() : setTimeout(go, 5)); go(); }));
+    // Die Schläge kommen alle 125 ms (= ein Sechzehntel): sie starten kurz nach einem Raster-Schritt, nicht zufällig neben der Rundungsgrenze
+    // (sonst rastet der „gleichzeitige“ Doppelschlag je nach Seitenlast auf zwei Schritte)
+    await page.evaluate(() => new Promise((r) => {
+      const { engine, patternEditor } = window.loopwerk; const lp = patternEditor.looper;
+      const go = () => { const x = ((engine.heardTime() - lp.t0) / lp.spb) * 4; const f = x - Math.floor(x); (engine.ctx.currentTime > lp.t0 + 0.2 && f > 0.05 && f < 0.2 ? r() : setTimeout(go, 3)); };
+      go();
+    }));
     const t = Date.now();
     for (let i = 0; i < 10; i++) { await page.keyboard.press('d'); await page.waitForTimeout(Math.max(0, t + (i + 1) * 125 - Date.now())); }
     await page.evaluate(() => {

@@ -3,7 +3,7 @@
 // Mikrofon: Loopback-Attrappe – getUserMedia liefert engine.out → DelayNode(0,12 s) (+ Testtöne) → MediaStreamDestination.
 const fs = require('fs');
 const path = require('path');
-const { openApp, createChecker, clickR } = require('./harness.cjs');
+const { openApp, createChecker, clickR, openClipSettings } = require('./harness.cjs');
 const { countUi, scene } = require('./count.cjs');
 
 const SHOTS = process.argv.includes('--shots');
@@ -450,8 +450,8 @@ const shot = async (page, name) => {
     check('B6 In Take k überwiegt Ton k um ≥ 20 dB (Goertzel)', dom.length === 3 && dom.every((x) => x >= 20), dom.map((x) => x.toFixed(1) + ' dB').join(', '));
 
     // ================= B7: Takes wechseln =================
-    await page.evaluate((id) => window.loopwerk.ui.select(id), (await page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips)[0].id)));
-    await page.waitForTimeout(300);
+    // Die Take-Zeile gehört zu den Clip-Einstellungen: sie steht im Clip-Editor (Karte in der Mitte, Umbau Scheibe 4)
+    await openClipSettings(page, await page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips)[0].id));
     await shot(page, 'takes-desktop.png');
     const ui0 = await page.evaluate(() => ({ btns: [...document.querySelectorAll('#insp-takes .take-n')].map((b) => [b.textContent, b.getAttribute('aria-pressed')]), del: !!document.getElementById('insp-take-del'), tag: document.querySelector('.clip.selected .clip-take')?.textContent, undo: window.loopwerk.store.undoStack.length }));
     check('B7 Inspektor „Take 1 2 3 ×“ (3 aktiv), Arranger zeigt „3/3“', JSON.stringify(ui0.btns) === '[["1","false"],["2","false"],["3","true"]]' && ui0.del && ui0.tag === '3/3', JSON.stringify(ui0));

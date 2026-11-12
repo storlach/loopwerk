@@ -1,8 +1,9 @@
 // Schwebende Karte rechts mit drei Reitern (Layout „reiter“, nur Desktop): Datei · Sounds · Mixer. Die Reiter-Knöpfe sitzen im Deck;
 // ein Klick auf den gewählten Reiter klappt die Karte zu (data-side="zu").
 // Dieselben Bausteine wie vorher, nur umgehängt: Sounds = das Regal (.shelf), Datei = Projekt-Knöpfe + Song-Abschnitt des Inspektors,
-// Mixer = Spur-Abschnitt, Summe und Busse des Inspektors + Knöpfe für Mixer-Fach und FX-Pad. Ein gewählter Clip zeigt seinen
-// Abschnitt oberhalb des Reiter-Inhalts (Übergang). Aussehen: CSS in index.html unter #app[data-layout="reiter"].
+// Mixer = Spur-Abschnitt, Summe und Busse des Inspektors + Knöpfe für Mixer-Fach und FX-Pad. Ein gewählter Clip zeigt hier nichts:
+// seine Einstellungen stehen im Clip-Editor (overlay.js), Teilen/Duplizieren/Löschen in der Kopfzeile über den Spuren (#arr-bar-tools),
+// „Tastenkürzel“ in der Befehlsliste von Datei. Aussehen: CSS in index.html unter #app[data-layout="reiter"].
 // Am Handy (≤ 760 px) bleibt alles am alten Platz; die Leiste wird dort nicht gezeigt.
 
 import { narrow } from './place.js';
@@ -137,7 +138,7 @@ export function mountSide({ ui }) {
   });
 
   // ---------- Ort je Bildschirm: Desktop in der Leiste, Handy an den alten Platz ----------
-  // Inspektor (mit dem Clip-Abschnitt oben) steht über dem Regal; am Handy kehren beide an ihren Platz zurück
+  // Der Inspektor steht über dem Regal; am Handy kehren beide an ihren Platz zurück
   const home = document.createComment('regal');
   shelf.before(home);
   const put = () => {

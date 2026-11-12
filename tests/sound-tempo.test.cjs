@@ -1,6 +1,6 @@
 // Tempo eines Sounds: im Inspektor festlegen (Zahl, ÷2, ×2), als Song-Tempo übernehmen, Rückgängig, Speichern.
 // node tests/sound-tempo.test.cjs [--shots]
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, openClipSettings } = require('./harness.cjs');
 
 const { check, finish } = createChecker();
 const SHOTS = process.argv.includes('--shots');
@@ -24,7 +24,7 @@ const DIR = process.env.SHOT_DIR || '/tmp';
       ui.select(id);
       return id;
     });
-    await page.waitForTimeout(300);
+    await openClipSettings(page, cid); // Clip-Einstellungen (Sound-Tempo) stehen im Clip-Editor
     const st = () => page.evaluate(() => {
       const s = window.loopwerk.library.get('own-tempo');
       return { kind: s.kind, beats: s.beats, len: s.lengthBeats, dur: +(s.buffer.duration).toFixed(3), out: document.getElementById('insp-stempo-out').textContent, map: window.loopwerk.store.project.sampleTempo || {} };

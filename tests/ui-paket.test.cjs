@@ -2,7 +2,7 @@
 // bewusster Bewegung der Ansicht, (4) Pfeil-Knopf klappt die Kurve auf, (5) Clip-Editor ohne Reiter.
 // node tests/ui-paket.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, openClipSettings, closeClipSettings } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -83,16 +83,16 @@ async function inspectorTest() {
   const app = await openApp({ viewport: { width: 1400, height: 900 } });
   const { page } = app;
   try {
-    await page.evaluate(() => { const { store, ui } = window.loopwerk; const t = store.project.tracks.find((x) => x.clips.length); ui.select(t.clips[0].id); });
-    // Layout „reiter“: der Spur-Abschnitt liegt im Reiter Mixer, der Clip-Abschnitt steht über jedem Reiter
+    const firstId = await page.evaluate(() => window.loopwerk.store.project.tracks.find((x) => x.clips.length).clips[0].id);
+    // Layout „reiter“: der Spur-Abschnitt liegt im Reiter Mixer, der Clip-Abschnitt im Clip-Editor (Karte in der Mitte, Umbau Scheibe 4)
     await page.click('#side-tab-mixer');
-    await page.waitForTimeout(250);
+    await openClipSettings(page, firstId);
     const d = await page.evaluate(() => {
       const { store, ui, library } = window.loopwerk;
       const f = store.findClip(ui.selectedClipId);
       const q = (s) => document.querySelector(s);
       const vis = (n) => !!n && n.offsetParent !== null;
-      const cs = q('#insp .insp-clip'); const ts = q('#insp .insp-track');
+      const cs = q('.insp-clip'); const ts = q('#insp .insp-track');
       const lab = (sec) => [...sec.querySelectorAll('.insp-row > span:first-child')].map((n) => n.textContent);
       const speed = cs.querySelector('.insp-clip-speed');
       return {
@@ -104,21 +104,22 @@ async function inspectorTest() {
         clipLabels: lab(cs), trackLabels: lab(ts),
         sepBorder: getComputedStyle(ts).borderTopWidth,
         speedHasRun: !!speed && !!speed.querySelector('.insp-speed') && /Geschwindigkeit/.test(speed.textContent),
-        order: cs.compareDocumentPosition(ts) & Node.DOCUMENT_POSITION_FOLLOWING ? 'clip-vor-spur' : 'falsch',
+        order: cs.closest('#clip-overlay') && ts.closest('#side') ? 'clip-im-editor-spur-im-mixer' : 'falsch',
         clipCat: [...cs.classList].find((c) => c.startsWith('cat-')) || '',
         sample: library.get(f.clip.sampleId).name,
       };
     });
-    check('Inspektor: bei einem Clip zwei Abschnitte, Clip oben, Spur darunter', d.mode === 'clip' && d.both && d.order === 'clip-vor-spur', JSON.stringify(d));
+    check('Bei einem Clip zwei Abschnitte: Clip im Clip-Editor, Spur im Reiter Mixer', d.mode === 'clip' && d.both && d.order === 'clip-im-editor-spur-im-mixer', JSON.stringify(d));
     check('Überschriften „CLIP · Name“ und „SPUR · Name“', d.clipHead === `Clip·${d.sample}` && d.trackHead === `Spur·${d.trackName}`, `${d.clipHead} | ${d.trackHead}`);
     check('Eindeutige Begriffe: Clip-Lautstärke vs. Spur-Lautstärke', d.clipLabels.includes('Clip-Lautstärke') && d.trackLabels.includes('Spur-Lautstärke') && !d.clipLabels.includes('Spur-Lautstärke'), JSON.stringify([d.clipLabels, d.trackLabels]));
     check('Sichtbare Trennung zwischen den Abschnitten', parseFloat(d.sepBorder) >= 2, d.sepBorder);
     check('Geschwindigkeit liegt im Container .insp-clip-speed des Clip-Abschnitts', d.speedHasRun);
     check('Kategoriefarbe nur als Akzent (Klasse cat-… am Clip-Abschnitt)', /^cat-/.test(d.clipCat), d.clipCat);
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'paket-desktop-inspektor.png') });
+    await closeClipSettings(page);
     await page.evaluate(() => { const { store, ui } = window.loopwerk; ui.selectTrack(store.project.tracks[0].id); });
     await page.waitForTimeout(200);
-    const t = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, clip: !!document.querySelector('#insp .insp-clip')?.offsetParent, track: !!document.querySelector('#insp .insp-track')?.offsetParent }));
+    const t = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, clip: !!document.querySelector('.insp-clip')?.offsetParent, track: !!document.querySelector('#insp .insp-track')?.offsetParent }));
     check('Nur Spur gewählt: nur der Spur-Abschnitt', t.mode === 'track' && !t.clip && t.track, JSON.stringify(t));
     check('Inspektor: keine Fehler in der Konsole', app.errors.length === 0, app.errors.join(' | '));
   } catch (e) { check('Inspektor: Ablauf ohne Ausnahme', false, e.stack); }

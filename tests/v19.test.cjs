@@ -60,13 +60,15 @@ const { check, finish } = createChecker();
     const bar = await rect('#tabbar');
     const arr = await rect('.arranger');
     const shelf = await rect('.shelf');
+    const innerH = await page.evaluate(() => innerHeight);
     const insp = await rect('#side'); // Layout „reiter“: die rechte Leiste (Reiter) ersetzt Regal links und Inspektor
     // Umbau Scheibe 1b: Der Arranger läuft über die ganze Breite, die Karte (#side, mit dem Regal) schwebt innerhalb davon; ab 1c beginnt sie oben auf Höhe der Kopfzeile (umschließt die Reiter), also über dem Arranger
-    check('Desktop: Fachleiste genau unter dem Arranger; Karte schwebt über seinem rechten Teil', Math.abs(bar.x - arr.x) < 1 && Math.abs(bar.w - arr.w) < 1 && Math.abs(bar.y - arr.b) < 2
+    // Umbau Scheibe 5: die Fachleiste entfällt; der Arranger reicht bis unten, die Karte (#side) schwebt über seinem rechten Teil
+    check('Desktop: keine Fachleiste, Arranger bis unten; Karte schwebt über seinem rechten Teil', bar.h === 0 && arr.b > innerH - 40
       && insp.x > arr.x + arr.w / 2 && insp.r <= arr.r && insp.y < arr.y && insp.b <= arr.b && shelf.b <= insp.b + 1, JSON.stringify({ bar, arr, shelf: shelf.b, insp }));
-    const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
-    // Layout „reiter“: Mixer und FX-Pad liegen im Reiter Mixer der rechten Leiste, die Fachleiste behält Editor und Kürzel
-    check('Desktop: Fachleiste zeigt Editor; Mixer und FX-Pad im Reiter Mixer', JSON.stringify(tabs) === '["editor-tab"]' && await page.evaluate(() => ['mixer-btn', 'fxpad-btn'].every((id) => document.getElementById(id).closest('#side-mixer'))), JSON.stringify(tabs));
+    const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none' && b.getClientRects().length).map((b) => b.id));
+    // Layout „reiter“: Mixer und FX-Pad liegen im Reiter Mixer der rechten Leiste, „Tastenkürzel“ in der Befehlsliste von Datei; Editor-Reiter entfällt
+    check('Desktop: keine Fachleiste; Mixer und FX-Pad im Reiter Mixer, Tastenkürzel in Datei', JSON.stringify(tabs) === '[]' && await page.evaluate(() => ['mixer-btn', 'fxpad-btn'].every((id) => document.getElementById(id).closest('#side-mixer')) && !!document.getElementById('keys-btn').closest('#side-datei-liste')), JSON.stringify(tabs));
     check('Desktop: kein Hinweistext, solange es nichts zu melden gibt', !(await visible('#hint')));
     await page.click('#mixer-btn');
     await page.waitForTimeout(550);
@@ -75,25 +77,23 @@ const { check, finish } = createChecker();
     // Layout „reiter“: der Knopf sitzt in der rechten Leiste; die Schublade liegt wie bisher unten über dem Arranger
     // Umbau Scheibe 1b: der Knopf liegt in der Karte rechts; die Schublade endet links davon
     const card = await rect('#side');
-    check('Desktop: Mixer-Schublade sitzt unten im Arranger, ihr Knopf in der Karte; die Schublade verdeckt die Karte nicht', Math.abs(mx.b - bar.y) < 2 && tab.x >= card.x && tab.r <= card.r && mx.r <= card.x + 1, JSON.stringify({ mx, tab, card }));
+    check('Desktop: Mixer-Schublade sitzt unten im Arranger, ihr Knopf in der Karte; die Schublade verdeckt die Karte nicht', Math.abs(mx.b - arr.b) < 2 && tab.x >= card.x && tab.r <= card.r && mx.r <= card.x + 1, JSON.stringify({ mx, tab, card }));
     check('Desktop: Schublade öffnet in der Mitte', Math.abs(mx.h / arr.h - 0.5) < 0.02, `${mx.h} / ${arr.h}`);
     // Einblender: erscheint mit einer Meldung, verschwindet von selbst
     await page.evaluate(() => window.loopwerk.ui.flash('Clip geteilt.'));
     await page.waitForTimeout(100);
     const toast = await rect('#hint');
-    check('Einblender erscheint über der Leiste, mittig über dem Arranger', await visible('#hint') && toast.b <= bar.y && Math.abs((toast.x + toast.w / 2) - (arr.x + arr.w / 2)) < 2, JSON.stringify(toast));
+    check('Einblender erscheint über der Leiste, mittig über dem Arranger', await visible('#hint') && toast.b <= arr.b && Math.abs((toast.x + toast.w / 2) - (arr.x + arr.w / 2)) < 2, JSON.stringify(toast));
     await page.waitForTimeout(3700);
     check('Einblender verschwindet wieder', !(await visible('#hint')));
     await page.click('#mixer-btn');
     await page.waitForTimeout(450);
-    // Editor-Reiter nennt den Clip
-    await page.locator('.clip').first().click();
-    check('Desktop: Editor-Reiter nennt den ausgewählten Clip', /^Editor · /.test(await page.locator('#editor-tab-label').textContent()));
-    // Wechsel Mixer ↔ Editor: die neue Schublade fährt sichtbar von unten herein, über der alten; die alte springt nicht
-    const docks = ['#mixer', '#editor', '#pattern'];
+    // Wechsel Mixer ↔ FX-Pad: die neue Schublade fährt sichtbar von unten herein, über der alten; die alte springt nicht
+    // (Umbau Scheibe 4: der Editor ist keine Schublade mehr, sondern eine Karte in der Mitte)
+    const docks = ['#mixer', '#fxpad'];
     await page.click('#mixer-btn');
     await rest(page);
-    for (const btn of ['#editor-tab', '#mixer-btn']) {
+    for (const btn of ['#fxpad-btn', '#mixer-btn']) {
       const from = `#${await page.evaluate(() => window.loopwerk.ui.dock)}`;
       const a0 = await rect(from);
       await startFrames(page, docks);

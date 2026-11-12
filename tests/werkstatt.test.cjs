@@ -1135,12 +1135,15 @@ async function seedPadWall() {
       await pg.evaluate(() => window.loopwerk.library.catalogReady);
       await scene(pg, 'clip');
       await pg.evaluate(() => window.loopwerk.side?.show('mixer', { save: false })); // Layout „reiter“: Spur-Abschnitt im Reiter Mixer
-      const lw2 = await pg.evaluate(() => ({ speed: !!document.getElementById('insp-speed')?.offsetParent, tabs: document.querySelectorAll('.wb-tabs').length, track: !!document.querySelector('.insp-track')?.offsetParent }));
-      check('Loopwerk: bei gewähltem Clip #insp-speed da, kein .wb-tabs, Spur-Abschnitt wie bisher', lw2.speed && lw2.tabs === 0 && lw2.track && errs.length === 0, JSON.stringify(lw2) + errs.join('|'));
-      await pg.click('#edit-btn');
+      const lw2 = await pg.evaluate(() => ({ tabs: document.querySelectorAll('.wb-tabs').length, track: !!document.querySelector('.insp-track')?.offsetParent, noEdit: !document.getElementById('edit-btn')?.offsetParent }));
+      check('Loopwerk: bei gewähltem Clip kein .wb-tabs, Spur-Abschnitt wie bisher, kein „Bearbeiten“-Knopf', lw2.tabs === 0 && lw2.track && lw2.noEdit && errs.length === 0, JSON.stringify(lw2) + errs.join('|'));
+      // Umbau Scheibe 4: Doppelklick auf den Clip öffnet den Sample-Editor als Karte, mit #insp-speed in der rechten Spalte
+      const cid = await pg.evaluate(() => window.loopwerk.ui.selectedClipId);
+      await pg.locator(`.clip[data-clip-id="${cid}"]`).dblclick({ position: { x: 40, y: 30 } });
+      await pg.waitForFunction(() => window.loopwerk.ui.dock === 'editor', null, { timeout: 10000 });
       await pg.waitForTimeout(400);
-      const lwEd = await pg.evaluate(() => ({ dock: window.loopwerk.ui.dock, btn: !!document.getElementById('edit-btn')?.offsetParent }));
-      check('Loopwerk: Sample-Editor öffnet wie heute (Bearbeiten sichtbar, Dock „editor“)', lwEd.dock === 'editor' && lwEd.btn, JSON.stringify(lwEd));
+      const lwEd = await pg.evaluate(() => ({ dock: window.loopwerk.ui.dock, speed: !!document.getElementById('insp-speed')?.offsetParent, card: !!document.getElementById('editor').closest('#clip-overlay:not([hidden])') }));
+      check('Loopwerk: Sample-Editor öffnet per Doppelklick als Karte (Dock „editor“, #insp-speed in der Karte)', lwEd.dock === 'editor' && lwEd.speed && lwEd.card, JSON.stringify(lwEd));
       await ctx.close();
     }
 

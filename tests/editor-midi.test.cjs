@@ -25,7 +25,7 @@ function geometry(pitch) {
   const wrap = document.getElementById('pat-roll-wrap');
   const canvas = document.getElementById('pat-roll');
   const keyW = 30;
-  const row = 14;
+  const row = parseFloat(canvas.style.height) / 49; // Zeilenhöhe wächst mit der Karte (Umbau Scheibe 4), 49 Halbtöne
   wrap.scrollTop = Math.max(0, (84 - pitch) * row - wrap.clientHeight / 2);
   const r = canvas.getBoundingClientRect();
   const { store, patternEditor } = window.loopwerk;
@@ -192,6 +192,7 @@ function geometry(pitch) {
     // ----- Akkord mit Tonleiter-Sperre, Tonartwechsel -----
     await setNotes([]);
     await page.click('#pat-scale');
+    await page.waitForTimeout(200); // das Feld „Tonleiter“ kommt in den Kopf: die Piano-Roll wird kürzer und zeichnet neu
     await click(69, 0);
     check('Tonleiter-Sperre an + Dur über A: C♯ rastet auf C ein (A C E)', j(pitchesOf(await getNotes())) === '[69,72,76]', j(await getNotes()));
     await page.click('#pat-scale'); // Sperre aus

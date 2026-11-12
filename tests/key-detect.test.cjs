@@ -1,7 +1,7 @@
 // Tonart-Erkennung eigener Sounds: synthetische Testsignale → Tonart bzw. keine, automatisch nach dem Anlegen,
 // Speichern (IndexedDB, Projektdatei) und Wiederladen, Inspektor- und Handy-Zeile, „Folgt Song“ verschiebt die Tonhöhe.
 // node tests/key-detect.test.cjs [--shots]
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, openClipSettings } = require('./harness.cjs');
 
 const { check, finish } = createChecker();
 const SHOTS = process.argv.includes('--shots');
@@ -118,13 +118,12 @@ function installSignals() {
     if (tip != null) check('Regal: Tonart im Hinweis der Zeile (wie Katalog-Sounds)', /Tonart Am/.test(tip), tip);
 
     // ---------- 3: Inspektor ----------
-    await page.evaluate(() => {
-      const { store, ui } = window.loopwerk;
+    const ktClip = await page.evaluate(() => {
+      const { store } = window.loopwerk;
       store.setKey('Am');
-      const t = store.project.tracks[0].id;
-      ui.select(store.addClip(t, 'own-kt-am', 64, 16));
+      return store.addClip(store.project.tracks[0].id, 'own-kt-am', 64, 16);
     });
-    await page.waitForTimeout(300);
+    await openClipSettings(page, ktClip); // Clip-Einstellungen (Tonart des Sounds) stehen im Clip-Editor
     const row = () => page.evaluate(() => {
       const r = document.getElementById('insp-skey');
       const sel = document.getElementById('insp-skey-sel');

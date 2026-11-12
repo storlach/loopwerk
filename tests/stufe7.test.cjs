@@ -90,14 +90,18 @@ const { check, finish } = createChecker();
     const geo = await page.evaluate(() => ({ cellW: (document.getElementById('pat-roll').clientWidth - 30) / 32, top: 84 }));
     // Klick auf A4 (MIDI 69), Schritt 0
     const wrapScroll = await page.evaluate(() => document.getElementById('pat-roll-wrap').scrollTop);
-    const yA4 = (84 - 69) * 14 + 7;
+    // Desktop: Zeilenhöhe der Piano-Roll wächst mit der Höhe des Editors (Karte in der Mitte, Umbau Scheibe 4): mindestens 14, höchstens 28 px
+    const rowPx = await page.evaluate(() => Math.min(28, Math.max(14, Math.floor(document.getElementById('pat-roll-wrap').clientHeight / 24))));
+    const yA4 = (84 - 69) * rowPx + rowPx / 2;
     await page.locator('#pat-roll-wrap').evaluate((n, y) => { n.scrollTop = Math.max(0, y - 60); }, yA4);
     const box2 = await page.locator('#pat-roll').boundingBox();
     await page.mouse.click(box2.x + 30 + geo.cellW * 0.5, box2.y + yA4);
     await page.waitForTimeout(200);
     let notes = await page.evaluate(() => window.loopwerk.store.project.patterns.p2.notes);
     check('Klick in die Piano-Roll setzt eine Note (A4, 1/4)', notes.length === 1 && notes[0].pitch === 69 && notes[0].start === 0 && notes[0].len === 1, JSON.stringify(notes));
-    await page.mouse.click(box2.x + 30 + geo.cellW * 0.5, box2.y + yA4);
+    // Die neue Note holt die Ansicht ins Bild (die hohe Karte rollt nach): Lage der Leinwand neu messen
+    const box3 = await page.locator('#pat-roll').boundingBox();
+    await page.mouse.click(box3.x + 30 + geo.cellW * 0.5, box3.y + yA4);
     await page.waitForTimeout(200);
     notes = await page.evaluate(() => window.loopwerk.store.project.patterns.p2.notes);
     check('Klick auf die Note löscht sie', notes.length === 0, JSON.stringify(notes));

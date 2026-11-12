@@ -96,16 +96,18 @@ export function mountTips({ ui, store }) {
 
   function check() {
     if (!enabled || state.off) { hide(); return; }
+    // Liegt eine Karte über allem (Clip-Editor in der Mitte), zeigen Tipps nur auf Dinge in der Karte
+    const modal = document.querySelector('.ov:not([hidden]) [aria-modal="true"]');
     if (current) {
       // Der Bereich ist weg (z. B. Fach geschlossen): Tipp kommt beim nächsten Mal wieder
-      if (!visible(current.target) || !document.contains(current.target)) hide();
+      if (!visible(current.target) || !document.contains(current.target) || (modal && !modal.contains(current.target))) hide();
       else { position(); return; }
     }
     const modes = [narrow.matches ? 'narrow' : 'wide', touch.matches ? 'touch' : 'mouse'];
     const fits = (t) => !t.only || [t.only].flat().some((m) => modes.includes(m));
     for (const tip of TIPS) {
       if (state.seen.includes(tip.id) || !fits(tip)) continue;
-      const target = [...document.querySelectorAll(tip.sel)].find(visible);
+      const target = [...document.querySelectorAll(tip.sel)].find((n) => visible(n) && (!modal || modal.contains(n)));
       if (!target) continue;
       current = { tip, target };
       text.textContent = (touch.matches && tip.touchText) || tip.text;

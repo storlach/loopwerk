@@ -124,6 +124,9 @@ async function reveal(page, sel) {
   await page.evaluate((s) => {
     const n = document.querySelector(s);
     if (!n) return;
+    // Desktop (Umbau Scheibe 4): der Clip-Editor liegt als Karte über allem anderen; was außerhalb liegt, braucht ihn zu
+    const lw = window.loopwerk;
+    if (lw?.overlay?.open && !n.closest('#clip-overlay, .deck, .tip, #hint')) lw.ui.setDock(null);
     // Clip-Editor: Tonhöhe, Autotune, Trennen, Loop sind eingeklappt
     if (n.closest('#ed-tools')?.hidden) document.getElementById('clip-more').click();
     const pop = n.closest('.pop');
@@ -139,7 +142,11 @@ const clickR = async (page, sel) => { await reveal(page, sel); await page.click(
 const selectR = async (page, sel, value) => { await reveal(page, sel); await page.selectOption(sel, value); };
 const fillR = async (page, sel, value) => { await reveal(page, sel); await page.fill(sel, value); };
 // Beat/Melodie/Einsingen über die Karten unter „Erstellen“
-const createCard = (page, kind) => clickR(page, `.ccard[data-create="${kind}"]`);
+// Desktop: ein offener Editor liegt als Karte über dem Regal (modal) und muss erst zu – wie für die Person, die zuerst schließt
+const createCard = async (page, kind) => {
+  await page.evaluate(() => { const lw = window.loopwerk; if (lw.overlay?.open) lw.ui.setDock(null); });
+  await clickR(page, `.ccard[data-create="${kind}"]`);
+};
 // Effekt einer Spur ein-/ausschalten: Spur im Inspektor zeigen, Schalter klicken
 async function toggleFx(page, trackId, fxId) {
   await page.evaluate((id) => window.loopwerk.ui.selectTrack(id), trackId);
@@ -181,5 +188,21 @@ function readSaved(file) {
   return { ...json, ownSounds: man.sounds, zip: { manifest: man, entries } };
 }
 
+// Desktop (Umbau Scheibe 4): die Clip-Einstellungen (Lautstärke, Ein-/Ausblenden, Geschwindigkeit, Sound-Tempo, Tonart …) stehen im Clip-Editor.
+// Öffnet ihn für den Clip wie der Doppelklick (Auswahl + Editor); Beat und Melodie öffnen den Pattern-Editor. Schließen: closeClipSettings.
+async function openClipSettings(page, clipId) {
+  await page.evaluate((id) => {
+    const lw = window.loopwerk;
+    lw.ui.select(id);
+    const c = lw.store.findClip(id)?.clip;
+    const pid = c && lw.library.get(c.sampleId)?.patternId;
+    if (pid) lw.patternEditor.open(pid); else lw.editor.open(id);
+  }, clipId);
+  await page.waitForSelector('#clip-overlay:not([hidden]) .insp-clip:not([hidden])', { state: 'visible', timeout: 15000 });
+  await page.waitForTimeout(260); // Einflug der Karte
+}
+const closeClipSettings = (page) => page.evaluate(() => window.loopwerk.ui.setDock(null));
+
 module.exports = {
+  openClipSettings, closeClipSettings,
   revealSide, legacyStart, openApp, createChecker, makeWav, reveal, clickR, selectR, fillR, createCard, toggleFx, readZipFile, readSaved };

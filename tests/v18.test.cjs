@@ -73,14 +73,15 @@ const { check, finish } = createChecker();
     // ---------- Grundaufteilung ----------
     const deck = await rect('.deck');
     const lay = await page.evaluate(() => ({
-      insp: !!document.getElementById('insp').offsetParent, bar: getComputedStyle(document.getElementById('tabbar')).display,
+      insp: !!document.getElementById('side').offsetParent, bar: getComputedStyle(document.getElementById('tabbar')).display,
       tabs: getComputedStyle(document.getElementById('tab-sounds')).display, overflow: document.documentElement.scrollWidth - innerWidth,
       mixerInBar: !!document.getElementById('mixer-btn').closest('#side-mixer'), zoomInBar: !!document.getElementById('zoom-in').closest('.arr-bar'),
       saveInMenu: !!document.getElementById('save-btn').closest('#side-datei-liste'), exportInDeck: !!document.getElementById('export-btn').closest('#side-datei-liste'),
       menuName: document.getElementById('project-menu-name').textContent,
     }));
     check('Deck in einer Zeile (≤ 64 px)', deck.h <= 64, `${deck.h} px`);
-    check('Inspektor rechts, Fachleiste unten ohne Handy-Reiter, kein Querscrollen', lay.insp && lay.bar === 'flex' && lay.tabs === 'none' && lay.overflow <= 0, JSON.stringify(lay));
+    // Umbau Scheibe 5: die Fachleiste unten entfällt (Tastenkürzel in Datei, Mixer und FX-Pad im Reiter Mixer)
+    check('Inspektor rechts, keine Fachleiste unten, kein Querscrollen', lay.insp && lay.bar === 'none' && lay.tabs === 'none' && lay.overflow <= 0, JSON.stringify(lay));
     check('Knöpfe an ihren neuen Plätzen', lay.mixerInBar && lay.zoomInBar && lay.saveInMenu && lay.exportInDeck && lay.menuName === 'Beispiel-Arrangement', JSON.stringify(lay));
 
     // Reiter Datei (Layout „reiter“ ersetzt das Projekt-Menü; der Knopf im Deck entfällt)
@@ -105,11 +106,26 @@ const { check, finish } = createChecker();
     await page.evaluate(() => { document.getElementById('arr-scroll').scrollLeft = 0; });
     const pad = page.locator('.clip', { hasText: 'Pad Am–F–C–G' });
     await pad.click({ position: { x: 60, y: 45 } });
-    const ci = await page.evaluate(() => ({ mode: document.getElementById('insp').dataset.mode, title: document.querySelector('#insp .insp-sec:not([hidden]) .insp-title span:last-child').textContent, meta: document.querySelector('#insp .insp-meta').textContent, btns: ['edit-btn', 'split-btn', 'dup-btn', 'del-btn'].every((id) => document.getElementById(id).closest('#insp') && document.getElementById(id).offsetParent) }));
-    check('Clip auswählen: Inspektor zeigt Clip mit Werkzeugen', ci.mode === 'clip' && ci.title === 'Pad Am–F–C–G' && /^Takt 1–16/.test(ci.meta) && ci.btns, JSON.stringify(ci));
+    // Umbau Scheibe 4/5: Clip gewählt → die Karte rechts zeigt nichts, Teilen/Duplizieren/Löschen stehen in der Kopfzeile über den Spuren
+    const ci = await page.evaluate(() => ({
+      mode: document.getElementById('insp').dataset.mode,
+      inCard: !!document.querySelector('#side .insp-clip')?.offsetParent,
+      btns: ['split-btn', 'dup-btn', 'del-btn'].every((id) => document.getElementById(id).closest('#arr-bar-tools') && document.getElementById(id).offsetParent),
+      noEdit: !document.getElementById('edit-btn').offsetParent,
+    }));
+    check('Clip auswählen: Karte zeigt nichts, Werkzeuge in der Kopfzeile, kein „Bearbeiten“-Knopf', ci.mode === 'clip' && !ci.inCard && ci.btns && ci.noEdit, JSON.stringify(ci));
+    await page.evaluate(() => window.loopwerk.ui.select(null));
+    check('Ohne Auswahl sind die Werkzeuge in der Kopfzeile nicht zu sehen', await page.evaluate(() => !document.getElementById('arr-bar-tools').offsetParent));
+    await pad.click({ position: { x: 60, y: 45 } });
+    await pad.dblclick({ position: { x: 60, y: 45 } });
+    await page.waitForSelector('#clip-overlay:not([hidden]) #insp-gain', { state: 'visible' });
+    const ovd = await page.evaluate(() => ({ dock: window.loopwerk.ui.dock, title: document.querySelector('#clip-overlay .insp-clip .insp-title span:last-child').textContent, meta: document.querySelector('#clip-overlay .insp-meta').textContent, dialog: document.getElementById('ov-card').getAttribute('role') }));
+    check('Doppelklick öffnet den Clip-Editor als Karte mit den Clip-Einstellungen', ovd.dock === 'editor' && ovd.title === 'Pad Am–F–C–G' && /^Takt 1–16/.test(ovd.meta) && ovd.dialog === 'dialog', JSON.stringify(ovd));
     await page.locator('#insp-gain').fill('0.5');
     const g = await page.evaluate(() => window.loopwerk.store.findClip(window.loopwerk.ui.selectedClipId).clip.gain);
-    check('Lautstärke im Inspektor ändert den Clip', g === 0.5, String(g));
+    check('Lautstärke in den Clip-Einstellungen ändert den Clip', g === 0.5, String(g));
+    await page.keyboard.press('Escape');
+    check('Esc schließt die Karte', await page.evaluate(() => window.loopwerk.ui.dock === null && document.getElementById('clip-overlay').hidden));
     await page.locator('.track-row').nth(2).locator('.track-btns').click({ position: { x: 4, y: 4 } }).catch(() => {});
     await page.locator('.track-row').nth(2).locator('.track-name').click();
     check('Klick auf den Spurkopf zeigt die Spur', await mode() === 'track' && await page.evaluate(() => window.loopwerk.ui.selectedTrackId) === 't3');
@@ -258,10 +274,11 @@ const { check, finish } = createChecker();
     });
     check('Karte „Beat bauen“: eigene Spur „Beat 1“, Editor offen', st.track === 'Beat 1' && st.n === tracks0, JSON.stringify(st));
     check('Beat-Clips in Drums-Farbe', st.cat === 'drums' && st.cls.includes('cat-drums'), st.cls);
-    const tabLabel = await page.locator('#editor-tab-label').textContent();
-    check('Leiste unten zeigt „Editor · Beat 1“', tabLabel === 'Editor · Beat 1', tabLabel);
-    await page.click('#editor-tab');
-    check('Editor-Reiter schließt den offenen Editor', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    // Umbau Scheibe 4: der Editor liegt als Karte in der Mitte (kein Editor-Reiter mehr); Name im Kopf, Esc schließt
+    const patName = await page.evaluate(() => ({ name: document.getElementById('pat-name').value, shown: !document.getElementById('clip-overlay').hidden, label: document.getElementById('pat-title').textContent }));
+    check('Karte in der Mitte zeigt „Beat 1“ im Kopf', patName.name === 'Beat 1' && patName.shown && /Beat/.test(patName.label), JSON.stringify(patName));
+    await page.keyboard.press('Escape');
+    check('Esc schließt den offenen Editor', await page.evaluate(() => window.loopwerk.ui.dock === null));
     // Karte auf eine Spur ziehen (erst wenn die Schublade weg ist – sie nimmt die Ansicht beim Schließen mit zurück)
     await page.waitForTimeout(700);
     // Layout „reiter“: mit gewähltem Clip steht dessen Abschnitt über dem Regal – die Karte erst in Sicht rollen

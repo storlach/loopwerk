@@ -2,7 +2,7 @@
 // Doppelklick oder Mausrad braucht, geht hier mit Antippen, Ziehen, langem Drücken und zwei Fingern.
 // node tests/tablet.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, closeClipSettings } = require('./harness.cjs');
 const { measureTargets } = require('./touch-targets.cjs');
 
 const SHOTS = process.argv.includes('--shots');
@@ -289,9 +289,10 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await pinch(arr.x + arr.width / 2, arr.y + 300, 260, 120);
     check('… zusammen wieder hinaus', (await lw()).ppb < z1, `${z1} → ${(await lw()).ppb}`);
     await page.evaluate(() => { window.loopwerk.arranger.zoomTo(24); document.getElementById('arr-scroll').scrollLeft = 0; });
-    await page.tap('#zoom-in');
-    check('„+“ in der Arranger-Leiste zoomt', (await lw()).ppb > 24);
-    await page.tap('#zoom-out');
+    // Umbau Scheibe 5: die Zoom-Knöpfe sind versteckt (Zoomen: zwei Finger, Rollbalken, Strg/Alt+Rad); die Funktion bleibt im Aufbau
+    await page.dispatchEvent('#zoom-in', 'click');
+    check('Zoom-Knopf „+“ (versteckt in der Arranger-Leiste) zoomt', (await lw()).ppb > 24);
+    await page.dispatchEvent('#zoom-out', 'click');
     await page.evaluate(() => { document.getElementById('arr-scroll').scrollLeft = 0; });
     const ruler = await box('.ruler');
     await swipe(ruler.x + 24 * 4 + 10, ruler.y + ruler.height / 2, 24 * 8, 0);
@@ -363,7 +364,8 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     check('Piano-Roll: Wischen setzt keine Note', (await notes()).length === 1);
     await shot('melodie');
     await targets('Melodie-Editor');
-    // Beat-Editor
+    // Beat-Editor (der offene Editor liegt als Karte über dem Regal und muss erst zu)
+    await closeClipSettings(page);
     await page.tap('#ltab-create');
     await page.tap('.ccard[data-create="beat"]');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && !document.getElementById('pat-drums').hidden);
@@ -372,7 +374,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await cell.tap();
     check('Beat-Editor: Schritt antippen setzt einen Schlag', await cell.getAttribute('aria-pressed') === 'true');
     await targets('Beat-Editor');
-    await page.tap('#editor-tab');
+    await closeClipSettings(page);
     await page.waitForTimeout(500);
 
     // ---------- Projekt-Menü, Export, Gesten ----------

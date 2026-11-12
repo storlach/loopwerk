@@ -75,7 +75,8 @@ async function run({ name, vp, touch }) {
     check(`${tag}: Enter speichert den neuen Namen`, after === 'Mein Groove', after);
     check(`${tag}: Fokus verlässt das Feld nach Enter`, await page.evaluate(() => document.activeElement?.id !== 'pat-name'));
     const names = await page.evaluate(() => ({ tab: document.getElementById('tab-editor')?.textContent || document.getElementById('tabbar').textContent, clips: window.loopwerk.store.project.tracks.flatMap((t) => t.clips.map((c) => c.sampleId)).length }));
-    if (!handy) check(`${tag}: neuer Name steht in der Fachleiste`, /Mein Groove/i.test(names.tab), names.tab.replace(/\s+/g, ' ').slice(0, 120));
+    // Umbau Scheibe 4: kein Editor-Reiter mehr; der Name steht im Kopf der Karte (Feld)
+    if (!handy) check(`${tag}: neuer Name steht im Kopf der Karte`, await page.evaluate(() => document.getElementById('pat-name').value) === 'Mein Groove');
     await page.evaluate(() => window.loopwerk.store.undo());
     await page.waitForTimeout(200);
     check(`${tag}: Rückgängig holt den alten Namen zurück (ein Schritt)`, (await patName()) === before && await page.evaluate(() => document.getElementById('pat-name').value) === before, await patName());
@@ -138,6 +139,8 @@ async function run({ name, vp, touch }) {
       check(`${tag}: Beat bei „Mitte“: mindestens 4 Schritt-Reihen ganz sichtbar`, vis >= 4, String(vis));
     }
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-beat-schritte-mitte.png`) });
+    // Schublade ziehen gibt es nur am Handy: am Desktop liegt der Editor als Karte in der Mitte (Umbau Scheibe 4)
+    if (handy) {
     const log = [];
     log.fn = cellH;
     await dragSheet(page, -(midTop - 60), log);
@@ -161,16 +164,20 @@ async function run({ name, vp, touch }) {
     const jump2 = Math.max(...steps2.slice(1).map((v, i) => Math.abs(v - steps2[i])));
     check(`${tag}: Verkleinern: Reihen schrumpfen ohne Sprung und am Ende ohne Ruck`, jump2 <= 20 && num(back) < num(top) - 2, `oben ${top} → ${back}, Sprung ${jump2}: ${steps2.join(', ')}`);
 
+    }
+
     // ---------- Pads ----------
     await page.click('#pat-view .seg[data-view="pads"]');
     await page.waitForTimeout(300);
     const padH = () => page.evaluate(() => { const p = document.querySelector('#pat-pads .pat-pad'); return Math.round(p.getBoundingClientRect().height); });
     const padMid = await padH();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-beat-pads-mitte.png`) });
-    const t1 = await sheetTop();
-    await dragSheet(page, -(t1 - 60));
-    const padTop = await padH();
-    check(`${tag}: Pads werden höher, wenn die Schublade von Mitte auf oben geht`, padTop > padMid + 2, `${padMid} → ${padTop}`);
+    if (handy) {
+      const t1 = await sheetTop();
+      await dragSheet(page, -(t1 - 60));
+      const padTop = await padH();
+      check(`${tag}: Pads werden höher, wenn die Schublade von Mitte auf oben geht`, padTop > padMid + 2, `${padMid} → ${padTop}`);
+    }
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-beat-pads-oben.png`) });
     check(`${tag}: Pads-Ansicht: aktive Seite „Pads“ ist gefüllt`, await page.evaluate(() => { const b = document.querySelector('#pat-view .seg[data-view="pads"]'); const m = getComputedStyle(b).backgroundColor.match(/[\d.]+/g).map(Number); return b.getAttribute('aria-pressed') === 'true' && m[0] + m[1] + m[2] > 600; }));
 
@@ -199,9 +206,11 @@ async function run({ name, vp, touch }) {
       check(`${tag}: Melodie bei „Mitte“: mindestens 10 Notenzeilen ganz sichtbar`, vis >= 10, String(vis));
     }
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-melodie-mitte.png`) });
-    await dragSheet(page, -(mtop - 60));
-    const mrTop = await rowNow();
-    check(`${tag}: Melodie: Zeilen der Piano-Roll werden höher, wenn die Schublade von Mitte auf oben geht`, mrTop > mrMid + 1, `${mrMid} → ${mrTop}`);
+    if (handy) {
+      await dragSheet(page, -(mtop - 60));
+      const mrTop = await rowNow();
+      check(`${tag}: Melodie: Zeilen der Piano-Roll werden höher, wenn die Schublade von Mitte auf oben geht`, mrTop > mrMid + 1, `${mrMid} → ${mrTop}`);
+    }
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-melodie-oben.png`) });
     if (handy) {
       // Verkleinern: die Piano-Roll geht stufenlos mit (kein Sprung am Ende), der Tonbereich bleibt am selben Ton
@@ -280,6 +289,7 @@ async function run({ name, vp, touch }) {
       check(`${tag}: Clip-Editor: Werkzeuge in einer wischbaren Zeile mit ausblendendem Rand`, strip.oneRow && strip.scrolls && strip.masked && strip.over <= 0, JSON.stringify(strip));
       if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, `editor-kopf-${tag}-clip-mitte.png`) });
     }
+    if (handy) {
     const eTop = await page.evaluate(() => Math.round(document.getElementById('editor').getBoundingClientRect().top));
     const wlog = [];
     wlog.fn = waveH;
@@ -293,6 +303,11 @@ async function run({ name, vp, touch }) {
     const wTop = await waveH();
     const wFrac = await page.evaluate(() => { const w = document.getElementById('ed-wave').getBoundingClientRect(); const s = document.getElementById('editor').getBoundingClientRect(); const more = document.getElementById('clip-more').getBoundingClientRect(); return { waveBottom: Math.round(w.bottom), moreTop: Math.round(more.top), sheetBottom: Math.round(s.bottom) }; });
     check(`${tag}: Clip-Editor: Wellenform wird höher, wenn die Schublade von Mitte auf oben geht und füllt das Fach`, wTop > wMid + 60 && wFrac.waveBottom <= wFrac.moreTop && wlog.every((v, i) => i === 0 || v >= wlog[i - 1] - 1), `${wMid} → ${wTop}, ${JSON.stringify(wFrac)}, ${wlog.join(',')}`);
+    } else {
+      // Karte in der Mitte: Wellenform hat Höhe und liegt über „Mehr“
+      const wf = await page.evaluate(() => ({ h: Math.round(document.getElementById('ed-wave').getBoundingClientRect().height), b: document.getElementById('ed-wave').getBoundingClientRect().bottom, m: document.getElementById('clip-more').getBoundingClientRect().top }));
+      check(`${tag}: Clip-Editor (Karte): Wellenform mindestens 160 px hoch, über „Mehr“`, wf.h >= 160 && wf.b <= wf.m, JSON.stringify(wf));
+    }
     const ed = await page.evaluate(() => { const c = document.getElementById('ed-wave'); return { w: c.clientWidth, h: c.clientHeight, cw: c.width, ch: c.height, dpr: window.devicePixelRatio || 1 }; });
     check(`${tag}: Clip-Editor: Zeichenfläche passt zur Größe (kein verzerrtes Bild)`, Math.abs(ed.ch - Math.round(ed.h * ed.dpr)) <= 1 && Math.abs(ed.cw - Math.round(ed.w * ed.dpr)) <= 1, JSON.stringify(ed));
     await page.click('#clip-more');

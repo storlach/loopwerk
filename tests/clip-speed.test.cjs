@@ -3,7 +3,7 @@
 // Bedienung im Inspektor (Desktop) und in der Clip-Leiste (Handy).
 // node tests/clip-speed.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, openClipSettings } = require('./harness.cjs');
 const { measureTargets } = require('./touch-targets.cjs');
 
 const SHOTS = process.argv.includes('--shots');
@@ -213,10 +213,10 @@ const { check, finish } = createChecker();
     check('Live: nur der geänderte Clip wird neu eingeplant', !lv.killedOther && lv.kills.length > 0, JSON.stringify(lv.kills));
 
     // ---------- Inspektor (Desktop) ----------
-    await page.evaluate(() => { const { store, ui } = window.loopwerk; store.undo(); ui.select('c4'); });
-    await page.waitForTimeout(150);
+    await page.evaluate(() => { window.loopwerk.store.undo(); });
+    await openClipSettings(page, 'c4'); // Umbau Scheibe 4: die Clip-Einstellungen stehen im Clip-Editor (Karte in der Mitte)
     const ins = await page.evaluate(() => ({
-      box: !!document.querySelector('#insp .insp-clip-speed #insp-speed'),
+      box: !!document.querySelector('.insp-clip .insp-clip-speed #insp-speed'),
       oldRow: !!document.getElementById('insp-run-out'),
       out: document.getElementById('insp-speed-out').textContent,
       val: document.getElementById('insp-speed').value,
@@ -226,8 +226,7 @@ const { check, finish } = createChecker();
     check('Inspektor: Zeile „Geschwindigkeit“ im Container .insp-clip-speed, Laufzeit-Zeile weg', ins.box && !ins.oldRow && ins.label === 'Geschwindigkeit', JSON.stringify(ins));
     check('Inspektor: 100 %, Akkord-Pad folgt der Tonart → Tonband gesperrt', ins.out === '100 %' && ins.val === '100' && ins.tapeDisabled, JSON.stringify(ins));
     // Drums-Clip: Regler ziehen (Maus), ein Rückgängig-Schritt, Länge passt sich an
-    await page.evaluate(() => window.loopwerk.ui.select('c1'));
-    await page.waitForTimeout(100);
+    await openClipSettings(page, 'c1');
     const c1 = await page.evaluate(() => ({ ...window.loopwerk.store.findClip('c1').clip }));
     const u0 = await page.evaluate(() => window.loopwerk.store.undoStack.length);
     const rb = await page.locator('#insp-speed').boundingBox();

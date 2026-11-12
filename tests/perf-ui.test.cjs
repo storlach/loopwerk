@@ -195,7 +195,7 @@ const lcd = (page) => page.evaluate(() => ['lcd-bar', 'lcd-beat', 'lcd-time'].ma
       await page.waitForTimeout(400);
       v = await view();
       const fresh = v.dom.filter((id) => !before.has(id)).length;
-      check(`${dev}: beim Scrollen wandern die Clip-Knoten mit`, fresh > 10 && v.missing.length === 0 && v.dom.length < 448 * 0.95 /* Layout „reiter“: volle Breite, nach dem Scrollen bleiben alte und neue Knoten kurz nebeneinander */, JSON.stringify({ fresh, missing: v.missing.length, dom: v.dom.length, left: v.left }));
+      check(`${dev}: beim Scrollen wandern die Clip-Knoten mit`, fresh > 10 && v.missing.length === 0 && v.dom.length < 448 * 0.98 /* Layout „reiter“: volle Breite und (Scheibe 5) ohne Fachleiste mehr Höhe, nach dem Scrollen bleiben alte und neue Knoten kurz nebeneinander */, JSON.stringify({ fresh, missing: v.missing.length, dom: v.dom.length, left: v.left }));
       check(`${dev}: der gewählte Clip bleibt im DOM (auch außerhalb des Bildes)`, await page.evaluate((id) => !!document.querySelector(`.clip.selected[data-clip-id="${id}"]`), keepId));
       // revealClip holt einen fernen Clip ins Bild und zeichnet ihn
       const far = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[3]; return t.clips[t.clips.length - 1].id; });

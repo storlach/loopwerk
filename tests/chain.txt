@@ -72,3 +72,4 @@ klangfarbe
 perf-ui
 pegel
 perf-audio
+overlay

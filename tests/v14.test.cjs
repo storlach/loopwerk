@@ -79,10 +79,9 @@ const { check, finish } = createChecker();
 
     // ---------- Zoom ----------
     const z0 = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
-    await page.click('#zoom-in');
-    await page.click('#zoom-in');
-    await page.click('#zoom-in');
-    await page.click('#zoom-in');
+    // Umbau Scheibe 5: die Zoom-Knöpfe sind in der Kopfzeile versteckt (Zoomen: zwei Finger, Rollbalken, Strg/Alt+Rad); ihre Funktion bleibt im Aufbau
+    const zoomKnopf = (id) => page.dispatchEvent('#' + id, 'click');
+    for (let i = 0; i < 4; i++) await zoomKnopf('zoom-in');
     const z1 = await page.evaluate(() => window.loopwerk.ui.pxPerBeat);
     check('Zoom vergrößert weit über das alte Maximum', z1 > 64 && z1 > z0, `${z0} → ${z1}`);
     const fine = await page.evaluate(() => document.querySelector('.arr-grid').classList.contains('fine'));
@@ -120,10 +119,10 @@ const { check, finish } = createChecker();
     const b1 = await beatAt();
     check('Strg+Mausrad verkleinert', z2 < z1, `${z1} → ${z2}`);
     check('Schlag unter dem Mauszeiger bleibt stehen', Math.abs(b1 - b0) < 0.3, `${b0.toFixed(2)} → ${b1.toFixed(2)}`);
-    for (let i = 0; i < 12; i++) await page.click('#zoom-out');
+    for (let i = 0; i < 12; i++) await zoomKnopf('zoom-out');
     const zmin = await page.evaluate(() => ({ ppb: window.loopwerk.ui.pxPerBeat, marks: document.querySelectorAll('.bar-mark').length, bars: window.loopwerk.store.project.lengthBars }));
     check('Ganz klein: mindestens 4 px pro Schlag, Taktzahlen ausgedünnt', zmin.ppb >= 4 && zmin.marks < zmin.bars, JSON.stringify(zmin));
-    for (let i = 0; i < 20; i++) await page.click('#zoom-in');
+    for (let i = 0; i < 20; i++) await zoomKnopf('zoom-in');
     const zmax = await page.evaluate(() => {
       if (!document.querySelector('.clip-wave')) window.loopwerk.arranger.revealClip(window.loopwerk.store.track('t2').clips[0].id); // nur Clips im Bild sind gezeichnet
       const cv = document.querySelector('.clip-wave');

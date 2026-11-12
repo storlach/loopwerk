@@ -127,6 +127,7 @@
 <link rel="modulepreload" href="src/ui/splash.js">
 <link rel="modulepreload" href="src/ui/layout.js">
 <link rel="modulepreload" href="src/ui/side.js">
+<link rel="modulepreload" href="src/ui/overlay.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
 <link rel="modulepreload" href="src/ui/fx-order.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
@@ -3805,7 +3806,7 @@
     @media (pointer: coarse) {
       #app[data-layout="reiter"] .side-tab { height: 44px; }
       #app[data-layout="reiter"] .side-datei .project-name { min-height: 44px; }
-      #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item), #app[data-layout="reiter"] .side-mixer-docks .tab { height: 44px; min-height: 44px; }
+      #app[data-layout="reiter"] .side-datei-liste :is(.key, .pop-item, .tabbar-end > .tab-keys), #app[data-layout="reiter"] .side-mixer-docks .tab { height: 44px; min-height: 44px; }
     }
 
     /* Export-Klappfeld: neben der Karte statt über ihr */
@@ -3846,6 +3847,7 @@
       display: flex; align-items: center; gap: 4px; padding-left: 14px; box-shadow: inset 1px 0 0 var(--line);
     }
     #app[data-layout="reiter"] .arr-bar-tools .key { padding: 0 12px; }
+    @media (hover: none) and (pointer: coarse) { #app[data-layout="reiter"] .arr-bar .lcd-song .lcd-input { height: 44px; min-width: 44px; } }
 
     /* ----- Clip-Editor-Karte ----- */
     #app[data-layout="reiter"] .ov {

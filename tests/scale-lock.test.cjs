@@ -123,11 +123,11 @@ function geometry(pitch) {
     check('Natürliches Moll ist Voreinstellung: kein scaleKind im Pattern', (await pats()).kind === undefined);
 
     // ---------- Setzen ----------
-    g = await geo(64);
-    await page.mouse.click(g.x0 + g.cellW * 0 + 3, g.ys[61]);
-    await page.mouse.click(g.x0 + g.cellW * 8 + 3, g.ys[66]);
-    await page.mouse.click(g.x0 + g.cellW * 16 + 3, g.ys[64]);
-    await page.mouse.click(g.x0 + g.cellW * 24 + 3, g.ys[70]);
+    // Die hohe Karte in der Mitte rollt nach jeder neuen Note nach (Note ins Bild): Lage vor jedem Klick neu messen
+    for (const [step, m] of [[0, 61], [8, 66], [16, 64], [24, 70]]) {
+      g = await geo(64);
+      await page.mouse.click(g.x0 + g.cellW * step + 3, g.ys[m]);
+    }
     check('Setzen: Cis → C, Fis → F, E bleibt E, Ais → A', JSON.stringify(await pitches()) === '[60,65,64,69]', JSON.stringify(await pitches()));
 
     // ---------- Verschieben ----------

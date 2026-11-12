@@ -1,6 +1,6 @@
 // Fade-Kurven (Bézier-Griffe am Clip) und Gleiten in Melodien (Portamento): Klang gemessen, Bedienung, Speichern.
 // node tests/fades-glide.test.cjs [--shots]   (SHOT_DIR=… für die Bilder)
-const { openApp, createChecker, createCard } = require('./harness.cjs');
+const { openApp, createChecker, createCard, openClipSettings, closeClipSettings } = require('./harness.cjs');
 const { measureTargets } = require('./touch-targets.cjs');
 
 const SHOTS = process.argv.includes('--shots');
@@ -206,7 +206,9 @@ function installPitch() {
     const ed = await page.evaluate(() => window.loopwerk.ui.dock);
     check('Doppelklick auf den Griff: wieder linear (öffnet keinen Editor)', !c.fadeInCurve && ed !== 'editor', `fadeInCurve ${c.fadeInCurve}, Dock ${ed}`);
     // Inspektor-Regler
+    await openClipSettings(page, 'f1'); // Clip-Einstellungen stehen im Clip-Editor
     await page.locator('#insp-curvein').fill('-0.5');
+    await closeClipSettings(page);
     c = await clipNow();
     check('Regler „Kurve“ im Inspektor setzt die Krümmung', c.fadeInCurve === -0.5, String(c.fadeInCurve));
     // Kurzer Fade: kein Bézier-Griff (verdeckt sonst den Fade-Griff)

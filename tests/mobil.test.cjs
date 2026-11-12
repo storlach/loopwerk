@@ -344,7 +344,7 @@ const { check, finish } = createChecker();
       dock: window.loopwerk.ui.dock,
       order: [...document.querySelector('.deck .group[aria-label="Transport"]').children].map((b) => b.id).join(','),
     }));
-    check('Desktop: Knöpfe zurück im Deck, dieselbe Fachleiste ohne Sounds/Song, Regal sichtbar', desk.back && desk.tabs === 'flex' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
+    check('Desktop: Knöpfe zurück im Deck, Fachleiste entfällt (Umbau Scheibe 5: Tastenkürzel in Datei), Regal sichtbar', desk.back && desk.tabs === 'none' && desk.shelf === 'flex' && desk.dock === null, JSON.stringify(desk));
     check('Desktop: Tempo-Feld wieder direkt eintippbar', await page.evaluate(() => !document.getElementById('bpm-input').readOnly));
     // 2.13: ▾ (Feld „Aufnahme“) sitzt direkt rechts am ●
     check('Desktop: Reihenfolge im Deck', desk.order === 'home-btn,play-btn,loop-btn,rec-btn,rec-more-wrap,metro-btn', desk.order);

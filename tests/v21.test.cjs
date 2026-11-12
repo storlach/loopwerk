@@ -1,7 +1,7 @@
 // Version 2.1: Mehrfachauswahl, Clip-Laufzeit, Spurgruppen, reaktive Grafik.
 // node tests/v21.test.cjs [--shots]
 const path = require('path');
-const { openApp, createChecker } = require('./harness.cjs');
+const { openApp, createChecker, openClipSettings, closeClipSettings } = require('./harness.cjs');
 
 const SHOTS = process.argv.includes('--shots');
 const SHOT_DIR = process.env.SHOT_DIR || '.';
@@ -92,7 +92,7 @@ const { check, finish } = createChecker();
     check('Laufzeit ×2: der Ton klingt doppelt so lang (≈2 s)', run.seconds > 1.85 && run.seconds < 2.15, JSON.stringify(run));
     check('Laufzeit ×2: Tonhöhe bleibt (440 Hz)', Math.abs(run.hz - 440) <= 4, JSON.stringify(run));
     // Bedienung im Inspektor
-    await page.evaluate(() => window.loopwerk.ui.select('c4'));
+    await openClipSettings(page, 'c4'); // Clip-Einstellungen stehen im Clip-Editor (Karte in der Mitte)
     const len0 = await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats);
     await page.click('.insp-speed [data-speed="2"]');
     await page.click('.insp-speed [data-speed="0.5"]');
@@ -104,6 +104,7 @@ const { check, finish } = createChecker();
     await page.click('.insp-speed [data-speed="1"]');
     check('Geschwindigkeit 1× stellt die Originallänge wieder her', await page.evaluate(() => window.loopwerk.store.findClip('c4').clip.lengthBeats) === len0);
     // ---------- Spurgruppen ----------
+    await closeClipSettings(page);
     await page.keyboard.press('Escape');
     await page.click('.track-row:has(.lane[data-track-id="t1"]) .tbtn-menu');
     const items = await page.locator('.track-menu-item').allTextContents();

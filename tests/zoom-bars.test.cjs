@@ -221,10 +221,11 @@ async function desktop() {
 
     // ---------- Knöpfe ----------
     await page.evaluate(() => window.loopwerk.arranger.setView({ tz: 1 }));
-    await page.click('#zoomy-in');
+    // Umbau Scheibe 5: die Zoom-Knöpfe sind versteckt; ihre Funktion bleibt im Aufbau
+    await page.dispatchEvent('#zoomy-in', 'click');
     const k1 = (await view(page)).tz;
-    await page.click('#zoomy-out');
-    await page.click('#zoomy-out');
+    await page.dispatchEvent('#zoomy-out', 'click');
+    await page.dispatchEvent('#zoomy-out', 'click');
     const k2 = (await view(page)).tz;
     check('Knöpfe „Spuren höher/niedriger“', k1 > 1 && k2 < 1, `${k1}, ${k2}`);
 
