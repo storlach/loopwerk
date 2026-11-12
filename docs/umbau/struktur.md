@@ -96,6 +96,14 @@ Bild: `skizze-martin-1.webp`. **Gilt rein optisch, nicht inhaltlich** (Martin): 
 - **Reiter Datei, Anordnung** (Skizze 4): oben der Songname als Überschrift, darunter Tempo, Tonart, Länge; dann eine ruhige Liste: Öffnen, Speichern · Beispiel, Leeren · Tipps wieder zeigen · Info-Zeile.
 - Wie immer: nur Anordnung und Layout, Farben und Benennungen aus dem Bestand.
 
+### Stand nach Scheibe 4 und 5 (2026-11-12)
+
+Martin: „Setz alles um, was ich gebrieft habe“ – die Scheiben laufen jetzt ohne Einzelabnahme durch, die Vorschau wird nach jeder Scheibe aktualisiert.
+
+Gebaut: Clip-Editor als Karte in der Mitte (Doppelklick, fliegt ein; Sample-, Beat- und Melodie-Editor im selben Rahmen, rechts die Clip-Einstellungen), Kopfzeile über den Spuren mit Raster, Tempo und – bei gewähltem Clip – Teilen, Duplizieren, Löschen; die Fachleiste unten entfällt, „Tastenkürzel“ steht im Reiter Datei.
+
+Bewusst entfallene Bedienelemente am Loopwerk-Desktop (Ersatz in Klammern): `#project-menu-btn` (Reiter Datei), `#zoom-in`, `#zoom-out`, `#zoomy-in`, `#zoomy-out` (zwei Finger, Rollbalken-Enden, Strg/Alt+Mausrad), `#editor-tab` und `#edit-btn` (Doppelklick auf den Clip), `#key-sel` im Deck (Tonart im Reiter Datei, `#insp-key`).
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
