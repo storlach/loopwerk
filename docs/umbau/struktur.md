@@ -109,6 +109,7 @@ Bewusst entfallene Bedienelemente am Loopwerk-Desktop (Ersatz in Klammern): `#pr
 - **Animationen sind wichtig:** Die Karten blenden „super smooth und elegant“ ein und aus, mit weichen Bewegungen. Sie kommen **von oben** (eingeblendet, geschoben oder beides).
 - **Der senkrechte Rollbalken der Spuren bleibt rechts am Fensterrand stehen.** Die Karte sitzt so weit innen, dass der Rollbalken bedienbar bleibt.
 - **Die Spuren laufen hinter der Karte einfach weiter;** die Karte wird nur darübergelegt.
+- **Der Clip-Editor bleibt von unten** (Martin): Nur die Karten rechts kommen von oben, das Editor-Overlay fliegt weiter von unten ein.
 
 ## Technischer Rahmen
 
