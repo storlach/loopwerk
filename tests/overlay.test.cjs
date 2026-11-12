@@ -1,6 +1,6 @@
 // Umbau Scheibe 4 und 5 (Layout „reiter“, Desktop): Clip-Editor als Karte in der Mitte, Kopfzeile über den Spuren, Fachleiste entfällt.
 // Prüft: Doppelklick öffnet Sample-Editor und Pattern-Editor als Karte (role=dialog, Fokus hinein), ✕ / Esc / Klick auf die abgedunkelte Fläche
-// schließen und der Fokus kehrt zurück, Abspielen und Leertaste laufen weiter, Einflug (mit reduzierter Bewegung ohne Verschieben),
+// schließen und der Fokus kehrt zurück, Abspielen und Leertaste laufen weiter, Ein- und Ausflug von unten (mit reduzierter Bewegung ohne Verschieben),
 // Karte rechts zeigt bei gewähltem Clip nichts, Werkzeuge (Teilen, Duplizieren, Löschen) und Tempo in der Kopfzeile, „Tastenkürzel“ in Datei.
 const { openApp, createChecker, createCard } = require('./harness.cjs');
 
@@ -11,6 +11,8 @@ const { check, finish } = createChecker();
   const { page } = app;
   const lw = (fn, arg) => page.evaluate(fn, arg);
   const overlayShown = () => lw(() => { const o = document.getElementById('clip-overlay'); return !!o && !o.hidden && o.getClientRects().length > 0; });
+  // Geschlossen: sofort nicht mehr bedienbar (data-state, inert), verborgen am Ende des Ausflugs – darauf warten statt auf eine feste Zeit
+  const closed = () => page.waitForFunction(() => { const o = document.getElementById('clip-overlay'); return o.dataset.state === 'zu' && o.inert && o.hidden; }, null, { timeout: 3000 }).then(() => true, () => false);
   try {
     // ---------- Kopfzeile über den Spuren ----------
     const bar0 = await lw(() => ({
@@ -86,33 +88,38 @@ const { check, finish } = createChecker();
 
     // ---------- Schließen: Esc, ✕, Klick daneben; Fokus kehrt zurück ----------
     await page.keyboard.press('Escape');
-    check('Esc schließt die Karte, der Fokus ist nicht mehr in ihr', !(await overlayShown()) && await lw(() => window.loopwerk.ui.dock === null && !document.getElementById('ov-card').contains(document.activeElement)));
+    check('Esc schließt die Karte, der Fokus ist nicht mehr in ihr', (await closed()) && await lw(() => window.loopwerk.ui.dock === null && !document.getElementById('ov-card').contains(document.activeElement)));
     await lw((id) => window.loopwerk.ui.select(id), cid);
     await clip.dblclick({ position: { x: 40, y: 30 } });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
     await page.waitForTimeout(300);
     await page.click('#ed-cancel');
-    check('✕ (Abbrechen) schließt die Karte, nichts wird übernommen', !(await overlayShown()) && await lw(() => window.loopwerk.ui.dock === null));
+    check('✕ (Abbrechen) schließt die Karte, nichts wird übernommen', (await closed()) && await lw(() => window.loopwerk.ui.dock === null));
     await clip.dblclick({ position: { x: 40, y: 30 } });
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
     await page.waitForTimeout(300);
     await page.mouse.click(40, 700);
-    check('Klick auf die abgedunkelte Fläche schließt die Karte', !(await overlayShown()) && await lw(() => window.loopwerk.ui.dock === null));
+    check('Klick auf die abgedunkelte Fläche schließt die Karte', (await closed()) && await lw(() => window.loopwerk.ui.dock === null));
     check('Nach dem Schließen ist der Clip noch gewählt, Werkzeuge in der Kopfzeile bleiben', await lw((id) => window.loopwerk.ui.selectedClipId === id && !!document.getElementById('arr-bar-tools').offsetParent, cid));
 
-    // ---------- Bewegung: Einflug, mit reduzierter Bewegung ohne Verschieben ----------
+    // ---------- Bewegung: Einflug von unten (Übergang, Feder), Ausflug kürzer; mit reduzierter Bewegung ohne Verschieben ----------
+    // Werte direkt nach dem Öffnen bzw. Schließen: Dauer der Übergänge und Lage der Karte zu Beginn (unten = größer als am Ende)
     const anim = async () => {
       await clip.dblclick({ position: { x: 40, y: 30 } });
       await page.waitForFunction(() => window.loopwerk.ui.dock === 'editor');
-      const a = await lw(() => { const cs = getComputedStyle(document.getElementById('ov-card')); return { name: cs.animationName, dur: parseFloat(cs.animationDuration) }; });
+      const dur = (v) => Math.max(...v.split(',').map((x) => parseFloat(x) * (x.trim().endsWith('ms') ? 1 : 1000)));
+      const a = await lw(() => { const cs = getComputedStyle(document.getElementById('ov-card')); return { prop: cs.transitionProperty, dur: cs.transitionDuration, ty: new DOMMatrix(cs.transform).m42 }; });
+      await page.waitForFunction(() => !document.getElementById('ov-card').getAnimations().length, null, { timeout: 3000 });
       await page.keyboard.press('Escape');
-      return a;
+      const z = await lw(() => getComputedStyle(document.getElementById('ov-card')).transitionDuration);
+      await closed();
+      return { prop: a.prop, ty: a.ty, auf: dur(a.dur), zu: dur(z) };
     };
     const a1 = await anim();
-    check('Einflug: Animation 180–240 ms', a1.name === 'ov-in' && a1.dur >= 0.18 && a1.dur <= 0.24, JSON.stringify(a1));
+    check('Einflug von unten: Übergang über Verschiebung und Deckkraft, 400–600 ms, Ausflug kürzer', /transform/.test(a1.prop) && /opacity/.test(a1.prop) && a1.ty > 1 && a1.auf >= 400 && a1.auf <= 600 && a1.zu < a1.auf, JSON.stringify(a1));
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const a2 = await anim();
-    check('Reduzierte Bewegung: nur Einblenden (kurz, ohne Verschieben)', a2.name === 'ov-fade' && a2.dur <= 0.15, JSON.stringify(a2));
+    check('Reduzierte Bewegung: nur Einblenden (kurz, ohne Verschieben)', Math.abs(a2.ty) < 0.5 && a2.auf <= 150, JSON.stringify(a2));
     await page.emulateMedia({ reducedMotion: 'no-preference' });
 
     // ---------- Beat: „Beat bauen“ landet in derselben Karte ----------
@@ -122,7 +129,7 @@ const { check, finish } = createChecker();
     const o2 = await lw(() => ({ shown: !document.getElementById('clip-overlay').hidden, inCard: !!document.getElementById('pattern').closest('#ov-card'), clipSec: !!document.querySelector('#pattern .insp-clip')?.offsetParent, close: !!document.getElementById('ov-close').offsetParent, label: document.getElementById('pat-title').textContent }));
     check('„Beat bauen“ öffnet den Pattern-Editor in der Karte, mit ✕ und Clip-Einstellungen', o2.shown && o2.inCard && o2.clipSec && o2.close && /Beat/.test(o2.label), JSON.stringify(o2));
     await page.click('#ov-close');
-    check('✕ schließt den Pattern-Editor', !(await overlayShown()) && await lw(() => window.loopwerk.ui.dock === null));
+    check('✕ schließt den Pattern-Editor', (await closed()) && await lw(() => window.loopwerk.ui.dock === null));
 
     // ---------- Handy: alles wieder an seinem alten Platz ----------
     await page.setViewportSize({ width: 390, height: 844 });

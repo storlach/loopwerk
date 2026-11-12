@@ -4,6 +4,8 @@
 //   Summe → Mastering, Busse, Master (Lautstärke und Effekte).
 // Die Karte folgt der Auswahl: eine Spur gewählt = Spur-Karte, nichts gewählt = Summe, ein Clip gewählt = zu. Schließen: ✕, Esc, anderer Reiter.
 
+import { settle, token } from './motion.js';
+
 const el = (tag, cls, id) => { const n = document.createElement(tag); if (cls) n.className = cls; if (id) n.id = id; return n; };
 
 export function mountMixcol({ ui, store, mixer, side }) {
@@ -26,19 +28,26 @@ export function mountMixcol({ ui, store, mixer, side }) {
   // Was die Auswahl gerade zeigt: Spur, Summe (nichts gewählt) oder nichts davon (Clip gewählt)
   const kindNow = () => (ui.selectedClipId ? null : ui.selectedTrackId ? 'spur' : 'summe');
 
-  // data-mixcard = offen (Art), data-mixkind = Inhalt der Karte; er bleibt, bis die Karte ausgeblendet ist (CSS-Übergang, 0,3 s)
-  let clearKind = 0;
+  // data-mixcard = offen (Art), data-mixkind = Inhalt der Karte; er bleibt, bis die Karte ausgeblendet ist (Ende des CSS-Übergangs)
+  let stopKind = null;
+  let shownTrack = null;
   function paint() {
+    stopKind?.();
+    stopKind = null;
     if (!kind) {
-      delete app.dataset.mixcard;
-      clearTimeout(clearKind);
-      clearKind = setTimeout(() => { if (!kind) delete app.dataset.mixkind; }, 450);
+      if (app.dataset.mixcard) { delete app.dataset.mixcard; side.refresh(); }
+      stopKind = settle(sideEl, 'opacity', token('--move-out', 240) + 400, () => { stopKind = null; if (!kind) delete app.dataset.mixkind; });
+      shownTrack = null;
       return;
     }
-    clearTimeout(clearKind);
+    const t = kind === 'spur' ? store.track(ui.selectedTrackId) : null;
+    const was = app.dataset.mixcard;
+    // Die Karte steht schon und zeigt jetzt anderes (andere Spur, Spur ↔ Summe): Inhalt blendet kurz über
+    const swap = !!was && (was !== kind || (kind === 'spur' && shownTrack !== t?.id));
     app.dataset.mixcard = kind;
     app.dataset.mixkind = kind;
-    const t = kind === 'spur' ? store.track(ui.selectedTrackId) : null;
+    shownTrack = t?.id ?? null;
+    if (!was || swap) side.refresh({ fade: swap });
     title.textContent = kind === 'spur' ? t?.name ?? '' : 'Summe';
     sideEl.setAttribute('aria-label', kind === 'spur' ? `Spur ${t?.name ?? ''}` : 'Summe');
   }

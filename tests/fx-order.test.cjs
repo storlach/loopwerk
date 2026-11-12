@@ -334,7 +334,8 @@ const fmtDb = (x) => (x === -Infinity ? '−∞' : x.toFixed(1)) + ' dB';
     check('7 Alt+↓ verschiebt den Verzerrer hinter den EQ, Fokus bleibt', JSON.stringify(u.order?.slice(0, 3)) === '["filter","eq","drive"]' && u.dom[2] === 'Verzerrer' && focusKept === 'fx-drive-on', `${JSON.stringify(u.order)} Fokus ${focusKept}`);
     // Mixer-Schalter folgen der Liste
     await page.evaluate(() => window.loopwerk.ui.setDock('mixer'));
-    await page.waitForSelector('.mix-slot .strip');
+    // Layout „reiter“: die Spalte liegt dann unter der offenen Effekt-Karte (dort ausgeblendet); die Schalter sind trotzdem da
+    await page.waitForSelector('.mix-slot .strip', { state: 'attached' });
     u = await ui();
     check('7 Mixer-Schalter folgen der Reihenfolge', JSON.stringify(u.strip.slice(0, 3)) === '["Filter","EQ","Zerr"]', JSON.stringify(u.strip));
     await page.evaluate(() => window.loopwerk.ui.setDock(null));

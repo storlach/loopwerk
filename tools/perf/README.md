@@ -10,6 +10,7 @@ Aus der Bestandsanalyse `docs/analyse/2026-11-performance.md`. Jede Verbesserung
 - `m6-sw.cjs [Teile A–D] [--netz 4g] [--runs N]`, `m6b-offline.cjs` – Service Worker, ohne Netz (Teil D braucht ein Zertifikat: `cert.pem`/`key.pem` in `tools/perf/`, z. B. `openssl req -x509 -newkey rsa:2048 -nodes -keyout tools/perf/key.pem -out tools/perf/cert.pem -days 30 -subj /CN=127.0.0.1`)
 - `m7-tests.cjs` – Dauer der Testkette
 - `kennzahlen.cjs` – die wichtigsten Kennzahlen in einem Lauf als Tabelle vorher/nachher (Stillstand, Abspielen mit 448 Clips, Zoom-Schritt, Clip-Knoten, Leinwand-Speicher); `--vorher <ordner>` z. B. aus `git archive`
+- `bewegung.cjs [--root <ordner>] [--out <ordner>] [--film] [--nur a,b] [--szene still|spielen|beide]` – Übergänge der schwebenden Flächen (Layout „reiter“, 1440×900, 448 Clips, auch beim Abspielen) Bild für Bild: Dauer, größter Sprung (px, Deckkraft), Anfangsruck, Überschwingen, Umkehr, lange Bilder, Breite fest, Rollbalken frei, Endzustand; `--film` legt je Übergang 8 Einzelbilder bei 1/10 Tempo und eine Übersicht ab (`film-<name>.png`)
 - `scen.cjs` – Szenen (Beispiel, großer Song mit 448 Clips)
 
 Headless hat keine Grafikkarte: Bildraten sind Vergleichswerte.

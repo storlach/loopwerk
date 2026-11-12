@@ -129,6 +129,7 @@
 <link rel="modulepreload" href="src/ui/side.js">
 <link rel="modulepreload" href="src/ui/overlay.js">
 <link rel="modulepreload" href="src/ui/mixcol.js">
+<link rel="modulepreload" href="src/ui/motion.js">
 <link rel="modulepreload" href="src/ui/inspector.js">
 <link rel="modulepreload" href="src/ui/fx-order.js">
 <link rel="modulepreload" href="src/ui/mixer.js">
@@ -254,6 +255,15 @@
     --sheet-bg: #1A1B1F;
     --sheet-shadow: 0 -1px 0 #2A2A2F, 0 -10px 26px rgb(0 0 0 / 0.5);
     --card-shadow: 0 14px 44px rgb(0 0 0 / 0.45); /* schwebende Karte (Layout „reiter“) */
+    /* Bewegung der schwebenden Flächen (Layout „reiter“): herein mit einer kritisch gedämpften Feder (weicher Start, ruhiges Ankommen, kein Überschwingen),
+       hinaus kürzer und sanft beschleunigend; Inhalt wechselt mit kurzem Überblenden. Nur transform und opacity. */
+    --move-in: 460ms; --move-in-fade: 300ms; --move-out: 240ms; --move-out-fade: 200ms;
+    --move-swap: 200ms; --move-swap-delay: 70ms; --move-small: 180ms;
+    --move-editor-in: 520ms; --move-editor-out: 260ms;
+    --move-y: -16px; --move-y-editor: 40px; --move-scale-editor: 0.985;
+    --ease-card: cubic-bezier(0.25, 0.7, 0.2, 1);
+    --ease-leave: cubic-bezier(0.4, 0, 0.75, 0.3);
+    --ease-fade-out: cubic-bezier(0.3, 0, 0.4, 1);
     --led-off: #2A2A30;
     --knob-hi: transparent;
     --knob-lo: transparent;
@@ -266,6 +276,13 @@
     --zbar: 12px; --zbar-b: 12px; --zbar-r: 12px; /* Dicke der Zoom-Leisten (unten, rechts) */
     /* Schriftskala der Dichte „calm“ (Krachwerk); Loopwerk nutzt sie nicht */
     --fs-11: 11px; --fs-13: 13px; --fs-15: 15px; --fs-24: 24px; --fs-38: 38px; --fs-56: 56px;
+  }
+  /* Feder als Kurve: x(t) = 1 − (1 + ωt)·e^(−ωt), ωT = 7 (95 % nach zwei Dritteln der Dauer); ältere Browser nehmen die Kurve oben */
+  @supports (transition-timing-function: linear(0, 1)) {
+    :root { --ease-card: linear(0, 0.009 2%, 0.033 4%, 0.067 6%, 0.11 8%, 0.157 10%, 0.233 13%, 0.311 16%, 0.411 20%, 0.504 24%, 0.587 28%, 0.676 33%, 0.749 38%, 0.818 44%, 0.87 50%, 0.914 57%, 0.948 65%, 0.972 74%, 0.989 85%, 1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root { --move-in: 140ms; --move-in-fade: 140ms; --move-out: 120ms; --move-out-fade: 120ms; --move-swap: 120ms; --move-swap-delay: 0ms; --move-small: 100ms; --move-editor-in: 140ms; --move-editor-out: 120ms; --move-y: 0px; --move-y-editor: 0px; --move-scale-editor: 1; }
   }
   /* Abgeschaltete Flächen einer Edition (src/ui/surfaces.js); bleiben im DOM */
   [data-off] { display: none !important; }
@@ -3725,14 +3742,24 @@
       background: var(--sheet-bg); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--card-shadow);
       -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
     }
-    /* Ein- und Ausblenden: von oben, über Übergänge (Deckkraft, Verschiebung); zu = unsichtbar und nicht erreichbar (visibility), bleibt aber bis zum Ende des Übergangs im Baum.
+    /* Ein- und Ausblenden: von oben (Tokens --move-*, --ease-*), nur Deckkraft und Verschiebung; zu = unsichtbar und nicht erreichbar (visibility nach dem Übergang),
+       bleibt aber im Baum. Übergänge kehren vom aktuellen Stand aus um (schnelles Hin und Her springt nicht).
        Zu ist die Karte bei data-side="zu" und im Reiter Mixer, solange keine Karte der Spalte offen ist (data-mixcard). */
-    #app[data-layout="reiter"] .side { opacity: 1; transform: none; visibility: visible; transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s; }
-    #app[data-layout="reiter"]:is([data-side="zu"], [data-side="mixer"]:not([data-mixcard])) .side {
-      opacity: 0; transform: translateY(-18px); visibility: hidden; pointer-events: none;
-      transition: opacity 0.26s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+    #app[data-layout="reiter"] .side {
+      opacity: 1; transform: none; visibility: visible;
+      transition: transform var(--move-in) var(--ease-card), opacity var(--move-in-fade) var(--ease-card), visibility 0s;
     }
-    @media (prefers-reduced-motion: reduce) { #app[data-layout="reiter"] .side { transform: none !important; } }
+    #app[data-layout="reiter"]:is([data-side="zu"], [data-side="mixer"]:not([data-mixcard])) .side {
+      opacity: 0; transform: translateY(var(--move-y)); visibility: hidden; pointer-events: none;
+      transition: transform var(--move-out) var(--ease-leave), opacity var(--move-out-fade) var(--ease-fade-out), visibility 0s linear var(--move-out);
+    }
+    /* Wechsel Karte ↔ Mixer-Spalte (data-move="wechsel", side.js): die gehende Fläche blendet am Platz aus, die kommende gleitet kurz danach von oben herein */
+    #app[data-layout="reiter"][data-move="wechsel"] .side { transition-delay: var(--move-swap-delay), var(--move-swap-delay), 0s; }
+    #app[data-layout="reiter"][data-move="wechsel"]:is([data-side="zu"], [data-side="mixer"]:not([data-mixcard])) .side {
+      transition: opacity var(--move-swap) var(--ease-fade-out), transform 0s linear calc(var(--move-swap) + 40ms), visibility 0s linear var(--move-swap);
+    }
+    /* Reiter: der gewählte wechselt weich (nur Farben dreier Knöpfe) */
+    #app[data-layout="reiter"] .side-tab { transition: background-color var(--move-small) ease, border-color var(--move-small) ease, color var(--move-small) ease; }
     /* Der Arranger bekommt rechts Reserve in Kartenbreite (Ende des Songs unter der Karte hervorholen); die Spuren laufen hinter der Karte weiter,
        der senkrechte Rollbalken bleibt am Fensterrand (die Karte sitzt innen, --side-r); Fächer (Mixer, Editoren) enden links der Karte */
     #app[data-layout="reiter"]:not([data-side="zu"]) .arr-scroll { padding-right: calc(var(--side-w) + var(--side-gap)); }
@@ -3860,13 +3887,19 @@
       background: var(--sheet-bg); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--card-shadow); overflow: hidden;
     }
     #app[data-layout="reiter"] .ov-card[data-kind="pattern"] { height: min(840px, 100%); }
-    #app[data-layout="reiter"] .ov.ov-enter .ov-card { animation: ov-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-    #app[data-layout="reiter"] .ov.ov-enter .ov-back { animation: ov-fade 0.22s ease-out both; }
-    @keyframes ov-in { from { opacity: 0; transform: translateY(28px) scale(0.97); } to { opacity: 1; transform: none; } }
-    @keyframes ov-fade { from { opacity: 0; } to { opacity: 1; } }
-    @media (prefers-reduced-motion: reduce) {
-      #app[data-layout="reiter"] .ov.ov-enter .ov-card { animation: ov-fade 0.12s linear both; }
-      #app[data-layout="reiter"] .ov.ov-enter .ov-back { animation: none; }
+    /* Ein- und Ausflug von unten (overlay.js setzt data-state): herein mit der Feder, hinaus kürzer; der Grund dunkelt gleichzeitig ab und hellt wieder auf.
+       Übergänge statt Keyframes: auf – zu – auf kehrt vom aktuellen Stand aus um. Beim Hinausgleiten fängt die Fläche keine Klicks mehr. */
+    #app[data-layout="reiter"] .ov { pointer-events: none; }
+    #app[data-layout="reiter"] .ov[data-state="auf"] { pointer-events: auto; }
+    #app[data-layout="reiter"] .ov-back { opacity: 0; transition: opacity var(--move-editor-out) var(--ease-fade-out); }
+    #app[data-layout="reiter"] .ov-card {
+      opacity: 0; transform: translateY(var(--move-y-editor)) scale(var(--move-scale-editor));
+      transition: transform var(--move-editor-out) var(--ease-leave), opacity var(--move-out-fade) var(--ease-fade-out);
+    }
+    #app[data-layout="reiter"] .ov[data-state="auf"] .ov-back { opacity: 1; transition: opacity var(--move-in-fade) var(--ease-card); }
+    #app[data-layout="reiter"] .ov[data-state="auf"] .ov-card {
+      opacity: 1; transform: none;
+      transition: transform var(--move-editor-in) var(--ease-card), opacity var(--move-in-fade) var(--ease-card);
     }
     /* Die Editoren verlieren ihr Fach-Gesicht: kein Griff, kein eigener Rahmen */
     #app[data-layout="reiter"] #clip-overlay :is(#editor, #pattern) {
@@ -3926,15 +3959,24 @@
     /* Die Plätze sind immer da (feste Breite); zu = unsichtbar, nicht erreichbar und nach oben verschoben, auf = sichtbar. Der Platz im Rollbereich (--mix-w) folgt sofort. */
     #app[data-layout="reiter"] :is(.mix-slot, .mix-head, .mix-bus) {
       display: flex; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--side-w); width: var(--side-w); margin-left: calc(var(--mix-w, 0px) - var(--side-w)); min-width: 0; box-sizing: border-box; overflow: hidden;
-      background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 1px 0 0 var(--line);
-      opacity: 0; transform: translateY(-14px); visibility: hidden; pointer-events: none;
-      transition: opacity 0.26s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+      background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: none; /* keine Linie: der Verlauf davor (.arr-wrap::after) ist die Kante */
+      opacity: 0; transform: translateY(var(--move-y)); visibility: hidden; pointer-events: none;
+      transition: transform var(--move-out) var(--ease-leave), opacity var(--move-out-fade) var(--ease-fade-out), visibility 0s linear var(--move-out);
     }
     #app[data-layout="reiter"][data-side="mixer"] :is(.mix-slot, .mix-head, .mix-bus) {
       opacity: 1; transform: none; visibility: visible; pointer-events: auto;
-      transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s;
+      transition: transform var(--move-in) var(--ease-card), opacity var(--move-in-fade) var(--ease-card), visibility 0s;
     }
-    @media (prefers-reduced-motion: reduce) { #app[data-layout="reiter"] :is(.mix-slot, .mix-head, .mix-bus) { transform: none; } }
+    /* Wechsel mit der Karte (Reiter): am Platz ausblenden bzw. kurz nach dem Ausblenden der Karte von oben herein */
+    #app[data-layout="reiter"][data-move="wechsel"][data-side="mixer"] :is(.mix-slot, .mix-head, .mix-bus) { transition-delay: var(--move-swap-delay), var(--move-swap-delay), 0s; }
+    #app[data-layout="reiter"][data-move="wechsel"]:not([data-side="mixer"]) :is(.mix-slot, .mix-head, .mix-bus) {
+      transition: opacity var(--move-swap) var(--ease-fade-out), transform 0s linear calc(var(--move-swap) + 40ms), visibility 0s linear var(--move-swap);
+    }
+    /* Unter der offenen Effekt- bzw. Summen-Karte blendet die Spalte am Platz aus, sobald die Karte sie deckt (kein Streifen am Rand); beim Schließen wieder ein */
+    #app[data-layout="reiter"][data-side="mixer"][data-mixcard] :is(.mix-slot, .mix-head, .mix-bus) {
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transition: opacity var(--move-swap) var(--ease-fade-out) var(--move-swap-delay), visibility 0s linear calc(var(--move-swap) + var(--move-swap-delay));
+    }
     #app[data-layout="reiter"] .mix-head { z-index: 5; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); }
     #app[data-layout="reiter"] .mix-head .corner-label { font: 600 10px/1 var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
     #app[data-layout="reiter"] .mix-head .tab {
@@ -3949,15 +3991,45 @@
     /* Zeilen ohne Kanalzug (Gruppen, Kurven) behalten die Breite der Spalte */
     #app[data-layout="reiter"] :is(.group-row, .auto-row)::after {
       content: ""; position: sticky; right: 0; z-index: 3; flex: 0 0 var(--side-w); margin-left: calc(var(--mix-w, 0px) - var(--side-w)); box-sizing: border-box;
-      background: color-mix(in srgb, var(--sheet-bg) 92%, transparent); box-shadow: inset 1px 0 0 var(--line);
-      opacity: 0; transform: translateY(-14px); visibility: hidden; pointer-events: none;
-      transition: opacity 0.26s ease, transform 0.3s ease, visibility 0s linear 0.3s;
+      background: color-mix(in srgb, var(--sheet-bg) 92%, transparent);
+      opacity: 0; transform: translateY(var(--move-y)); visibility: hidden; pointer-events: none;
+      transition: transform var(--move-out) var(--ease-leave), opacity var(--move-out-fade) var(--ease-fade-out), visibility 0s linear var(--move-out);
     }
     #app[data-layout="reiter"][data-side="mixer"] :is(.group-row, .auto-row)::after {
       opacity: 1; transform: none; visibility: visible;
-      transition: opacity 0.38s cubic-bezier(0.22, 0.8, 0.3, 1), transform 0.5s cubic-bezier(0.22, 0.8, 0.3, 1), visibility 0s;
+      transition: transform var(--move-in) var(--ease-card), opacity var(--move-in-fade) var(--ease-card), visibility 0s;
     }
-    #app[data-layout="reiter"] .track-row.selected .mix-slot { box-shadow: inset 1px 0 0 var(--line), inset -2px 0 0 var(--ink); }
+    /* Wechsel mit der Karte (Reiter): am Platz ausblenden bzw. kurz nach dem Ausblenden der Karte von oben herein */
+    #app[data-layout="reiter"][data-move="wechsel"][data-side="mixer"] :is(.group-row, .auto-row)::after { transition-delay: var(--move-swap-delay), var(--move-swap-delay), 0s; }
+    #app[data-layout="reiter"][data-move="wechsel"]:not([data-side="mixer"]) :is(.group-row, .auto-row)::after {
+      transition: opacity var(--move-swap) var(--ease-fade-out), transform 0s linear calc(var(--move-swap) + 40ms), visibility 0s linear var(--move-swap);
+    }
+    /* Unter der offenen Effekt- bzw. Summen-Karte blendet die Spalte am Platz aus, sobald die Karte sie deckt (kein Streifen am Rand); beim Schließen wieder ein */
+    #app[data-layout="reiter"][data-side="mixer"][data-mixcard] :is(.group-row, .auto-row)::after {
+      opacity: 0; visibility: hidden; pointer-events: none;
+      transition: opacity var(--move-swap) var(--ease-fade-out) var(--move-swap-delay), visibility 0s linear calc(var(--move-swap) + var(--move-swap-delay));
+    }
+    /* Kante zur Spalte (Martin: die Spuren laufen hinter der Fläche weiter, enden nicht hart davor): links der Spalte ein weicher Verlauf über die ganze Höhe
+       (ein Element, kein Rand je Zeile); die Spalte selbst bleibt voll lesbar. Bewegt sich mit der Spalte. */
+    #app[data-layout="reiter"] .arr-wrap::after {
+      content: ""; position: absolute; z-index: 2; pointer-events: none; top: var(--zruler, 30px); bottom: calc(var(--zbar-b) + var(--zpad, 0px)); right: calc(var(--zbar-r) + var(--side-w)); width: 40px;
+      background: linear-gradient(to right, transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent));
+      opacity: 0; transform: translateY(var(--move-y)); visibility: hidden;
+      transition: transform var(--move-out) var(--ease-leave), opacity var(--move-out-fade) var(--ease-fade-out), visibility 0s linear var(--move-out);
+    }
+    #app[data-layout="reiter"][data-side="mixer"] .arr-wrap::after {
+      opacity: 1; transform: none; visibility: visible;
+      transition: transform var(--move-in) var(--ease-card), opacity var(--move-in-fade) var(--ease-card), visibility 0s;
+    }
+    #app[data-layout="reiter"][data-move="wechsel"][data-side="mixer"] .arr-wrap::after { transition-delay: var(--move-swap-delay), var(--move-swap-delay), 0s; }
+    #app[data-layout="reiter"][data-move="wechsel"]:not([data-side="mixer"]) .arr-wrap::after {
+      transition: opacity var(--move-swap) var(--ease-fade-out), transform 0s linear calc(var(--move-swap) + 40ms), visibility 0s linear var(--move-swap);
+    }
+    #app[data-layout="reiter"][data-side="mixer"][data-mixcard] .arr-wrap::after {
+      opacity: 0; visibility: hidden;
+      transition: opacity var(--move-swap) var(--ease-fade-out) var(--move-swap-delay), visibility 0s linear calc(var(--move-swap) + var(--move-swap-delay));
+    }
+    #app[data-layout="reiter"] .track-row.selected .mix-slot { box-shadow: inset -2px 0 0 var(--ink); }
     #app[data-layout="reiter"] .track-row.silent .mix-slot .strip :is(.strip-l1, .strip-l2) > * { opacity: 0.55; }
     #app[data-layout="reiter"] .mix-bus { flex-direction: column; align-self: stretch; margin-left: auto; padding-bottom: 8px; }
 

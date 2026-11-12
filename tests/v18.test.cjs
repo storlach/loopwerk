@@ -115,7 +115,9 @@ const { check, finish } = createChecker();
     }));
     check('Clip auswählen: Karte zeigt nichts, Werkzeuge in der Kopfzeile, kein „Bearbeiten“-Knopf', ci.mode === 'clip' && !ci.inCard && ci.btns && ci.noEdit, JSON.stringify(ci));
     await page.evaluate(() => window.loopwerk.ui.select(null));
-    check('Ohne Auswahl sind die Werkzeuge in der Kopfzeile nicht zu sehen', await page.evaluate(() => !document.getElementById('arr-bar-tools').offsetParent));
+    // Die Werkzeuge blenden weich aus (motion.js): sofort nicht mehr bedienbar, verborgen am Ende des Ausblendens
+    check('Ohne Auswahl sind die Werkzeuge in der Kopfzeile nicht bedienbar', await page.evaluate(() => document.getElementById('arr-bar-tools').inert));
+    check('Ohne Auswahl sind die Werkzeuge in der Kopfzeile nicht zu sehen', await page.waitForFunction(() => !document.getElementById('arr-bar-tools').offsetParent, null, { timeout: 3000 }).then(() => true, () => false));
     await pad.click({ position: { x: 60, y: 45 } });
     await pad.dblclick({ position: { x: 60, y: 45 } });
     await page.waitForSelector('#clip-overlay:not([hidden]) #insp-gain', { state: 'visible' });

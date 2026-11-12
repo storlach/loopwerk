@@ -6,6 +6,7 @@
 // Aussehen: CSS in index.html unter #app[data-layout="reiter"] #clip-overlay.
 
 import { narrow } from './place.js';
+import { settle, token } from './motion.js';
 
 const el = (tag, cls, id) => { const n = document.createElement(tag); if (cls) n.className = cls; if (id) n.id = id; return n; };
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -24,6 +25,7 @@ export function mountOverlay({ ui, editor }) {
 
   const root = el('div', 'ov', 'clip-overlay');
   root.hidden = true;
+  root.dataset.state = 'zu'; // auf | zu: steuert Ein- und Ausflug (CSS-Übergänge); hidden erst, wenn die Karte ganz draußen ist
   const back = el('div', 'ov-back');
   const card = el('section', 'ov-card', 'ov-card');
   card.setAttribute('role', 'dialog');
@@ -61,6 +63,7 @@ export function mountOverlay({ ui, editor }) {
   // ---------- Öffnen und Schließen ----------
   let isOpen = false;
   let returnTo = null;
+  let stopHide = null;
   const kindOf = () => (ui.dock === 'editor' ? 'sample' : ui.dock === 'pattern' ? 'pattern' : null);
   const clipEl = () => (ui.selectedClipId ? document.querySelector(`.clip[data-clip-id="${CSS.escape(ui.selectedClipId)}"]`) : null);
 
@@ -85,19 +88,25 @@ export function mountOverlay({ ui, editor }) {
     labelled(kind);
     sideState();
     dockClip();
-    root.hidden = false;
+    stopHide?.();
+    stopHide = null;
+    root.inert = false;
+    if (root.hidden) {
+      root.hidden = false;
+      void getComputedStyle(card).transform; // Ausgangslage (unten, unsichtbar) festhalten, damit der Übergang startet
+    }
+    root.dataset.state = 'auf'; // läuft die Karte gerade hinaus, kehrt sie vom aktuellen Stand aus um
     // Der Editor gehört zu einem Clip: ist er nicht gewählt (z. B. Öffnen über die Konsole), wird er es jetzt
     const cid = kind === 'sample' ? editor?.state?.clipId : null;
     if (cid && ui.selectedClipId !== cid) ui.select(cid);
-    root.classList.remove('ov-enter');
-    void root.offsetWidth; // Animation neu starten
-    root.classList.add('ov-enter');
     requestAnimationFrame(() => { if (isOpen) card.focus({ preventScroll: true }); });
   }
   function shut() {
     isOpen = false;
-    root.hidden = true;
-    root.classList.remove('ov-enter');
+    root.dataset.state = 'zu';
+    root.inert = true; // während des Ausflugs weder Klicks noch Fokus; die Spuren darunter sind sofort wieder bedienbar
+    stopHide?.();
+    stopHide = settle(card, 'opacity', token('--move-editor-out', 260) + 400, () => { stopHide = null; if (!isOpen) root.hidden = true; });
     // Fokus zurück: das Element von vorher, sonst der Clip
     const t = returnTo && returnTo.isConnected && visible(returnTo) ? returnTo : clipEl();
     returnTo = null;

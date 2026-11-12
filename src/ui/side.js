@@ -9,6 +9,7 @@
 
 import { narrow } from './place.js';
 import { lsKey } from '../edition.js';
+import { fadeIn, reveal, settle, token } from './motion.js';
 
 const TABS = [
   { id: 'datei', label: 'Datei' },
@@ -96,9 +97,26 @@ export function mountSide({ ui }) {
   let current = DEFAULT; // zuletzt gewählter Reiter (auch bei zugeklappter Karte)
   let closed = false;
   try { const v = localStorage.getItem(key); if (TABS.some((t) => t.id === v)) current = v; else if (v === 'zu') closed = true; } catch { /* Voreinstellung */ }
-  function apply(save) {
-    app.dataset.tab = current; // gewählter Reiter, auch bei zugeklappter Karte (der Inhalt bleibt, solange sie ausblendet)
+  // Was gerade zu sehen ist: die Karte, die Mixer-Spalte (Reiter Mixer ohne offene Karte) oder nichts
+  const surface = () => (closed ? 'zu' : current === 'mixer' && !app.dataset.mixcard ? 'spalte' : 'karte');
+  let shown = null;
+  let stopTab = null;
+  // move: '' (auf/zu) oder 'wechsel' (Karte ↔ Spalte: die gehende blendet am Platz aus, die kommende gleitet herein; CSS unter data-move)
+  function apply(save, { move } = {}) {
+    const before = shown;
+    shown = surface();
+    app.dataset.move = move ?? ((before === 'karte' && shown === 'spalte') || (before === 'spalte' && shown === 'karte') ? 'wechsel' : '');
     app.dataset.side = closed ? 'zu' : current;
+    // data-tab = Inhalt der Karte. Geht die Karte, behält sie ihren Inhalt, bis sie ausgeblendet ist (kein Springen beim Ausblenden);
+    // bleibt sie stehen und der Reiter wechselt, blendet der neue Inhalt kurz über
+    stopTab?.();
+    stopTab = null;
+    if (shown === 'karte' || before === null) {
+      if (app.dataset.tab !== current && before === 'karte' && app.dataset.tab) fadeIn([insp, sounds]);
+      app.dataset.tab = current;
+    } else if (app.dataset.tab !== current) {
+      stopTab = settle(side, 'opacity', token('--move-out', 240) + 400, () => { stopTab = null; if (surface() !== 'karte') app.dataset.tab = current; });
+    }
     for (const [tid, b] of btns) { const on = !closed && tid === current; b.setAttribute('aria-selected', String(on)); b.tabIndex = on || (closed && tid === current) ? 0 : -1; }
     if (save) { try { localStorage.setItem(key, closed ? 'zu' : current); } catch { /* egal */ } }
   }
@@ -119,7 +137,7 @@ export function mountSide({ ui }) {
   // Kopfzeile über den Spuren: Teilen, Duplizieren, Löschen (und später Schneiden) stehen nur, solange Clips gewählt sind
   const barTools = document.getElementById('arr-bar-tools');
   if (barTools) {
-    const sync = () => { barTools.hidden = !ui.selectedIds().length; };
+    const sync = () => reveal(barTools, ui.selectedIds().length > 0); // blendet weich ein und aus (motion.js)
     ui.on(sync);
     sync();
   }
@@ -157,5 +175,11 @@ export function mountSide({ ui }) {
     new MutationObserver(() => neu.classList.toggle('busy', panel.classList.contains('busy'))).observe(panel, { attributes: true, attributeFilter: ['class'] });
   }
 
-  return { show, close, takeStarter, get open() { return !closed; }, get current() { return current; } };
+  // Die Karte der Mixer-Spalte (mixcol.js) ging auf oder zu bzw. zeigt anderen Inhalt (fade): Fläche neu bestimmen, ohne Wechsel-Übergang
+  function refresh({ fade = false } = {}) {
+    if (fade && shown === 'karte' && surface() === 'karte') fadeIn([insp, sounds, document.getElementById('mixcard-head')]);
+    apply(false, { move: '' });
+  }
+
+  return { show, close, refresh, takeStarter, get open() { return !closed; }, get current() { return current; } };
 }
