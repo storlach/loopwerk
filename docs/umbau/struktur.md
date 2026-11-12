@@ -104,6 +104,12 @@ Gebaut: Clip-Editor als Karte in der Mitte (Doppelklick, fliegt ein; Sample-, Be
 
 Bewusst entfallene Bedienelemente am Loopwerk-Desktop (Ersatz in Klammern): `#project-menu-btn` (Reiter Datei), `#zoom-in`, `#zoom-out`, `#zoomy-in`, `#zoomy-out` (zwei Finger, Rollbalken-Enden, Strg/Alt+Mausrad), `#editor-tab` und `#edit-btn` (Doppelklick auf den Clip), `#key-sel` im Deck (Tonart im Reiter Datei, `#insp-key`).
 
+### Bewegung und Rollbalken (Martin, 2026-11-12)
+
+- **Animationen sind wichtig:** Die Karten blenden „super smooth und elegant“ ein und aus, mit weichen Bewegungen. Sie kommen **von oben** (eingeblendet, geschoben oder beides).
+- **Der senkrechte Rollbalken der Spuren bleibt rechts am Fensterrand stehen.** Die Karte sitzt so weit innen, dass der Rollbalken bedienbar bleibt.
+- **Die Spuren laufen hinter der Karte einfach weiter;** die Karte wird nur darübergelegt.
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
