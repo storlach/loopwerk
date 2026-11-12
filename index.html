@@ -3672,7 +3672,7 @@
   .side, .side-tabs { display: none; }
   .deck-bar { display: contents; }
   @media (min-width: 761px) {
-    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; --side-r: calc(var(--side-gap) + var(--zbar-r)); --bar-h: 60px; } /* --side-r: Abstand der Karte vom Fensterrand, lässt den senkrechten Rollbalken frei */
+    #app[data-layout="reiter"] { --side-w: 336px; --side-gap: 12px; --side-r: calc(var(--zbar-r) + 4px); --bar-h: 60px; } /* --side-r: Abstand der Karte vom Fensterrand, lässt den senkrechten Rollbalken frei */
     #app[data-layout="reiter"], #app[data-layout="reiter"].dock-open {
       grid-template-columns: minmax(0, 1fr);
       grid-template-areas: "deck" "arr" "bar";
@@ -3958,7 +3958,7 @@
     }
     #app[data-layout="reiter"] .track-row.selected .mix-slot { box-shadow: inset 1px 0 0 var(--line), inset -2px 0 0 var(--ink); }
     #app[data-layout="reiter"] .track-row.silent .mix-slot .strip > * { opacity: 0.55; }
-    #app[data-layout="reiter"] .mix-bus { flex-direction: column; align-self: stretch; padding-bottom: 8px; }
+    #app[data-layout="reiter"] .mix-bus { flex-direction: column; align-self: stretch; margin-left: auto; padding-bottom: 8px; }
 
     /* Kanalzug als Zeile: oben Kurzinfo und Regler (Hall, Echo, Panorama), unten Lautstärke mit Wert, M, S; Pegel als dünner Streifen am unteren Rand */
     #app[data-layout="reiter"] :is(.mix-slot, .mix-bus) .strip {
