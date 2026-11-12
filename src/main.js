@@ -15,6 +15,7 @@ import { mountProjectIO } from './ui/project-io.js';
 import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
 import { mountSide } from './ui/side.js';
+import { mountOverlay } from './ui/overlay.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountSoundBench } from './ui/sound-bench.js';
 import { mountCreate } from './ui/create.js';
@@ -846,7 +847,9 @@ async function boot() {
   mountMobile({ store, ui, tools, library });
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
   if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools, library });
-  const sheets = mountSheets({ ui, arranger });
+  // Layout „reiter“: Sample- und Pattern-Editor öffnen als Karte in der Mitte (overlay.js) statt als Fach unten
+  const overlay = reiter ? mountOverlay({ ui, editor }) : null;
+  const sheets = mountSheets({ ui, arranger, external: overlay ? { ids: ['editor', 'pattern'], on: () => !narrow.matches } : null });
   bounce?.attach({ sheets });
   // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
   if (EDITION.density === 'calm') {
@@ -982,7 +985,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, overlay, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

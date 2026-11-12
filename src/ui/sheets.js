@@ -57,7 +57,8 @@ export function springStep(x, v, w, dt) {
 // Gummiband: folgt anfangs 1:1, bleibt dann zurück (nie mehr als RUBBER)
 const rubber = (d) => (d * RUBBER) / (d + RUBBER);
 
-export function mountSheets({ ui, arranger }) {
+// external: { ids, on() } – Fächer, die gerade anderswo gezeigt werden (Layout „reiter“: Editoren als Karte in der Mitte, src/ui/overlay.js)
+export function mountSheets({ ui, arranger, external = null }) {
   const app = document.getElementById('app');
   const arr = document.querySelector('.arranger');
   const snaps = loadSnaps();
@@ -88,6 +89,7 @@ export function mountSheets({ ui, arranger }) {
   const shown = (s) => {
     if (s.classList.contains('shelf')) return narrow.matches && ui.dock === 'sounds';
     if (s.id === 'export' && !narrow.matches) return false;
+    if (external?.ids.includes(s.id) && external.on()) return false;
     return !s.hidden;
   };
   const current = () => sheets.find((s) => shown(s) && !s.classList.contains('leaving') && getComputedStyle(s).display !== 'none') ?? null;

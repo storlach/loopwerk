@@ -120,6 +120,14 @@ export function mountSide({ ui }) {
   }
   apply(false);
 
+  // Kopfzeile über den Spuren: Teilen, Duplizieren, Löschen (und später Schneiden) stehen nur, solange Clips gewählt sind
+  const barTools = document.getElementById('arr-bar-tools');
+  if (barTools) {
+    const sync = () => { barTools.hidden = !ui.selectedIds().length; };
+    ui.on(sync);
+    sync();
+  }
+
   // Eine Spur gewählt (Klick auf den Spurkopf): die Leiste wechselt auf „Mixer“
   let lastTrack = ui.selectedTrackId ?? null;
   ui.on(() => {

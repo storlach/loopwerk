@@ -3811,6 +3811,112 @@
     /* Export-Klappfeld: neben der Karte statt über ihr */
     #app[data-layout="reiter"]:not([data-side="zu"]) #export.dock { right: calc(var(--side-w) + var(--side-gap) * 2); }
   }
+  /* ---------- Layout „reiter“, Scheiben 4 und 5: Clip-Editor als Karte in der Mitte, Kopfzeile über den Spuren, Fachleiste entfällt ---------- */
+  @media (min-width: 761px) {
+    /* Die Karte rechts zeigt bei gewähltem Clip nichts mehr: seine Einstellungen stehen im Clip-Editor (Doppelklick auf den Clip) */
+    #app[data-layout="reiter"][data-side="sounds"] .side .insp { display: none; }
+    #app[data-layout="reiter"] :is(#edit-btn, #editor-tab) { display: none; }
+    /* Fachleiste: nur „Tastenkürzel“ blieb übrig und wohnt jetzt in der Befehlsliste des Reiters Datei; Mixer und FX-Pad stehen im Reiter Mixer */
+    #app[data-layout="reiter"] #tabbar { display: none; }
+    #app[data-layout="reiter"] .side-datei-liste .tabbar-end { display: block; margin: 0; padding: 0; }
+    #app[data-layout="reiter"] .side-datei-liste .tabbar-end > .tab-keys {
+      display: flex; align-items: center; justify-content: flex-start; width: 100%; height: 36px; box-sizing: border-box; padding: 0 10px; margin: 0; background: transparent;
+      color: var(--ink); border: 0; border-radius: var(--radius); box-shadow: none; cursor: pointer; font: 500 13px/1 var(--font-body); letter-spacing: 0; text-transform: none;
+    }
+    #app[data-layout="reiter"] .side-datei-liste .tabbar-end > .tab-keys:hover { background: var(--lane); }
+    #app[data-layout="reiter"] .side-datei-liste .tabbar-end > .tab-keys:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    /* Das Feld klappt in der Liste auf (die Karte würde ein schwebendes Feld abschneiden) */
+    #app[data-layout="reiter"] .side-datei-liste .keys-pop {
+      position: static; width: auto; max-height: none; overflow: visible; margin: 4px 0 6px; padding: 8px 10px; box-shadow: none; background: var(--lane); border-radius: var(--radius);
+    }
+
+    /* Deck: die Tonart steht im Reiter Datei, das Tempo über den Spuren */
+    #app[data-layout="reiter"] .deck .lcd-key { display: none; }
+
+    /* Kopfzeile über den Spuren: Raster · Tempo, rechts davon die Werkzeuge des gewählten Clips (Platz für ein späteres „Schneiden“ am Ende dieser Gruppe) */
+    #app[data-layout="reiter"] :is(#zoom-in, #zoom-out, #zoomy-in, #zoomy-out) { display: none; }
+    #app[data-layout="reiter"] .arr-bar { gap: 14px; }
+    #app[data-layout="reiter"] .arr-bar-view { gap: 14px; }
+    #app[data-layout="reiter"] .arr-bar .lcd-cell.lcd-song {
+      display: flex; align-items: center; gap: 8px; padding: 0 0 0 14px; margin: 0; box-shadow: inset 1px 0 0 var(--line);
+    }
+    #app[data-layout="reiter"] .arr-bar .lcd-song .lcd-label { font: 500 10px/1 var(--font-mono); letter-spacing: 0.12em; color: var(--muted); }
+    #app[data-layout="reiter"] .arr-bar .lcd-song .lcd-input { width: 4ch; height: 28px; text-align: left; font: 300 18px/1 var(--font-mono); color: var(--display-ink); }
+    #app[data-layout="reiter"] .arr-bar-tools:not([hidden]) {
+      display: flex; align-items: center; gap: 4px; padding-left: 14px; box-shadow: inset 1px 0 0 var(--line);
+    }
+    #app[data-layout="reiter"] .arr-bar-tools .key { padding: 0 12px; }
+
+    /* ----- Clip-Editor-Karte ----- */
+    #app[data-layout="reiter"] .ov {
+      position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; top: calc(var(--bar-h) + 6px);
+      display: grid; place-items: center; padding: 18px 24px 24px; box-sizing: border-box;
+    }
+    #app[data-layout="reiter"] .ov[hidden] { display: none; }
+    #app[data-layout="reiter"] .ov-back { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 66%, transparent); }
+    #app[data-layout="reiter"] .ov-card {
+      position: relative; box-sizing: border-box; width: min(1180px, 100%); height: min(700px, 100%); min-height: 0; display: grid; outline: none;
+      background: var(--sheet-bg); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--card-shadow); overflow: hidden;
+    }
+    #app[data-layout="reiter"] .ov-card[data-kind="pattern"] { height: min(840px, 100%); }
+    #app[data-layout="reiter"] .ov.ov-enter .ov-card { animation: ov-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    #app[data-layout="reiter"] .ov.ov-enter .ov-back { animation: ov-fade 0.22s ease-out both; }
+    @keyframes ov-in { from { opacity: 0; transform: translateY(28px) scale(0.97); } to { opacity: 1; transform: none; } }
+    @keyframes ov-fade { from { opacity: 0; } to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      #app[data-layout="reiter"] .ov.ov-enter .ov-card { animation: ov-fade 0.12s linear both; }
+      #app[data-layout="reiter"] .ov.ov-enter .ov-back { animation: none; }
+    }
+    /* Die Editoren verlieren ihr Fach-Gesicht: kein Griff, kein eigener Rahmen */
+    #app[data-layout="reiter"] #clip-overlay :is(#editor, #pattern) {
+      grid-area: auto; position: relative; z-index: auto; align-self: stretch; margin: 0; width: auto; height: 100%; max-height: none; min-height: 0; min-width: 0;
+      background: transparent; border: 0; border-radius: 0; box-shadow: none; clip-path: none; transform: none;
+    }
+    #app[data-layout="reiter"] #clip-overlay .sheet-grip { display: none; }
+    #app[data-layout="reiter"] .ov-close, #app[data-layout="reiter"] .ov-side-toggle { position: absolute; z-index: 3; top: 18px; width: 40px; height: 40px; padding: 0; }
+    #app[data-layout="reiter"] .ov-close { right: 20px; }
+    #app[data-layout="reiter"] .ov-side-toggle { right: 68px; }
+    #app[data-layout="reiter"] .ov-card[data-kind="sample"] :is(.ov-close, .ov-side-toggle) { display: none; }
+    #app[data-layout="reiter"] .ov-close svg, #app[data-layout="reiter"] .ov-side-toggle svg { width: 16px; height: 16px; }
+    #app[data-layout="reiter"] .ov-side-toggle[aria-expanded="true"] { background: var(--lane); box-shadow: inset 0 0 0 1px var(--key-line); }
+    /* Clip-Einstellungen: rechte Spalte als ruhige Fläche (Skizze), ohne Clip-Rahmen */
+    #app[data-layout="reiter"] #clip-overlay .insp-clip {
+      display: grid; align-content: start; gap: 16px; box-sizing: border-box; min-height: 0; margin: 0; padding: 18px 20px 20px; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+      background: var(--lane); border: 1px solid var(--line); border-radius: 14px; box-shadow: none;
+    }
+    #app[data-layout="reiter"] #clip-overlay .insp-clip > .insp-head { margin: 0; padding: 0; background: none; box-shadow: none; }
+    #app[data-layout="reiter"] #clip-overlay .insp-clip > .insp-head > .insp-title { display: none; }
+    #app[data-layout="reiter"] #clip-overlay .insp-clip[hidden] { display: none; }
+
+    /* Sample-Editor: Kopf über beide Spalten, links Wellenform · Werkzeuge · „Mehr“, rechts die Clip-Einstellungen */
+    #app[data-layout="reiter"] #clip-overlay #editor {
+      display: grid; grid-template-columns: minmax(0, 1fr) 340px; grid-template-rows: auto auto auto minmax(0, 1fr);
+    }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-top { display: contents; }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-headrow { grid-column: 1 / -1; grid-row: 1; padding: 22px 24px 8px 28px; flex-wrap: nowrap; }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-name { font-size: 30px; }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-stage { grid-column: 1; grid-row: 2; padding: 8px 20px 0 28px; }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-stage { container-type: normal; }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-wave-wrap { height: clamp(110px, 34vh, 360px); }
+    #app[data-layout="reiter"] #clip-overlay #editor:has(#clip-more[aria-expanded="true"]) .ed-wave-wrap { height: clamp(90px, 17vh, 150px); }
+    #app[data-layout="reiter"] #clip-overlay #editor .ed-cuts { grid-column: 1; grid-row: 3; padding: 12px 20px 0 28px; }
+    #app[data-layout="reiter"] #clip-overlay #editor .editor-body { grid-column: 1; grid-row: 4; padding: 10px 20px 22px 28px; max-height: none; }
+    #app[data-layout="reiter"] #clip-overlay #editor .insp-clip { grid-column: 2; grid-row: 2 / 5; margin: 8px 24px 24px 0; }
+
+    /* Beat und Melodie: Kopf und Raster links, Clip-Einstellungen rechts (einklappbar) */
+    #app[data-layout="reiter"] #clip-overlay #pattern { display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto minmax(0, 1fr); }
+    #app[data-layout="reiter"] #clip-overlay #pattern > .dock-head { grid-column: 1; grid-row: 1; padding: 22px 16px 8px 28px; border-bottom: 0; }
+    #app[data-layout="reiter"] #clip-overlay #pattern .pat-name { font-size: 30px; }
+    #app[data-layout="reiter"] #clip-overlay #pattern > .pat-body { grid-column: 1; grid-row: 2; padding: 8px 20px 22px 28px; min-height: 0; }
+    #app[data-layout="reiter"] #clip-overlay #pattern .insp-clip { grid-column: 2; grid-row: 1 / 3; margin: 72px 24px 24px 0; }
+    #app[data-layout="reiter"] .ov-card[data-side="zu"] #pattern { grid-template-columns: minmax(0, 1fr); }
+    #app[data-layout="reiter"] .ov-card[data-side="zu"] #pattern > .dock-head { padding-right: 120px; }
+    #app[data-layout="reiter"] .ov-card[data-side="zu"] #pattern .insp-clip { display: none; }
+    #app[data-layout="reiter"] .ov-card[data-kind="pattern"]:not([data-side="zu"]) #pattern > .dock-head { padding-right: 16px; }
+    /* Ohne gewählten Clip bleibt die Spalte leer: dann bekommt der Editor die ganze Breite */
+    #app[data-layout="reiter"] #clip-overlay #pattern:has(.insp-clip[hidden]) { grid-template-columns: minmax(0, 1fr); }
+    #app[data-layout="reiter"] #clip-overlay #editor:has(.insp-clip[hidden]) { grid-template-columns: minmax(0, 1fr); }
+  }
 </style>
 
 
@@ -4006,6 +4112,7 @@
   <main class="arranger" aria-label="Arranger">
     <div class="arr-bar" id="arr-bar" role="toolbar" aria-label="Ansicht">
       <div class="arr-bar-view" id="arr-bar-view"></div>
+      <div class="arr-bar-tools" id="arr-bar-tools" role="group" aria-label="Ausgewählte Clips" hidden></div>
       <div class="arr-bar-select" role="group" aria-label="Auswahl">
         <button class="key" id="select-btn" data-tier="3" type="button" aria-pressed="false" title="Mehrere Clips auswählen: Clips antippen">Auswählen</button>
         <button class="key" id="select-all-btn" data-tier="3" type="button" title="Alle Clips auswählen">Alle</button>

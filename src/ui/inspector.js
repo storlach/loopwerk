@@ -160,7 +160,9 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
   // Die Clip-Knöpfe (Bearbeiten, Teilen, Duplizieren, Löschen) ziehen vom Deck hierher
   const clipGroup = document.querySelector('.deck .group[aria-label="Clip"]');
-  if (!panel) for (const id of ['edit-btn', 'split-btn', 'dup-btn', 'del-btn']) place(document.getElementById(id), { wide: btns, calm: id === 'edit-btn' ? { narrow: btns } : null });
+  // Layout „reiter“: Teilen, Duplizieren und Löschen stehen in der Kopfzeile über den Spuren (solange etwas gewählt ist); „Bearbeiten“ entfällt (Doppelklick öffnet den Editor)
+  const barTools = document.getElementById('arr-bar-tools');
+  if (!panel) for (const id of ['edit-btn', 'split-btn', 'dup-btn', 'del-btn']) place(document.getElementById(id), { wide: btns, calm: id === 'edit-btn' ? { narrow: btns } : null, reiter: id === 'edit-btn' ? null : barTools });
   void clipGroup;
 
   // ---------- Spur ----------

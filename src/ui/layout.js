@@ -14,6 +14,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   // Raster, Klick und Loop wandern über die Spuren (so bleibt im Deck Platz für Aufnahme, Wiederholen und die Anzeige); Zoomen geht am Handy mit zwei Fingern (die Knöpfe bleiben unsichtbar im Deck)
   for (const id of ['zoom-out', 'zoom-in', 'zoomy-out', 'zoomy-in']) place($(id), { wide: $('arr-bar-view') });
   place($('snap-sel'), { wide: $('arr-bar-view'), narrow: $('arr-pills') });
+  // Layout „reiter“: das Tempo-Feld wohnt neben dem Raster in der Kopfzeile über den Spuren
+  place(document.querySelector('.lcd-song'), { reiter: $('arr-bar-view') });
   place($('metro-btn'), { narrow: $('arr-pills'), calm: { narrow: $('song-links'), wide: $('insp-song-tools') } });
   place($('loop-btn'), { narrow: $('arr-pills') }); // der Loop-Bereich liegt im Lineal darunter
   // Rückgängig und Wiederholen: am Handy beide im Deck
@@ -26,6 +28,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('export-btn'), { wide: $('deck-export'), narrow: $('song-main'), reiter: $('side-datei-export') });
   place($('demo-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-start') });
   place($('tips-reset'), { narrow: $('song-links'), reiter: $('side-datei-foot') });
+  place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') }, reiter: $('side-datei-foot') }); // Tastenkürzel: Song-Werkbank bzw. Befehlsliste in Datei
   place($('pop-about'), { reiter: $('side-datei-foot') });
   place($('new-btn'), { wide: $('project-menu-start'), narrow: $('song-links'), reiter: $('side-datei-start') });
   place(document.querySelector('.deck .brand'), { narrow: $('song-foot') });
@@ -37,7 +40,6 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('rec-btn'), { calm: { narrow: $('tabbar') } });
   place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('side-mixer-docks') });
   place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('side-mixer-docks') });
-  place(document.querySelector('.tabbar-end'), { calm: { wide: $('insp-song-tools') } }); // Tastenkürzel: Song-Werkbank
   place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
