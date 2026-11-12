@@ -3911,10 +3911,10 @@
     #app[data-layout="reiter"] #clip-overlay #pattern .pat-name { font-size: 30px; }
     #app[data-layout="reiter"] #clip-overlay #pattern > .pat-body { grid-column: 1; grid-row: 2; padding: 8px 20px 22px 28px; min-height: 0; }
     #app[data-layout="reiter"] #clip-overlay #pattern .insp-clip { grid-column: 2; grid-row: 1 / 3; margin: 72px 24px 24px 0; }
-    #app[data-layout="reiter"] .ov-card[data-side="zu"] #pattern { grid-template-columns: minmax(0, 1fr); }
-    #app[data-layout="reiter"] .ov-card[data-side="zu"] #pattern > .dock-head { padding-right: 120px; }
-    #app[data-layout="reiter"] .ov-card[data-side="zu"] #pattern .insp-clip { display: none; }
-    #app[data-layout="reiter"] .ov-card[data-kind="pattern"]:not([data-side="zu"]) #pattern > .dock-head { padding-right: 16px; }
+    #app[data-layout="reiter"] #clip-overlay .ov-card[data-side="zu"] #pattern { grid-template-columns: minmax(0, 1fr); }
+    #app[data-layout="reiter"] #clip-overlay .ov-card[data-side="zu"] #pattern > .dock-head { padding-right: 120px; }
+    #app[data-layout="reiter"] #clip-overlay .ov-card[data-side="zu"] #pattern .insp-clip { display: none; }
+    #app[data-layout="reiter"] #clip-overlay .ov-card[data-kind="pattern"]:not([data-side="zu"]) #pattern > .dock-head { padding-right: 16px; }
     /* Ohne gewählten Clip bleibt die Spalte leer: dann bekommt der Editor die ganze Breite */
     #app[data-layout="reiter"] #clip-overlay #pattern:has(.insp-clip[hidden]) { grid-template-columns: minmax(0, 1fr); }
     #app[data-layout="reiter"] #clip-overlay #editor:has(.insp-clip[hidden]) { grid-template-columns: minmax(0, 1fr); }
