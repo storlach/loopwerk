@@ -65,6 +65,8 @@ function sammeln() {
   const CONTROLS = 'button, input:not([type=hidden]):not([type=file]), select, textarea, a[href], [role=button], [role=slider], [role=tab], [role=option], [role=menuitem], [role=switch], [role=checkbox], [draggable=true]:not(.clip), [contenteditable=true]';
   // innerster Treffer gewinnt
   const ORTE = [
+    ['#clip-overlay .insp-sec.insp-clip', 'Clip-Editor (Overlay), Clip-Einstellungen'], ['#clip-overlay #editor', 'Clip-Editor (Overlay)'], ['#clip-overlay #pattern', 'Clip-Editor (Overlay, Beat/Melodie)'], ['#clip-overlay', 'Clip-Editor (Overlay)'],
+    ['#arr-bar-tools', 'Kopfzeile über den Spuren'], ['.arr-bar .lcd-song', 'Kopfzeile über den Spuren'],
     ['.side .insp-for-datei', 'Reiter Datei'], ['.side .insp-for-mixer', 'Reiter Mixer'], ['.side-tabs', 'Deck (Reiter rechts)'], ['#side-datei', 'Reiter Datei'], ['#side-datei-neu', 'Reiter Datei'], ['#side-datei-liste', 'Reiter Datei'], ['#side-mixer', 'Reiter Mixer'],
     ['#project-menu', 'Projekt-Menü'], ['#rec-pop', 'Aufnahme-Feld am ●'], ['#keys-pop', 'Kürzel- und Gesten-Liste'],
     ['#link-pop', 'Feld „Aus dem Netz holen“'], ['.track-menu', 'Spur-Menü ⋯'], ['.chord-pop', 'Akkord-Feld'], ['.key-pop', 'Tonart-Feld'],
@@ -126,6 +128,8 @@ function sammeln() {
     outer: for (; p && p !== document.documentElement; p = p.parentElement) for (const [sel, name] of ORTE) if (p.matches(sel)) { ort = name; break outer; }
     const pfad = [];
     for (let q = el.parentElement; q && q !== document.body; q = q.parentElement) if (q.id && q.id !== 'app') pfad.unshift(q.id);
+    // Clip-Einstellungen im Clip-Editor (Overlay): gleiche Kennung wie im Inspektor, sonst gälte jeder Regler als neu
+    if (el.closest('#clip-overlay .insp-clip')) pfad.splice(0, pfad.length, 'insp');
     const tag = el.tagName.toLowerCase();
     const art = el.getAttribute('role') || (tag === 'input' ? `input:${el.type}` : tag === 'a' ? 'link' : tag === 'button' ? 'button' : tag === 'select' ? 'select' : tag === 'textarea' ? 'textarea' : el.draggable ? 'ziehbar' : tag);
     const text = kurz(tag === 'select' || tag === 'textarea' ? '' : worte(el));
@@ -192,7 +196,15 @@ function zustaende(S) {
     ...S.SZENE,
     'projekt-menue': feld('#project-menu-btn', 'Projekt-Menü'),
     'aufnahme-feld': feld('#rec-more', 'Aufnahme-Feld'),
-    kuerzel: feld('#keys-btn', 'Kürzel-Liste'),
+    // Layout „reiter“: „Tastenkürzel“ steht in der Befehlsliste des Reiters Datei
+    async kuerzel(page, ed, dev) {
+      await S.ruhe(page);
+      await page.evaluate(() => window.loopwerk.side?.show('datei', { save: false }));
+      await page.waitForTimeout(400);
+      if (!(await klick(page, '#keys-btn'))) return 'Kürzel-Liste: Knopf hier nicht zu sehen';
+      await page.waitForTimeout(600);
+      return null;
+    },
     async regal(page) { await S.ruhe(page); await klick(page, '#tab-sounds'); await page.waitForTimeout(900); return null; },
     async erstellen(page) {
       await S.ruhe(page);
@@ -223,12 +235,20 @@ function zustaende(S) {
     'reiter-mixer': reiter('mixer'),
     'reiter-sounds': reiter('sounds'),
     'spur-menue': feld('.track-head .tbtn-menu', 'Spur-Menü'),
+    // Menüs schließen, bevor ein Editor aufgeht (die Karte in der Mitte läge sonst unter dem offenen Menü)
+    async beat(page, ed, dev) {
+      if (await page.evaluate(() => !!window.loopwerk.overlay && innerWidth > 760)) { await page.mouse.click(2, 2).catch(() => {}); await page.keyboard.press('Escape').catch(() => {}); }
+      return S.SZENE.beat(page, ed, dev);
+    },
+    async melodie(page, ed, dev) { return S.SZENE.melodie(page, ed, dev); },
+    // Editor zu, Reiter Sounds: die Sounds, die Beat und Melodie erzeugt haben (Gruppe „Eigene“), liegen sonst unter der Karte
+    async 'nach-erstellen'(page) { await S.ruhe(page); await page.waitForTimeout(500); return null; },
     fxpad: dock('fxpad'),
     tempo: dock('tempo'),
     'song-fach': dock('song'),
   };
 }
-const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie'];
+const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie', 'nach-erstellen'];
 
 async function messen(o) {
   const { chromium } = require('playwright');
