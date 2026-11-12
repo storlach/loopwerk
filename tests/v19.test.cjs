@@ -61,7 +61,9 @@ const { check, finish } = createChecker();
     const arr = await rect('.arranger');
     const shelf = await rect('.shelf');
     const insp = await rect('#side'); // Layout „reiter“: die rechte Leiste (Reiter) ersetzt Regal links und Inspektor
-    check('Desktop: Fachleiste genau unter dem Arranger, nicht unter den Seitenspalten', Math.abs(bar.x - arr.x) < 1 && Math.abs(bar.w - arr.w) < 1 && Math.abs(bar.y - arr.b) < 2 && shelf.b > bar.y && insp.b > bar.y, JSON.stringify({ bar, arr, shelf: shelf.b, insp: insp.b }));
+    // Umbau Scheibe 1b: Der Arranger läuft über die ganze Breite, die Karte (#side, mit dem Regal) schwebt innerhalb davon
+    check('Desktop: Fachleiste genau unter dem Arranger; Karte schwebt über seinem rechten Teil', Math.abs(bar.x - arr.x) < 1 && Math.abs(bar.w - arr.w) < 1 && Math.abs(bar.y - arr.b) < 2
+      && insp.x > arr.x + arr.w / 2 && insp.r <= arr.r && insp.y >= arr.y && insp.b <= arr.b && shelf.b <= insp.b + 1, JSON.stringify({ bar, arr, shelf: shelf.b, insp }));
     const tabs = await page.evaluate(() => [...document.querySelectorAll('#tabbar .tab')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.id));
     // Layout „reiter“: Mixer und FX-Pad liegen im Reiter Mixer der rechten Leiste, die Fachleiste behält Editor und Kürzel
     check('Desktop: Fachleiste zeigt Editor; Mixer und FX-Pad im Reiter Mixer', JSON.stringify(tabs) === '["editor-tab"]' && await page.evaluate(() => ['mixer-btn', 'fxpad-btn'].every((id) => document.getElementById(id).closest('#side-mixer'))), JSON.stringify(tabs));
@@ -71,7 +73,9 @@ const { check, finish } = createChecker();
     const mx = await rect('#mixer');
     const tab = await rect('#mixer-btn');
     // Layout „reiter“: der Knopf sitzt in der rechten Leiste; die Schublade liegt wie bisher unten über dem Arranger
-    check('Desktop: Mixer-Schublade sitzt unten im Arranger, ihr Knopf in der rechten Leiste', Math.abs(mx.b - bar.y) < 2 && tab.x >= arr.r, JSON.stringify({ mx, tab }));
+    // Umbau Scheibe 1b: der Knopf liegt in der Karte rechts; die Schublade endet links davon
+    const card = await rect('#side');
+    check('Desktop: Mixer-Schublade sitzt unten im Arranger, ihr Knopf in der Karte; die Schublade verdeckt die Karte nicht', Math.abs(mx.b - bar.y) < 2 && tab.x >= card.x && tab.r <= card.r && mx.r <= card.x + 1, JSON.stringify({ mx, tab, card }));
     check('Desktop: Schublade öffnet in der Mitte', Math.abs(mx.h / arr.h - 0.5) < 0.02, `${mx.h} / ${arr.h}`);
     // Einblender: erscheint mit einer Meldung, verschwindet von selbst
     await page.evaluate(() => window.loopwerk.ui.flash('Clip geteilt.'));

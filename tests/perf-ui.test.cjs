@@ -185,7 +185,7 @@ const lcd = (page) => page.evaluate(() => ['lcd-bar', 'lcd-beat', 'lcd-time'].ma
         return { dom: [...dom], missing, mb: +(px * 4 / 1e6).toFixed(1), left: sc.scrollLeft, names: [...sc.querySelectorAll('.lane[aria-label]')].reduce((n, l) => n + (l.getAttribute('aria-label').split(' – ')[1]?.split('; ').length ?? 0), 0) };
       });
       let v = await view();
-      check(`${dev}: deutlich weniger Clip-Knoten als Clips (448)`, v.dom.length < 448 * 0.7 /* Layout „reiter“: der Arranger ist ohne linke Spalte breiter, also mehr Clips im Bild */, String(v.dom.length));
+      check(`${dev}: deutlich weniger Clip-Knoten als Clips (448)`, v.dom.length < 448 * 0.8 /* Layout „reiter“: der Arranger läuft über die ganze Fensterbreite, also mehr Clips im Bild */, String(v.dom.length));
       check(`${dev}: jeder Clip im Bild ist gezeichnet`, v.missing.length === 0, JSON.stringify(v.missing.slice(0, 5)));
       check(`${dev}: Namen aller Clips bleiben für Screenreader erreichbar`, v.names === 448, String(v.names));
       const before = new Set(v.dom);
@@ -195,7 +195,7 @@ const lcd = (page) => page.evaluate(() => ['lcd-bar', 'lcd-beat', 'lcd-time'].ma
       await page.waitForTimeout(400);
       v = await view();
       const fresh = v.dom.filter((id) => !before.has(id)).length;
-      check(`${dev}: beim Scrollen wandern die Clip-Knoten mit`, fresh > 10 && v.missing.length === 0 && v.dom.length < 448 * 0.9 /* Layout „reiter“: breiterer Arranger, nach dem Scrollen bleiben alte und neue Knoten kurz nebeneinander */, JSON.stringify({ fresh, missing: v.missing.length, dom: v.dom.length, left: v.left }));
+      check(`${dev}: beim Scrollen wandern die Clip-Knoten mit`, fresh > 10 && v.missing.length === 0 && v.dom.length < 448 * 0.95 /* Layout „reiter“: volle Breite, nach dem Scrollen bleiben alte und neue Knoten kurz nebeneinander */, JSON.stringify({ fresh, missing: v.missing.length, dom: v.dom.length, left: v.left }));
       check(`${dev}: der gewählte Clip bleibt im DOM (auch außerhalb des Bildes)`, await page.evaluate((id) => !!document.querySelector(`.clip.selected[data-clip-id="${id}"]`), keepId));
       // revealClip holt einen fernen Clip ins Bild und zeichnet ihn
       const far = await page.evaluate(() => { const t = window.loopwerk.store.project.tracks[3]; return t.clips[t.clips.length - 1].id; });

@@ -1,13 +1,13 @@
 {
   "desktop-start": {
     "controls": 65,
-    "frames": 40,
+    "frames": 43,
     "sizes": 8,
     "minFont": 9.5
   },
   "desktop-clip": {
-    "controls": 75,
-    "frames": 48,
+    "controls": 73,
+    "frames": 49,
     "sizes": 8,
     "minFont": 9.5
   },

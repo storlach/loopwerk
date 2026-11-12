@@ -49,6 +49,9 @@ function measureTargets(selector) {
     // am Rand und ist erst beim Hinscrollen ganz erreichbar – nicht messen (die Ecken-Prüfung sieht nur das Element selbst)
     const cut = (x, y) => { const h = document.elementFromPoint(x, y); return !!h && !h.closest(SEL) && !!h.closest('.sheet, .ruler-row, .key-row, .chord-row'); };
     if ((b - t + 1 < 44 && (cut(mx, b + 1) || cut(mx, t - 1))) || (rr - l + 1 < 44 && (cut(l - 1, cy) || cut(rr + 1, cy)))) continue;
+    // Schwebende Karte (Layout „reiter“, rollt in sich): am oberen oder unteren Kartenrand endet die Trefferfläche an der Karte, erst beim Hinrollen ist sie ganz
+    const card = n.closest('#side');
+    if (card && b - t + 1 < 44) { const cr = card.getBoundingClientRect(); if (r.top - cr.top < 44 || cr.bottom - r.bottom < 44) continue; }
     const name = n.id ? `#${n.id}` : `${n.tagName.toLowerCase()}.${[...n.classList].slice(0, 2).join('.')}`;
     const label = `${name}${n.getAttribute('aria-label') ? ` „${n.getAttribute('aria-label')}“` : n.textContent.trim() ? ` „${n.textContent.trim().slice(0, 18)}“` : ''}`;
     const key = label.replace(/-t\d+\b/g, '-tN').replace(/\d+/g, '#');

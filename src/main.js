@@ -916,8 +916,8 @@ async function boot() {
       if (arranger.cancelScissors()) return;
       if (ui.selecting) { ui.setSelecting(false); return; }
       if (ui.dock) { ui.setDock(null); return; }
-      // Layout „reiter“: ist sonst nichts offen, was Esc schließt, klappt die Karte zu
-      if (side && !ui.armedSampleId && !ui.selectedClipId && !ui.selectedTrackId && !ui.multi?.length && !ui.benchSoundId && side.close()) return;
+      // Layout „reiter“: ist sonst nichts offen, was Esc schließt (Auswahl, Fach, aufgeklappte Felder, Tipp), klappt die Karte zu
+      if (side && !ui.armedSampleId && !ui.selectedClipId && !ui.selectedTrackId && !ui.multi?.length && !ui.benchSoundId && !document.querySelector('[aria-expanded="true"]:not(.side-tab), .tip:not([hidden])') && side.close()) return;
       ui.arm(null);
       ui.select(null);
       engine.stopPreview();

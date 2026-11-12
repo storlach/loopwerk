@@ -357,9 +357,9 @@ const { check, finish } = createChecker();
       const seps = [...document.querySelectorAll('.deck .deck-sep')].filter((n) => n.offsetParent).length;
       return { right, file, seps, datei, start: ['demo-btn', 'new-btn'].every((id) => document.getElementById(id).closest('#side-datei-act')) };
     });
-    // Layout „reiter“: Export und Projekt-Knöpfe liegen im Reiter Datei, im Deck bleibt nur der (unsichtbare) Menü-Knopf
+    // Layout „reiter“: Export und Projekt-Knöpfe liegen im Reiter Datei, im Deck bleibt nur der (unsichtbare) Menü-Knopf; ab Scheibe 1b folgen die Reiter-Knöpfe (side-tabs) rechts im Deck
     check('Desktop: Deck-Gruppen (Rückgängig | Datei-Knöpfe im Reiter Datei)',
-      groups.right === 'deck-edit,deck-sep,deck-file' && groups.file === 'project-menu-btn' && groups.seps === 4 && groups.datei && groups.start, JSON.stringify(groups));
+      groups.right === 'deck-edit,deck-sep,deck-file,side-tabs' && groups.file === 'project-menu-btn' && groups.seps === 4 && groups.datei && groups.start, JSON.stringify(groups));
     for (const w of [1100, 1200, 1280, 1440, 1536, 900]) {
       await page.setViewportSize({ width: w, height: 820 });
       await page.waitForTimeout(80);

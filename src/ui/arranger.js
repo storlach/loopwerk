@@ -1077,9 +1077,15 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   // Scrollposition und Breite merken: die Marke liest je Bild nichts aus dem Layout
   let viewLeft = root.scrollLeft;
   let viewW = root.clientWidth;
+  // Freier Rand rechts (padding-right, z. B. unter der schwebenden Karte im Layout „reiter“): dort liegt kein Song-Inhalt zum Bedienen,
+  // aber der Rollbereich ist um ihn größer – Rollbalken, „einpassen“ und Folgen rechnen mit der Breite davor
+  const rightReserve = () => parseFloat(getComputedStyle(root).paddingRight) || 0;
+  let reserve = 0;
   let phGripW = null; // Breite des Griffs (CSS, je Gerät): einmal gemessen
   new ResizeObserver(() => {
-    if (viewW === root.clientWidth && viewH === root.clientHeight) return;
+    const r = rightReserve();
+    if (viewW === root.clientWidth && viewH === root.clientHeight && r === reserve) return;
+    reserve = r;
     viewW = root.clientWidth;
     viewH = root.clientHeight;
     phGripW = null;
@@ -1106,7 +1112,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     wasPlaying = engine.playing;
     let chip = true;
     if (engine.playing) {
-      const out = x > viewLeft + viewW - 40 || x < viewLeft + headW();
+      const out = x > viewLeft + viewW - reserve - 40 || x < viewLeft + headW();
       if (out && !freeView) { root.scrollLeft = x - headW() - 24; viewLeft = appLeft = root.scrollLeft; }
       chip = !(freeView && out);
     }
@@ -1569,7 +1575,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     const found = store.findClip(clipId);
     if (!found) return;
     if (limitTop == null) {
-      const w = viewW - headW();
+      const w = viewW - reserve - headW();
       const s0 = found.clip.startBeat * ppb();
       const s1 = s0 + found.clip.lengthBeats * ppb();
       if (s0 < viewLeft || s1 > viewLeft + w) {
@@ -1697,7 +1703,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     }
     return {
       headW: headW(), ruler, pad, beats: totalBeats(store.project), base: baseTrackH(), fixed, n,
-      vx: root.clientWidth - headW(), cx: totalBeats(store.project) * ppb(),
+      vx: root.clientWidth - reserve - headW(), cx: totalBeats(store.project) * ppb(),
       vy: root.clientHeight - ruler - pad, cy: rowsEl.offsetHeight + addRow.offsetHeight,
     };
   }
