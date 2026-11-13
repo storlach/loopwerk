@@ -123,7 +123,9 @@ Gebaut: gemeinsames Bewegungs-System (`src/ui/motion.js`, Tokens in `:root`; Kar
 
 Damit ist alles aus Martins Briefing umgesetzt, außer Handy und Krachwerk (bewusst ausgenommen). Letzte volle Testkette auf `2ede579`: 77 grün, 1 wackelig (`contrast`), 0 rot. Funktionsvergleich: Loopwerk Handy, Krachwerk Desktop, Krachwerk Handy je 0 Abweichungen; am Loopwerk-Desktop kein echter Verlust.
 
-Noch von Martin zu bestätigen: der entfallene Link „Alle Spuren im Mixer vergleichen →“, der entfallene Spurname in der Mixer-Zeile, die Wörter „Feinschliff“ (Mastering) und „Gesamt“ (Summe/Master).
+Wörter (Martin, 2026-11-13): „Duplizieren ist nicht Kopieren, mit Summe war besser, lass Mastering, lass Limiter“ – diese vier bleiben wie im Bestand (zurückgenommen: Kopieren, Gesamt, Feinschliff, Begrenzer).
+
+Noch von Martin zu bestätigen: der entfallene Link „Alle Spuren im Mixer vergleichen →“ und der entfallene Spurname in der Mixer-Zeile.
 
 ## Technischer Rahmen
 
