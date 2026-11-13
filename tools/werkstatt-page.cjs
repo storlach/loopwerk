@@ -31,6 +31,8 @@ function werkstattPage(skeletonHead) {
     if (found !== n) throw new Error(`werkstatt-page: „${from}“ ${found}× statt ${n}× in index.html`);
     index = index.split(from).join(to);
   }
+  // Abläufe und Wörter (Umbau, Layout „reiter“) gibt es nur im Loopwerk-Desktop: ihre Vorladung steht nicht in der Krachwerk-Seite (bleibt bytegleich)
+  index = index.replace(/<link rel="modulepreload" href="src\/ui\/(?:flow|flow-style|flows|words|words-table)\.js">\n/g, '');
   // Seite liegt eine Ebene tiefer; <base> lässt src/ und assets/ wie gewohnt auflösen
   const head = skeletonHead
     .replace('<head>', '<head><base href="../">')
