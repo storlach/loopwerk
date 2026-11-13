@@ -25,6 +25,7 @@ export const ENTRIES = [
   // ----- Textstücke -----
   { art: 'teil', alt: 'Ausgewählten Clip im Sample-Editor öffnen', neu: 'Clip bearbeiten', wo: 'Hinweistext des Bearbeiten-Knopfs', warum: 'ein Wort fürs Öffnen' },
   { art: 'teil', alt: 'Clip im Editor öffnen', neu: 'Clip bearbeiten', wo: 'Hinweistext', warum: 'ein Wort fürs Öffnen' },
+  { art: 'teil', alt: 'Doppelklick öffnet den Editor', neu: 'Doppelklick bearbeitet den Clip', wo: 'Tipp „clip“', warum: 'ein Wort fürs Öffnen' },
   { art: 'teil', alt: 'Editor · ', neu: 'Bearbeiten · ', wo: 'Hinweistext/Name der Fachleiste', warum: 'ein Wort fürs Öffnen' },
   { art: 'teil', alt: 'Name des Patterns', neu: 'Name des Beats oder der Melodie', wo: 'aria-label des Namensfelds', warum: 'Pattern ist Fachwort' },
   { art: 'teil', alt: 'Pattern im Loop anhören', neu: 'Im Loop anhören', wo: 'Hinweistext Anhören', warum: 'Fachwort gestrichen' },

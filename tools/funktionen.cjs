@@ -65,6 +65,7 @@ function sammeln() {
   const CONTROLS = 'button, input:not([type=hidden]):not([type=file]), select, textarea, a[href], [role=button], [role=slider], [role=tab], [role=option], [role=menuitem], [role=switch], [role=checkbox], [draggable=true]:not(.clip), [contenteditable=true]';
   // innerster Treffer gewinnt
   const ORTE = [
+    ['#flow-card[data-flow="song"] #starter', 'Ablauf Neuer Song'], ['#flow-card[data-flow="sound"] #create-panel', 'Ablauf Neuer Sound'], ['#flow-card[data-flow="export"] #export', 'Ablauf Exportieren'], ['#flow-card', 'Ablauf (Karte in der Mitte)'],
     ['#clip-overlay .insp-sec.insp-clip', 'Clip-Editor (Overlay), Clip-Einstellungen'], ['#clip-overlay #editor', 'Clip-Editor (Overlay)'], ['#clip-overlay #pattern', 'Clip-Editor (Overlay, Beat/Melodie)'], ['#clip-overlay', 'Clip-Editor (Overlay)'],
     ['#arr-bar-tools', 'Kopfzeile über den Spuren'], ['.arr-bar .lcd-song', 'Kopfzeile über den Spuren'],
     ['.mix-slot', 'Mixer-Zeile neben der Spur'], ['#mix-bus', 'Mixer-Zeile Summe/Busse'], ['#mix-head', 'Kopf der Mixer-Spalte'], ['#side .mixcard-head', 'Karte Mixer (Kopf)'], ['#side .insp-track', 'Karte Spur (Effekte)'], ['#side .insp-for-mixer', 'Karte Summe'],
@@ -193,7 +194,8 @@ function zustaende(S) {
     await page.waitForTimeout(600);
     return null;
   };
-  return {
+  const Z0 = {};
+  const Z = {
     ...S.SZENE,
     'projekt-menue': feld('#project-menu-btn', 'Projekt-Menü'),
     'aufnahme-feld': feld('#rec-more', 'Aufnahme-Feld'),
@@ -216,7 +218,8 @@ function zustaende(S) {
       return null;
     },
     async 'erstellen-zu'(page) { // „+ Neu“ ist ein Umschalter: zurück auf Sounds, damit die folgenden Szenen stimmen
-      await page.evaluate(() => { const b = document.getElementById('shelf-new'); if (b?.getAttribute('aria-pressed') === 'true') b.click(); else document.getElementById('ltab-sounds')?.click(); });
+      await page.evaluate(() => {
+        window.loopwerk.flow?.close({ focus: false, now: true }); // Layout „reiter“: der Ablauf „Neuer Sound“ const b = document.getElementById('shelf-new'); if (b?.getAttribute('aria-pressed') === 'true') b.click(); else document.getElementById('ltab-sounds')?.click(); });
       return 'nur Aufräumen';
     },
     async spur(page) {
@@ -244,6 +247,23 @@ function zustaende(S) {
     'reiter-datei': reiter('datei'),
     'reiter-mixer': reiter('mixer'),
     'reiter-sounds': reiter('sounds'),
+    // Layout „reiter“: die drei Abläufe, jeder Schritt einmal (Schritt 2/3 mit dem Hauptknopf erreicht, wie ein Mensch es täte)
+    // Ablauf öffnen (Reiter, Einstiegsknopf) und mit dem Hauptknopf bis Schritt n (0-basiert) gehen; jede Szene steht für sich (nach der Szene drückt das Skript Esc)
+    async ablauf(page, tab, knopf, id, n) {
+      await S.ruhe(page);
+      await page.evaluate((t) => { window.loopwerk.flow?.close({ focus: false, now: true }); window.loopwerk.side?.show(t, { save: false }); }, tab);
+      if (!(await klick(page, knopf))) return `${knopf}: hier nicht zu sehen`;
+      await page.waitForTimeout(900);
+      for (let i = 0; i < 4 && (await page.evaluate(() => window.loopwerk.flow.step)) < n; i++) { await klick(page, '#flow-main'); await page.waitForTimeout(900); }
+      return (await page.evaluate(() => `${window.loopwerk.flow.id}:${window.loopwerk.flow.step}`)) === `${id}:${n}` ? null : `Schritt ${n + 1} von ${id} nicht erreicht`;
+    },
+    'neuer-song-1': (page) => Z0.ablauf(page, 'datei', '#new-song-btn', 'song', 0),
+    'neuer-song-2': (page) => Z0.ablauf(page, 'datei', '#new-song-btn', 'song', 1),
+    'neuer-sound': (page) => Z0.ablauf(page, 'sounds', '#shelf-new', 'sound', 0),
+    'export-1': (page) => Z0.ablauf(page, 'datei', '#export-btn', 'export', 0),
+    'export-2': (page) => Z0.ablauf(page, 'datei', '#export-btn', 'export', 1),
+    'export-3': (page) => Z0.ablauf(page, 'datei', '#export-btn', 'export', 2),
+    async 'ablauf-zu'(page) { await page.evaluate(() => window.loopwerk.flow?.close({ focus: false, now: true })); return 'nur Aufräumen'; },
     'spur-menue': feld('.track-head .tbtn-menu', 'Spur-Menü'),
     // Menüs schließen, bevor ein Editor aufgeht (die Karte in der Mitte läge sonst unter dem offenen Menü)
     async beat(page, ed, dev) {
@@ -257,8 +277,9 @@ function zustaende(S) {
     tempo: dock('tempo'),
     'song-fach': dock('song'),
   };
+  return Object.assign(Z0, Z);
 }
-const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'summen-karte', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie', 'nach-erstellen'];
+const ABLAUF = ['start', 'projekt-menue', 'aufnahme-feld', 'kuerzel', 'regal', 'erstellen', 'erstellen-zu', 'song', 'neuer-song-1', 'neuer-song-2', 'neuer-sound', 'export-1', 'export-2', 'export-3', 'ablauf-zu', 'song', 'reiter-datei', 'reiter-mixer', 'reiter-sounds', 'clip', 'spur', 'summen-karte', 'spur-menue', 'clip-editor', 'werkbank', 'mixer', 'mastering', 'export', 'fxpad', 'tempo', 'song-fach', 'beat', 'melodie', 'nach-erstellen'];
 
 async function messen(o) {
   const { chromium } = require('playwright');
