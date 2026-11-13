@@ -53,6 +53,7 @@ export const ENTRIES = [
   { art: 'regex', alt: '^(−?[\\d,.]+) LUFS · Spitze', neu: 'Lautheit $1 LUFS · Spitze', wo: 'Anzeige unter dem Feinschliff-Stil', warum: 'Zahl mit Einheit bleibt, Etikett davor' },
   { art: 'regex', alt: 'Ziel (−?\\d+) LUFS', neu: 'Ziel-Lautheit $1 LUFS', wo: 'Anzeige und Hinweistexte der Stile', warum: 'Etikett vor dem Messwert' },
   { art: 'teil', alt: ' (Stems)', neu: '', wo: 'Export, Einzelspuren', warum: '„Stems“ ist Fachwort; „Einzelspuren“ sagt es schon' },
+  { art: 'regex', alt: '^Suchen … \\(.*\\)$', neu: 'Suchen …', wo: 'Suchfeld im Reiter Sounds', warum: 'die Zahl in Klammern wurde abgeschnitten (neben „+ Neu“ ist zu wenig Platz); die Zahlen stehen an den Gruppen' },
   { art: 'teil', alt: 'Fach schließen', neu: 'Karte schließen', wo: 'Tastenkürzel-Liste (Esc)', warum: 'es gibt hier Karten, keine Fächer' },
 ];
 

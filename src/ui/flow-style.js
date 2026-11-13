@@ -60,6 +60,8 @@ const CSS = `
   #app[data-layout="reiter"] .flow-body #export .export-body { padding: 0; display: grid; gap: 14px; overflow: visible; }
   #app[data-layout="reiter"] .flow-body #export .ex-set { width: auto; padding: 12px 16px 14px; gap: 8px; }
   #app[data-layout="reiter"] .flow-body #export .ex-set label { min-height: 36px; }
+  /* Schritt „Format und Klang“: die Überschrift „Feinschliff“ steht schon am Schalter, nicht doppelt */
+  #app[data-layout="reiter"] .flow-body #export #ex-master-set > legend { display: none; }
   #app[data-layout="reiter"] .flow-body #export .ex-go { min-width: 0; }
   #app[data-layout="reiter"] .flow-foot #ex-go { height: 44px; padding: 0 22px; justify-self: auto; }
   #app[data-layout="reiter"] .flow-card[data-flow="export"] .flow-foot { gap: 12px; }
