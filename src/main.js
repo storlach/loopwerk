@@ -17,6 +17,7 @@ import { mountLayout } from './ui/layout.js';
 import { mountSide } from './ui/side.js';
 import { mountOverlay } from './ui/overlay.js';
 import { mountFlow } from './ui/flow.js';
+import { W, mountWords } from './ui/words.js';
 import { mountFlows } from './ui/flows.js';
 import { mountMixcol } from './ui/mixcol.js';
 import { mountInspector } from './ui/inspector.js';
@@ -171,7 +172,7 @@ function createUi() {
     // Kurze Rückmeldung nach einer Aktion
     flash(text) {
       clearTimeout(flashTimer);
-      ui.flashText = text;
+      ui.flashText = W(text);
       ui.emit();
       flashTimer = setTimeout(() => { ui.flashText = null; ui.emit(); }, 3500);
     },
@@ -891,6 +892,7 @@ async function boot() {
     try { on = localStorage.getItem(lsKey('loopwerk.harmony')) === '1'; } catch { /* Standard */ }
     if (on) set(true);
   }
+  mountWords({ active: reiter }); // Layout „reiter“, Desktop: Wörter der Tabelle (words-table.js); sonst bleiben die alten
   const tips = EDITION.surfaces.tips === false ? null : mountTips({ ui, store });
   // Block „Werkstatt“ (Krachwerk 3a): Sichern und Zurückholen am Ende der Song-Werkbank bzw. im Song-Fach
   const backup = EDITION.storagePanel ? mountStoragePanel({

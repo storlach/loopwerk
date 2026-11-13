@@ -7,6 +7,7 @@ import { fileExt } from '../wav.js';
 import { masteringOf } from '../engine.js';
 import { mountMasteringControls } from './mastering.js';
 import { narrow } from './place.js';
+import { W } from './words.js';
 
 // flow: Schritt-Ablauf (Layout „reiter“, Desktop) – der Knopf öffnet ihn statt des Fachs; am Handy bleibt das Fach
 export function mountExport({ root, store, library, ui, engine, tempo, mastering, flow = null }) {
@@ -56,7 +57,7 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     if (!hasLoop && value('ex-range') === 'loop') $('ex-range-song').checked = true;
     const [s0, s1] = exportRange(p, value('ex-range'));
     const n = s1 > s0 ? stemTracks(p, s0, s1).length : 0;
-    $('ex-stems-label').textContent = `Einzelspuren (Stems) – ${n === 1 ? '1 Spur' : `${n} Spuren`} als ZIP`;
+    $('ex-stems-label').textContent = W(`Einzelspuren (Stems) – ${n === 1 ? '1 Spur' : `${n} Spuren`} als ZIP`);
   }
   root.querySelectorAll('input[name="ex-range"]').forEach((r) => r.addEventListener('change', describe));
 
@@ -75,7 +76,7 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
       signal: abort.signal,
       onProgress: (p, info) => {
         bar.value = p;
-        status.textContent = info.phase === 'analyze' ? `Mastering wird vorbereitet … ${Math.round(p * 100)} %`
+        status.textContent = info.phase === 'analyze' ? W(`Mastering wird vorbereitet … ${Math.round(p * 100)} %`)
           : info.phase === 'done' ? 'ZIP wird geschrieben …'
           : `Spur ${info.index + 1} von ${info.count} (${info.name}) … ${Math.round(p * 100)} %`;
       },
@@ -114,7 +115,7 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
       const saved = await saveFile(filename, res.blob);
       const mb = (res.blob.size / 1048576).toFixed(1).replace('.', ',');
       const loud = res.analysis ? `, ${res.analysis.outLufs.toFixed(1).replace('.', ',').replace('-', '−')} LUFS` : '';
-      status.textContent = `Fertig: ${saved.filename} (${mb} MB, ${res.duration.toFixed(1).replace('.', ',')} s, Spitze ${formatDb(res.peak)}${loud})${saved.zipped ? ' – als ZIP, weil claude.ai Audiodateien nur verpackt speichern kann.' : '.'}`;
+      status.textContent = W(`Fertig: ${saved.filename} (${mb} MB, ${res.duration.toFixed(1).replace('.', ',')} s, Spitze ${formatDb(res.peak)}${loud})${saved.zipped ? ' – als ZIP, weil claude.ai Audiodateien nur verpackt speichern kann.' : '.'}`);
       ui.flash(`Exportiert: ${saved.filename}`);
     } catch (err) {
       if (err?.code === 'declined') status.textContent = 'Speichern abgebrochen.';

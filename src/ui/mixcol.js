@@ -5,6 +5,7 @@
 // Die Karte folgt der Auswahl: eine Spur gewählt = Spur-Karte, nichts gewählt = Summe, ein Clip gewählt = zu. Schließen: ✕, Esc, anderer Reiter.
 
 import { settle, token } from './motion.js';
+import { W } from './words.js';
 
 const el = (tag, cls, id) => { const n = document.createElement(tag); if (cls) n.className = cls; if (id) n.id = id; return n; };
 
@@ -48,8 +49,8 @@ export function mountMixcol({ ui, store, mixer, side }) {
     app.dataset.mixkind = kind;
     shownTrack = t?.id ?? null;
     if (!was || swap) side.refresh({ fade: swap });
-    title.textContent = kind === 'spur' ? t?.name ?? '' : 'Summe';
-    sideEl.setAttribute('aria-label', kind === 'spur' ? `Spur ${t?.name ?? ''}` : 'Summe');
+    title.textContent = kind === 'spur' ? t?.name ?? '' : W('Summe');
+    sideEl.setAttribute('aria-label', kind === 'spur' ? `Spur ${t?.name ?? ''}` : W('Summe'));
   }
   function shut({ focus = true } = {}) {
     if (!kind) return false;

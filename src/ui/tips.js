@@ -5,6 +5,7 @@
 import { el } from '../util.js';
 import { narrow, touch } from './place.js';
 import { lsKey } from '../edition.js';
+import { W } from './words.js';
 
 const KEY = lsKey('loopwerk.tips');
 
@@ -17,6 +18,7 @@ const TIPS = [
   { id: 'filter', sel: '#shelf-filter-btn', text: 'Hinter dem Regler-Knopf filterst du nach Länge (1 Takt, 2 Takte … Shot) und ordnest nach Kategorie oder Genre. Der Stern zeigt nur deine Favoriten, das × vorn setzt alles zurück.' },
   { id: 'harmony', sel: '#harm-toggle', text: '„Harmonie“ blendet die Zeilen für Tonart und Akkorde ein – dort stellst du ab einem Takt eine andere Tonart oder Akkorde ein. Ein Leuchtpunkt zeigt, dass es Wechsel gibt.' },
   { id: 'create', sel: '#ltab-create', only: 'wide', text: 'Unter „Erstellen“ baust du Beats und Melodien, singst ein, nimmst auf oder importierst Dateien.' },
+  { id: 'create-neu', sel: '.shelf-find #shelf-new', only: 'wide', text: 'Mit „+ Neu“ baust du Beats und Melodien, singst ein, nimmst auf oder holst Dateien – Schritt für Schritt.' },
   { id: 'ruler', sel: '.ruler', text: 'Das Lineal: Klick setzt die Abspielmarke, Ziehen markiert einen Bereich zum Wiederholen (Loop).', touchText: 'Das Lineal: Antippen setzt die Abspielmarke, Ziehen markiert einen Bereich zum Wiederholen (Loop). Zwei Finger zoomen.' },
   { id: 'clip', sel: '.clip.selected', text: 'Ziehen verschiebt den Clip, die Ränder kürzen oder verlängern ihn. Die Punkte oben regeln Lautstärke und Ein-/Ausblenden. Doppelklick öffnet den Editor.', touchText: 'Den ausgewählten Clip ziehen verschiebt ihn, unten an den Rändern kürzt oder verlängert er sich. Die Punkte oben regeln Lautstärke und Ein-/Ausblenden.' },
   { id: 'select-touch', sel: '#select-btn, .clip.selected', only: 'touch', text: 'Lange auf einen Clip drücken wählt mehrere aus – danach weitere antippen. Lange auf eine freie Stelle drücken und ziehen zieht einen Rahmen auf.' },
@@ -110,7 +112,7 @@ export function mountTips({ ui, store }) {
       const target = [...document.querySelectorAll(tip.sel)].find((n) => visible(n) && (!modal || modal.contains(n)));
       if (!target) continue;
       current = { tip, target };
-      text.textContent = (touch.matches && tip.touchText) || tip.text;
+      text.textContent = W((touch.matches && tip.touchText) || tip.text);
       const left = TIPS.filter((t) => !state.seen.includes(t.id) && fits(t)).length;
       step.textContent = left > 1 ? `Tipp · noch ${left - 1} weitere` : 'Tipp';
       target.classList.add('tip-target');

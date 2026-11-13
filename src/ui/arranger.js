@@ -12,6 +12,7 @@ import { mountKeyRow } from './key-row.js';
 import { mountChordRow } from './chord-row.js';
 import { mountAutoLanes } from './auto-lane.js';
 import { recipeKey } from '../recipe.js';
+import { W } from './words.js';
 
 // Notfarbe, falls ein Token (noch) nicht aufgelöst ist
 const FALLBACK_INK = '#888';
@@ -444,8 +445,8 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
     addBtn.hidden = tracks.length >= MAX_TRACKS;
     const sumOpen = autoLanes.isOpen('master');
     sumBtn.setAttribute('aria-expanded', String(sumOpen));
-    sumBtn.setAttribute('aria-label', sumOpen ? 'Summen-Kurve schließen' : 'Summen-Kurve zeigen');
-    sumBtn.title = sumOpen ? 'Summen-Kurve schließen' : 'Summen-Kurve zeigen (Taste A ohne Auswahl)';
+    sumBtn.setAttribute('aria-label', W(sumOpen ? 'Summen-Kurve schließen' : 'Summen-Kurve zeigen'));
+    sumBtn.title = W(sumOpen ? 'Summen-Kurve schließen' : 'Summen-Kurve zeigen (Taste A ohne Auswahl)');
   }
 
   // ---------- Spur-Menü und Spuren ziehen ----------
@@ -531,7 +532,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
       return b;
     };
     menu.replaceChildren(
-      item('Duplizieren', () => { closeMenu(); store.duplicateTrack(trackId); }, tracks.length >= MAX_TRACKS),
+      item(W('Duplizieren'), () => { closeMenu(); store.duplicateTrack(trackId); }, tracks.length >= MAX_TRACKS),
       item('Nach oben', () => { closeMenu(); store.moveTrack(trackId, i - 1); }, i === 0),
       item('Nach unten', () => { closeMenu(); store.moveTrack(trackId, i + 1); }, i === tracks.length - 1),
       item('Umbenennen', () => { closeMenu(); startRename(trackId); }),
@@ -559,7 +560,7 @@ export function mountArranger({ root, store, engine, library, ui, grainWave = fa
   // Schalter im Menü: an = roter Punkt davor (aria-checked)
   function armItem(trackId) {
     const on = !!ui.recTracks?.includes(trackId);
-    const b = el('button', 'track-menu-item track-menu-arm', 'Für Aufnahme scharf');
+    const b = el('button', 'track-menu-item track-menu-arm', W('Für Aufnahme scharf'));
     b.type = 'button';
     b.id = 'tm-rec-arm';
     b.setAttribute('role', 'menuitemcheckbox');

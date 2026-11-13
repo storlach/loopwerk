@@ -13,6 +13,7 @@ import { narrow } from './place.js';
 import { makeKnob, relativeDrag } from './knob.js';
 import { autoLock, lockedValue } from './auto-lane.js';
 import { AUTO_PARAMS, busUsed, sendKey } from '../automation.js';
+import { W } from './words.js';
 
 const MASTER = '__master';
 // Rückkanäle (Send-Busse) haben im Mixer eigene Kennungen neben den Spuren
@@ -56,13 +57,13 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
 
   const fxOf = (id) => (id === MASTER ? withFx(masterOf(store.project).fx) : withFx(store.track(id)?.fx));
   const setFx = (id, fxId, patch, key) => (id === MASTER ? store.setMasterFx(fxId, patch, key) : store.setTrackFx(id, fxId, patch, key));
-  const labelOf = (id) => (id === MASTER ? 'Summe' : nameOf(id));
+  const labelOf = (id) => (id === MASTER ? W('Summe') : nameOf(id));
   // Kurzinfo eines Rückkanals: seine ein, zwei wichtigsten Werte
   const busSummary = (bk) => {
     const cfg = busOf(store.project, bk);
     return busDef(bk).params.slice(0, 2).map((k) => { const p = busParamDef(bk, k); return p.options ? p.options.find((o) => o.id === cfg[k])?.label ?? cfg[k] : formatParam(p, cfg[k]); }).join(' · ');
   };
-  const nameOf = (id) => (id === MASTER ? 'Master' : busKey(id) ? busDef(busKey(id))?.label ?? '' : store.track(id)?.name ?? '');
+  const nameOf = (id) => (id === MASTER ? W('Master') : busKey(id) ? W(busDef(busKey(id))?.label ?? '') : store.track(id)?.name ?? '');
   // Besitzer der Kurven eines Kanals (Master: Summen-Kurven, Ziel 'master')
   const ownerOf = (id) => (id === MASTER ? masterOf(store.project) : store.track(id));
 
@@ -97,7 +98,7 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
       pan.step = '0.05';
       pan.className = 'strip-pan';
       pan.id = `pan-${id}`;
-      pan.title = 'Panorama (Doppelklick = Mitte)';
+      pan.title = W('Panorama (Doppelklick = Mitte)');
       pan.addEventListener('input', () => store.setTrack(id, { pan: Number(pan.value) }, 'pan-' + id));
       pan.addEventListener('dblclick', () => store.setTrack(id, { pan: 0 }));
     }
@@ -112,12 +113,12 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
       for (const b of BUSES) {
         const input = document.createElement('input');
         Object.assign(input, { type: 'range', min: '0', max: '1', step: '0.01', id: `send-${id}-${b.id}`, className: 'strip-send-in' });
-        input.title = `Anteil zum ${b.label} (Doppelklick = aus)`;
+        input.title = W(`Anteil zum ${b.label} (Doppelklick = aus)`);
         input.addEventListener('input', () => store.setSend(id, b.id, Number(input.value), `send-${id}-${b.id}`));
         input.addEventListener('dblclick', () => { input.value = '0'; store.setSend(id, b.id, 0); });
         const sk = makeKnob(input, { wrapClass: 'strip-send-wrap' });
         const cell = el('div', 'strip-send');
-        cell.append(sk.wrap, el('span', 'strip-send-label', `→${SEND_SHORT[b.id]}`));
+        cell.append(sk.wrap, el('span', 'strip-send-label', W(`→${SEND_SHORT[b.id]}`)));
         sendsEl.append(cell);
         // Send mit Kurve: Regler folgt ihr, ein Klick öffnet die Kurvenzeile
         const lock = autoLock({ ui, key: sendKey(b.id), wrap: sk.wrap, input, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } });
@@ -223,11 +224,11 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
         if (s.locked) showPan(s, t);
         else if (document.activeElement !== s.pan) s.pan.value = String(t.pan || 0);
         s.knob.update();
-        s.pan.setAttribute('aria-label', `Panorama ${t.name}`);
+        s.pan.setAttribute('aria-label', W(`Panorama ${t.name}`));
         s.mute.setAttribute('aria-pressed', String(t.mute));
         s.solo.setAttribute('aria-pressed', String(t.solo));
         for (const sd of s.sends) {
-          sd.input.setAttribute('aria-label', `Anteil zum ${sd.b.label} ${t.name}`);
+          sd.input.setAttribute('aria-label', W(`Anteil zum ${sd.b.label} ${t.name}`));
           sd.locked = sd.lock.update(t);
           if (sd.locked) { showSend(sd, t); continue; }
           const v = sendOf(t, sd.b.id);
@@ -476,7 +477,7 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
     if (id !== MASTER) {
       const card = el('section', 'fx-card fx-bus-card');
       const head = el('div', 'fx-card-head');
-      head.append(el('span', 'fx-card-title', 'Busse'));
+      head.append(el('span', 'fx-card-title', W('Busse')));
       card.append(head);
       for (const b of BUSES) {
         const row = el('label', 'fx-param');
@@ -485,7 +486,7 @@ export function mountMixer({ root, store, engine, ui, arranger = null }) {
         input.addEventListener('input', () => store.setSend(id, b.id, Number(input.value), `send-${id}-${b.id}`));
         input.addEventListener('dblclick', () => { input.value = '0'; store.setSend(id, b.id, 0); });
         const out = el('span', 'fx-param-value');
-        row.append(el('span', 'fx-param-label', `→ ${b.label}`), input, out);
+        row.append(el('span', 'fx-param-label', W(`→ ${b.label}`)), input, out);
         const box = el('div', 'fx-param-box');
         box.append(row);
         const lock = autoLock({ ui, key: sendKey(b.id), wrap: box, input, getTrackId: () => id, onOpen: () => { if (narrow.matches) ui.setDock(null); } });

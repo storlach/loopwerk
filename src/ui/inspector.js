@@ -23,6 +23,7 @@ import { AUTO_PARAMS, busUsed, isAutomated, sendKey } from '../automation.js';
 import { lsKey } from '../edition.js';
 import { mountRecArmRows } from './rec-arm.js';
 import { pressHold } from './touch.js';
+import { W } from './words.js';
 
 // Laufzeit-Stufen für − und +
 const RUN_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
@@ -205,7 +206,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   }
   const vol = slider('Spur-Lautstärke', 'insp-vol', 0, 1, 0.01);
   const volLabel = vol.row.firstChild;
-  const pan = slider('Panorama', 'insp-pan', -1, 1, 0.05);
+  const pan = slider(W('Panorama'), 'insp-pan', -1, 1, 0.05);
   // Panorama mit Kurve: gedimmt, folgt der Kurve; Klick öffnet die Kurvenzeile
   const panBox = el('div', 'insp-pan-box');
   panBox.append(pan.row);
@@ -321,10 +322,10 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
 
   // Busse der Spur (hinter Fader und Panorama abgegriffen): je ein Anteil zum Hall- und Echo-Bus, 0 = aus
   const busBlock = el('div', 'insp-buses');
-  busBlock.append(el('span', 'insp-kind', 'Busse'));
+  busBlock.append(el('span', 'insp-kind', W('Busse')));
   const sendRows = BUSES.map((b) => {
-    const r = slider(`→ ${b.label}`, `insp-send-${b.id}`, 0, 1, 0.01);
-    r.input.title = `Anteil zum ${b.label} (Doppelklick = aus)`;
+    const r = slider(W(`→ ${b.label}`), `insp-send-${b.id}`, 0, 1, 0.01);
+    r.input.title = W(`Anteil zum ${b.label} (Doppelklick = aus)`);
     r.input.addEventListener('input', () => { if (trackId && trackId !== MASTER) store.setSend(trackId, b.id, Number(r.input.value), `send-${trackId}-${b.id}`); });
     // Doppelklick = aus; der Regler hat dann den Fokus, also den Wert selbst setzen
     r.input.addEventListener('dblclick', () => { if (trackId && trackId !== MASTER) { r.input.value = '0'; store.setSend(trackId, b.id, 0); } });
@@ -407,7 +408,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const songTools = el('div', 'insp-song-tools'); // Klick (Metronom) in „calm“: layout.js bringt den Knopf hierher
   songTools.id = 'insp-song-tools';
   // Master-Lautstärke (nur Layout „reiter“): eigene Zeile im Song-Abschnitt, damit sie neben einer gewählten Spur steht
-  const mvol = reiter ? slider('Master-Lautstärke', 'insp-master-vol', 0, 1, 0.01) : null;
+  const mvol = reiter ? slider(W('Master-Lautstärke'), 'insp-master-vol', 0, 1, 0.01) : null;
   mvol?.input.addEventListener('input', () => store.setMaster({ volume: Number(mvol.input.value) }, 'master-vol'));
   const lenRow = el('label', 'insp-row');
   const lenOut = el('output');
@@ -416,7 +417,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   lenIn.addEventListener('change', () => store.setLength(Number(lenIn.value)));
   lenIn.addEventListener('input', () => { lenOut.textContent = `${lenIn.value} Takte`; });
   lenRow.append(el('span', null, 'Länge'), lenOut, lenIn);
-  const masterSub = el('p', 'insp-sub', 'Master');
+  const masterSub = el('p', 'insp-sub', W('Master'));
   // Song-Leiste in Blöcken nach dem Signalweg: Song · Master (Lautstärke, Effekte) · Busse · Mastering
   const grp = (cls) => el('div', `insp-grp ${cls}`);
   const songGrp = grp('insp-grp-song');
@@ -429,7 +430,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
   const busGrp = grp('insp-grp-buses');
   busGrp.id = 'insp-buses';
   busGrp.classList.add('insp-for-mixer');
-  busGrp.append(el('p', 'insp-sub', 'Busse'));
+  busGrp.append(el('p', 'insp-sub', W('Busse')));
   const busCtl = [];
   const busBoxes = new Map();
   for (const b of BUSES) {
@@ -595,7 +596,7 @@ export function mountInspector({ root, store, ui, library, tools, engine, master
       trackId = null;
     } else {
       trackId = MASTER;
-      volLabel.textContent = 'Master-Lautstärke';
+      volLabel.textContent = W('Master-Lautstärke');
       // Master-Lautstärke und Master-Effekte unter „Master“ (Layout „reiter“: die Lautstärke hat eine eigene Zeile im Song-Abschnitt)
       const m = masterOf(store.project);
       if (reiter) { if (fxl.parentElement !== masterGrp) masterGrp.append(fxl, fxReset.node); }

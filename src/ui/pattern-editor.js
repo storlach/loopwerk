@@ -19,6 +19,7 @@ import { clamp, el, trackPointer } from '../util.js';
 import { place, touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
 import { patternScale, scaleKindOf, SCALE_ORDER, CHORD_MODES, chordPitches } from '../scale.js';
+import { W } from './words.js';
 
 // Linke Spalte der Piano-Roll: am Handy die (senkrechte, spielbare) Klaviatur, am Desktop nur Notennamen –
 // dort spielt man auf der waagerechten Klaviatur darunter
@@ -1459,7 +1460,7 @@ export function mountPatternEditor({ root, store, engine, library, ui, kits = nu
     if (!p || root.hidden) return;
     const drums = p.type === 'drums';
     root.dataset.type = p.type;
-    $('pat-title').textContent = drums ? 'Beat-Editor' : 'Melodie-Editor';
+    $('pat-title').textContent = W(drums ? 'Beat-Editor' : 'Melodie-Editor');
     $('pat-view').hidden = !drums;
     for (const b of viewBtns) b.setAttribute('aria-pressed', String(b.dataset.view === view));
     liveBtn.setAttribute('aria-pressed', String(looper.running));

@@ -4,6 +4,7 @@
 
 import { el } from '../util.js';
 import { loadDevice, resolveInputs, INPUT_LABELS } from '../rec-settings.js';
+import { W } from './words.js';
 
 const CHOICES = [['', 'Auto'], ['L', 'Links'], ['R', 'Rechts'], ['LR', 'Stereo']];
 
@@ -53,9 +54,9 @@ export function mountRecArmRows({ store, ui, recArm, recorder }) {
   const arm = el('button', 'key arm-btn');
   arm.type = 'button';
   arm.id = 'insp-rec-arm';
-  arm.append(el('span', 'arm-dot'), el('span', null, 'Scharf'));
+  arm.append(el('span', 'arm-dot'), el('span', null, W('Scharf')));
   arm.title = 'Die nächste Aufnahme (●) landet auch auf dieser Spur (Umschalt+R)';
-  arm.setAttribute('aria-label', 'Für Aufnahme scharf');
+  arm.setAttribute('aria-label', W('Für Aufnahme scharf'));
   armRow.append(el('span', null, 'Aufnahme'), arm);
   const inRow = el('div', 'insp-row insp-recin');
   inRow.id = 'insp-recin-row';
@@ -103,7 +104,7 @@ export function mountArmedList({ store, ui, recArm, recorder }) {
       }
       r.name.textContent = t.name;
       r.name.title = t.name;
-      r.off.title = `„${t.name}“ nicht mehr scharf`;
+      r.off.title = W(`„${t.name}“ nicht mehr scharf`);
       r.off.setAttribute('aria-label', r.off.title);
       r.picker.update(t);
       if (box.children[i] !== r.row) box.insertBefore(r.row, box.children[i] || null);

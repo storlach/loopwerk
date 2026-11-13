@@ -7,6 +7,7 @@ import { PAD_MODES, ECHO_STEPS, STUTTER_STEPS, stepAt, padFilter, padBits, padHo
 import { PadRecorder, padRecordBlocked } from '../fxpad-record.js';
 import { AUTO_PARAMS } from '../automation.js';
 import { clamp, el } from '../util.js';
+import { W } from './words.js';
 
 const hz = (f) => (f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 0 : 1).replace('.', ',')} kHz` : `${Math.round(f)} Hz`);
 const pct = (v) => `${Math.round(v * 100)} %`;
@@ -120,7 +121,7 @@ export function mountFxPad({ root, store, engine, ui }) {
     ui.autoLane?.open(t.target, res.key);
     const label = AUTO_PARAMS[res.key].label;
     const note = res.other ? ` Die ${res.type === 'highpass' ? 'Tiefpass' : 'Hochpass'}-Seite wirkt nur live.` : tape ? ' Der Bandstopp wirkt nur live.' : '';
-    ui.flash?.(`${t.target === 'master' ? 'Summe: ' : ''}${label}-Kurve aufgenommen.${note}`);
+    ui.flash?.(`${t.target === 'master' ? W('Summe') + ': ' : ''}${label}-Kurve aufgenommen.${note}`);
   }
 
   function setMode(id) {
@@ -143,7 +144,7 @@ export function mountFxPad({ root, store, engine, ui }) {
   }
 
   function targets() {
-    const opts = [['master', 'Summe'], ...store.project.tracks.map((t) => [t.id, t.name])];
+    const opts = [['master', W('Summe')], ...store.project.tracks.map((t) => [t.id, t.name])];
     const key = JSON.stringify(opts);
     if (sel.dataset.key !== key) {
       sel.dataset.key = key;

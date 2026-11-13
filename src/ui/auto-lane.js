@@ -12,6 +12,7 @@ import { masterOf } from '../engine.js';
 import { clamp, el, trackPointer } from '../util.js';
 import { touch } from './place.js';
 import { holdArea, pressHold } from './touch.js';
+import { W } from './words.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, cls) => { const n = document.createElementNS(SVGNS, tag); if (cls) n.setAttribute('class', cls); return n; };
@@ -76,7 +77,7 @@ export function applyTemplate({ store, ui, engine, id, name }) {
   if (!res) { ui.flash?.('Hier ist kein Platz für diesen Verlauf.'); return false; }
   ui.autoLane?.open(id, res.key);
   const n = Math.round(((res.toBeat - res.fromBeat) / store.project.beatsPerBar) * 10) / 10;
-  ui.flash?.(`${id === 'master' ? 'Summe: ' : ''}${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
+  ui.flash?.(`${id === 'master' ? W('Summe') + ': ' : ''}${AUTO_TEMPLATES[name].label} über ${String(n).replace('.', ',')} ${n === 1 ? 'Takt' : 'Takte'}.`);
   return true;
 }
 
@@ -153,7 +154,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     if (target === 'master') row.classList.add('auto-master');
     const head = el('div', 'auto-head');
     // Summe: Beschriftung vor dem Chip (am Handy nur als Leuchtstrich, die Beschriftung trägt aria-label)
-    if (target === 'master') head.append(el('span', 'auto-sum', 'Summe'));
+    if (target === 'master') head.append(el('span', 'auto-sum', W('Summe')));
     const chip = el('button', 'auto-chip');
     chip.type = 'button';
     chip.setAttribute('aria-haspopup', 'menu');
@@ -213,7 +214,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     const full = autoRowHeight(view.rowH());
     L.h = full - 1; // ohne die Trennlinie unten
     const pts = pointsOf(L);
-    const name = store.track(L.target)?.name ?? 'Summe';
+    const name = store.track(L.target)?.name ?? W('Summe');
     const lit = autoKeys(L.target).filter((k) => laneOf(ownerOf(L.target), k).length).join();
     const active = autoActive(ownerOf(L.target), L.key);
     const sig = `${L.key}|${Math.round(total * ppb)}|${L.h}|${total}|${ppb}|${JSON.stringify(pts)}|${name}|${lit}|${active}`;
@@ -225,7 +226,7 @@ export function mountAutoLanes({ rowsEl, store, ui, engine, view }) {
     L.svg.setAttribute('height', String(L.h));
     L.chipLabel.textContent = spec.label;
     L.chip.title = 'Parameter der Kurve wählen';
-    L.chip.setAttribute('aria-label', `${L.target === 'master' ? 'Summen-Kurve' : 'Kurve'}: ${spec.label} – Parameter wählen`);
+    L.chip.setAttribute('aria-label', W(`${L.target === 'master' ? 'Summen-Kurve' : 'Kurve'}: ${spec.label} – Parameter wählen`));
     L.chip.classList.toggle('lit', lit.length > 0);
     L.row.dataset.key = L.key;
     // Effekt aus: die Kurve wirkt nicht und ist gestrichelt (der erste Punkt schaltet den Effekt ein)
