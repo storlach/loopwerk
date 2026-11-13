@@ -219,7 +219,8 @@ function zustaende(S) {
     },
     async 'erstellen-zu'(page) { // „+ Neu“ ist ein Umschalter: zurück auf Sounds, damit die folgenden Szenen stimmen
       await page.evaluate(() => {
-        window.loopwerk.flow?.close({ focus: false, now: true }); // Layout „reiter“: der Ablauf „Neuer Sound“ const b = document.getElementById('shelf-new'); if (b?.getAttribute('aria-pressed') === 'true') b.click(); else document.getElementById('ltab-sounds')?.click(); });
+        window.loopwerk.flow?.close({ focus: false, now: true }); /* Layout „reiter“: der Ablauf „Neuer Sound“ */
+        const b = document.getElementById('shelf-new'); if (b?.getAttribute('aria-pressed') === 'true') b.click(); else document.getElementById('ltab-sounds')?.click(); });
       return 'nur Aufräumen';
     },
     async spur(page) {
