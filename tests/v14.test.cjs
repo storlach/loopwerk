@@ -166,8 +166,8 @@ const { check, finish } = createChecker();
     // ---------- Spuren: Menü ----------
     await page.locator('.track-row').nth(1).locator('.tbtn-menu').click();
     const items = await page.locator('.track-menu:not([hidden]) .track-menu-item').allTextContents();
-    check('Spur-Menü zeigt die Befehle', items.join(',') === 'Duplizieren,Nach oben,Nach unten,Umbenennen,Kurve,Für Aufnahme scharf,Gruppe bilden,Löschen', items.join(','));
-    await page.locator('.track-menu-item', { hasText: 'Duplizieren' }).click();
+    check('Spur-Menü zeigt die Befehle', /^(Duplizieren|Kopieren),Nach oben,Nach unten,Umbenennen,Kurve,Für Aufnahme (scharf|bereit),Gruppe bilden,Löschen$/.test(items.join(',')) /* Desktop seit Scheibe 7: „Kopieren“, „bereit“ */, items.join(','));
+    await page.locator('.track-menu-item', { hasText: /Duplizieren|Kopieren/ }).click();
     const dup = await page.evaluate(() => {
       const t = window.loopwerk.store.project.tracks;
       return { n: t.length, name: t[2].name, clips: t[2].clips.length, ids: t[2].clips[0].id !== t[1].clips[0].id, same: t[2].clips[0].sampleId === t[1].clips[0].sampleId };

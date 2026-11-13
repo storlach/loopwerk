@@ -346,11 +346,15 @@ function pitchFn() {
     // Starter-Knöpfe: nicht leer → „Sicher?“, zweiter Klick baut; „Nochmal“ würfelt ohne Rückfrage, solange unverändert
     await page.evaluate(async () => { const M = await import('./src/model.js'); window.loopwerk.store.replace(M.createDemoProject()); });
     const demo = await page.evaluate(() => JSON.stringify(window.loopwerk.store.project));
+    // Desktop seit Scheibe 6: „Neuer Song“ ist ein Ablauf; der Stil-Knopf wählt nur aus, die Rückfrage „Sicher?“ steht im Hauptknopf der Karte
+    const viaFlow = await page.evaluate(() => !!window.loopwerk.flow);
     await clickR(page, '.starter-genre[data-genre="techno"]');
-    const ask = await page.evaluate((d) => ({ text: document.querySelector('.starter-genre[data-genre="techno"]').textContent, same: JSON.stringify(window.loopwerk.store.project) === d }), demo);
-    check('Starter im vollen Lied: Knopf fragt „Sicher?“, nichts passiert', ask.text === 'Sicher?' && ask.same, JSON.stringify(ask));
+    const ask = await page.evaluate(([d, flow]) => ({ text: flow ? document.getElementById('flow-main').textContent : document.querySelector('.starter-genre[data-genre="techno"]').textContent, same: JSON.stringify(window.loopwerk.store.project) === d }), [demo, viaFlow]);
+    if (viaFlow) await page.click('#flow-main');
+    const ask2 = viaFlow ? await page.evaluate(() => document.getElementById('flow-main').textContent) : ask.text;
+    check('Starter im vollen Lied: Knopf fragt „Sicher?“, nichts passiert', (viaFlow ? /ersetzen/i.test(ask.text) && /^Sicher/.test(ask2) : ask.text === 'Sicher?') && ask.same && await page.evaluate((d) => JSON.stringify(window.loopwerk.store.project) === d, demo), JSON.stringify({ ask, ask2 }));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'starter-desktop-confirm.png') });
-    await page.click('.starter-genre[data-genre="techno"]');
+    await page.click(viaFlow ? '#flow-main' : '.starter-genre[data-genre="techno"]');
     await page.waitForFunction(() => window.loopwerk.starter.last?.genre === 'techno', null, { timeout: 10000 });
     const built = await page.evaluate(() => ({ bpm: window.loopwerk.store.project.bpm, name: window.loopwerk.store.project.name, again: document.getElementById('starter-again').textContent, dis: document.getElementById('starter-again').disabled, pressed: document.querySelector('.starter-genre[data-genre="techno"]').getAttribute('aria-pressed'), hint: document.getElementById('hint-text').textContent }));
     check('Zweiter Klick baut den Techno-Song', built.bpm === 130 && built.name === 'Techno-Song' && built.pressed === 'true' && /Techno · 130 BPM/.test(built.hint), JSON.stringify(built));
@@ -401,10 +405,11 @@ function pitchFn() {
       const where = await page.evaluate(() => {
         const dock = document.getElementById('starter').closest('.dock');
         if (dock) window.loopwerk.ui.setDock(dock.id);
+        else if (window.loopwerk.flow && !matchMedia('(max-width: 760px)').matches) window.loopwerk.flow.open('song'); // Layout „reiter“ (Scheibe 6): der Song-Starter liegt in der Karte „Neuer Song“
         else if (!matchMedia('(max-width: 760px)').matches) { const t = document.getElementById('side-tab-datei'); if (t?.getClientRects().length) t.click(); else document.getElementById('ltab-create')?.click(); } // Layout „reiter“: der Song-Starter liegt im Reiter Datei
         else return null;
         document.getElementById('starter').scrollIntoView({ block: 'center' });
-        return dock?.id ?? (document.getElementById('starter').closest('#side-datei-neu') ? 'datei' : 'create');
+        return dock?.id ?? (window.loopwerk.flow?.isOpen ? 'ablauf' : document.getElementById('starter').closest('#side-datei-neu') ? 'datei' : 'create');
       });
       if (where) {
         await page.waitForTimeout(500);

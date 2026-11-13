@@ -435,7 +435,7 @@ const ptCenter = (page, i) => page.evaluate((k) => { const r = document.querySel
     await page.waitForSelector('.auto-row.auto-master');
     check('Summen-Zeile liegt unter allen Spuren, Kopf „Summe“ + Chip „Lautstärke“', await page.evaluate(() => {
       const r = document.querySelector('.auto-row.auto-master');
-      return r.parentElement.lastElementChild === r && r.previousElementSibling?.classList.contains('track-row') && r.querySelector('.auto-sum')?.textContent === 'Summe' && r.querySelector('.auto-chip').textContent === 'Lautstärke';
+      return r.parentElement.lastElementChild === r && r.previousElementSibling?.classList.contains('track-row') && /^(Summe|Gesamt)$/.test(r.querySelector('.auto-sum')?.textContent) /* Desktop seit Scheibe 7: „Gesamt“ */ && r.querySelector('.auto-chip').textContent === 'Lautstärke';
     }));
     await page.click('.auto-master .auto-chip');
     const mkeys = await page.evaluate(() => [...document.querySelectorAll('.auto-keys .auto-key[data-key]')].map((b) => b.dataset.key));
