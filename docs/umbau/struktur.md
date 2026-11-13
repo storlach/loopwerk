@@ -117,6 +117,14 @@ Gebaut: Reiter Mixer = Spalte rechts neben den Spuren, jede Spur mit ihrer Zeile
 
 Zusätzlich entfallen (noch zu bestätigen): der Link „Alle Spuren im Mixer vergleichen →“ (sein Ziel gibt es nicht mehr) und der Spurname als Knopf im Kanalzug (der Name steht im Spurkopf, die Kurzinfo öffnet die Karte).
 
+### Stand nach Bewegung, Scheibe 6 und 7 (2026-11-13)
+
+Gebaut: gemeinsames Bewegungs-System (`src/ui/motion.js`, Tokens in `:root`; Karten rechts von oben, Clip-Editor von unten), die Abläufe „Neuer Song“ (2 Schritte), „Neuer Sound“ über „+ Neu“ (1 Schritt, ersetzt die Unterreiter Suchen/Erstellen) und „Exportieren“ (3 Schritte) als Karten in der Mitte, neue Wörter nur am Loopwerk-Desktop (`src/ui/words-table.js`, Liste in `woerter.md`).
+
+Damit ist alles aus Martins Briefing umgesetzt, außer Handy und Krachwerk (bewusst ausgenommen). Letzte volle Testkette auf `2ede579`: 77 grün, 1 wackelig (`contrast`), 0 rot. Funktionsvergleich: Loopwerk Handy, Krachwerk Desktop, Krachwerk Handy je 0 Abweichungen; am Loopwerk-Desktop kein echter Verlust.
+
+Noch von Martin zu bestätigen: der entfallene Link „Alle Spuren im Mixer vergleichen →“, der entfallene Spurname in der Mixer-Zeile, die Wörter „Feinschliff“ (Mastering) und „Gesamt“ (Summe/Master).
+
 ## Technischer Rahmen
 
 - Der Umbau gilt nur für Loopwerk am Desktop: Schalter `EDITION.layout = 'reiter'` in `src/edition.js`, an `#app` als `data-layout="reiter"`; alle neuen CSS-Regeln unter diesem Attribut und `@media (min-width: 761px)`. Krachwerk und Handy bleiben unverändert und werden nach jeder Scheibe mit Bildern und der Funktionsliste gegengeprüft.
