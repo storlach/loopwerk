@@ -173,7 +173,7 @@ function setupProject() {
     // ---------- Bedienung Desktop ----------
     await page.click('#export-btn');
     const label = await page.locator('#ex-stems-label').textContent();
-    check('Desktop: Option „Einzelspuren (Stems)“ zeigt die Zahl der Spuren', label === 'Einzelspuren (Stems) – 4 Spuren als ZIP', label);
+    check('Desktop: Option „Einzelspuren (Stems)“ zeigt die Zahl der Spuren', /^Einzelspuren( \(Stems\))? – 4 Spuren als ZIP$/.test(label) /* Desktop seit Scheibe 7: ohne „(Stems)“ */, label);
     check('Desktop: „Mit Summe“ erst mit Stems wählbar, aus', await page.locator('#ex-stems-master').isDisabled() && !(await page.locator('#ex-stems-master').isChecked()));
     await page.check('#ex-stems');
     check('Desktop: Stems an → „Mit Summe“ wählbar, Mastering-Haken ruht, Knopf „Spuren exportieren“',

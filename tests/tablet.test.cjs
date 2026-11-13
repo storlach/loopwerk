@@ -389,7 +389,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await shot('projektmenue');
     await page.tap('#export-btn');
     await page.waitForTimeout(300);
-    check('Export öffnet per Antippen', (await lw()).dock === 'export' && await page.locator('#ex-go').isVisible());
+    check('Export öffnet per Antippen', await page.evaluate(() => window.loopwerk.flow.isOpen && window.loopwerk.flow.id === 'export') && await page.locator('#export').isVisible() /* Ablauf als Karte; „Exportieren“ steht erst im dritten Schritt */);
     await targets('Export');
     await page.touchscreen.tap(600, 400);
     await page.waitForTimeout(300);

@@ -182,6 +182,9 @@ function registerSignals() {
     await page.evaluate(() => window.loopwerk.store.undo());
     await page.click('#export-btn');
     await page.waitForTimeout(300);
+    // Desktop seit Scheibe 6: Export ist ein Ablauf; Mastering („Feinschliff“) steht im Schritt „Format und Klang“
+    await page.evaluate(() => { const f = window.loopwerk.flow; if (f?.isOpen) f.go(1); });
+    await page.waitForTimeout(300);
     const ex = await page.evaluate(() => ({ vis: !!document.getElementById('ex-mst-on')?.offsetParent, checked: document.getElementById('ex-mastering').checked, dis: document.getElementById('ex-mastering').disabled }));
     await page.click('#ex-mst-on');
     await page.waitForTimeout(150);
