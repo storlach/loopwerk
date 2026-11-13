@@ -162,6 +162,8 @@ function installHelpers() {
       store.addAutoPoint('t1', 'send.hall', 8, 1);
       ui.selectTrack('t1');
       ui.setDock('mixer');
+      // Layout „reiter“: Die Spur-Karte öffnet erst der Klick auf die Effekt-Kurzinfo der Zeile
+      if (window.loopwerk.side) window.loopwerk.mixer.select('t1');
     });
     await page.waitForSelector('#insp-send-hall');
     await page.waitForTimeout(500);

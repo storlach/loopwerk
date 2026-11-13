@@ -1134,11 +1134,19 @@ async function seedPadWall() {
       await pg.waitForFunction(() => window.loopwerk?.ready, null, { timeout: 30000 });
       await pg.evaluate(() => window.loopwerk.library.catalogReady);
       await scene(pg, 'clip');
-      await pg.evaluate(() => window.loopwerk.side?.show('mixer', { save: false })); // Layout „reiter“: Spur-Abschnitt im Reiter Mixer
+      const cid = await pg.evaluate(() => window.loopwerk.ui.selectedClipId); // die Spur-Karte unten hebt die Clip-Auswahl auf
+      // Layout „reiter“: bei gewähltem Clip bleibt die Karte zu; der Spur-Abschnitt steht in der Karte der Spur (Klick auf die Effekt-Kurzinfo)
+      await pg.evaluate(() => {
+        const lw = window.loopwerk;
+        if (!lw.side) return;
+        const hit = lw.store.findClip(lw.ui.selectedClipId);
+        lw.side.show('mixer', { save: false });
+        lw.mixer.select(hit.track.id);
+      });
+      await pg.waitForTimeout(700);
       const lw2 = await pg.evaluate(() => ({ tabs: document.querySelectorAll('.wb-tabs').length, track: !!document.querySelector('.insp-track')?.offsetParent, noEdit: !document.getElementById('edit-btn')?.offsetParent }));
       check('Loopwerk: bei gewähltem Clip kein .wb-tabs, Spur-Abschnitt wie bisher, kein „Bearbeiten“-Knopf', lw2.tabs === 0 && lw2.track && lw2.noEdit && errs.length === 0, JSON.stringify(lw2) + errs.join('|'));
       // Umbau Scheibe 4: Doppelklick auf den Clip öffnet den Sample-Editor als Karte, mit #insp-speed in der rechten Spalte
-      const cid = await pg.evaluate(() => window.loopwerk.ui.selectedClipId);
       await pg.locator(`.clip[data-clip-id="${cid}"]`).dblclick({ position: { x: 40, y: 30 } });
       await pg.waitForFunction(() => window.loopwerk.ui.dock === 'editor', null, { timeout: 10000 });
       await pg.waitForTimeout(400);
