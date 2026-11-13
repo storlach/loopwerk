@@ -62,7 +62,7 @@ async function run({ name, vp, touch }) {
       const tr = t.getBoundingClientRect();
       return { size: parseFloat(cs.fontSize), nameW: r.width, nameH: r.height, nameVisible: r.width > 40 && r.height > 10, kind: t.textContent, kindSize: parseFloat(getComputedStyle(t).fontSize), above: tr.bottom <= r.top + 2, value: n.value };
     });
-    check(`${tag}: Name ist sichtbar und groß (≥ 20 px), kleine Zeile „Beat-Editor“ darüber`, head.nameVisible && head.size >= 20 && head.kind === 'Beat-Editor' && head.kindSize < head.size && head.above, JSON.stringify(head));
+    check(`${tag}: Name ist sichtbar und groß (≥ 20 px), kleine Zeile „Beat-Editor“ darüber`, head.nameVisible && head.size >= 20 && /^Beat(-Editor| bearbeiten)$/.test(head.kind) /* Desktop seit Scheibe 7: „Beat bearbeiten“ */ && head.kindSize < head.size && head.above, JSON.stringify(head));
 
     const before = await patName();
     check(`${tag}: Feld zeigt den Namen des Patterns`, head.value === before, `${head.value} / ${before}`);
@@ -184,7 +184,7 @@ async function run({ name, vp, touch }) {
     // ---------- Melodie ----------
     await openEditor(page, 'melody');
     const mhead = await page.evaluate(() => { const n = document.getElementById('pat-name'); return { size: parseFloat(getComputedStyle(n).fontSize), kind: document.getElementById('pat-title').textContent, w: n.getBoundingClientRect().width, view: getComputedStyle(document.getElementById('pat-view')).display, h: n.getBoundingClientRect().height }; });
-    check(`${tag}: Melodie-Editor: gleicher Kopf (Name groß, „Melodie-Editor“ darüber, kein Schritte/Pads)`, mhead.size >= 20 && mhead.kind === 'Melodie-Editor' && mhead.w > 40 && mhead.view === 'none', JSON.stringify(mhead));
+    check(`${tag}: Melodie-Editor: gleicher Kopf (Name groß, „Melodie-Editor“ darüber, kein Schritte/Pads)`, mhead.size >= 20 && /^Melodie(-Editor| bearbeiten)$/.test(mhead.kind) /* Desktop seit Scheibe 7 */ && mhead.w > 40 && mhead.view === 'none', JSON.stringify(mhead));
     const mkeys = await page.evaluate(() => { const r = (id) => { const b = document.getElementById(id).getBoundingClientRect(); return { w: b.width, h: b.height }; }; return { p: r('pat-play'), l: r('pat-live'), dp: r('play-btn'), dl: r('rec-btn') }; });
     check(`${tag}: Melodie: Anhören und Live in Deck-Größe`, Math.abs(mkeys.p.w - mkeys.dp.w) <= 2 && Math.abs(mkeys.l.w - mkeys.dl.w) <= 2 && Math.abs(mkeys.l.h - mkeys.dl.h) <= 2, JSON.stringify(mkeys));
     const mname = await page.evaluate(() => window.loopwerk.store.project.patterns[window.loopwerk.patternEditor.id].name);
@@ -278,7 +278,7 @@ async function run({ name, vp, touch }) {
         groups: [...document.querySelectorAll('#editor .ed-cutgroup')].map((g) => g.getAttribute('aria-label')),
       };
     });
-    check(`${tag}: Clip-Editor: kleine Zeile „Clip-Editor“, Name groß (≥ 20 px)`, ce.kind === 'Clip-Editor' && ce.size >= 20 && ce.nameW > 40, JSON.stringify({ k: ce.kind, s: ce.size, w: ce.nameW }));
+    check(`${tag}: Clip-Editor: kleine Zeile „Clip-Editor“, Name groß (≥ 20 px)`, /^Clip(-Editor| bearbeiten)$/.test(ce.kind) /* Desktop seit Scheibe 7 */ && ce.size >= 20 && ce.nameW > 40, JSON.stringify({ k: ce.kind, s: ce.size, w: ce.nameW }));
     check(`${tag}: Clip-Editor: Anhören wie Abspielen im Deck`, Math.abs(ce.play.w - ce.dplay.w) <= 2 && Math.abs(ce.play.h - ce.dplay.h) <= 2 && ce.br[0] === ce.br[1], JSON.stringify([ce.play, ce.dplay, ce.br]));
     check(`${tag}: Clip-Editor: zehn Werkzeuge (mit Entrauschen) mit Icon und Titel${handy ? ', ≥ 44 px' : ''}`, ce.tools === 10 && ce.icons && ce.labels && JSON.stringify(ce.groups) === '["Auswahl","Säubern","Bearbeiten"]' && (!handy || ce.minTool >= 43.5), JSON.stringify(ce));
     const waveH = () => page.evaluate(() => Math.round(document.getElementById('ed-wave').getBoundingClientRect().height));

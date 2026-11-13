@@ -368,7 +368,7 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
     await page.waitForTimeout(300);
     const desk = await page.evaluate(chipFit, 'insp-mst');
     check('Desktop Inspektor: fünf Stil-Chips, „Club“ als fünfter, Tooltip „Club · Ziel −8 LUFS“',
-      desk && desk.chips.length === 5 && desk.chips[4].id === 'club' && desk.chips[4].text === 'Club' && desk.chips[4].title === 'Club · Ziel −8 LUFS', JSON.stringify(desk));
+      desk && desk.chips.length === 5 && desk.chips[4].id === 'club' && desk.chips[4].text === 'Club' && /^Club · Ziel(-Lautheit)? −8 LUFS$/.test(desk.chips[4].title) /* Desktop seit Scheibe 7: „Ziel-Lautheit“ */, JSON.stringify(desk));
     check('Desktop Inspektor: kein Chip abgeschnitten, alle in der Gruppe; Club nimmt die ganze Zeile', desk?.fits && Math.abs(desk.chips[4].w - desk.box.w) <= 2, JSON.stringify(desk));
     await page.click('#insp-mst-style-club');
     await page.waitForTimeout(200);
@@ -382,6 +382,8 @@ const noOverflow = (o) => o.doc <= 0 && o.body <= 0 && o.app <= 0;
     }
     await page.click('#export-btn');
     await page.waitForTimeout(400);
+    await page.evaluate(() => { const f = window.loopwerk.flow; if (f?.isOpen) f.go(1); }); // Desktop seit Scheibe 6: Feinschliff steht im Schritt „Format und Klang“
+    await page.waitForTimeout(300);
     const ex = await page.evaluate(chipFit, 'ex-mst');
     check('Desktop Export-Klappfeld: fünf Chips, Club gewählt, nichts abgeschnitten', ex && ex.chips.length === 5 && ex.fits && await page.evaluate(() => document.getElementById('ex-mst-style-club').getAttribute('aria-pressed') === 'true'), JSON.stringify(ex));
     check('Keine Fehler in der Konsole (Desktop)', app.errors.length === 0, app.errors.join(' | '));
