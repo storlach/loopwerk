@@ -16,6 +16,8 @@ import { createSplash } from './ui/splash.js';
 import { mountLayout } from './ui/layout.js';
 import { mountSide } from './ui/side.js';
 import { mountOverlay } from './ui/overlay.js';
+import { mountFlow } from './ui/flow.js';
+import { mountFlows } from './ui/flows.js';
 import { mountMixcol } from './ui/mixcol.js';
 import { mountInspector } from './ui/inspector.js';
 import { mountSoundBench } from './ui/sound-bench.js';
@@ -790,7 +792,9 @@ async function boot() {
   const tempo = mountTempo({ store, engine, library, ui, arranger });
   mountSoundState({ store, engine, library, ui, arranger });
   const mastering = mountMasteringAnalysis({ store, engine, library, hold: () => tempo.busy });
-  mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering });
+  // Layout „reiter“: Schritt-für-Schritt-Abläufe auf einer Karte (flow.js, flows.js)
+  const flow = EDITION.layout === 'reiter' ? mountFlow({ ui }) : null;
+  const exportApi = mountExport({ root: document.getElementById('export'), store, library, ui, engine, tempo, mastering, flow });
   const fxpad = mountFxPad({ root: document.getElementById('fxpad'), store, engine, ui });
   splash.set(0.94, 'Oberfläche wird aufgebaut …');
   if (library.bpm !== store.project.bpm || library.semis !== keySemis(keyOf(store.project))) { splash.set(0.95, 'Sounds werden angepasst …'); await tempo.apply(); }
@@ -844,13 +848,14 @@ async function boot() {
     ui.flash(res.done.length ? 'Begleitung folgt jetzt dem Akkord-Streifen – Akkord antippen zum Ändern.' : 'Keine freie Spur für die Begleitung.');
   }
   const starter = mountStarter({ root: document.getElementById('create-panel'), store, library, ui, onAccomp: accompany });
-  side?.takeStarter();
+  side?.takeStarter(() => flow?.park);
   mountKeySelects(store);
   mountMobile({ store, ui, tools, library });
   // Dichte „calm“: Werkzeug am Clip statt Clip-Leiste und Deck-Gruppe
   if (EDITION.density === 'calm') mountClipFloat({ store, ui, tools, library });
   // Layout „reiter“: Sample- und Pattern-Editor öffnen als Karte in der Mitte (overlay.js) statt als Fach unten
   const overlay = reiter ? mountOverlay({ ui, editor }) : null;
+  mountFlows({ flow, ui, engine, starter, exportApi });
   const sheets = mountSheets({ ui, arranger, external: overlay ? { ids: ['editor', 'pattern'], on: () => !narrow.matches } : null });
   bounce?.attach({ sheets });
   // ⤢ breite Werkbank: der Song soll mindestens 4 ganze Takte zeigen, sonst wird die Ansicht passend verkleinert
@@ -988,7 +993,7 @@ async function boot() {
   if (missing) ui.flash(`${missing === 1 ? 'Ein eigener Sound fehlt' : `${missing} eigene Sounds fehlen`} im Browser – die Clips sind noch da. Öffne die Projektdatei, um ${missing === 1 ? 'ihn' : 'sie'} zurückzuholen.`);
 
   // Zugang für automatische Tests und spätere Werkzeuge.
-  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, mixcol, overlay, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
+  window.loopwerk = { edition: EDITION, bounce, pwa, store, engine, library, ui, arranger, tools, tempo, mixer, editor, own, io, backup, recorder, importer, linkImport, patterns, patternEditor, inspector, layout, side, mixcol, overlay, flow, sheets, tips, recSetup, renderProject, encodeWav, glow, mastering, fxpad, starter, ready: true };
 }
 
 boot().catch((err) => {

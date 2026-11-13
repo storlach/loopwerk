@@ -6,8 +6,11 @@ import { formatDb } from './arranger.js';
 import { fileExt } from '../wav.js';
 import { masteringOf } from '../engine.js';
 import { mountMasteringControls } from './mastering.js';
+import { narrow } from './place.js';
 
-export function mountExport({ root, store, library, ui, engine, tempo, mastering }) {
+// flow: Schritt-Ablauf (Layout „reiter“, Desktop) – der Knopf öffnet ihn statt des Fachs; am Handy bleibt das Fach
+export function mountExport({ root, store, library, ui, engine, tempo, mastering, flow = null }) {
+  const viaFlow = () => !!flow && !narrow.matches;
   const $ = (id) => root.querySelector('#' + id);
   const btn = document.getElementById('export-btn');
   const go = $('ex-go');
@@ -125,8 +128,9 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     }
   });
 
-  btn.addEventListener('click', () => ui.setDock(ui.dock === 'export' ? null : 'export'));
+  btn.addEventListener('click', () => { if (viaFlow()) flow.open('export'); else ui.setDock(ui.dock === 'export' ? null : 'export'); });
   ui.on(() => {
+    if (viaFlow()) return;
     const show = ui.dock === 'export';
     btn.setAttribute('aria-pressed', String(show));
     if (root.hidden === !show) return;
@@ -134,4 +138,9 @@ export function mountExport({ root, store, library, ui, engine, tempo, mastering
     if (show) { describe(); if (!busy) { bar.hidden = true; status.textContent = ''; } }
   });
   store.on(() => { if (!root.hidden) describe(); });
+  // Ablauf geöffnet: Angaben auffrischen, alten Stand der Anzeige leeren
+  return {
+    open() { describe(); if (!busy) { bar.hidden = true; status.textContent = ''; } },
+    get busy() { return busy; },
+  };
 }

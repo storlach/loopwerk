@@ -40,7 +40,10 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   place($('rec-btn'), { calm: { narrow: $('tabbar') } });
   place($('mixer-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') } }); // Layout „reiter“: kein Fach, die Zeilen neben den Spuren sind der Mixer
   place($('fxpad-btn'), { calm: { narrow: $('song-links'), wide: $('insp-song-tools') }, reiter: $('mix-head') }); // Layout „reiter“: Kopf der Mixer-Spalte
-  place($('shelf-new'), { calm: { narrow: $('shelf-sticky') } });
+  place($('shelf-new'), { calm: { narrow: $('shelf-sticky') }, reiter: $('shelf-find') }); // Layout „reiter“: „+ Neu“ neben der Suche
+  // Layout „reiter“: die Abläufe (flow.js) nehmen das Erstellen-Panel und das Export-Fach auf
+  place($('create-panel'), { reiter: $('flow-park') });
+  place($('export'), { reiter: $('flow-park') });
 
   // ---------- Aufklappfelder: eins zur Zeit, Klick daneben oder Esc schließt ----------
   const pops = [];
@@ -116,6 +119,7 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
   const calm = app.dataset.density === 'calm';
   const newBtn = $('shelf-new');
   newBtn.addEventListener('click', () => {
+    if (app.dataset.layout === 'reiter' && !narrow.matches) return; // dort öffnet „+ Neu“ den Ablauf „Neuer Sound“ (flows.js)
     const create = shelf.dataset.left !== 'create';
     setLeft(create ? 'create' : 'sounds');
     newBtn.setAttribute('aria-pressed', String(create));

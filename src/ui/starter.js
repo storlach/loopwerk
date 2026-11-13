@@ -34,6 +34,8 @@ export function mountStarter({ root, store, library, ui, onAccomp }) {
   let busy = false;
   let armed = null; // Knopf, der gerade „Sicher?“ zeigt
   let armTimer = null;
+  let choose = null; // Schritt-Ablauf (Desktop): ein Genre antippen wählt nur aus, gebaut wird mit dem Hauptknopf des Ablaufs
+  let picked = null; // dort gewähltes Genre
 
   const empty = () => store.project.tracks.every((t) => !t.clips.length);
   const label = (btn) => btn.dataset.label;
@@ -85,6 +87,7 @@ export function mountStarter({ root, store, library, ui, onAccomp }) {
     b.dataset.genre = g.id;
     b.dataset.label = g.label;
     b.addEventListener('click', () => {
+      if (choose) { choose(g.id); return; }
       if (!safe() && armed !== b) { arm(b); return; }
       disarm();
       build(g.id, last?.genre === g.id ? last.variant + 1 : 0);
@@ -103,10 +106,20 @@ export function mountStarter({ root, store, library, ui, onAccomp }) {
     again.disabled = !last || busy;
     if (armed !== again) again.textContent = last ? `Nochmal · ${starterGenre(last.genre)?.label}` : 'Nochmal';
     again.dataset.label = again.textContent;
-    for (const b of genres.children) b.setAttribute('aria-pressed', String(last?.genre === b.dataset.genre && safe()));
+    for (const b of genres.children) b.setAttribute('aria-pressed', String(picked ? picked === b.dataset.genre : last?.genre === b.dataset.genre && safe()));
   }
   store.on(() => { if (!busy) { disarm(); sync(); } });
   sync();
 
-  return { build, get last() { return last; } };
+  // Genre wie ein Klick auf seine Taste bauen (nächste Fassung, wenn es dasselbe wie zuletzt ist)
+  const run = (genre) => build(genre, last?.genre === genre ? last.variant + 1 : 0);
+  return {
+    build, run, safe, empty,
+    // Schritt-Ablauf: fn(genreId) statt sofort zu bauen; null stellt das alte Verhalten wieder her
+    setChoose(fn) { choose = fn; if (!fn) picked = null; sync(); },
+    pick(id) { picked = id; sync(); },
+    get picked() { return picked; },
+    get busy() { return busy; },
+    get last() { return last; },
+  };
 }

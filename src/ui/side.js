@@ -77,21 +77,24 @@ export function mountSide({ ui }) {
   const datei = el('div', 'side-datei', 'side-datei');
   datei.setAttribute('aria-label', 'Datei');
   datei.append(el('div', 'side-datei-name', 'side-datei-name')); // Songname als Überschrift
-  // Darunter (nach dem Song-Abschnitt): „Neuer Song“ mit dem Song-Starter, dann die ruhige Befehlsliste
-  const neu = el('section', 'side-datei-neu', 'side-datei-neu');
-  neu.setAttribute('data-surface', 'starter');
-  const neuH = el('h3', 'create-sec', null);
-  neuH.textContent = 'Neuer Song';
-  neu.append(neuH);
+  // Darunter (nach dem Song-Abschnitt): die ruhige Befehlsliste; „Neuer Song“ ist eine Zeile und öffnet den Ablauf (flows.js)
   const liste = el('div', 'side-datei-liste', 'side-datei-liste');
   liste.setAttribute('role', 'group');
   liste.setAttribute('aria-label', 'Datei');
+  const newRow = el('div', 'side-datei-new', 'side-datei-new');
+  newRow.setAttribute('data-surface', 'starter');
+  const newSong = el('button', 'key', 'new-song-btn');
+  newSong.type = 'button';
+  newSong.textContent = 'Neuer Song';
+  newSong.title = 'Neuen Song aus einem Stil bauen';
+  newRow.append(newSong);
+  liste.append(newRow);
   for (const id of ['side-datei-act', 'side-datei-export', 'side-datei-start', 'side-datei-help']) liste.append(el('div', id, id));
   const foot = el('div', 'side-datei-foot', 'side-datei-foot'); // Info-Zeile ganz unten
   const songSec = insp.querySelector('.insp-song');
   songSec.before(datei);
-  // Reihenfolge in Datei: Name · Tempo, Tonart, Länge (Song-Abschnitt) · Befehle · Neuer Song · Info
-  insp.append(liste, neu, foot);
+  // Reihenfolge in Datei: Name · Tempo, Tonart, Länge (Song-Abschnitt) · Befehle (Neuer Song zuerst) · Info
+  insp.append(liste, foot);
 
   // ---------- Reiter ----------
   let current = DEFAULT; // zuletzt gewählter Reiter (auch bei zugeklappter Karte)
@@ -162,17 +165,15 @@ export function mountSide({ ui }) {
   // Die schmale Laptop-Ansicht klappt den Inspektor sonst zu; hier ist er Teil der Leiste
   app.classList.add('insp-open');
 
-  // Der Song-Starter zieht aus dem Erstellen-Fach in den Reiter Datei (wird nach mountStarter aufgerufen); „busy“ folgt dem Fach
-  function takeStarter() {
+  // Der Song-Starter zieht aus dem Erstellen-Fach in den Ablauf „Neuer Song“ (dest = Ruheplatz der Abläufe); wird nach mountStarter aufgerufen
+  function takeStarter(dest) {
     const box = document.getElementById('starter');
-    const panel = document.getElementById('create-panel');
-    if (!box || !panel) return;
+    if (!box) return;
     const home = document.createComment('starter');
     box.before(home);
-    const mv = () => (narrow.matches ? home.after(box) : neu.append(box)); // Handy: zurück ins Fach „Erstellen“
+    const mv = () => (narrow.matches || !dest() ? home.after(box) : dest().append(box)); // Handy: zurück ins Fach „Erstellen“
     mv();
     narrow.addEventListener('change', mv);
-    new MutationObserver(() => neu.classList.toggle('busy', panel.classList.contains('busy'))).observe(panel, { attributes: true, attributeFilter: ['class'] });
   }
 
   // Die Karte der Mixer-Spalte (mixcol.js) ging auf oder zu bzw. zeigt anderen Inhalt (fade): Fläche neu bestimmen, ohne Wechsel-Übergang
