@@ -10,6 +10,8 @@ const { check, finish } = createChecker();
   const { page } = app;
   const lw = (fn, arg) => page.evaluate(fn, arg);
   const text = (id) => lw((i) => document.getElementById(i)?.textContent.trim(), id);
+  // Text aller sichtbaren Blätter der Karte (ohne das Regal: Sound-Namen sind Inhalt)
+  const visText = () => [...document.querySelectorAll('#side *')].filter((n) => n.offsetParent && !n.children.length && !n.closest('#library')).map((n) => n.textContent.trim() + ' ' + (n.getAttribute('aria-label') || '') + ' ' + (n.getAttribute('title') || '')).join(' | ').replace(/\s+/g, ' ');
   const attr = (id, a) => lw(([i, n]) => document.getElementById(i)?.getAttribute(n), [id, a]);
   try {
     await lw(async () => { const M = await import('./src/model.js'); window.loopwerk.store.replace(M.createDemoProject()); });
@@ -31,14 +33,14 @@ const { check, finish } = createChecker();
     check('Gesamt, Hall, Echo statt Summe, Master, Hall-Bus, Echo-Bus', /Gesamt/i.test(bus) && /Hall/i.test(bus) && /Echo/i.test(bus) && !/Summe|Master|-Bus/.test(bus), bus);
     await lw(() => window.loopwerk.mixer.select('__master'));
     await page.waitForTimeout(500);
-    const card = await lw(() => document.getElementById('side').textContent.replace(/\s+/g, ' '));
-    check('Gesamt-Karte: Feinschliff, Hall und Echo, Gesamt-Lautstärke; kein Mastering, Busse, Master', /Feinschliff/i.test(card) && /Hall und Echo/i.test(card) && /Gesamt/i.test(card) && !/Mastering|Busse|Master\b|Summe/.test(card), card.slice(0, 300));
+    const card = await lw(visText);
+    check('Gesamt-Karte: Feinschliff, Hall und Echo, Gesamt-Lautstärke; kein Mastering, Busse, Master', /Feinschliff/i.test(card) && /Hall und Echo/i.test(card) && /Gesamt/i.test(card) && !/Mastering|Busse|Master\b|\bSumme\b/.test(card), card.slice(0, 300));
     check('Messwert mit Etikett: „Lautheit … LUFS · Spitze … dBTP“ oder „Ziel-Lautheit“', await lw(() => /(Lautheit|Ziel-Lautheit) −?[\d,]+ LUFS/.test(document.getElementById('side').textContent)), '');
     await lw(() => window.loopwerk.mixcol.close());
     // Spur-Karte: Aufnahme bereit
     await lw(() => { const k = window.loopwerk; k.mixer.select(k.store.project.tracks[0].id); });
     await page.waitForTimeout(500);
-    const tr = await lw(() => document.getElementById('side').textContent.replace(/\s+/g, ' '));
+    const tr = await lw(visText);
     check('Spur-Karte: „Aufnahme bereit“, „Links/Rechts“, „Hall-Anteil“; kein Scharf, Panorama, Bus', /Aufnahme bereit/.test(tr) && /Links\/Rechts/.test(tr) && /Hall-Anteil/.test(tr) && !/Scharf|Panorama|-Bus/.test(tr), tr.slice(0, 300));
     await lw(() => window.loopwerk.mixcol.close());
     // Clip bearbeiten

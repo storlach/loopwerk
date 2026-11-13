@@ -4,6 +4,7 @@
 
 import { place, narrow } from './place.js';
 import { lsKey } from '../edition.js';
+import { W } from './words.js';
 
 export function mountLayout({ store, ui, library, editName = () => '' }) {
   const $ = (id) => document.getElementById(id);
@@ -155,8 +156,8 @@ export function mountLayout({ store, ui, library, editName = () => '' }) {
     editorTab.disabled = !sel && !editing;
     editorTab.setAttribute('aria-pressed', String(editing));
     const label = editing ? editName(ui.dock) || name : name;
-    $('editor-tab-label').textContent = label && !narrow.matches ? `Editor · ${label}` : 'Editor';
-    editorTab.title = label ? `Editor · ${label}` : 'Wähle einen Clip, um ihn zu bearbeiten';
+    $('editor-tab-label').textContent = W(label && !narrow.matches ? `Editor · ${label}` : 'Editor');
+    editorTab.title = W(label ? `Editor · ${label}` : 'Wähle einen Clip, um ihn zu bearbeiten');
   }
   ui.on(syncTabs);
   store.on(syncTabs);
