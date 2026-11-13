@@ -256,7 +256,7 @@ function installHelpers() {
     });
     let r = await read();
     check('17 Inspektor Spur: Block „Busse“ mit „→ Hall-Bus“ und „→ Echo-Bus“, aus = „aus“', r.hallOut === 'aus' && r.echoOut === 'aus'
-      && await page.evaluate(() => { const b = document.querySelector('.insp-track .insp-buses'); const fx = document.querySelector('.insp-track .fxl'); return !!b && !!(fx.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) && b.textContent.includes('→ Hall-Bus') && b.textContent.includes('→ Echo-Bus'); }), JSON.stringify(r));
+      && await page.evaluate(() => { const b = document.querySelector('.insp-track .insp-buses'); const fx = document.querySelector('.insp-track .fxl'); return !!b && !!(fx.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) && /(→ Hall-Bus|Hall-Anteil)/.test(b.textContent) && /(→ Echo-Bus|Echo-Anteil)/.test(b.textContent) /* Desktop seit Scheibe 7: „Hall-Anteil“, „Echo-Anteil“ (ohne Pfeil) */; }), JSON.stringify(r));
     // Ziehen am Regler (Maus): Anteil steigt
     const hb = await page.evaluate(() => { const n = document.getElementById('insp-send-hall'); n.scrollIntoView({ block: 'center', behavior: 'instant' }); const q = n.getBoundingClientRect(); return { x: q.left, y: q.top + q.height / 2, w: q.width }; });
     await page.mouse.move(hb.x + 2, hb.y);

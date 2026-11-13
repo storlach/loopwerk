@@ -115,7 +115,7 @@ function installHelpers() {
     });
     check('17 Mixer: Zeile je Spur, darunter Summe, „Hall-Bus“ und „Echo-Bus“', JSON.stringify(layout.ids) === '["t1","t2","__master","__bus:hall","__bus:echo"]', JSON.stringify(layout.ids));
     check('17 Mixer: ohne Send sind beide Rückkanäle gedimmt', layout.idle.length === 2 && layout.idle.every(Boolean), JSON.stringify(layout.idle));
-    check('17 Mixer: Kanalzug hat „→H“ und „→E“, Rückkanal weder Panorama noch Solo', layout.sends && layout.labels.join() === '→H,→E' && !layout.busHasPan && !layout.busHasSolo, JSON.stringify(layout));
+    check('17 Mixer: Kanalzug hat „→H“ und „→E“, Rückkanal weder Panorama noch Solo', layout.sends && /^(→H,→E|Hall,Echo)$/.test(layout.labels.join()) /* Desktop seit Scheibe 7: „Hall“, „Echo“ */ && !layout.busHasPan && !layout.busHasSolo, JSON.stringify(layout));
 
     // Drehregler „→H“ mit der Maus ziehen (senkrecht, relativ)
     const kb = await page.evaluate(() => { const r = document.querySelector('.strip[data-strip-id="t1"] .strip-send:first-child .knob').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width }; });
@@ -131,7 +131,7 @@ function installHelpers() {
     check('17 Mixer: „→H“ ziehen setzt track.sends.hall; Hall-Bus ist nicht mehr gedimmt, Echo-Bus schon', r.sends?.hall > 0.2 && r.sends.hall < 0.6 && r.idle[0] === false && r.idle[1] === true && r.on, JSON.stringify(r));
     // Titel und Doppelklick
     const title = await page.evaluate(() => document.getElementById('send-t1-hall').title);
-    check('17 Mixer: Titel „Anteil zum Hall-Bus“, Doppelklick setzt 0', /Anteil zum Hall-Bus/.test(title) && await (async () => {
+    check('17 Mixer: Titel „Anteil zum Hall-Bus“, Doppelklick setzt 0', /Anteil zum Hall-Bus|Hall-Anteil/.test(title) /* Desktop seit Scheibe 7 */ && await (async () => {
       await page.dblclick('.strip[data-strip-id="t1"] .strip-send:first-child .knob');
       const q = await rd();
       return q.sends === null && q.idle[0] === true;
@@ -161,7 +161,7 @@ function installHelpers() {
     await page.click('.mix-bus .strip[data-strip-id="__bus:echo"] .strip-name');
     await page.waitForTimeout(200);
     const flash = await page.evaluate(() => document.getElementById('hint-text')?.textContent || '');
-    check('17 Mixer: Name eines ungenutzten Rückkanals meldet „Noch sendet keine Spur …“', /Noch sendet keine Spur zum Echo-Bus/.test(flash), flash);
+    check('17 Mixer: Name eines ungenutzten Rückkanals meldet „Noch sendet keine Spur …“', /Noch sendet keine Spur zum Echo(-Bus)?\./.test(flash) /* Desktop seit Scheibe 7: ohne „-Bus“ */, flash);
     await page.evaluate(() => window.loopwerk.store.setSend('t1', 'hall', 0.5));
     await page.waitForTimeout(300);
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'mixer-desktop.png') });

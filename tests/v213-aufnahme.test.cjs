@@ -745,7 +745,7 @@ async function partC() {
       const dot = (id) => getComputedStyle(document.querySelector(`.track-row:has(.lane[data-track-id="${id}"]) .track-dot`)).backgroundColor === red;
       return { rec: ui.recTracks.slice(), input: store.track('t2').recInput, dots: ['t1', 't2', 't3'].map(dot), undo: store.undoStack.length, inProject: JSON.stringify(store.project).includes('recTracks') };
     });
-    check('C10 Spur-Menü ⋯: „Für Aufnahme scharf“ als Schalter (menuitemcheckbox)', item.text === 'Für Aufnahme scharf' && item.role === 'menuitemcheckbox' && item.checked === 'false', JSON.stringify(item));
+    check('C10 Spur-Menü ⋯: „Für Aufnahme scharf“ als Schalter (menuitemcheckbox)', /^Für Aufnahme (scharf|bereit)$/.test(item.text) /* Desktop seit Scheibe 7: „bereit“ */ && item.role === 'menuitemcheckbox' && item.checked === 'false', JSON.stringify(item));
     check('C10 Inspektor „Spur“: Schalter ● Scharf, Zeile Eingang erst wenn scharf (Auto · Links · Rechts · Stereo, Auto aktiv)',
       insp0.arm && insp0.pressed === 'false' && insp0.inRow && insp1.inRow && insp1.btns.map((b) => b[0]).join() === 'Auto,Links,Rechts,Stereo' && insp1.btns[0][1] === 'true' && /Rechts/.test(insp1.auto), JSON.stringify({ insp0, insp1 }));
     check('C10 Scharf: ui.recTracks in Reihenfolge, roter Punkt nur an scharfen Spuren, Eingang „R“ an der Spur (ein Rückgängig-Schritt), Scharf nicht im Projekt/Verlauf',
