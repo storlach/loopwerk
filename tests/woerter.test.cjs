@@ -1,5 +1,5 @@
 // Umbau Scheibe 7: Wörter (docs/umbau/woerter.md, src/ui/words-table.js). Nur im Layout „reiter“ am Desktop; Handy und Krachwerk behalten die alten Wörter.
-// Prüft: neue Wörter am Desktop (Sounds statt Assets, Kopieren, Feinschliff, Links/Rechts, Hall-Anteil, Gesamt, Aufnahme bereit, Lautheit),
+// Prüft: neue Wörter am Desktop (Sounds statt Assets, Links/Rechts, Hall-Anteil, Aufnahme bereit, Lautheit; Duplizieren, Summe, Mastering, Limiter bleiben),
 // Kennungen unverändert, alte Wörter am Handy nach dem Wechsel der Breite und in Krachwerk, dynamische Texte (Mixer-Zeile) über dieselbe Tabelle.
 const { openApp, createChecker } = require('./harness.cjs');
 
@@ -17,9 +17,10 @@ const { check, finish } = createChecker();
     await lw(async () => { const M = await import('./src/model.js'); window.loopwerk.store.replace(M.createDemoProject()); });
     await page.waitForTimeout(500);
     check('Desktop: Seitenleiste heißt „Sounds“ (nicht Assets), keine Überschrift „Assets“', (await lw(() => document.querySelector('.shelf').getAttribute('aria-label'))) === 'Sounds' && !(await lw(() => [...document.querySelectorAll('body *')].some((n) => n.offsetParent && n.children.length === 0 && /^Assets$/.test(n.textContent.trim())))));
-    check('Desktop: „Kopieren“ statt „Duplizieren“ (Knopf und Hinweistext)', (await text('dup-btn')) === 'Kopieren' && /kopieren/.test(await attr('dup-btn', 'title')) && !/uplizier/.test(await attr('dup-btn', 'title')));
+    // Martin (2026-11-13): Duplizieren, Summe/Master, Mastering und Limiter bleiben
+    check('Desktop: „Duplizieren“ bleibt (Knopf und Hinweistext), kein „Kopieren“', (await text('dup-btn')) === 'Duplizieren' && /uplizier/.test(await attr('dup-btn', 'title')));
     check('Desktop: Beispiel laden, Kennungen unverändert', (await text('demo-btn')) === 'Beispiel laden' && !!(await lw(() => document.getElementById('new-btn'))));
-    check('Desktop: Deck-Anzeige „Gesamt“ statt „Master“', await lw(() => [...document.querySelectorAll('.deck .lcd-label, .deck .meter-wrap *')].some((n) => /^Gesamt$/i.test(n.textContent.trim()))) || await lw(() => /Gesamt/i.test(document.querySelector('.deck').textContent)));
+    check('Desktop: Deck-Anzeige „Master“ bleibt, kein „Gesamt“', await lw(() => /Master/i.test(document.querySelector('.deck').textContent) && !/Gesamt/i.test(document.querySelector('.deck').textContent)));
     // Mixer-Zeile (dynamisch erzeugt)
     await page.click('#side-tab-mixer');
     await page.waitForTimeout(500);
@@ -30,11 +31,11 @@ const { check, finish } = createChecker();
     });
     check('Mixer-Zeile: „Hall“ und „Echo“ statt →H/→E, Hall-Anteil und Links/Rechts als Beschriftung', /Hall/.test(mx.text) && /Echo/.test(mx.text) && !/→/.test(mx.text) && /Hall-Anteil/.test(mx.labels) && /Echo-Anteil/.test(mx.labels) && /Links\/Rechts/.test(mx.labels) && !/Panorama|-Bus/.test(mx.labels), JSON.stringify(mx));
     const bus = await lw(() => document.getElementById('mix-bus').textContent + ' | ' + [...document.querySelectorAll('#mix-bus [aria-label]')].map((n) => n.getAttribute('aria-label')).join(' ; '));
-    check('Gesamt, Hall, Echo statt Summe, Master, Hall-Bus, Echo-Bus', /Gesamt/i.test(bus) && /Hall/i.test(bus) && /Echo/i.test(bus) && !/Summe|Master|-Bus/.test(bus), bus);
+    check('Summe, Hall, Echo: „Summe“ bleibt, Hall-Bus/Echo-Bus heißen Hall/Echo', /Summe/i.test(bus) && /Hall/i.test(bus) && /Echo/i.test(bus) && !/Gesamt|-Bus/.test(bus), bus);
     await lw(() => window.loopwerk.mixer.select('__master'));
     await page.waitForTimeout(500);
     const card = await lw(visText);
-    check('Gesamt-Karte: Feinschliff, Hall und Echo, Gesamt-Lautstärke; kein Mastering, Busse, Master', /Feinschliff/i.test(card) && /Hall und Echo/i.test(card) && /Gesamt/i.test(card) && !/Mastering|Busse|Master\b|\bSumme\b/.test(card), card.slice(0, 300));
+    check('Summen-Karte: Mastering, Hall und Echo, Master-Lautstärke; kein Feinschliff, Gesamt, Busse', /Mastering/i.test(card) && /Hall und Echo/i.test(card) && /Master/i.test(card) && !/Feinschliff|Gesamt|Busse/.test(card), card.slice(0, 300));
     check('Messwert mit Etikett: „Lautheit … LUFS · Spitze … dBTP“ oder „Ziel-Lautheit“', await lw(() => /(Lautheit|Ziel-Lautheit) −?[\d,]+ LUFS/.test(document.getElementById('side').textContent)), '');
     await lw(() => window.loopwerk.mixcol.close());
     // Spur-Karte: Aufnahme bereit
@@ -56,7 +57,7 @@ const { check, finish } = createChecker();
     check('Handy: alte Wörter kehren zurück (Assets, Duplizieren, Beispiel, Sample-Editor)', (await lw(() => document.querySelector('.shelf').getAttribute('aria-label'))) === 'Assets' && (await text('dup-btn')) === 'Duplizieren' && (await text('demo-btn')) === 'Beispiel' && (await lw(() => document.getElementById('editor').getAttribute('aria-label'))) === 'Sample-Editor');
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(700);
-    check('Zurück am Desktop: neue Wörter wieder da', (await text('dup-btn')) === 'Kopieren' && (await lw(() => document.querySelector('.shelf').getAttribute('aria-label'))) === 'Sounds');
+    check('Zurück am Desktop: neue Wörter wieder da', (await text('demo-btn')) === 'Beispiel laden' && (await lw(() => document.querySelector('.shelf').getAttribute('aria-label'))) === 'Sounds');
 
     // ---------- Krachwerk: nichts geändert ----------
     await page.goto(app.url + '?edition=make');

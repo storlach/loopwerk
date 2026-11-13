@@ -12,6 +12,10 @@ const NEU_GESETZT = [
   ['Tipp „+ Neu“ (create-neu)', 'Tipps', 'Der Tipp „Unter Erstellen …“ zeigt auf den verschwundenen Unterreiter'],
 ];
 const BLEIBT = [
+  ['Duplizieren', 'Martin (2026-11-13): Duplizieren ist nicht Kopieren; „Kopieren“ war zurückzunehmen'],
+  ['Summe, Master', 'Martin: „Summe“ war besser als „Gesamt“; Summe und Master bleiben wie im Bestand'],
+  ['Mastering', 'Martin: bleibt, kein „Feinschliff“'],
+  ['Limiter', 'Martin: bleibt, kein „Begrenzer“'],
   ['Tempo, Takt, Schlag, Loop, Klick, Mixer, Hall, Echo, EQ, FX-Pad', 'Etablierte Musikwörter, die Einsteiger überall wiedersehen'],
   ['Kompressor, Verzerrer, Filter, Pumpen, Resonanz', 'Effektnamen, die man auch in anderen Programmen findet; die Regler dazu sind mit Alltagswörtern beschriftet (Stärke, Tiefe)'],
   ['Ansprache / Ausklang', 'Deutsche Fachwörter für Attack/Release, ohne bessere Alltagsentsprechung gefunden'],
@@ -47,7 +51,7 @@ const BLEIBT = [
   for (const r of BLEIBT) L.push(`| ${esc(r[0])} | ${esc(r[1])} |`);
   L.push('', '## Hinweise', '',
     '- Überschrift „Assets“ im Reiter Sounds: entfällt ganz (die Unterreiter samt Überschrift sind am Desktop durch „+ Neu“ ersetzt).',
-    '- Die Regel „ein Wort“ schreibt auch Sound- und Spurnamen nicht um (`#library`, `.clip`, `.track-head` sind ausgenommen). Heißt eine Spur „Master“ oder „Summe“, zeigen nur aria-label und Mixer-Zeile „Gesamt“.',
+    '- Die Regel „ein Wort“ schreibt auch Sound- und Spurnamen nicht um (`#library`, `.clip`, `.track-head` sind ausgenommen).',
     '- Texte, die nur beim Breitenwechsel zur Laufzeit neu entstehen, zeigen die alten Wörter bis zur nächsten Aktualisierung der Fläche.', '');
   fs.writeFileSync(path.resolve(out), L.join('\n'));
   console.log(`geschrieben: ${out} (${ENTRIES.length} geändert, ${BLEIBT.length} bleibt)`);

@@ -8,7 +8,7 @@ Regeln: Deutsch, aus Sicht der Person, ein Wort je Sache, kein Fachwort, wo ein 
 
 Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regulärer Ausdruck (`$1` = Treffer).
 
-## Geändert (48 Einträge)
+## Geändert (38 Einträge)
 
 | alt | neu | wo | warum |
 |---|---|---|---|
@@ -19,12 +19,9 @@ Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regul�
 | Beat-Editor | Beat bearbeiten | Überschrift der Karte | Verb statt Werkzeugname |
 | Melodie-Editor | Melodie bearbeiten | Überschrift der Karte | Verb statt Werkzeugname |
 | Editor | Bearbeiten | Fachleisten-Knopf (versteckt am Desktop), Einblender | ein Wort für dieselbe Sache |
-| Duplizieren | Kopieren | Kopfzeile über den Spuren, Spur-Menü | Martins Wort; „Duplizieren“ ist Fachsprache |
 | Scharf | Aufnahme bereit | Schalter im Spur-Abschnitt | sagt, was passiert; „scharf“ ist Studiojargon |
 | Für Aufnahme scharf | Für Aufnahme bereit | Spur-Menü, aria-label | wie oben |
-| Busse | Hall und Echo | Abschnitt in der Gesamt-Karte und der Spur-Karte | „Bus“ ist Fachwort; der Abschnitt enthält Hall und Echo |
-| Master-Lautstärke | Gesamt-Lautstärke | Gesamt-Karte | ein Wort für Summe und Master |
-| Mit Summe (Master-Effekte, Mastering) | Mit Gesamt (Effekte, Feinschliff) | Export, Schritt „Was“ (Einzelspuren) | einheitliche Wörter |
+| Busse | Hall und Echo | Abschnitt in der Summen-Karte und der Spur-Karte | „Bus“ ist Fachwort; der Abschnitt enthält Hall und Echo |
 | Quantisieren | Ins Raster rücken | Beat/Melodie bearbeiten | sagt, was passiert (Hinweistext erklärte es schon so) |
 | Beispiel | Beispiel laden | Reiter Datei | Befehl statt Hauptwort; steht neben „Leeren“ |
 | →H | Hall | Regler in der Mixer-Zeile | Abkürzung ausgeschrieben, dazu ein verständlicher Hinweistext |
@@ -36,27 +33,20 @@ Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regul�
 | Name des Patterns | Name des Beats oder der Melodie | aria-label des Namensfelds | Pattern ist Fachwort |
 | Pattern im Loop anhören | Im Loop anhören | Hinweistext Anhören | Fachwort gestrichen |
 | Pattern läuft im Loop | Es läuft im Loop | Hinweistext Live | Fachwort gestrichen |
-| duplizieren | kopieren | Hinweistexte, Tastenkürzel-Liste | ein Wort: Kopieren |
-| Mastering | Feinschliff | Gesamt-Karte, Export, Hinweistexte | Alltagswort für den letzten Klangschliff |
-| Summe radiotauglich machen | Gesamtklang radiotauglich machen | Hinweistext des Feinschliff-Schalters | einheitlich Gesamt |
-| Bus-Kompression | Kompression | Hinweistext Feinschliff | Fachwort Bus gestrichen |
-| Limiter | Begrenzer | Hinweistext Feinschliff | deutsches Wort |
-| Ziellautheit | Ziel-Lautheit | Hinweistext Feinschliff | lesbarer |
+| Bus-Kompression | Kompression | Hinweistext Mastering | Fachwort Bus gestrichen |
+| Ziellautheit | Ziel-Lautheit | Hinweistext Mastering | lesbarer |
 | Muster \bFader\b | Regler | Hinweistext Einzelspuren | ein Wort für Schieberegler |
 | Panorama | Links/Rechts | Regler in Mixer-Zeile und Spur-Karte, aria-label | sagt, was der Regler tut |
 | Muster Anteil zum (Hall\|Echo)-Bus | $1-Anteil | Hinweistext und aria-label der Regler | „Send“/„Bus“ ist Fachwort |
 | Muster → (Hall\|Echo)-Bus | $1-Anteil | Regler in der Spur-Karte | wie oben |
-| Muster \b(Hall\|Echo)-Bus\b | $1 | Zeilen in der Gesamt-Karte, aria-label | Hall und Echo sind Alltagswörter, „Bus“ nicht |
+| Muster \b(Hall\|Echo)-Bus\b | $1 | Zeilen in der Summen-Karte, aria-label | Hall und Echo sind Alltagswörter, „Bus“ nicht |
 |  dieses Rückkanals | (entfällt) | Hinweistext der Hall-/Echo-Zeile | „Rückkanal“ ist Fachwort |
 | Effekte dieses Kanals | Effekte dieser Spur | Hinweistext der Effekt-Kurzinfo | ein Wort: Spur |
-| Muster \bMaster\b | Gesamt | Deck (Pegel), Gesamt-Karte, aria-label | ein Wort für Summe und Master |
-| Muster \bSumme\b | Gesamt | Spuren-Fuß, Mixer, Kurven, Hinweistexte | ein Wort für Summe und Master |
-| Muster \bSummen- | Gesamt- | Summen-Kurve, aria-label | ein Wort für Summe und Master |
 | Muster Aufnahme scharf schalten | Aufnahme bereit machen | Tastenkürzel-Liste | „scharf“ ist Jargon |
 | Muster (Aufnahme\|mehr) scharf\b | $1 bereit | Spur-Menü, Einblender, aria-label | wie „Aufnahme bereit“ |
 | Muster ist scharf für | ist bereit für | Einblender | wie „Aufnahme bereit“ |
 | Muster , (−?[\d,]+) LUFS\) | , Lautheit $1 LUFS) | Ergebnis des Exports | Messwert bekommt ein Etikett |
-| Muster ^(−?[\d,.]+) LUFS · Spitze | Lautheit $1 LUFS · Spitze | Anzeige unter dem Feinschliff-Stil | Zahl mit Einheit bleibt, Etikett davor |
+| Muster ^(−?[\d,.]+) LUFS · Spitze | Lautheit $1 LUFS · Spitze | Anzeige unter dem Mastering-Stil | Zahl mit Einheit bleibt, Etikett davor |
 | Muster Ziel (−?\d+) LUFS | Ziel-Lautheit $1 LUFS | Anzeige und Hinweistexte der Stile | Etikett vor dem Messwert |
 |  (Stems) | (entfällt) | Export, Einzelspuren | „Stems“ ist Fachwort; „Einzelspuren“ sagt es schon |
 | Fach schließen | Karte schließen | Tastenkürzel-Liste (Esc) | es gibt hier Karten, keine Fächer |
@@ -71,10 +61,14 @@ Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regul�
 | Ablauf „Exportieren“: „Was soll exportiert werden?“ · „Format und Klang“ · „Bereit zum Speichern“ · „Weiter“ · „Zurück“ | Karte in der Mitte | Schritte statt Klappfeld |
 | Tipp „+ Neu“ (create-neu) | Tipps | Der Tipp „Unter Erstellen …“ zeigt auf den verschwundenen Unterreiter |
 
-## Geprüft, bleibt (13)
+## Geprüft, bleibt (17)
 
 | Wort | warum |
 |---|---|
+| Duplizieren | Martin (2026-11-13): Duplizieren ist nicht Kopieren; „Kopieren“ war zurückzunehmen |
+| Summe, Master | Martin: „Summe“ war besser als „Gesamt“; Summe und Master bleiben wie im Bestand |
+| Mastering | Martin: bleibt, kein „Feinschliff“ |
+| Limiter | Martin: bleibt, kein „Begrenzer“ |
 | Tempo, Takt, Schlag, Loop, Klick, Mixer, Hall, Echo, EQ, FX-Pad | Etablierte Musikwörter, die Einsteiger überall wiedersehen |
 | Kompressor, Verzerrer, Filter, Pumpen, Resonanz | Effektnamen, die man auch in anderen Programmen findet; die Regler dazu sind mit Alltagswörtern beschriftet (Stärke, Tiefe) |
 | Ansprache / Ausklang | Deutsche Fachwörter für Attack/Release, ohne bessere Alltagsentsprechung gefunden |
@@ -92,5 +86,5 @@ Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regul�
 ## Hinweise
 
 - Überschrift „Assets“ im Reiter Sounds: entfällt ganz (die Unterreiter samt Überschrift sind am Desktop durch „+ Neu“ ersetzt).
-- Die Regel „ein Wort“ schreibt auch Sound- und Spurnamen nicht um (`#library`, `.clip`, `.track-head` sind ausgenommen). Heißt eine Spur „Master“ oder „Summe“, zeigen nur aria-label und Mixer-Zeile „Gesamt“.
+- Die Regel „ein Wort“ schreibt auch Sound- und Spurnamen nicht um (`#library`, `.clip`, `.track-head` sind ausgenommen).
 - Texte, die nur beim Breitenwechsel zur Laufzeit neu entstehen, zeigen die alten Wörter bis zur nächsten Aktualisierung der Fläche.
