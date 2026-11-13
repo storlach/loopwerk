@@ -73,7 +73,7 @@ const { check, finish } = createChecker();
     await page.evaluate(() => window.loopwerk.ui.setDock(null));
     await page.waitForTimeout(500);
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await page.waitForTimeout(600);
     await page.selectOption('#pat-vel', '0.7');
     const box = await page.evaluate(() => { const w = document.getElementById('pat-roll').parentElement.getBoundingClientRect(); const r = document.getElementById('pat-roll').getBoundingClientRect(); const top = Math.max(w.top, r.top), bottom = Math.min(w.bottom, r.bottom); return { x: r.left, y: top, height: bottom - top }; });

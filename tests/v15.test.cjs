@@ -114,7 +114,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     // ---------- Einsingen per Datei ----------
     await page.evaluate(async () => { const mm = await import('./src/model.js'); window.loopwerk.store.replace(mm.createEmptyProject()); });
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await page.click('#pat-sing-btn');
     check('„Einsingen“ öffnet das Feld', await page.locator('#pat-sing').isVisible());
     const melFile = wav([voice([[null, 0.4], ...MEL.map((m) => [m, 0.5])])]);
@@ -272,7 +272,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     const oldPat = await page.evaluate(() => window.loopwerk.patternEditor.id);
     await createCard(page, 'melody');
     // Auf das neue Pattern warten – der Titel stimmt schon vom vorigen Melodie-Editor
-    await page.waitForFunction((o) => window.loopwerk.patternEditor.id !== o && document.getElementById('pat-title').textContent === 'Melodie-Editor', oldPat);
+    await page.waitForFunction((o) => window.loopwerk.patternEditor.id !== o && /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */, oldPat);
     const START = [[69, 0, 1], [72, 1, 1], [76, 2, 1], [74, 3, 1], [72, 4, 2], [71, 6, 2]];
     const setNotes = (list) => page.evaluate((l) => {
       const { store, patternEditor } = window.loopwerk;
@@ -328,7 +328,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
       window.claude = { use: async (name) => (name === 'sample' ? fakeSample : null) };
     });
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await setNotes(START);
     await page.click('#pat-continue');
     await page.waitForFunction(() => !document.getElementById('pat-continue').hasAttribute('aria-busy'));
@@ -391,7 +391,7 @@ const MEL = [57, 60, 64, 67, 69, 67, 64, 60];
     check('Handy: Import klappt „Eigene“ auf (andere zu) und zeigt den Sound', mob.open === 'true' && mob.drums === 'false' && mob.inView, JSON.stringify(mob));
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v15-import-mobil.png') });
     await page.tap('#new-melody-btn');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await reveal(page, '#pat-sing-btn');
     await page.tap('#pat-sing-btn');
     const ms = await page.evaluate(() => ({ visible: !document.getElementById('pat-sing').hidden, overflow: document.documentElement.scrollWidth - innerWidth, rec: document.getElementById('sing-rec').getBoundingClientRect().height }));

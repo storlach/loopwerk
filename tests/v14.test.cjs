@@ -480,7 +480,7 @@ const { check, finish } = createChecker();
 
     // ---------- Klaviatur im Melodie-Editor ----------
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     const keys = await page.evaluate(() => ({
       visible: !document.getElementById('pat-keys').hidden && document.getElementById('pat-keys').offsetHeight > 40,
       n: document.querySelectorAll('#pat-keybed .pat-key').length,
@@ -560,7 +560,7 @@ const { check, finish } = createChecker();
     if (SHOTS) await page.screenshot({ path: path.join(SHOT_DIR, 'v14-pads-mobil.png') });
     await page.evaluate(() => window.loopwerk.ui.setDock('sounds'));
     await page.tap('#new-melody-btn');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     const mkeys = await page.evaluate(() => getComputedStyle(document.getElementById('pat-keys')).display);
     check('Handy: Melodie-Editor ohne Klaviatur', mkeys === 'none', mkeys);
     check('Keine Fehler in der Konsole (Handy)', app.errors.length === 0, app.errors.join(' | '));

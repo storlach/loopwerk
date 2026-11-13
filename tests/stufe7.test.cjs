@@ -152,7 +152,7 @@ const { check, finish } = createChecker();
     const beatClip = await page.evaluate(() => window.loopwerk.store.project.tracks.flatMap((t) => t.clips).find((c) => c.sampleId === 'pat-p1').id);
     await page.locator(`.clip[data-clip-id="${beatClip}"]`).dblclick({ position: { x: 30, y: 40 } });
     await page.waitForSelector('#pattern:not([hidden])');
-    check('Doppelklick auf einen Beat-Clip öffnet den Beat-Editor', await page.locator('#pat-title').textContent() === 'Beat-Editor');
+    check('Doppelklick auf einen Beat-Clip öffnet den Beat-Editor', /^Beat(-Editor| bearbeiten)$/.test(await page.locator('#pat-title').textContent()) /* Desktop: Wort seit Scheibe 7 */);
 
     // Pattern im Regal löschen (nicht benutzt) und Rückgängig
     const cnt = await page.evaluate(() => window.loopwerk.store.addPattern({ type: 'synth', name: 'Übrig', bars: 1, preset: 'lead', notes: [] }));

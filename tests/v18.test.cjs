@@ -355,7 +355,7 @@ const { check, finish } = createChecker();
     check('Raster: gedrückt ziehen setzt mehrere Schläge', JSON.stringify(hats) === '[1,1,1,1]', JSON.stringify(hats));
     // Melodie: Ton halten in der Schritt-Eingabe = längere Note
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await clickR(page, '#pat-rec');
     await selectR(page, '#pat-len', '0.25');
     await page.keyboard.press('Escape');
@@ -492,7 +492,7 @@ const { check, finish } = createChecker();
     // Klaviertasten
     await page.tap('#tab-sounds');
     await page.tap('#new-melody-btn');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await page.waitForTimeout(550);
     const vk = await page.evaluate(() => {
       const keys = document.querySelectorAll('#pat-vkeys .vkey');

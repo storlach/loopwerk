@@ -88,7 +88,7 @@ function geometry(pitch) {
     // ---------- Melodie-Editor öffnen ----------
     await page.evaluate(MIDI_STUB);
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await page.waitForTimeout(500);
     const pid = await page.evaluate(() => window.loopwerk.patternEditor.id);
     const getNotes = () => page.evaluate((id) => window.loopwerk.store.project.patterns[id].notes.map((n) => ({ pitch: n.pitch, start: n.start, len: n.len })), pid);

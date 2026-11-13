@@ -74,7 +74,7 @@ function geometry(pitch) {
 
     // ---------- Melodie-Editor ----------
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     await page.waitForTimeout(600);
     const pid = await page.evaluate(() => window.loopwerk.patternEditor.id);
     const getNotes = () => page.evaluate((id) => window.loopwerk.store.project.patterns[id].notes.map((n) => ({ pitch: n.pitch, start: n.start, len: n.len, vel: n.vel })), pid);
@@ -338,7 +338,7 @@ function geometry(pitch) {
     await page.evaluate(() => window.loopwerk.ui.setDock(null));
     await page.waitForTimeout(500);
     await createCard(page, 'beat');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Beat-Editor');
+    await page.waitForFunction(() => /^Beat(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Beat bearbeiten“ */);
     await page.waitForTimeout(600);
     const bid = await page.evaluate(() => window.loopwerk.patternEditor.id);
     const rows = () => page.evaluate((id) => JSON.parse(JSON.stringify(window.loopwerk.store.project.patterns[id].rows)), bid);
@@ -517,7 +517,7 @@ function geometry(pitch) {
     await pp.waitForTimeout(600);
     await pp.tap('#tab-sounds');
     await pp.tap('#new-beat-btn');
-    await pp.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && document.getElementById('pat-title').textContent === 'Beat-Editor');
+    await pp.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && /^Beat(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Beat bearbeiten“ */);
     await pp.waitForTimeout(800);
     const beat = await pp.evaluate(() => ({
       head: (() => { const a = document.querySelector('#pattern .dock-actions'); return a.scrollWidth <= a.clientWidth; })(),

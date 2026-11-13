@@ -54,7 +54,7 @@ function installHelpers() {
 
     await page.evaluate(async () => { const m = await import('./src/model.js'); window.loopwerk.store.replace(m.createEmptyProject()); });
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     const pid = await page.evaluate(() => window.loopwerk.patternEditor.id);
     const sel = await page.evaluate(() => {
       const s = document.getElementById('pat-preset');

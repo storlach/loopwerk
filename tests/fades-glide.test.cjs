@@ -318,7 +318,7 @@ function installPitch() {
 
     // ================= Gleiten: Bedienung im Melodie-Editor =================
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     const pid = await page.evaluate(() => window.loopwerk.patternEditor.id);
     const glideField = await page.evaluate(() => {
       const f = document.getElementById('pat-glide-field');

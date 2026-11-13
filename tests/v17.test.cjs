@@ -112,7 +112,7 @@ const { check, finish } = createChecker();
 
     // Flüssig: eine Eingabe zeichnet nur die geänderte Spur neu
     await createCard(page, 'melody');
-    await page.waitForFunction(() => document.getElementById('pat-title').textContent === 'Melodie-Editor');
+    await page.waitForFunction(() => /^Melodie(-Editor| bearbeiten)$/.test(document.getElementById('pat-title').textContent) /* Desktop seit Scheibe 7: „Melodie bearbeiten“ */);
     const cost = await page.evaluate(async () => {
       const { store, arranger, patternEditor } = window.loopwerk;
       const time = (fn) => { const a = performance.now(); fn(); return performance.now() - a; };
