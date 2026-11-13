@@ -53,12 +53,12 @@ async function audit(page, cdp, where) {
   const { nodeIds } = await cdp.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: '[data-ct]' });
   const bad = [];
   for (const state of [[], ['hover'], ['active'], ['focus-visible'], ['hover', 'active']]) {
-    if (state.length) for (const id of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: state });
+    if (state.length) for (const id of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: state }).catch(() => {}); // Knoten inzwischen neu gebaut: überspringen
     for (const pressed of [false, true]) {
       const res = await page.evaluate(measureAll, pressed);
       for (const r of res) if (r.ratio < MIN) bad.push(`${state.join('+') || 'normal'}${pressed ? '+aktiv' : ''}: ${r.id ? '#' + r.id : '.' + r.cls} „${r.text}“ ${r.ratio.toFixed(2)}`);
     }
-    if (state.length) for (const id of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: [] });
+    if (state.length) for (const id of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId: id, forcedPseudoClasses: [] }).catch(() => {});
   }
   check(`Lesbar in jedem Zustand: ${where} (${count} Knöpfe)`, bad.length === 0, [...new Set(bad)].slice(0, 12).join(' | '));
 }
