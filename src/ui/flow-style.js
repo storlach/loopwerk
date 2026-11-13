@@ -64,6 +64,10 @@ const CSS = `
   #app[data-layout="reiter"] .flow-foot #ex-go { height: 44px; padding: 0 22px; justify-self: auto; }
   #app[data-layout="reiter"] .flow-card[data-flow="export"] .flow-foot { gap: 12px; }
 
+  /* Eine Karte wird auf eine Spur gezogen: die Fläche wird durchsichtig und lässt die Zeiger durch (der Arranger sucht die Spur unter dem Zeiger) */
+  body.is-dragging #flow-overlay { opacity: 0.25; transition: opacity var(--move-swap, 160ms) ease; }
+  body.is-dragging #flow-overlay, body.is-dragging #flow-overlay * { pointer-events: none !important; }
+
   /* Zeile „Neuer Song“ im Reiter Datei */
   #app[data-layout="reiter"] .side-datei-liste .side-datei-new { display: grid; }
 

@@ -354,7 +354,7 @@ function geometry(pitch) {
   const tab = await openApp({ viewport: { width: 1180, height: 820 }, hasTouch: true, deviceScaleFactor: 2 });
   try {
     const tp = tab.page;
-    await tp.tap('#ltab-create');
+    // Desktop seit Scheibe 6: kein Unterreiter „Erstellen“ mehr; die Karte „Melodie“ öffnet den Ablauf „Neuer Sound“ (Harness)
     await tp.tap('.ccard[data-create="melody"]');
     await tp.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && !document.getElementById('pat-roll-wrap').hidden);
     await tp.waitForTimeout(600);

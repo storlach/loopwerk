@@ -334,7 +334,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await page.waitForTimeout(500);
 
     // ---------- Melodie: Piano-Roll ----------
-    await page.tap('#ltab-create');
+    // Desktop seit Scheibe 6: kein Unterreiter „Erstellen“; die Karte öffnet den Ablauf „Neuer Sound“ (Harness)
     await page.tap('.ccard[data-create="melody"]');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && !document.getElementById('pat-roll-wrap').hidden);
     await page.waitForTimeout(600);
@@ -367,7 +367,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
     await targets('Melodie-Editor');
     // Beat-Editor (der offene Editor liegt als Karte über dem Regal und muss erst zu)
     await closeClipSettings(page);
-    await page.tap('#ltab-create');
+    // (Ablauf „Neuer Sound“ wie oben)
     await page.tap('.ccard[data-create="beat"]');
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern' && !document.getElementById('pat-drums').hidden);
     await page.waitForTimeout(600);
@@ -380,7 +380,7 @@ const exempt = (label) => EXCEPTIONS.some(([re]) => re.test(label));
 
     // ---------- Projekt-Menü, Export, Gesten ----------
     await targets('Erstellen');
-    await page.tap('#ltab-sounds');
+    // (kein Unterreiter „Sounds“ mehr)
     await page.evaluate(() => window.loopwerk.engine.setPosition(8));
     // Layout „reiter“: der Reiter Datei ersetzt das Projekt-Menü
     await page.tap('#side-tab-datei');

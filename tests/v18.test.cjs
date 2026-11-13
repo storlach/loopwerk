@@ -89,16 +89,23 @@ const { check, finish } = createChecker();
     check('Reiter Datei zeigt Name, Öffnen, Speichern, Beispiel, Leeren, Tipps', await page.evaluate(() => ['project-name', 'open-btn', 'save-btn', 'demo-btn', 'new-btn', 'tips-reset'].every((id) => document.getElementById(id).offsetParent && document.getElementById(id).closest('#side-datei, #side-datei-liste'))));
     check('Der Menü-Knopf im Deck entfällt', await page.locator('#project-menu-btn').isHidden());
 
-    // Export als Klappfeld: Arranger bleibt gleich groß
+    // Export (Umbau Scheibe 6): am Desktop ein Ablauf als Karte in der Mitte statt Klappfeld (Arranger bleibt, wie er ist);
+    // Esc und Klick auf den abgedunkelten Grund schließen ihn
     const arr0 = await rect('.arranger');
     await page.click('#export-btn');
+    await page.waitForTimeout(500);
     const ex = await rect('#export');
     const arr1 = await rect('.arranger');
-    check('Export öffnet als Klappfeld unter dem Knopf, Arranger unverändert', ex && ex.y < deck.b + 20 && ex.r > 1000 && arr1.h === arr0.h, JSON.stringify({ ex, arr0: arr0.h, arr1: arr1.h }));
-    // Daneben klicken: in die leere Spur 8 (ein Clip würde ausgewählt)
-    const empty = await rect('.lane[data-track-id="t8"]');
-    await page.mouse.click(empty.x + 20, empty.y + empty.h / 2);
-    check('Klick daneben schließt das Export-Feld', await page.evaluate(() => window.loopwerk.ui.dock === null));
+    const fl = await page.evaluate(() => ({ open: window.loopwerk.flow.isOpen, id: window.loopwerk.flow.id, dialog: document.getElementById('flow-card').getAttribute('role') }));
+    check('Export öffnet als Karte in der Mitte (Ablauf), Arranger unverändert', ex && fl.open && fl.id === 'export' && fl.dialog === 'dialog' && ex.x > 300 && ex.r < 1140 && arr1.h === arr0.h, JSON.stringify({ ex, fl, arr0: arr0.h, arr1: arr1.h }));
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+    check('Esc schließt den Export-Ablauf', await page.evaluate(() => !window.loopwerk.flow.isOpen && document.getElementById('flow-overlay').hidden));
+    await page.click('#export-btn');
+    await page.waitForTimeout(400);
+    await page.mouse.click(8, 450);
+    await page.waitForTimeout(500);
+    check('Klick daneben schließt die Karte', await page.evaluate(() => !window.loopwerk.flow.isOpen));
 
     // ---------- Inspektor ----------
     const mode = () => page.evaluate(() => document.getElementById('insp').dataset.mode);
@@ -127,7 +134,8 @@ const { check, finish } = createChecker();
     const g = await page.evaluate(() => window.loopwerk.store.findClip(window.loopwerk.ui.selectedClipId).clip.gain);
     check('Lautstärke in den Clip-Einstellungen ändert den Clip', g === 0.5, String(g));
     await page.keyboard.press('Escape');
-    check('Esc schließt die Karte', await page.evaluate(() => window.loopwerk.ui.dock === null && document.getElementById('clip-overlay').hidden));
+    // die Karte blendet weich aus (motion.js): verborgen erst am Ende des Ausflugs
+    check('Esc schließt die Karte', await page.waitForFunction(() => window.loopwerk.ui.dock === null && document.getElementById('clip-overlay').hidden, null, { timeout: 3000 }).then(() => true, () => false));
     await page.locator('.track-row').nth(2).locator('.track-btns').click({ position: { x: 4, y: 4 } }).catch(() => {});
     await page.locator('.track-row').nth(2).locator('.track-name').click();
     check('Klick auf den Spurkopf zeigt die Spur', await mode() === 'track' && await page.evaluate(() => window.loopwerk.ui.selectedTrackId) === 't3');
@@ -267,8 +275,9 @@ const { check, finish } = createChecker();
     await page.keyboard.press('Escape');
 
     // ---------- Erstellen ----------
-    await page.click('#ltab-create');
-    check('Reiter „Erstellen“ zeigt sieben Karten (mit „Begleitung“)', await page.locator('.ccard:visible').count() === 7);
+    // Umbau Scheibe 6: kein Unterreiter „Erstellen“ mehr; „+ Neu“ öffnet den Ablauf „Neuer Sound“ mit denselben Karten
+    await page.click('#shelf-new');
+    check('„+ Neu“ zeigt sieben Karten (mit „Begleitung“)', await page.locator('.ccard:visible').count() === 7);
     const tracks0 = (await S()).tracks.length;
     await page.locator('.ccard[data-create="beat"]').click();
     await page.waitForFunction(() => window.loopwerk.ui.dock === 'pattern');
@@ -287,6 +296,8 @@ const { check, finish } = createChecker();
     // Karte auf eine Spur ziehen (erst wenn die Schublade weg ist – sie nimmt die Ansicht beim Schließen mit zurück)
     await page.waitForTimeout(700);
     // Layout „reiter“: mit gewähltem Clip steht dessen Abschnitt über dem Regal – die Karte erst in Sicht rollen
+    await page.click('#shelf-new'); // die erste Karte hat den Ablauf geschlossen
+    await page.waitForTimeout(500);
     await page.locator('.ccard[data-create="melody"]').scrollIntoViewIfNeeded();
     const card = await rect('.ccard[data-create="melody"]');
     const t8 = await rect('.lane[data-track-id="t8"]');
@@ -394,7 +405,7 @@ const { check, finish } = createChecker();
 
     // ---------- Tipps ----------
     await page.evaluate(() => { window.loopwerk.tips.reset(); window.loopwerk.tips.enable(); });
-    await page.click('#ltab-sounds');
+    // Umbau: der Reiter Sounds ist schon offen (ein Klick darauf würde die Karte schließen); der Tipp kommt nach dem Zurücksetzen von selbst
     await page.waitForSelector('.tip:not([hidden])', { timeout: 3000 });
     const tip1 = await page.evaluate(() => ({ id: window.loopwerk.tips.current, text: document.querySelector('.tip-text').textContent, target: !!document.querySelector('.tip-target') }));
     check('Tipp erscheint beim ersten Sehen eines Bereichs, Element wird markiert', tip1.id === 'sounds' && tip1.target && tip1.text.length > 20, JSON.stringify(tip1));

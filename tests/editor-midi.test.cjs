@@ -300,7 +300,7 @@ function geometry(pitch) {
     // ----- Quantisieren (Melodie) -----
     await page.evaluate(() => { const pop = document.getElementById('pat-more'); if (pop.hidden) document.getElementById('pat-more-btn').click(); });
     const qb = await page.evaluate(() => { const b = document.getElementById('pat-quantize'); const r = b.getBoundingClientRect(); return { vis: !!b.offsetParent, inMore: !!b.closest('#pat-more'), inView: r.right <= innerWidth && r.left >= 0, text: b.textContent }; });
-    check('Desktop: Knopf „Quantisieren“ unter „Mehr“ neben „Einrasten“ (zwei Klicks)', qb.vis && qb.inMore && qb.inView && qb.text === 'Quantisieren', j(qb));
+    check('Desktop: Knopf „Quantisieren“ unter „Mehr“ neben „Einrasten“ (zwei Klicks)', qb.vis && qb.inMore && qb.inView && /Ins Raster rücken|Quantisieren/.test(qb.text), j(qb) /* Desktop seit Scheibe 7: „Ins Raster rücken“ */);
     await page.evaluate(() => { const pop = document.getElementById('pat-more'); if (!pop.hidden) document.getElementById('pat-more-btn').click(); });
     const orig = [[60, 0.3, 0.3, 1], [62, 1.1, 0.1, 0.6], [64, 2, 1, 1], [65, 3.37, 0.5, 1]];
     await setNotes(orig);
