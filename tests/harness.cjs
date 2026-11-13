@@ -43,6 +43,25 @@ async function revealSide(page, sel) {
       const sumPart = n.closest('.insp-grp-master, .insp-grp-buses, .insp-mst');
       const trackPart = n.closest('.insp-track');
       const lw = window.loopwerk;
+      // Abläufe (Scheibe 6): Erstellen-Karten, Song-Starter und Export-Fach liegen auf der Karte in der Mitte; wie ein Mensch öffnet sie sie
+      // über „+ Neu“, „Neuer Song“ bzw. „Exportieren“ und geht bis zum Schritt des Elements. Etwas anderes anklicken schließt den Ablauf zuerst.
+      const flow = lw.flow;
+      if (flow) {
+        const own = n.closest('#create-panel, #starter, #export, #flow-overlay') || n.id === 'ex-go';
+        if (!own && flow.isOpen && !n.closest('.tip, #hint')) flow.close({ focus: false, now: true });
+        if (n.closest('#create-panel') && flow.id !== 'sound') flow.open('sound');
+        else if (n.closest('#starter')) {
+          if (flow.id !== 'song') flow.open('song');
+          const later = n.closest('#starter-again, #starter-accomp');
+          if (later && lw.starter.last && flow.step === 0) flow.go(1);
+          if (!later && flow.step === 1) flow.go(0);
+        } else if (n.closest('#export') || n.id === 'ex-go') {
+          if (flow.id !== 'export') flow.open('export');
+          const part = n.id === 'ex-go' ? '3' : n.closest('[data-flow-step]')?.getAttribute('data-flow-step');
+          if (part) flow.go(Number(part) - 1);
+        }
+        if (own) return;
+      }
       const tab = n.closest('.side-sounds') ? 'sounds' : n.closest('.mix-slot, .mix-bus, #mix-head') || sumPart || trackPart || n.closest('.insp-for-mixer') ? 'mixer' : n.closest('.insp-for-datei, #side-datei, #side-datei-neu, #side-datei-liste, #side-datei-foot') ? 'datei' : null;
       if (tab && app.dataset.side !== tab) document.getElementById(`side-tab-${tab}`).click();
       if (sumPart && app.dataset.mixcard !== 'summe') lw.mixer.select('__master');
@@ -140,7 +159,8 @@ async function reveal(page, sel) {
     if (n.closest('#ed-tools')?.hidden) document.getElementById('clip-more').click();
     const pop = n.closest('.pop');
     if (pop && pop.hidden) pop.parentElement.querySelector('button').click();
-    if (n.closest('.create-panel') && document.querySelector('.shelf').dataset.left !== 'create') document.getElementById('ltab-create').click();
+    if (n.closest('.create-panel') && lw?.flow) { if (lw.flow.id !== 'sound') lw.flow.open('sound'); } // Layout „reiter“: Ablauf „Neuer Sound“
+    else if (n.closest('.create-panel') && document.querySelector('.shelf').dataset.left !== 'create') document.getElementById('ltab-create').click();
     if (n.closest('.shelf-head, .shelf-list, #library') && document.querySelector('.shelf').dataset.left === 'create') document.getElementById('ltab-sounds').click();
     // Regal-Gruppen starten geschlossen: die Gruppe des Eintrags aufklappen
     const items = n.closest('.shelf-items');
