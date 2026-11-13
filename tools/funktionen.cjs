@@ -251,11 +251,13 @@ function zustaende(S) {
     // Layout „reiter“: die drei Abläufe, jeder Schritt einmal (Schritt 2/3 mit dem Hauptknopf erreicht, wie ein Mensch es täte)
     // Ablauf öffnen (Reiter, Einstiegsknopf) und mit dem Hauptknopf bis Schritt n (0-basiert) gehen; jede Szene steht für sich (nach der Szene drückt das Skript Esc)
     async ablauf(page, tab, knopf, id, n) {
+      if (!(await page.evaluate(() => !!window.loopwerk.flow && innerWidth > 760))) return 'Abläufe gibt es nur im Layout „reiter“ am Desktop';
       await S.ruhe(page);
       await page.evaluate((t) => { window.loopwerk.flow?.close({ focus: false, now: true }); window.loopwerk.side?.show(t, { save: false }); }, tab);
       if (!(await klick(page, knopf))) return `${knopf}: hier nicht zu sehen`;
       await page.waitForTimeout(900);
       for (let i = 0; i < 4 && (await page.evaluate(() => window.loopwerk.flow.step)) < n; i++) { await klick(page, '#flow-main'); await page.waitForTimeout(900); }
+      await page.waitForTimeout(900); // der Schritt blendet ein (Deckkraft 0 → 1), erst danach messen
       return (await page.evaluate(() => `${window.loopwerk.flow.id}:${window.loopwerk.flow.step}`)) === `${id}:${n}` ? null : `Schritt ${n + 1} von ${id} nicht erreicht`;
     },
     'neuer-song-1': (page) => Z0.ablauf(page, 'datei', '#new-song-btn', 'song', 0),
