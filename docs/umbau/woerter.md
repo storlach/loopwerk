@@ -8,7 +8,7 @@ Regeln: Deutsch, aus Sicht der Person, ein Wort je Sache, kein Fachwort, wo ein 
 
 Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regulärer Ausdruck (`$1` = Treffer).
 
-## Geändert (49 Einträge)
+## Geändert (48 Einträge)
 
 | alt | neu | wo | warum |
 |---|---|---|---|
@@ -59,7 +59,6 @@ Art: „ganz“ = der ganze Text, „teil“ = Textstück, „Muster“ = regul�
 | Muster ^(−?[\d,.]+) LUFS · Spitze | Lautheit $1 LUFS · Spitze | Anzeige unter dem Feinschliff-Stil | Zahl mit Einheit bleibt, Etikett davor |
 | Muster Ziel (−?\d+) LUFS | Ziel-Lautheit $1 LUFS | Anzeige und Hinweistexte der Stile | Etikett vor dem Messwert |
 |  (Stems) | (entfällt) | Export, Einzelspuren | „Stems“ ist Fachwort; „Einzelspuren“ sagt es schon |
-| Muster ^Suchen … \(.*\)$ | Suchen … | Suchfeld im Reiter Sounds | die Zahl in Klammern wurde abgeschnitten (neben „+ Neu“ ist zu wenig Platz); die Zahlen stehen an den Gruppen |
 | Fach schließen | Karte schließen | Tastenkürzel-Liste (Esc) | es gibt hier Karten, keine Fächer |
 
 ## Neu gesetzte Texte (5)

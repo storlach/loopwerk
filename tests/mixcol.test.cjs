@@ -35,7 +35,7 @@ const { check, finish } = createChecker();
     await page.click('#demo-btn'); // Beispiel-Song
     await page.waitForTimeout(600);
     await page.click('#side-tab-mixer');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1200); // die Spalte blendet mit Feder ein (motion.js); erst danach liegen die Zeilen auf den Pixel genau
 
     // ---------- Aufbau ----------
     const base = await lw(() => ({

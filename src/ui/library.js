@@ -1,6 +1,5 @@
 // Sound-Regal: Suche, Kategorie-Filter, Favoriten. Klick = anhören und auswählen, Ziehen = auf eine Spur legen.
 
-import { W } from './words.js';
 import { CATEGORIES, GENRES } from '../samples.js';
 import { el, trackPointer } from '../util.js';
 import { lsKey } from '../edition.js';
@@ -251,7 +250,7 @@ export function mountLibrary({ root, library, store, engine, ui, arranger, onDel
     // × ersetzt die Lupe, sobald etwas wirkt
     const anything = !!q || filter !== 'all' || pane;
     if (resetBtn) { resetBtn.hidden = !anything; lupe.hidden = anything; }
-    search.placeholder = W(!all.length ? 'Suchen …' : shown.length === all.length ? `Suchen … (${all.length})` : `Suchen … (${shown.length} Treffer)`);
+    search.placeholder = !all.length ? 'Suchen …' : shown.length === all.length ? `Suchen … (${all.length})` : `Suchen … (${shown.length} Treffer)`;
     totalEl.textContent = shown.length === all.length ? `${all.length}` : `${shown.length} von ${all.length}`;
 
     if (!shown.length) {

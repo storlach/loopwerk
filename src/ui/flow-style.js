@@ -76,10 +76,11 @@ const CSS = `
   /* Sounds: „+ Neu“ neben der Suche, die Unterreiter entfallen */
   #app[data-layout="reiter"] .side .left-tabs { display: none; }
   #app[data-layout="reiter"] .side .shelf-find #shelf-new {
-    display: inline-flex; align-items: center; justify-content: center; flex: none; height: 32px; padding: 0 14px; margin-left: 4px;
+    display: inline-flex; align-items: center; justify-content: center; flex: none; height: 32px; padding: 0 10px; margin-left: 2px;
     border: 0; border-radius: var(--radius); background: transparent; box-shadow: var(--key-shadow); color: var(--ink); cursor: pointer;
     font: 600 11px/1 var(--font-display); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
   }
+  #app[data-layout="reiter"] .side .shelf-find .shelf-search { font-size: 12px; } /* Platz für „Suchen … (261)“ neben „+ Neu“ */
   #app[data-layout="reiter"] .side .shelf-find #shelf-new:hover { background: var(--lane-alt); }
   #app[data-layout="reiter"] .side .shelf-find #shelf-new:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 }

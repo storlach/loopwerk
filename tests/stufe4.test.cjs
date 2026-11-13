@@ -142,6 +142,10 @@ const { check, finish } = createChecker();
     const echo = await page.evaluate(() => window.loopwerk.store.track('t1').fx.echo);
     check('Echo einschalten, Zeit wählen', echo.on && echo.time === '1/16', JSON.stringify(echo));
 
+    // Desktop (Umbau): die Spur-Karte liegt über der Mixer-Spalte; wie ein Mensch schließt man sie (Esc), bevor man an den Reglern der Spalte zieht
+    await page.evaluate(() => window.loopwerk.mixcol?.close?.());
+    await page.waitForFunction(() => !document.getElementById('app').dataset.mixcard, null, { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(700);
     await page.locator('#fader-t2').fill('0.3');
     await page.locator('#pan-t2').fill('-0.5');
     const t2 = await page.evaluate(() => { const t = window.loopwerk.store.track('t2'); return [t.volume, t.pan]; });
